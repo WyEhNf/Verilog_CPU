@@ -1,0 +1,64 @@
+# Existing reference material in the workspace
+MinorCPU/
+RISC-V-CPU-Simulator/
+VerilogCPU(Tfoi's)/
+instructions.md
+lead-in.md
+plan.md
+repo_setting.txt
+
+# Operating-system, editor, and IDE files
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated project directories and intermediates
+/build/*
+!/build/.gitkeep
+/reports/*
+!/reports/.gitkeep
+/.deps/*
+!/.deps/.gitkeep
+obj_dir/
+
+# Simulation waveforms and logs
+*.vcd
+*.fst
+*.lxt
+*.lxt2
+*.ghw
+*.wlf
+*.lna
+*.log
+*.out
+*.trace
+*.tmp
+*.bak
+
+# RISC-V and synthesis artifacts
+*.o
+*.a
+*.elf
+*.bin
+*.hex
+*.dump
+*.hexdump
+*.data
+*.image
+*.map
+*.readelf
+*.rpt
+*.lib
+*.db
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
