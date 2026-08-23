@@ -4,4 +4,9 @@ rtl/rv32m_multiplier.v
 rtl/rv32m_divider.v
 rtl/rv32_physical_register_file.v
 rtl/rv32_rename_unit.v
+rtl/common/rv32im_tag_compare.v
+rtl/common/rv32im_fifo.v
+rtl/common/rv32im_skid_buffer.v
+rtl/common/rv32im_prefix_alloc.v
+rtl/common/rv32im_priority_select.v
 rtl/cpu_core.v
