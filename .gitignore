@@ -41,6 +41,10 @@ obj_dir/
 *.bak
 
 # RISC-V and synthesis artifacts
+*.tgz
+*.tar
+*.gz
+*.zip
 *.o
 *.a
 *.elf
