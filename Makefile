@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: doctor lint unit matrix h01 h02 h03 h04 b01 b02 b03 b04 b05 regression
+.PHONY: doctor lint unit matrix h01 h02 h03 h04 b01 b02 b03 b04 b05 b06 regression
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -121,6 +121,12 @@ b04:
 b05:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32i_alu_tb -o build/b05.vvp -c $(RTL_FILELIST) tb/unit/rv32i_alu_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b05.vvp | findstr /C:"PASS: B-05 ALU/branch/AGU"
+
+b06:
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32m_units_tb -o build/b06.vvp -c $(RTL_FILELIST) tb/unit/rv32m_units_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b06.vvp | findstr /C:"PASS: B-06 multiplier/divider"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32m_mdu_reservation_station_tb -o build/b06_mdu.vvp -c $(RTL_FILELIST) tb/unit/rv32m_mdu_reservation_station_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu.vvp | findstr /C:"PASS: B-06 MDU RS"
 
 regression:
 	@powershell -NoProfile -Command "python tools/regression.py"
