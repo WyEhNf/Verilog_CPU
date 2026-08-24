@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: doctor lint unit matrix h01 h02 h03 h04 b01 regression
+.PHONY: doctor lint unit matrix h01 h02 h03 h04 b01 b02 regression
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -88,11 +88,19 @@ h04:
 
 b01:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=1 -P rv32_physical_register_file_tb.PHYS_REGS=48 -s rv32_physical_register_file_tb -o build/b01_be1_p48.vvp -c $(RTL_FILELIST) tb/unit/rv32_physical_register_file_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b01_be1_p48.vvp
+	@$(OSS_ENV) "$(VVP)" -N build/b01_be1_p48.vvp | findstr /C:"PASS: B-01 PRF BE_WIDTH=1 PHYS_REGS=48"
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=2 -P rv32_physical_register_file_tb.PHYS_REGS=64 -s rv32_physical_register_file_tb -o build/b01_be2_p64.vvp -c $(RTL_FILELIST) tb/unit/rv32_physical_register_file_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b01_be2_p64.vvp
+	@$(OSS_ENV) "$(VVP)" -N build/b01_be2_p64.vvp | findstr /C:"PASS: B-01 PRF BE_WIDTH=2 PHYS_REGS=64"
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=4 -P rv32_physical_register_file_tb.PHYS_REGS=96 -s rv32_physical_register_file_tb -o build/b01_be4_p96.vvp -c $(RTL_FILELIST) tb/unit/rv32_physical_register_file_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b01_be4_p96.vvp
+	@$(OSS_ENV) "$(VVP)" -N build/b01_be4_p96.vvp | findstr /C:"PASS: B-01 PRF BE_WIDTH=4 PHYS_REGS=96"
+
+b02:
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=1 -P rv32_rename_unit_tb.PHYS_REGS=48 -s rv32_rename_unit_tb -o build/b02_be1_p48.vvp -c $(RTL_FILELIST) tb/unit/rv32_rename_unit_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b02_be1_p48.vvp | findstr /C:"PASS: B-02 rename BE_WIDTH=1 PHYS_REGS=48"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=2 -P rv32_rename_unit_tb.PHYS_REGS=64 -s rv32_rename_unit_tb -o build/b02_be2_p64.vvp -c $(RTL_FILELIST) tb/unit/rv32_rename_unit_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b02_be2_p64.vvp | findstr /C:"PASS: B-02 rename BE_WIDTH=2 PHYS_REGS=64"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=4 -P rv32_rename_unit_tb.PHYS_REGS=96 -s rv32_rename_unit_tb -o build/b02_be4_p96.vvp -c $(RTL_FILELIST) tb/unit/rv32_rename_unit_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b02_be4_p96.vvp | findstr /C:"PASS: B-02 rename BE_WIDTH=4 PHYS_REGS=96"
 
 regression:
 	@powershell -NoProfile -Command "python tools/regression.py"

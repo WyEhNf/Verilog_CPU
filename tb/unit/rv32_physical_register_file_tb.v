@@ -10,6 +10,8 @@ module rv32_physical_register_file_tb #(
     reg [(2*BE_WIDTH*ADDR_WIDTH)-1:0] read_phys;
     wire [(2*BE_WIDTH*32)-1:0] read_data;
     wire [(2*BE_WIDTH)-1:0] read_ready;
+    reg [(BE_WIDTH*ADDR_WIDTH)-1:0] alloc_phys;
+    reg [BE_WIDTH-1:0] alloc_valid;
     reg [(BE_WIDTH*ADDR_WIDTH)-1:0] write_phys;
     reg [(BE_WIDTH*32)-1:0] write_data;
     reg [BE_WIDTH-1:0] write_valid;
@@ -19,6 +21,7 @@ module rv32_physical_register_file_tb #(
     rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS)) dut (
         .clk_i(clk), .reset_i(reset),
         .read_phys_i(read_phys), .read_data_o(read_data), .read_ready_o(read_ready),
+        .alloc_phys_i(alloc_phys), .alloc_valid_i(alloc_valid),
         .write_phys_i(write_phys), .write_data_i(write_data), .write_valid_i(write_valid)
     );
 
@@ -47,6 +50,8 @@ module rv32_physical_register_file_tb #(
         write_phys = {(BE_WIDTH*ADDR_WIDTH){1'b0}};
         write_data = {(BE_WIDTH*32){1'b0}};
         write_valid = {BE_WIDTH{1'b0}};
+        alloc_phys = {(BE_WIDTH*ADDR_WIDTH){1'b0}};
+        alloc_valid = {BE_WIDTH{1'b0}};
         bad = 0;
         #12;
         reset = 1'b0;
@@ -69,6 +74,20 @@ module rv32_physical_register_file_tb #(
         write_valid = {BE_WIDTH{1'b0}};
         #1;
         if (!read_ready[0] || read_data[31:0] !== ((BE_WIDTH > 1) ? 32'h22222222 : 32'h11111111)) begin $display("DBG commit fail data=%h ready=%b", read_data, read_ready); bad = bad + 1; end
+
+        // Allocation clears ready on the edge.  A simultaneous CDB write wins.
+        alloc_phys[ADDR_WIDTH-1:0] = 3;
+        alloc_valid[0] = 1'b1;
+        @(posedge clk); #1;
+        alloc_valid = {BE_WIDTH{1'b0}};
+        if (read_ready[0]) bad = bad + 1;
+        alloc_phys[ADDR_WIDTH-1:0] = 3;
+        alloc_valid[0] = 1'b1;
+        set_write(0, 3, 32'h33333333);
+        @(posedge clk); #1;
+        alloc_valid = {BE_WIDTH{1'b0}};
+        write_valid = {BE_WIDTH{1'b0}};
+        if (!read_ready[0] || read_data[31:0] !== 32'h33333333) bad = bad + 1;
 
         // x0 remains zero/ready and cannot be overwritten.
         set_write(0, 0, 32'hdeadbeef);

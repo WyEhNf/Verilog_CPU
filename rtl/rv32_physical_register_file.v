@@ -16,6 +16,8 @@ module rv32_physical_register_file #(
     input  wire [(2*BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] read_phys_i,
     output reg  [(2*BE_WIDTH*32)-1:0]   read_data_o,
     output reg  [(2*BE_WIDTH)-1:0]      read_ready_o,
+    input  wire [(BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] alloc_phys_i,
+    input  wire [BE_WIDTH-1:0]           alloc_valid_i,
     input  wire [(BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] write_phys_i,
     input  wire [(BE_WIDTH*32)-1:0]      write_data_i,
     input  wire [BE_WIDTH-1:0]           write_valid_i
@@ -23,6 +25,7 @@ module rv32_physical_register_file #(
     reg [(PHYS_REGS*32)-1:0] value;
     reg [PHYS_REGS-1:0] ready;
     integer reset_index;
+    integer alloc_lane;
     integer write_lane;
 
     initial begin
@@ -74,6 +77,15 @@ module rv32_physical_register_file #(
                 ready[reset_index] <= (reset_index == 0);
             end
         end else begin
+            // Rename allocation makes a destination unavailable.  Writeback
+            // is processed afterwards and therefore has higher priority.
+            for (alloc_lane = 0; alloc_lane < BE_WIDTH; alloc_lane = alloc_lane + 1) begin
+                if (alloc_valid_i[alloc_lane] &&
+                    (alloc_phys_i[(alloc_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] != 0) &&
+                    (alloc_phys_i[(alloc_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] < PHYS_REGS)) begin
+                    ready[alloc_phys_i[(alloc_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]] <= 1'b0;
+                end
+            end
             // Iterating low-to-high makes the highest lane deterministic.
             // P0 is hardwired and out-of-range encoded addresses are ignored.
             for (write_lane = 0; write_lane < BE_WIDTH; write_lane = write_lane + 1) begin
