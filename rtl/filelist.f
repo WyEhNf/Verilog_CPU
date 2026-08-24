@@ -5,6 +5,7 @@ rtl/rv32m_divider.v
 rtl/rv32_physical_register_file.v
 rtl/rv32_rename_unit.v
 rtl/backend/rv32_rob.v
+rtl/backend/rv32_reservation_station.v
 rtl/common/rv32im_tag_compare.v
 rtl/common/rv32im_fifo.v
 rtl/common/rv32im_skid_buffer.v
