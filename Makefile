@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: doctor lint unit matrix h01 h02
+.PHONY: doctor lint unit matrix h01 h02 h03 h04 regression
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -74,3 +74,17 @@ h02:
 	@$(OSS_ENV) "$(VVP)" -N build/h02_lanes2.vvp
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32im_common_tb.LANES=4 -s rv32im_common_tb -o build/h02_lanes4.vvp -c $(RTL_FILELIST) tb/unit/rv32im_common_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/h02_lanes4.vvp
+
+h03:
+	@powershell -NoProfile -Command "$$env:RISCV_PREFIX='$(RISCV_PREFIX)'; python tools/make_image.py tests/programs/accumulate.c --arch rv32i --out-dir build/images/accumulate-rv32i --cc '$(RISCV_PREFIX)gcc.exe' --objdump '$(RISCV_PREFIX)objdump.exe' --objcopy '$(RISCV_PREFIX)objcopy.exe' --readelf '$(RISCV_PREFIX)readelf.exe'"
+	@powershell -NoProfile -Command "python tools/test_image_pipeline.py build/images/accumulate-rv32i/accumulate.image"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32im_memory_model_tb -o build/rv32im_memory_model_tb.vvp tb/models/rv32im_memory_model.v tb/unit/rv32im_memory_model_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/rv32im_memory_model_tb.vvp
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32im_memory_image_tb -o build/rv32im_memory_image_tb.vvp tb/models/rv32im_memory_model.v tb/unit/rv32im_memory_image_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/rv32im_memory_image_tb.vvp +IMAGE=RISC-V-CPU-Simulator/testcases/naive.data
+
+h04:
+	@powershell -NoProfile -Command "python tools/test_trace_tools.py"
+
+regression:
+	@powershell -NoProfile -Command "python tools/regression.py"
