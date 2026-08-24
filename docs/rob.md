@@ -1,0 +1,17 @@
+# 重排序缓冲（B-03）
+
+`rtl/backend/rv32_rob.v` 是按程序顺序分配、按 head 连续提交的环形 ROB。每个 slot
+保存 PC、原始指令、逻辑/物理寄存器信息、结果、store 元数据、HALT/error 标志和 branch
+checkpoint。slot 的 generation 在复用时递增并跳过零；completion、store ack 和 recovery
+都必须同时匹配 valid、slot 和 generation，旧响应不会写入新一代 entry。
+
+store 到达 head 后先通过 `store_commit_valid_o` 请求 LSQ/Cache 提交许可，收到
+`store_ack_valid_i` 后才产生 CommitRecord 并 pop。普通结果只在 head 连续 ready 时提交。
+HALT、error 和返回值只在该精确提交沿更新。
+
+branch recovery 以 distance-from-head 选择最老的 live request，恢复该 entry 的 opaque
+checkpoint，保留 branch 及其以前的 entry，截断年轻 ROB 项并递增 epoch。恢复优先于普通
+completion、commit 和 allocation。
+
+验证命令：`make b03`，覆盖 BE_WIDTH=1/2/4、generation stale completion、store ordering、
+branch recovery、HALT 和 precise error。

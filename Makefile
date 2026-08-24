@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: doctor lint unit matrix h01 h02 h03 h04 b01 b02 regression
+.PHONY: doctor lint unit matrix h01 h02 h03 h04 b01 b02 b03 regression
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -101,6 +101,14 @@ b02:
 	@$(OSS_ENV) "$(VVP)" -N build/b02_be2_p64.vvp | findstr /C:"PASS: B-02 rename BE_WIDTH=2 PHYS_REGS=64"
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=4 -P rv32_rename_unit_tb.PHYS_REGS=96 -s rv32_rename_unit_tb -o build/b02_be4_p96.vvp -c $(RTL_FILELIST) tb/unit/rv32_rename_unit_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b02_be4_p96.vvp | findstr /C:"PASS: B-02 rename BE_WIDTH=4 PHYS_REGS=96"
+
+b03:
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=1 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be1.vvp -c $(RTL_FILELIST) tb/unit/rv32_rob_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b03_be1.vvp | findstr /C:"PASS: B-03 ROB BE_WIDTH=1"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=2 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be2.vvp -c $(RTL_FILELIST) tb/unit/rv32_rob_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b03_be2.vvp | findstr /C:"PASS: B-03 ROB BE_WIDTH=2"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=4 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be4.vvp -c $(RTL_FILELIST) tb/unit/rv32_rob_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b03_be4.vvp | findstr /C:"PASS: B-03 ROB BE_WIDTH=4"
 
 regression:
 	@powershell -NoProfile -Command "python tools/regression.py"
