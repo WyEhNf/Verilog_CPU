@@ -79,6 +79,7 @@ module rv32_reservation_station #(
     integer reset_slot;
     integer wake_slot;
     integer issue_slot;
+    integer issue_fire_lane;
     integer alloc_cursor;
     integer flush_count;
     integer remaining_count;
@@ -124,7 +125,6 @@ module rv32_reservation_station #(
         issue_slot_o = {(BE_WIDTH*SLOT_WIDTH){1'b0}};
         selected_mask = {ENTRIES{1'b0}};
         selected_count = 0;
-        issue_fire_count = 0;
         for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
             found = 1'b0;
             chosen_slot = 0;
@@ -149,9 +149,19 @@ module rv32_reservation_station #(
                 issue_slot_o[(lane*SLOT_WIDTH) +: SLOT_WIDTH] = chosen_slot[SLOT_WIDTH-1:0];
                 selected_mask[chosen_slot] = 1'b1;
                 selected_count = selected_count + 1;
-                if (issue_ready_i[lane]) issue_fire_count = issue_fire_count + 1;
             end
         end
+    end
+
+    // Keep issue selection independent from the downstream ready feedback.
+    // This also makes the selected operation safe to use for functional-unit
+    // routing in an integration wrapper without introducing a combinational
+    // ready/valid cycle.
+    always @* begin
+        issue_fire_count = 0;
+        for (issue_fire_lane = 0; issue_fire_lane < BE_WIDTH; issue_fire_lane = issue_fire_lane + 1)
+            if (issue_valid_o[issue_fire_lane] && issue_ready_i[issue_fire_lane])
+                issue_fire_count = issue_fire_count + 1;
     end
 
     always @(posedge clk_i) begin
