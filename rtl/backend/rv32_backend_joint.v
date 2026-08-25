@@ -323,7 +323,7 @@ module rv32_backend_joint #(
     // Issue acceptance is independent from completion/CDB backpressure.  The
     // previous wiring reused alu_exec_ready for both directions, creating a
     // combinational loop through the reservation station's issue_valid path.
-    assign rs_issue_ready[0] = rs_issue_is_mdu ? mdu_issue_ready : alu_issue_ready;
+    assign rs_issue_ready = {{(BE_WIDTH-1){1'b0}}, (rs_issue_is_mdu ? mdu_issue_ready : alu_issue_ready)};
     assign mdu_completion_ready = mdu_rank < 3 ? producer_ready[mdu_rank] : 1'b0;
     assign lsq_load_complete_ready = load_rank < 3 ? producer_ready[load_rank] : 1'b0;
 

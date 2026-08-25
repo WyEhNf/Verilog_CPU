@@ -48,6 +48,8 @@ module rv32_backend_joint_tb #(
     wire [31:0] redirect_pc;
     wire [7:0] return_value;
     integer bad, commit_count;
+    reg redirect_seen, younger_commit_seen;
+    reg [31:0] redirect_pc_seen;
     reg [7:0] memory [0:255];
     integer i;
 
@@ -56,8 +58,6 @@ module rv32_backend_joint_tb #(
         .clk_i(clk), .reset_i(reset), .flush_i(flush), .trace_valid_i(trace_valid), .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst), .trace_op_i(trace_op), .trace_imm_i(trace_imm), .trace_rd_i(trace_rd), .trace_rs1_i(trace_rs1), .trace_rs2_i(trace_rs2), .trace_rd_we_i(trace_rd_we), .trace_rs1_used_i(trace_rs1_used), .trace_rs2_used_i(trace_rs2_used), .trace_is_load_i(trace_load), .trace_is_store_i(trace_store), .trace_is_branch_i(trace_branch), .trace_is_halt_i(trace_halt), .trace_is_error_i(trace_error), .trace_mem_size_i(trace_size), .trace_mem_unsigned_i(trace_unsigned), .trace_store_data_i(trace_store_data), .trace_pred_taken_i(trace_pred_taken), .trace_pred_target_i(trace_pred_target), .trace_pred_kind_i(trace_pred_kind), .dcache_req_valid_o(req_valid), .dcache_req_ready_i(req_ready), .dcache_req_is_load_o(req_load), .dcache_req_is_store_o(req_store), .dcache_req_addr_o(req_addr), .dcache_req_size_o(req_size), .dcache_req_unsigned_o(req_unsigned), .dcache_req_mask_o(req_mask), .dcache_req_wdata_o(req_wdata), .dcache_req_rob_tag_o(req_rob_tag), .dcache_req_lsq_tag_o(req_lsq_tag), .dcache_resp_valid_i(resp_valid), .dcache_resp_ready_o(), .dcache_resp_lsq_tag_i(resp_lsq_tag), .dcache_resp_addr_i(resp_addr), .dcache_resp_line_data_i(resp_line), .dcache_resp_word_data_i(resp_word), .dcache_resp_line_valid_i(resp_line_valid), .dcache_resp_error_i(resp_error), .dcache_store_ack_valid_i(store_ack_valid), .dcache_store_ack_lsq_tag_i(store_ack_lsq_tag), .dcache_store_ack_error_i(store_ack_error), .commit_ready_i(commit_ready), .commit_valid_o(commit_valid), .commit_pc_o(commit_pc), .commit_inst_o(commit_inst), .commit_rd_o(commit_rd), .commit_rd_we_o(commit_rd_we), .commit_value_o(commit_value), .commit_is_store_o(commit_store), .commit_store_addr_o(commit_store_addr), .commit_store_mask_o(commit_store_mask), .commit_store_data_o(commit_store_data), .commit_tag_o(commit_tag), .redirect_valid_o(redirect_valid), .redirect_pc_o(redirect_pc), .halted_o(halted), .error_o(error), .return_value_o(return_value)
     );
     initial begin clk = 0; forever #5 clk = ~clk; end
-    always @(posedge clk) if ($time < 400) $display("DBG t=%0t tr=%b/%b ren=%b disp=%b rob=%0d rs=%0d lsq=%0d issue=%b alu=%b mdu=%b cdb=%b commit=%b", $time, trace_valid, trace_ready, dut.rename_valid, dut.dispatch_valid, dut.rob_occupancy, dut.rs_occupancy, dut.lsq_occupancy, dut.rs_issue_valid, dut.alu_exec_valid, dut.mdu_completion_valid, dut.cdb_valid, commit_valid);
-
     always @(posedge clk) begin
         resp_valid <= 1'b0;
         store_ack_valid <= 1'b0;
@@ -75,7 +75,14 @@ module rv32_backend_joint_tb #(
                 memory[req_addr[7:0]] <= req_wdata[7:0];
             end
         end
-        if (commit_valid && commit_ready) commit_count <= commit_count + 1;
+        if (commit_valid && commit_ready) begin
+            commit_count <= commit_count + 1;
+            if (commit_pc == 32'h2c) younger_commit_seen <= 1'b1;
+        end
+        if (redirect_valid) begin
+            redirect_seen <= 1'b1;
+            redirect_pc_seen <= redirect_pc;
+        end
     end
 
     task clear_trace;
@@ -89,20 +96,34 @@ module rv32_backend_joint_tb #(
             @(posedge clk); #1; clear_trace();
         end
     endtask
+    task send_mem;
+        input [31:0] pc; input [5:0] op; input [31:0] imm; input [4:0] rd; input load; input store; input [1:0] size; input unsign; input [127:0] sdata;
+        begin
+            while (!trace_ready) @(posedge clk);
+            trace_pc=pc; trace_inst={26'b0,op}; trace_op=op; trace_imm=imm; trace_rd=rd; trace_rs1=0; trace_rs2=0; trace_rd_we=load; trace_rs1_used=0; trace_rs2_used=0; trace_load=load; trace_store=store; trace_branch=0; trace_halt=0; trace_store_data=sdata; trace_size=size; trace_unsigned=unsign; trace_valid=1;
+            @(posedge clk); #1; clear_trace();
+        end
+    endtask
     task expect_commit;
         input [31:0] pc; input [31:0] value; input rdwe;
         integer cycles;
         begin
             cycles=0;
             while (!commit_valid && cycles < 100) begin @(posedge clk); #1; cycles=cycles+1; end
-            if (!commit_valid || commit_pc !== pc || commit_value !== value || commit_rd_we !== rdwe) bad=bad+1;
-            if (cycles >= 100) bad=bad+1;
+            if (!commit_valid || commit_pc !== pc || commit_value !== value || commit_rd_we !== rdwe) begin
+                $display("EXPECT_FAIL pc=%h got_valid=%b got_pc=%h got_value=%h got_rdwe=%b cycles=%0d", pc, commit_valid, commit_pc, commit_value, commit_rd_we, cycles);
+                bad=bad+1;
+            end
+            if (cycles >= 100) begin
+                $display("EXPECT_TIMEOUT pc=%h", pc);
+                bad=bad+1;
+            end
             @(posedge clk); #1;
         end
     endtask
 
     initial begin
-        bad=0; commit_count=0; reset=1; flush=0; commit_ready=1; resp_valid=0; resp_line_valid=1; resp_error=0; resp_lsq_tag=0; resp_addr=0; resp_word=0; resp_line=0; store_ack_valid=0; store_ack_error=0; store_ack_lsq_tag=0; clear_trace();
+        bad=0; commit_count=0; redirect_seen=0; younger_commit_seen=0; redirect_pc_seen=0; reset=1; flush=0; commit_ready=1; resp_valid=0; resp_line_valid=1; resp_error=0; resp_lsq_tag=0; resp_addr=0; resp_word=0; resp_line=0; store_ack_valid=0; store_ack_error=0; store_ack_lsq_tag=0; clear_trace();
         for (i=0; i<256; i=i+1) memory[i]=0;
         #12; reset=0; #1;
         // RAW chain through rename -> PRF -> RS wakeup -> ALU -> CDB -> ROB.
@@ -120,9 +141,33 @@ module rv32_backend_joint_tb #(
         expect_commit(32'h10, 0, 0);
         send_inst(32'h14, `RV32IM_OP_LW, 32'h20, 5, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0);
         expect_commit(32'h14, 32'h0000002a, 1);
+        // Byte forwarding: a younger LB consumes one byte from an older
+        // uncommitted SW without waiting for the cache request.
+        send_mem(32'h40, `RV32IM_OP_SW, 32'h40, 0, 0, 1, `RV32IM_MEM_WORD, 0, 128'h000000000000000000000044332211);
+        send_mem(32'h44, `RV32IM_OP_LBU, 32'h41, 6, 1, 0, `RV32IM_MEM_BYTE, 1, 0);
+        expect_commit(32'h40, 0, 0);
+        expect_commit(32'h44, 32'h00000022, 1);
+        // WAW: both writes to x7 commit in order and the final value wins.
+        send_inst(32'h18, `RV32IM_OP_ADDI, 7, 7, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0);
+        send_inst(32'h1c, `RV32IM_OP_ADDI, 9, 7, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0);
+        expect_commit(32'h18, 7, 1);
+        expect_commit(32'h1c, 9, 1);
+        // WAR: the older long-latency read keeps its pre-write physical
+        // source while the younger instruction writes the same architectural
+        // register.
+        send_inst(32'h20, `RV32IM_OP_MUL, 0, 8, 7, 7, 1, 1, 1, 0, 0, 0, 0, 0);
+        send_inst(32'h24, `RV32IM_OP_ADDI, 3, 7, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0);
+        expect_commit(32'h20, 81, 1);
+        expect_commit(32'h24, 3, 1);
+        // Checkpoint recovery: taken BEQ is predicted not-taken, so the
+        // younger instruction must be squashed before it can commit.
+        send_inst(32'h28, `RV32IM_OP_BEQ, 8, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0);
+        send_inst(32'h2c, `RV32IM_OP_ADDI, 99, 9, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0);
+        expect_commit(32'h28, 0, 0);
+        if (!redirect_seen || redirect_pc_seen !== 32'h30 || younger_commit_seen) bad=bad+1;
         // HALT is precise at the ROB head and captures the computed value.
-        send_inst(32'h18, `RV32IM_OP_ADD, 0, 0, 4, 0, 0, 1, 0, 0, 0, 0, 1, 0);
-        expect_commit(32'h18, 10, 0);
+        send_inst(32'h30, `RV32IM_OP_ADD, 0, 0, 4, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+        expect_commit(32'h30, 10, 0);
         if (!halted || error || return_value != 8'd10) bad=bad+1;
         if (bad != 0) begin $display("FAIL: B-09 backend joint BE_WIDTH=%0d checks=%0d", BE_WIDTH, bad); $finish(1); end
         $display("PASS: B-09 backend joint BE_WIDTH=%0d", BE_WIDTH); $finish(0);
