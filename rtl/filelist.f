@@ -8,6 +8,7 @@ rtl/backend/rv32_rob.v
 rtl/backend/rv32_reservation_station.v
 rtl/backend/rv32m_mdu_reservation_station.v
 rtl/backend/rv32_completion_network.v
+rtl/backend/rv32_lsq.v
 rtl/common/rv32im_tag_compare.v
 rtl/common/rv32im_fifo.v
 rtl/common/rv32im_skid_buffer.v

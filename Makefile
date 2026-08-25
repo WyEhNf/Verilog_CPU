@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: doctor lint unit matrix h01 h02 h03 h04 b01 b02 b03 b04 b05 b06 b07 regression
+.PHONY: doctor lint unit matrix h01 h02 h03 h04 b01 b02 b03 b04 b05 b06 b07 b08 regression
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -133,6 +133,12 @@ b07:
 	@$(OSS_ENV) "$(VVP)" -N build/b07_be1.vvp | findstr /C:"PASS: B-07 completion network BE_WIDTH=1"
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_completion_network_tb.BE_WIDTH=2 -s rv32_completion_network_tb -o build/b07_be2.vvp -c $(RTL_FILELIST) tb/unit/rv32_completion_network_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b07_be2.vvp | findstr /C:"PASS: B-07 completion network BE_WIDTH=2"
+
+b08:
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_lsq_tb.BE_WIDTH=1 -s rv32_lsq_tb -o build/b08_be1.vvp -c $(RTL_FILELIST) tb/unit/rv32_lsq_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b08_be1.vvp | findstr /C:"PASS: B-08 LSQ BE_WIDTH=1"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_lsq_tb.BE_WIDTH=2 -s rv32_lsq_tb -o build/b08_be2.vvp -c $(RTL_FILELIST) tb/unit/rv32_lsq_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b08_be2.vvp | findstr /C:"PASS: B-08 LSQ BE_WIDTH=2"
 
 regression:
 	@powershell -NoProfile -Command "python tools/regression.py"
