@@ -38,6 +38,10 @@ module rv32_backend_joint_tb #(
     reg store_ack_valid, store_ack_error;
     reg [TAGW-1:0] store_ack_lsq_tag;
     reg inject_load_error, inject_store_error;
+    reg defer_load_response, held_load_valid, completion_collision_seen;
+    reg [TAGW-1:0] held_load_lsq_tag;
+    reg [31:0] held_load_addr, held_load_word;
+    reg [127:0] held_load_line;
     reg commit_ready;
     wire commit_valid, commit_rd_we, commit_store;
     wire [31:0] commit_pc, commit_inst, commit_value, commit_store_addr;
@@ -66,13 +70,21 @@ module rv32_backend_joint_tb #(
         store_ack_error <= 1'b0;
         if (req_valid && req_ready) begin
             if (req_load) begin
-                resp_valid <= 1'b1;
-                resp_error <= inject_load_error;
-                resp_lsq_tag <= req_lsq_tag;
-                resp_addr <= req_addr;
-                resp_line_valid <= 1'b1;
-                resp_line <= {96'b0, memory[req_addr[7:0]+3], memory[req_addr[7:0]+2], memory[req_addr[7:0]+1], memory[req_addr[7:0]]};
-                resp_word <= {memory[req_addr[7:0]+3], memory[req_addr[7:0]+2], memory[req_addr[7:0]+1], memory[req_addr[7:0]]};
+                if (defer_load_response) begin
+                    held_load_valid <= 1'b1;
+                    held_load_lsq_tag <= req_lsq_tag;
+                    held_load_addr <= req_addr;
+                    held_load_line <= {96'b0, memory[req_addr[7:0]+3], memory[req_addr[7:0]+2], memory[req_addr[7:0]+1], memory[req_addr[7:0]]};
+                    held_load_word <= {memory[req_addr[7:0]+3], memory[req_addr[7:0]+2], memory[req_addr[7:0]+1], memory[req_addr[7:0]]};
+                end else begin
+                    resp_valid <= 1'b1;
+                    resp_error <= inject_load_error;
+                    resp_lsq_tag <= req_lsq_tag;
+                    resp_addr <= req_addr;
+                    resp_line_valid <= 1'b1;
+                    resp_line <= {96'b0, memory[req_addr[7:0]+3], memory[req_addr[7:0]+2], memory[req_addr[7:0]+1], memory[req_addr[7:0]]};
+                    resp_word <= {memory[req_addr[7:0]+3], memory[req_addr[7:0]+2], memory[req_addr[7:0]+1], memory[req_addr[7:0]]};
+                end
             end else if (req_store) begin
                 store_ack_valid <= 1'b1;
                 store_ack_error <= inject_store_error;
@@ -88,6 +100,9 @@ module rv32_backend_joint_tb #(
             redirect_seen <= 1'b1;
             redirect_pc_seen <= redirect_pc;
         end
+        if (dut.mdu_completion_valid && dut.mdu_completion_ready &&
+            dut.lsq_load_complete_valid && dut.lsq_load_complete_ready)
+            completion_collision_seen <= 1'b1;
     end
 
     task clear_trace;
@@ -126,9 +141,19 @@ module rv32_backend_joint_tb #(
             @(posedge clk); #1;
         end
     endtask
+    task release_held_load_with_mul;
+        begin
+            while (!held_load_valid) begin @(posedge clk); #1; end
+            while (!dut.mdu.multiplier.s2_valid) begin @(posedge clk); #1; end
+            @(negedge clk);
+            resp_valid=1'b1; resp_error=inject_load_error; resp_lsq_tag=held_load_lsq_tag;
+            resp_addr=held_load_addr; resp_line_valid=1'b1; resp_line=held_load_line; resp_word=held_load_word;
+            held_load_valid=1'b0;
+        end
+    endtask
 
     initial begin
-        bad=0; commit_count=0; redirect_seen=0; younger_commit_seen=0; redirect_pc_seen=0; reset=1; flush=0; commit_ready=1; resp_valid=0; resp_line_valid=1; resp_error=0; resp_lsq_tag=0; resp_addr=0; resp_word=0; resp_line=0; store_ack_valid=0; store_ack_error=0; store_ack_lsq_tag=0; inject_load_error=0; inject_store_error=0; clear_trace();
+        bad=0; commit_count=0; redirect_seen=0; younger_commit_seen=0; redirect_pc_seen=0; reset=1; flush=0; commit_ready=1; resp_valid=0; resp_line_valid=1; resp_error=0; resp_lsq_tag=0; resp_addr=0; resp_word=0; resp_line=0; store_ack_valid=0; store_ack_error=0; store_ack_lsq_tag=0; inject_load_error=0; inject_store_error=0; defer_load_response=0; held_load_valid=0; held_load_lsq_tag=0; held_load_addr=0; held_load_word=0; held_load_line=0; completion_collision_seen=0; clear_trace();
         for (i=0; i<256; i=i+1) memory[i]=0;
         #12; reset=0; #1;
         // RAW chain through rename -> PRF -> RS wakeup -> ALU -> CDB -> ROB.
@@ -196,6 +221,24 @@ module rv32_backend_joint_tb #(
         commit_ready=1;
         expect_commit(32'h54, 0, 0);
         if (!error) bad=bad+1;
+
+        // Force a three-stage MUL result and an LSQ load result into the
+        // completion network on the same cycle. Both must be accepted and
+        // retain their ROB order through the single-lane CDB.
+        reset=1; inject_store_error=0; defer_load_response=0; held_load_valid=0; completion_collision_seen=0; clear_trace(); @(posedge clk); #1; reset=0; #1;
+        memory[8'h70]=8'h34; memory[8'h71]=0; memory[8'h72]=0; memory[8'h73]=0;
+        send_inst(32'h60, `RV32IM_OP_ADDI, 6, 11, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0);
+        send_inst(32'h64, `RV32IM_OP_ADDI, 7, 12, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0);
+        expect_commit(32'h60, 6, 1);
+        expect_commit(32'h64, 7, 1);
+        defer_load_response=1;
+        send_mem(32'h68, `RV32IM_OP_LW, 32'h70, 13, 1, 0, `RV32IM_MEM_WORD, 0, 0);
+        send_inst(32'h6c, `RV32IM_OP_MUL, 0, 14, 11, 12, 1, 1, 1, 0, 0, 0, 0, 0);
+        release_held_load_with_mul();
+        defer_load_response=0;
+        expect_commit(32'h68, 32'h34, 1);
+        expect_commit(32'h6c, 42, 1);
+        if (!completion_collision_seen) bad=bad+1;
         if (bad != 0) begin $display("FAIL: B-09 backend joint BE_WIDTH=%0d checks=%0d", BE_WIDTH, bad); $finish(1); end
         $display("PASS: B-09 backend joint BE_WIDTH=%0d", BE_WIDTH); $finish(0);
     end
