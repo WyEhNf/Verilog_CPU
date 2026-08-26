@@ -20,4 +20,6 @@ held stable while their ready input is low.
 The request payload follows the shared `MemoryRequest` fields: operation,
 address, size, signedness, byte mask, line write data, ROB tag, and LSQ tag.
 Responses carry an LSQ tag, optional 128-bit line data (or a 32-bit word
-fallback), and an error bit.
+fallback), and an error bit. The LSQ retains the error alongside a completed
+load or acknowledged store until the corresponding ready/valid handshake, so
+the backend can report it precisely at ROB retirement.
