@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: doctor lint unit matrix h01 h02 h03 h04 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression
+.PHONY: doctor lint unit matrix h01 h02 h03 h04 a01 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -85,6 +85,12 @@ h03:
 
 h04:
 	@powershell -NoProfile -Command "python tools/test_trace_tools.py"
+
+a01:
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32im_decoder_tb -o build/a01_decoder.vvp -c $(RTL_FILELIST) tb/unit/rv32im_decoder_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/a01_decoder.vvp | findstr /C:"PASS: A-01 decoder"
+	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/rv32im_decoder.v
+	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/rv32im_decoder.v; hierarchy -check -top rv32im_decoder; proc; check"
 
 b01:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=1 -P rv32_physical_register_file_tb.PHYS_REGS=48 -s rv32_physical_register_file_tb -o build/b01_be1_p48.vvp -c $(RTL_FILELIST) tb/unit/rv32_physical_register_file_tb.v
