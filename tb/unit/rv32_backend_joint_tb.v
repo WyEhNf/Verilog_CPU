@@ -37,6 +37,7 @@ module rv32_backend_joint_tb #(
     reg [127:0] resp_line;
     reg store_ack_valid, store_ack_error;
     reg [TAGW-1:0] store_ack_lsq_tag;
+    reg inject_load_error, inject_store_error;
     reg commit_ready;
     wire commit_valid, commit_rd_we, commit_store;
     wire [31:0] commit_pc, commit_inst, commit_value, commit_store_addr;
@@ -60,10 +61,13 @@ module rv32_backend_joint_tb #(
     initial begin clk = 0; forever #5 clk = ~clk; end
     always @(posedge clk) begin
         resp_valid <= 1'b0;
+        resp_error <= 1'b0;
         store_ack_valid <= 1'b0;
+        store_ack_error <= 1'b0;
         if (req_valid && req_ready) begin
             if (req_load) begin
                 resp_valid <= 1'b1;
+                resp_error <= inject_load_error;
                 resp_lsq_tag <= req_lsq_tag;
                 resp_addr <= req_addr;
                 resp_line_valid <= 1'b1;
@@ -71,6 +75,7 @@ module rv32_backend_joint_tb #(
                 resp_word <= {memory[req_addr[7:0]+3], memory[req_addr[7:0]+2], memory[req_addr[7:0]+1], memory[req_addr[7:0]]};
             end else if (req_store) begin
                 store_ack_valid <= 1'b1;
+                store_ack_error <= inject_store_error;
                 store_ack_lsq_tag <= req_lsq_tag;
                 memory[req_addr[7:0]] <= req_wdata[7:0];
             end
@@ -123,7 +128,7 @@ module rv32_backend_joint_tb #(
     endtask
 
     initial begin
-        bad=0; commit_count=0; redirect_seen=0; younger_commit_seen=0; redirect_pc_seen=0; reset=1; flush=0; commit_ready=1; resp_valid=0; resp_line_valid=1; resp_error=0; resp_lsq_tag=0; resp_addr=0; resp_word=0; resp_line=0; store_ack_valid=0; store_ack_error=0; store_ack_lsq_tag=0; clear_trace();
+        bad=0; commit_count=0; redirect_seen=0; younger_commit_seen=0; redirect_pc_seen=0; reset=1; flush=0; commit_ready=1; resp_valid=0; resp_line_valid=1; resp_error=0; resp_lsq_tag=0; resp_addr=0; resp_word=0; resp_line=0; store_ack_valid=0; store_ack_error=0; store_ack_lsq_tag=0; inject_load_error=0; inject_store_error=0; clear_trace();
         for (i=0; i<256; i=i+1) memory[i]=0;
         #12; reset=0; #1;
         // RAW chain through rename -> PRF -> RS wakeup -> ALU -> CDB -> ROB.
@@ -169,6 +174,28 @@ module rv32_backend_joint_tb #(
         send_inst(32'h30, `RV32IM_OP_ADD, 0, 0, 4, 0, 0, 1, 0, 0, 0, 0, 1, 0);
         expect_commit(32'h30, 10, 0);
         if (!halted || error || return_value != 8'd10) bad=bad+1;
+
+        // Load response errors survive the completion network and become
+        // architecturally visible only when the load reaches the ROB head.
+        reset=1; inject_load_error=0; inject_store_error=0; clear_trace(); @(posedge clk); #1; reset=0; #1;
+        commit_ready=0; inject_load_error=1;
+        send_mem(32'h50, `RV32IM_OP_LW, 32'h60, 10, 1, 0, `RV32IM_MEM_WORD, 0, 0);
+        expect_commit(32'h50, 0, 1);
+        if (error) bad=bad+1;
+        commit_ready=1;
+        expect_commit(32'h50, 0, 1);
+        if (!error) bad=bad+1;
+
+        // Store acknowledgement errors follow the separate visibility
+        // handshake and become precise when the store retires.
+        reset=1; inject_load_error=0; inject_store_error=0; clear_trace(); @(posedge clk); #1; reset=0; #1;
+        commit_ready=0; inject_store_error=1;
+        send_mem(32'h54, `RV32IM_OP_SW, 32'h64, 0, 0, 1, `RV32IM_MEM_WORD, 0, 128'h55);
+        expect_commit(32'h54, 0, 0);
+        if (error) bad=bad+1;
+        commit_ready=1;
+        expect_commit(32'h54, 0, 0);
+        if (!error) bad=bad+1;
         if (bad != 0) begin $display("FAIL: B-09 backend joint BE_WIDTH=%0d checks=%0d", BE_WIDTH, bad); $finish(1); end
         $display("PASS: B-09 backend joint BE_WIDTH=%0d", BE_WIDTH); $finish(0);
     end
