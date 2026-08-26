@@ -1,6 +1,7 @@
 rtl/rv32im_decoder.v
 rtl/predictor/rv32_branch_predictor.v
 rtl/cache/rv32_icache.v
+rtl/frontend/rv32_fetch_frontend.v
 rtl/rv32i_alu.v
 rtl/rv32m_multiplier.v
 rtl/rv32m_divider.v

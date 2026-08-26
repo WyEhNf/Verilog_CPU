@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: doctor lint unit matrix h01 h02 h03 h04 a01 a02 a03 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression
+.PHONY: doctor lint unit matrix h01 h02 h03 h04 a01 a02 a03 a04 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -103,6 +103,16 @@ a03:
 	@$(OSS_ENV) "$(VVP)" -N build/a03_icache.vvp | findstr /C:"PASS: A-03 I-cache"
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/cache/rv32_icache.v
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/cache/rv32_icache.v; hierarchy -check -top rv32_icache; proc; memory; check"
+
+a04:
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=1 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe1.vvp -c $(RTL_FILELIST) tb/unit/rv32_fetch_frontend_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/a04_frontend_fe1.vvp | findstr /C:"PASS: A-04 frontend FE_WIDTH=1"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=2 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe2.vvp -c $(RTL_FILELIST) tb/unit/rv32_fetch_frontend_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/a04_frontend_fe2.vvp | findstr /C:"PASS: A-04 frontend FE_WIDTH=2"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=4 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe4.vvp -c $(RTL_FILELIST) tb/unit/rv32_fetch_frontend_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/a04_frontend_fe4.vvp | findstr /C:"PASS: A-04 frontend FE_WIDTH=4"
+	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/frontend/rv32_fetch_frontend.v
+	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/frontend/rv32_fetch_frontend.v; hierarchy -check -top rv32_fetch_frontend; proc; memory; check"
 
 b01:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=1 -P rv32_physical_register_file_tb.PHYS_REGS=48 -s rv32_physical_register_file_tb -o build/b01_be1_p48.vvp -c $(RTL_FILELIST) tb/unit/rv32_physical_register_file_tb.v
