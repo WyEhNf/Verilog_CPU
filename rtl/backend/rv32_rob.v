@@ -61,6 +61,7 @@ module rv32_rob #(
     output reg  [127:0]                 store_commit_data_o,
     input  wire                         store_ack_valid_i,
     input  wire [TAG_WIDTH-1:0]          store_ack_tag_i,
+    input  wire                         store_ack_error_i,
 
     input  wire [BE_WIDTH-1:0]           recovery_valid_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] recovery_tag_i,
@@ -296,6 +297,7 @@ module rv32_rob #(
                 ready_mem[reset_slot] <= 1'b0;
                 store_wait_mem[reset_slot] <= 1'b0;
                 store_sent_mem[reset_slot] <= 1'b0;
+                error_mem[reset_slot] <= 1'b0;
                 generation_mem[reset_slot] <= {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
                 generation_next_mem[reset_slot] <= {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
             end
@@ -332,8 +334,10 @@ module rv32_rob #(
                 end
             end
             for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
-                if (store_ack_valid_i && tag_matches(store_ack_tag_i, slot_index))
+                if (store_ack_valid_i && tag_matches(store_ack_tag_i, slot_index)) begin
                     store_wait_mem[slot_index] <= 1'b1;
+                    if (store_ack_error_i) error_mem[slot_index] <= 1'b1;
+                end
             end
             if (store_commit_valid_o && store_commit_ready_i) begin
                 store_sent_mem[head_reg] <= 1'b1;

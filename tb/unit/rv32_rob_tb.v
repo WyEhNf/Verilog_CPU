@@ -34,7 +34,7 @@ module rv32_rob_tb #(
     wire [(BE_WIDTH*128)-1:0] commit_data;
     wire [(BE_WIDTH*TAG_W)-1:0] commit_tag;
     wire store_valid;
-    reg store_ready, store_ack_valid;
+    reg store_ready, store_ack_valid, store_ack_error;
     wire [TAG_W-1:0] store_tag;
     wire [31:0] store_addr;
     wire [15:0] store_mask;
@@ -62,7 +62,7 @@ module rv32_rob_tb #(
         .alloc_ready_o(alloc_ready), .alloc_fire_o(alloc_fire), .alloc_tag_o(alloc_tag), .alloc_count_o(alloc_count),
         .completion_valid_i(cpl_valid), .completion_tag_i(cpl_tag), .completion_value_i(cpl_value), .completion_done_i(cpl_done), .completion_error_i(cpl_error), .completion_store_addr_i(cpl_addr), .completion_store_mask_i(cpl_mask), .completion_store_data_i(cpl_data),
         .commit_ready_i(commit_ready), .commit_valid_o(commit_valid), .commit_rd_we_o(commit_rd_we), .commit_rd_o(commit_rd), .commit_pc_o(commit_pc), .commit_inst_o(commit_inst), .commit_value_o(commit_value), .commit_is_store_o(commit_store), .commit_store_addr_o(commit_addr), .commit_store_mask_o(commit_mask), .commit_store_data_o(commit_data), .commit_tag_o(commit_tag),
-        .store_commit_valid_o(store_valid), .store_commit_ready_i(store_ready), .store_commit_tag_o(store_tag), .store_commit_addr_o(store_addr), .store_commit_mask_o(store_mask), .store_commit_data_o(store_data), .store_ack_valid_i(store_ack_valid), .store_ack_tag_i(store_ack_tag),
+        .store_commit_valid_o(store_valid), .store_commit_ready_i(store_ready), .store_commit_tag_o(store_tag), .store_commit_addr_o(store_addr), .store_commit_mask_o(store_mask), .store_commit_data_o(store_data), .store_ack_valid_i(store_ack_valid), .store_ack_tag_i(store_ack_tag), .store_ack_error_i(store_ack_error),
         .recovery_valid_i(recovery_valid), .recovery_tag_i(recovery_tag), .recovery_pc_i(recovery_pc), .recovery_accept_o(recovery_accept), .redirect_valid_o(redirect_valid), .redirect_pc_o(redirect_pc), .redirect_epoch_o(redirect_epoch), .checkpoint_restore_valid_o(checkpoint_valid), .checkpoint_restore_o(checkpoint),
         .halted_o(halted), .error_o(error), .return_value_o(return_value), .head_o(head), .tail_o(tail), .occupancy_o(occupancy)
     );
@@ -73,7 +73,7 @@ module rv32_rob_tb #(
             alloc_valid = 0; alloc_rd_we = 0; alloc_store = 0; alloc_branch = 0; alloc_halt = 0; alloc_error = 0;
             alloc_pc = 0; alloc_inst = 0; alloc_rd = 0; alloc_old = 0; alloc_new = 0; alloc_cp = 0;
             cpl_valid = 0; cpl_done = 0; cpl_error = 0; cpl_tag = 0; cpl_value = 0; cpl_addr = 0; cpl_mask = 0; cpl_data = 0;
-            recovery_valid = 0; recovery_tag = 0; recovery_pc = 0; store_ack_valid = 0; store_ack_tag = 0;
+            recovery_valid = 0; recovery_tag = 0; recovery_pc = 0; store_ack_valid = 0; store_ack_tag = 0; store_ack_error = 0;
         end
     endtask
     task alloc_one;
@@ -145,6 +145,17 @@ module rv32_rob_tb #(
         if (!commit_valid[0]) bad = bad + 1; @(posedge clk); #1;
         if (!halted || return_value != 8'h5a) bad = bad + 1;
         clear_inputs(); alloc_error[0] = 1; alloc_one(0, 32, 0); alloc_error[0] = 1; #1; stale_tag = alloc_tag[0 +: TAG_W]; @(posedge clk); #1; clear_inputs(); complete_one(0, stale_tag, 0); cpl_error[0] = 1; @(posedge clk); #1; clear_inputs(); @(posedge clk); #1;
+        if (!error) bad = bad + 1;
+
+        // A failed store acknowledgement becomes a precise ROB error when
+        // the acknowledged store retires.
+        reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0; #1;
+        clear_inputs(); alloc_store[0] = 1; alloc_one(0, 36, 0); alloc_store[0] = 1; #1; saved_store_tag = alloc_tag[0 +: TAG_W]; @(posedge clk); #1; clear_inputs();
+        complete_one(0, saved_store_tag, 0); cpl_addr[31:0] = 32'h104; cpl_mask[15:0] = 16'h000f; @(posedge clk); #1; clear_inputs();
+        if (!store_valid || commit_valid != 0) bad = bad + 1;
+        @(posedge clk); #1; clear_inputs(); store_ack_valid = 1; store_ack_tag = saved_store_tag; store_ack_error = 1; @(posedge clk); #1; clear_inputs();
+        if (!commit_valid[0] || !commit_store[0]) bad = bad + 1;
+        @(posedge clk); #1;
         if (!error) bad = bad + 1;
 
         if (bad != 0) begin $display("FAIL: B-03 ROB BE_WIDTH=%0d checks=%0d", BE_WIDTH, bad); $finish(1); end
