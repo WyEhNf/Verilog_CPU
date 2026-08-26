@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: doctor lint unit matrix h01 h02 h03 h04 a01 a02 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression
+.PHONY: doctor lint unit matrix h01 h02 h03 h04 a01 a02 a03 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -97,6 +97,12 @@ a02:
 	@$(OSS_ENV) "$(VVP)" -N build/a02_predictor.vvp | findstr /C:"PASS: A-02 bimodal predictor and BTB"
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/predictor/rv32_branch_predictor.v
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/predictor/rv32_branch_predictor.v; hierarchy -check -top rv32_branch_predictor; proc; memory; check"
+
+a03:
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32_icache_tb -o build/a03_icache.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/unit/rv32_icache_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/a03_icache.vvp | findstr /C:"PASS: A-03 I-cache"
+	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/cache/rv32_icache.v
+	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/cache/rv32_icache.v; hierarchy -check -top rv32_icache; proc; memory; check"
 
 b01:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=1 -P rv32_physical_register_file_tb.PHYS_REGS=48 -s rv32_physical_register_file_tb -o build/b01_be1_p48.vvp -c $(RTL_FILELIST) tb/unit/rv32_physical_register_file_tb.v
