@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: doctor lint unit matrix h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression
+.PHONY: doctor lint unit matrix h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -129,6 +129,12 @@ a06:
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/cache/rv32_cache_stats.v
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/memory/rv32_memory_bridge.v; hierarchy -check -top rv32_memory_bridge; proc; check"
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/cache/rv32_cache_stats.v; hierarchy -check -top rv32_cache_stats; proc; check"
+
+a07:
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s a07_frontend_cache_tb -o build/a07_frontend_cache.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/a07_frontend_cache_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/a07_frontend_cache.vvp | findstr /C:"PASS: A-07 frontend/cache joint gate"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s a07_image_fetch_smoke_tb -o build/a07_image_fetch_smoke.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/a07_image_fetch_smoke_tb.v
+	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_a07_image_smoke.ps1 -Vvp "$(VVP)" -Simulation build/a07_image_fetch_smoke.vvp -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
 
 b01:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=1 -P rv32_physical_register_file_tb.PHYS_REGS=48 -s rv32_physical_register_file_tb -o build/b01_be1_p48.vvp -c $(RTL_FILELIST) tb/unit/rv32_physical_register_file_tb.v
