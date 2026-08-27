@@ -79,6 +79,7 @@ module rv32_backend_joint #(
     output wire [TAG_WIDTH-1:0]         commit_tag_o,
     output wire                         redirect_valid_o,
     output wire [31:0]                  redirect_pc_o,
+    output wire [3:0]                   redirect_epoch_o,
     output wire                         halted_o,
     output wire                         error_o,
     output wire [7:0]                   return_value_o
@@ -306,6 +307,7 @@ module rv32_backend_joint #(
     assign commit_tag_o = rob_commit_tag[TAG_WIDTH-1:0];
     assign redirect_valid_o = rob_redirect_valid;
     assign redirect_pc_o = rob_redirect_pc;
+    assign redirect_epoch_o = rob_redirect_epoch;
 
     assign lsq_addr_update_valid = alu_exec_valid && alu_exec_is_memory;
     assign lsq_addr_update_tag = rob_to_lsq_mem[alu_exec_tag[3 +: ROB_SLOT_WIDTH]];
@@ -558,7 +560,7 @@ module rv32_backend #(
     input wire [1:0] trace_mem_size_i, input wire trace_mem_unsigned_i, input wire [127:0] trace_store_data_i, input wire trace_pred_taken_i, input wire [31:0] trace_pred_target_i, input wire [1:0] trace_pred_kind_i,
     output wire dcache_req_valid_o, input wire dcache_req_ready_i, output wire dcache_req_is_load_o, output wire dcache_req_is_store_o, output wire [31:0] dcache_req_addr_o, output wire [1:0] dcache_req_size_o, output wire dcache_req_unsigned_o, output wire [15:0] dcache_req_mask_o, output wire [127:0] dcache_req_wdata_o, output wire [TAG_WIDTH-1:0] dcache_req_rob_tag_o, output wire [TAG_WIDTH-1:0] dcache_req_lsq_tag_o,
     input wire dcache_resp_valid_i, output wire dcache_resp_ready_o, input wire [TAG_WIDTH-1:0] dcache_resp_lsq_tag_i, input wire [31:0] dcache_resp_addr_i, input wire [127:0] dcache_resp_line_data_i, input wire [31:0] dcache_resp_word_data_i, input wire dcache_resp_line_valid_i, input wire dcache_resp_error_i, input wire dcache_store_ack_valid_i, input wire [TAG_WIDTH-1:0] dcache_store_ack_lsq_tag_i, input wire dcache_store_ack_error_i,
-    input wire commit_ready_i, output wire commit_valid_o, output wire [31:0] commit_pc_o, output wire [31:0] commit_inst_o, output wire [4:0] commit_rd_o, output wire commit_rd_we_o, output wire [31:0] commit_value_o, output wire commit_is_store_o, output wire [31:0] commit_store_addr_o, output wire [15:0] commit_store_mask_o, output wire [127:0] commit_store_data_o, output wire [TAG_WIDTH-1:0] commit_tag_o, output wire redirect_valid_o, output wire [31:0] redirect_pc_o, output wire halted_o, output wire error_o, output wire [7:0] return_value_o
+    input wire commit_ready_i, output wire commit_valid_o, output wire [31:0] commit_pc_o, output wire [31:0] commit_inst_o, output wire [4:0] commit_rd_o, output wire commit_rd_we_o, output wire [31:0] commit_value_o, output wire commit_is_store_o, output wire [31:0] commit_store_addr_o, output wire [15:0] commit_store_mask_o, output wire [127:0] commit_store_data_o, output wire [TAG_WIDTH-1:0] commit_tag_o, output wire redirect_valid_o, output wire [31:0] redirect_pc_o, output wire [3:0] redirect_epoch_o, output wire halted_o, output wire error_o, output wire [7:0] return_value_o
 );
     rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .TAG_WIDTH(TAG_WIDTH)) impl (.*);
 endmodule
