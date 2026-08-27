@@ -148,8 +148,8 @@ module rv32_fetch_frontend_tb #(
         end
         fetch_ready = {FE_WIDTH{1'b1}};
         @(posedge clk); @(negedge clk);
-        if (if_req_pc != 32'h00000100 || current_epoch != 4'd0) begin
-            $display("FAIL: A-04 predicted next PC"); $finish(1);
+        if (if_req_pc != 32'h00000100 || current_epoch != 4'd0 || frozen) begin
+            $display("FAIL: A-04 predicted next PC must continue fetching"); $finish(1);
         end
 
         // A response beginning at the final word of a line produces one entry only.

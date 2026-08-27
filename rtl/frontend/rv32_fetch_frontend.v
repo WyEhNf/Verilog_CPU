@@ -84,6 +84,7 @@ module rv32_fetch_frontend #(
     integer word_index;
     reg [31:0] next_pc_comb;
     reg bundle_freeze;
+    reg freeze_after_response;
     reg req_fire;
     reg resp_fire;
 
@@ -110,6 +111,7 @@ module rv32_fetch_frontend #(
         bundle_count = 0;
         next_pc_comb = if_resp_pc_i + 32'd4;
         bundle_freeze = if_resp_error_i;
+        freeze_after_response = if_resp_error_i;
         word_index = if_resp_pc_i[3:2];
         for (b = 0; b < FE_WIDTH; b = b + 1) begin
             if ((word_index + b) < 4 && !bundle_freeze) begin
@@ -127,6 +129,7 @@ module rv32_fetch_frontend #(
                 end
                 if ((if_resp_line_data_i >> ((word_index+b)*32)) == 32'h0ff00513) begin
                     bundle_freeze = 1'b1;
+                    freeze_after_response = 1'b1;
                 end
             end
         end
@@ -201,7 +204,7 @@ module rv32_fetch_frontend #(
                 if (resp_fire) begin
                     req_pending_reg <= 1'b0;
                     pc_reg <= next_pc_comb;
-                    if (bundle_freeze || stop_i || error_i)
+                    if (freeze_after_response || stop_i || error_i)
                         frozen_reg <= 1'b1;
                 end
                 if (stop_i || error_i)
