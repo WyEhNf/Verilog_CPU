@@ -123,8 +123,12 @@ a05:
 a06:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32_memory_bridge_tb -o build/a06_memory_bridge.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/unit/rv32_memory_bridge_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a06_memory_bridge.vvp | findstr /C:"PASS: A-06 memory bridge"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32_cache_stats_tb -o build/a06_cache_stats.vvp -c $(RTL_FILELIST) tb/unit/rv32_cache_stats_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/a06_cache_stats.vvp | findstr /C:"PASS: A-06 cache statistics"
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/memory/rv32_memory_bridge.v
+	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/cache/rv32_cache_stats.v
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/memory/rv32_memory_bridge.v; hierarchy -check -top rv32_memory_bridge; proc; check"
+	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/cache/rv32_cache_stats.v; hierarchy -check -top rv32_cache_stats; proc; check"
 
 b01:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=1 -P rv32_physical_register_file_tb.PHYS_REGS=48 -s rv32_physical_register_file_tb -o build/b01_be1_p48.vvp -c $(RTL_FILELIST) tb/unit/rv32_physical_register_file_tb.v
