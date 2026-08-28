@@ -185,6 +185,13 @@ module rv32i_alu #(
             `RV32IM_OP_SW: begin
                 calc_is_memory = 1'b1;
                 calc_is_store = 1'b1;
+                // Integration callers may provide an already positioned
+                // line payload.  A zero payload means the normal CPU path:
+                // use the live rs2 value and position it at the byte offset
+                // of the effective address.  The fallback also covers a
+                // dependent store whose rs2 was not ready at RS allocation.
+                if (issue_store_data_i == 128'b0)
+                    calc_store_data = ({96'b0, issue_src2_value_i} << (calc_mem_addr[3:0] * 8));
             end
             `RV32IM_OP_ADDI,
             `RV32IM_OP_ADD: begin calc_value = issue_src1_value_i + ((issue_op_i == `RV32IM_OP_ADDI) ? issue_imm_i : issue_src2_value_i); calc_rd_we = 1'b1; end
