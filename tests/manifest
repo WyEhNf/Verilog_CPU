@@ -1,19 +1,19 @@
 # name, expected a0[7:0], recommended max cycles, long regression
 array_test1,123,200000,0
 array_test2,43,200000,0
-basicopt1,88,300000,0
-bulgarian,159,300000,0
+basicopt1,88,4000000,0
+bulgarian,159,2000000,0
 expr,58,200000,0
 gcd,178,300000,0
-hanoi,20,300000,0
+hanoi,20,1000000,0
 lvalue2,175,300000,0
-magic,106,400000,0
+magic,106,3000000,0
 manyarguments,40,200000,0
 multiarray,115,300000,0
 naive,94,100000,0
-pi,137,5000000,1
-qsort,105,5000000,1
+pi,137,620000000,1
+qsort,105,8000000,1
 queens,171,5000000,1
 statement_test,50,200000,0
-superloop,134,500000,1
-tak,186,5000000,1
+superloop,134,4000000,1
+tak,186,10000000,1

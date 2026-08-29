@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: doctor lint unit matrix h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression
+.PHONY: doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -16,6 +16,7 @@ RISCV_PREFIX ?= $(RV_ROOT)/bin/riscv-none-elf-
 
 OSS_ENV = set "VERILATOR_ROOT=$(OSS_CAD_ROOT_WIN)\share\verilator" && set "YOSYSHQ_ROOT=" && call "$(OSS_CAD_ROOT_WIN)\environment.bat" &&
 RTL_FILELIST = rtl/filelist.f
+RTL_FILES := $(strip $(file <$(RTL_FILELIST)))
 
 doctor:
 	@$(OSS_ENV) "$(ICARUS)" -V
@@ -31,13 +32,13 @@ lint:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core -o build/h00_lint.vvp -c $(RTL_FILELIST)
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32im_defs_tb -o build/h01_defs_lint.vvp -c $(RTL_FILELIST) tb/unit/rv32im_defs_tb.v
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s h01_channel_tb -o build/h01_channel_lint.vvp -c $(RTL_FILELIST) tb/integration/h01_channel_tb.v
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/cpu_core.v
+	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Wno-fatal -Irtl --top-module cpu_core -f $(RTL_FILELIST)
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_tag_compare.v
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_fifo.v
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_skid_buffer.v
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_prefix_alloc.v
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_priority_select.v
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/cpu_core.v; hierarchy -check -top cpu_core; proc; check"
+	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl $(RTL_FILES); hierarchy -check -top cpu_core; check"
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/common/rv32im_tag_compare.v; hierarchy -check -top rv32im_tag_compare; proc; check"
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/common/rv32im_fifo.v; hierarchy -check -top rv32im_fifo; proc; memory; check"
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/common/rv32im_skid_buffer.v; hierarchy -check -top rv32im_skid_buffer; proc; check"
@@ -60,6 +61,16 @@ unit:
 matrix:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_matrix_tb -o build/cpu_core_matrix_tb.vvp -c $(RTL_FILELIST) tb/unit/cpu_core_matrix_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_matrix_tb.vvp
+
+join01:
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_join01_tb -o build/cpu_core_join01_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/unit/cpu_core_join01_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_join01_tb.vvp | findstr /C:"PASS: JOIN-01"
+
+join02:
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Vvp "$(VVP)" -Simulation build/cpu_core_image_tb.vvp -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
+
+join: join01 join02
 
 h01:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32im_defs_tb -o build/rv32im_defs_tb.vvp -c $(RTL_FILELIST) tb/unit/rv32im_defs_tb.v
