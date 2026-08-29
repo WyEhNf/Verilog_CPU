@@ -113,18 +113,26 @@ module rv32_rob_tb #(
         if (!commit_valid[0] || !commit_store[0]) bad = bad + 1;
         @(posedge clk); #1;
 
-        // Branch recovery preserves the branch and kills younger entries.
+        // A non-head branch may complete on the same cycle that its recovery
+        // removes younger entries.  The completion must still make the
+        // retained branch ready while the older entry remains at the head.
+        clear_inputs(); alloc_one(0, 16, 2); #1; saved_tag0 = alloc_tag[0 +: TAG_W]; @(posedge clk); #1;
         clear_inputs(); alloc_branch[0] = 1; alloc_cp[CP_W-1:0] = 32'hcafe; alloc_one(0, 20, 0); alloc_branch[0] = 1; #1; saved_branch_tag = alloc_tag[0 +: TAG_W]; @(posedge clk); #1;
         clear_inputs(); alloc_one(0, 24, 3); #1; stale_tag = alloc_tag[0 +: TAG_W]; @(posedge clk); #1; clear_inputs();
-        recovery_valid[0] = 1; recovery_tag[0 +: TAG_W] = saved_branch_tag; recovery_pc[31:0] = 32'h200; #1;
+        recovery_valid[0] = 1; recovery_tag[0 +: TAG_W] = saved_branch_tag; recovery_pc[31:0] = 32'h200;
+        complete_one(0, saved_branch_tag, 33); #1;
         if (!recovery_accept || !redirect_valid || redirect_pc != 32'h200 || !checkpoint_valid || checkpoint != 32'hcafe) bad = bad + 1;
         @(posedge clk); #1; clear_inputs();
-        if (occupancy != 1) bad = bad + 1;
+        if (occupancy != 2 || !dut.ready_mem[saved_branch_tag[3 +: SLOT_W]] ||
+            dut.value_mem[saved_branch_tag[3 +: SLOT_W]] != 33) bad = bad + 1;
         // A stale younger tag cannot complete after recovery.
         complete_one(0, stale_tag, 77); @(posedge clk); #1; clear_inputs();
 
-        // Commit the surviving branch before appending precise HALT/error tests.
-        complete_one(0, saved_branch_tag, 0); @(posedge clk); #1; clear_inputs(); @(posedge clk); #1;
+        // Completing the older entry releases both survivors in order.  Two
+        // commit cycles cover the single-lane configuration as well.
+        complete_one(0, saved_tag0, 11); @(posedge clk); #1; clear_inputs();
+        repeat (2) begin @(posedge clk); #1; end
+        if (occupancy != 0) bad = bad + 1;
 
         // Reuse one slot and reject a completion carrying its old generation.
         clear_inputs(); alloc_one(0, 26, 0); #1; stale_tag = alloc_tag[0 +: TAG_W]; @(posedge clk); #1; clear_inputs();

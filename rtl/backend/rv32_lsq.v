@@ -10,6 +10,7 @@ module rv32_lsq #(
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer ROB_TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
+    parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SLOT_WIDTH = (LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES),
     parameter integer GENERATION_WIDTH = (TAG_WIDTH > (SLOT_WIDTH + 3)) ?
                                           (TAG_WIDTH - SLOT_WIDTH - 3) : 1,
@@ -19,6 +20,12 @@ module rv32_lsq #(
     input  wire                         clk_i,
     input  wire                         reset_i,
     input  wire                         flush_i,
+    // A branch recovery trims speculative suffix entries while retaining
+    // older memory operations that the ROB still requires for commit.
+    input  wire                         recovery_valid_i,
+    input  wire [ROB_TAG_WIDTH-1:0]     recovery_tag_i,
+    input  wire [((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES))-1:0] recovery_head_i,
+    input  wire [15:0]                  recovery_occupancy_i,
 
     input  wire [BE_WIDTH-1:0]           alloc_valid_i,
     output wire                         alloc_ready_o,
@@ -95,6 +102,7 @@ module rv32_lsq #(
     localparam integer BYTES_WIDTH = 3;
     localparam integer TAG_SLOT_LSB = 3;
     localparam integer TAG_GEN_LSB = TAG_SLOT_LSB + SLOT_WIDTH;
+    localparam integer ROB_SLOT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES);
 
     reg valid_mem [0:LSQ_ENTRIES-1];
     reg load_mem [0:LSQ_ENTRIES-1];
@@ -138,6 +146,13 @@ module rv32_lsq #(
     integer alloc_slot;
     integer update_slot;
     integer response_slot;
+    integer entry_rob_slot;
+    integer recovery_branch_slot;
+    integer recovery_branch_age;
+    integer recovery_entry_age;
+    integer recovery_keep_count;
+    integer recovery_first_killed;
+    integer recovery_kill_found;
     integer byte_index;
     integer byte_count;
     integer byte_offset;
@@ -223,7 +238,8 @@ module rv32_lsq #(
                 end
             end
             if (!unsigned_load && (count < 4) && result[(count*8)-1]) begin
-                for (n = count; n < 4; n = n + 1) result[(n*8) +: 8] = 8'hff;
+                for (n = 0; n < 4; n = n + 1)
+                    if (n >= count) result[(n*8) +: 8] = 8'hff;
             end
             extract_value = result;
         end
@@ -236,8 +252,11 @@ module rv32_lsq #(
         integer n;
         begin
             p = start;
-            for (n = 0; n < amount; n = n + 1)
-                if (p == LSQ_ENTRIES - 1) p = 0; else p = p + 1;
+            for (n = 0; n < LSQ_ENTRIES; n = n + 1) begin
+                if (n < amount) begin
+                    if (p == LSQ_ENTRIES - 1) p = 0; else p = p + 1;
+                end
+            end
             advance_slot = p[SLOT_WIDTH-1:0];
         end
     endfunction
@@ -312,21 +331,23 @@ module rv32_lsq #(
                     target_mask = size_mask(addr_mem[scan], size_mem[scan]);
                     fwd_mask = 16'b0;
                     fwd_data = 128'b0;
-                    for (older_age = 0; older_age < age; older_age = older_age + 1) begin
-                        i = head_reg + older_age;
-                        if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
-                        if (valid_mem[i] && store_mem[i]) begin
-                            if (!addr_ready_mem[i]) begin
-                                blocked = 1'b1;
-                            end else if ((addr_mem[i][31:4] == addr_mem[scan][31:4])) begin
-                                if (data_ready_mem[i]) begin
-                                    for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
-                                        if (mask_mem[i][byte_index] && target_mask[byte_index]) begin
-                                            fwd_mask[byte_index] = 1'b1;
-                                            fwd_data[(byte_index*8) +: 8] = data_mem[i][(byte_index*8) +: 8];
-                                        end
-                                end else if ((mask_mem[i] & target_mask) != 0) begin
+                    for (older_age = 0; older_age < LSQ_ENTRIES; older_age = older_age + 1) begin
+                        if (older_age < age) begin
+                            i = head_reg + older_age;
+                            if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
+                            if (valid_mem[i] && store_mem[i]) begin
+                                if (!addr_ready_mem[i]) begin
                                     blocked = 1'b1;
+                                end else if ((addr_mem[i][31:4] == addr_mem[scan][31:4])) begin
+                                    if (data_ready_mem[i]) begin
+                                        for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
+                                            if (mask_mem[i][byte_index] && target_mask[byte_index]) begin
+                                                fwd_mask[byte_index] = 1'b1;
+                                                fwd_data[(byte_index*8) +: 8] = data_mem[i][(byte_index*8) +: 8];
+                                            end
+                                    end else if ((mask_mem[i] & target_mask) != 0) begin
+                                        blocked = 1'b1;
+                                    end
                                 end
                             end
                         end
@@ -361,16 +382,18 @@ module rv32_lsq #(
                 target_mask = size_mask(addr_mem[candidate], size_mem[candidate]);
                 fwd_mask = 16'b0;
                 fwd_data = 128'b0;
-                for (older_age = 0; older_age < candidate_age; older_age = older_age + 1) begin
-                    i = head_reg + older_age;
-                    if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
-                    if (valid_mem[i] && store_mem[i] && addr_ready_mem[i] && data_ready_mem[i] &&
-                        (addr_mem[i][31:4] == addr_mem[candidate][31:4])) begin
-                        for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
-                            if (mask_mem[i][byte_index] && target_mask[byte_index]) begin
-                                fwd_mask[byte_index] = 1'b1;
-                                fwd_data[(byte_index*8) +: 8] = data_mem[i][(byte_index*8) +: 8];
-                            end
+                for (older_age = 0; older_age < LSQ_ENTRIES; older_age = older_age + 1) begin
+                    if (older_age < candidate_age) begin
+                        i = head_reg + older_age;
+                        if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
+                        if (valid_mem[i] && store_mem[i] && addr_ready_mem[i] && data_ready_mem[i] &&
+                            (addr_mem[i][31:4] == addr_mem[candidate][31:4])) begin
+                            for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
+                                if (mask_mem[i][byte_index] && target_mask[byte_index]) begin
+                                    fwd_mask[byte_index] = 1'b1;
+                                    fwd_data[(byte_index*8) +: 8] = data_mem[i][(byte_index*8) +: 8];
+                                end
+                        end
                     end
                 end
                 if ((fwd_mask & target_mask) != target_mask) begin
@@ -412,8 +435,10 @@ module rv32_lsq #(
                 response_match = 1'b1;
                 response_slot = i;
             end
-        dcache_resp_ready_o = response_match;
-        response_fire = dcache_resp_valid_i && dcache_resp_ready_o;
+        // Always drain a cache response.  A generation mismatch is a killed
+        // wrong-path request; a matching live response is captured below.
+        dcache_resp_ready_o = 1'b1;
+        response_fire = dcache_resp_valid_i && response_match;
     end
 
     always @* begin
@@ -469,6 +494,80 @@ module rv32_lsq #(
                 store_commit_mem[slot] <= 1'b0;
                 store_ack_mem[slot] <= 1'b0;
             end
+        end else if (recovery_valid_i) begin
+            // LSQ allocation follows program order, so entries younger than
+            // the recovering branch form a suffix of the live queue.  Trim
+            // that suffix in place and leave the older prefix/tag mappings
+            // untouched for the ROB's pending stores and loads.
+            recovery_branch_slot = recovery_tag_i[3 +: ROB_SLOT_WIDTH];
+            recovery_branch_age = recovery_branch_slot - recovery_head_i;
+            if (recovery_branch_age < 0) recovery_branch_age = recovery_branch_age + ROB_ENTRIES;
+            recovery_keep_count = 0;
+            recovery_first_killed = tail_reg;
+            recovery_kill_found = 0;
+            for (slot = 0; slot < LSQ_ENTRIES; slot = slot + 1) begin
+                scan = head_reg + slot;
+                if (scan >= LSQ_ENTRIES) scan = scan - LSQ_ENTRIES;
+                if ((slot < occupancy_reg) && valid_mem[scan]) begin
+                    entry_rob_slot = rob_tag_mem[scan][3 +: ROB_SLOT_WIDTH];
+                    recovery_entry_age = entry_rob_slot - recovery_head_i;
+                    if (recovery_entry_age < 0) recovery_entry_age = recovery_entry_age + ROB_ENTRIES;
+                    if ((recovery_entry_age > recovery_branch_age) &&
+                        (recovery_entry_age < recovery_occupancy_i)) begin
+                        if (!recovery_kill_found) begin
+                            recovery_first_killed = scan;
+                            recovery_kill_found = 1;
+                        end
+                        valid_mem[scan] <= 1'b0;
+                        request_sent_mem[scan] <= 1'b0;
+                        response_wait_mem[scan] <= 1'b0;
+                        complete_mem[scan] <= 1'b0;
+                        store_commit_mem[scan] <= 1'b0;
+                        store_ack_mem[scan] <= 1'b0;
+                    end else begin
+                        recovery_keep_count = recovery_keep_count + 1;
+                    end
+                end
+            end
+            // Stores are architectural before they enter the D-cache.  If an
+            // acknowledgement coincides with recovery, retain it for the
+            // surviving store instead of consuming and losing it.
+            for (slot = 0; slot < LSQ_ENTRIES; slot = slot + 1) begin
+                if (dcache_store_ack_valid_i &&
+                    tag_matches_slot(dcache_store_ack_lsq_tag_i, slot) &&
+                    request_sent_mem[slot] && response_wait_mem[slot]) begin
+                    store_ack_mem[slot] <= 1'b1;
+                    store_ack_error_mem[slot] <= dcache_store_ack_error_i;
+                    response_wait_mem[slot] <= 1'b0;
+                end
+            end
+            // A load response is also consumed by the cache on this edge.
+            // Record it only when its ROB entry is in the retained prefix;
+            // wrong-path responses are intentionally drained and discarded.
+            if (response_fire) begin
+                entry_rob_slot = rob_tag_mem[response_slot][3 +: ROB_SLOT_WIDTH];
+                recovery_entry_age = entry_rob_slot - recovery_head_i;
+                if (recovery_entry_age < 0) recovery_entry_age = recovery_entry_age + ROB_ENTRIES;
+                if (!((recovery_entry_age > recovery_branch_age) &&
+                      (recovery_entry_age < recovery_occupancy_i))) begin
+                    response_line = dcache_resp_line_valid_i ? dcache_resp_line_data_i :
+                                    {96'b0, dcache_resp_word_data_i};
+                    merged_line = response_line;
+                    for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
+                        if (forward_mask_mem[response_slot][byte_index])
+                            merged_line[(byte_index*8) +: 8] =
+                                forward_data_mem[response_slot][(byte_index*8) +: 8];
+                    complete_value_mem[response_slot] <= extract_value(
+                        merged_line, addr_mem[response_slot], size_mem[response_slot],
+                        unsigned_mem[response_slot]);
+                    complete_error_mem[response_slot] <= dcache_resp_error_i;
+                    complete_mem[response_slot] <= 1'b1;
+                    response_wait_mem[response_slot] <= 1'b0;
+                end
+            end
+            if (recovery_keep_count < occupancy_reg)
+                tail_reg <= recovery_first_killed[SLOT_WIDTH-1:0];
+            occupancy_reg <= recovery_keep_count;
         end else begin
             commit_fire = store_commit_valid_i && store_commit_ready_o;
             if (commit_fire) store_commit_mem[head_reg] <= 1'b1;
@@ -501,16 +600,18 @@ module rv32_lsq #(
                 target_mask = size_mask(addr_mem[candidate], size_mem[candidate]);
                 fwd_mask = 16'b0;
                 fwd_data = 128'b0;
-                for (older_age = 0; older_age < candidate_age; older_age = older_age + 1) begin
-                    i = head_reg + older_age;
-                    if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
-                    if (valid_mem[i] && store_mem[i] && addr_ready_mem[i] && data_ready_mem[i] &&
-                        (addr_mem[i][31:4] == addr_mem[candidate][31:4])) begin
-                        for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
-                            if (mask_mem[i][byte_index] && target_mask[byte_index]) begin
-                                fwd_mask[byte_index] = 1'b1;
-                                fwd_data[(byte_index*8) +: 8] = data_mem[i][(byte_index*8) +: 8];
-                            end
+                for (older_age = 0; older_age < LSQ_ENTRIES; older_age = older_age + 1) begin
+                    if (older_age < candidate_age) begin
+                        i = head_reg + older_age;
+                        if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
+                        if (valid_mem[i] && store_mem[i] && addr_ready_mem[i] && data_ready_mem[i] &&
+                            (addr_mem[i][31:4] == addr_mem[candidate][31:4])) begin
+                            for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
+                                if (mask_mem[i][byte_index] && target_mask[byte_index]) begin
+                                    fwd_mask[byte_index] = 1'b1;
+                                    fwd_data[(byte_index*8) +: 8] = data_mem[i][(byte_index*8) +: 8];
+                                end
+                        end
                     end
                 end
                 if ((fwd_mask & target_mask) == target_mask) begin
@@ -617,52 +718,8 @@ module rv32_lsq #(
         integer k;
         begin
             alloc_count_before_lane = 0;
-            for (k = 0; k < target_lane; k = k + 1)
-                if (fire[k]) alloc_count_before_lane = alloc_count_before_lane + 1;
+            for (k = 0; k < BE_WIDTH; k = k + 1)
+                if ((k < target_lane) && fire[k]) alloc_count_before_lane = alloc_count_before_lane + 1;
         end
     endfunction
-endmodule
-
-// Descriptive alias used by integration code that spells out the block name.
-module rv32_load_store_queue #(
-    parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
-    parameter integer LSQ_ENTRIES = 8,
-    parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
-    parameter integer ROB_TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT
-) (
-    input wire clk_i, input wire reset_i, input wire flush_i,
-    input wire [BE_WIDTH-1:0] alloc_valid_i, output wire alloc_ready_o,
-    output wire [BE_WIDTH-1:0] alloc_fire_o,
-    output wire [((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))-1:0] alloc_count_o,
-    output wire [(BE_WIDTH*TAG_WIDTH)-1:0] alloc_lsq_tag_o,
-    input wire [BE_WIDTH-1:0] alloc_is_load_i, input wire [BE_WIDTH-1:0] alloc_is_store_i,
-    input wire [(BE_WIDTH*ROB_TAG_WIDTH)-1:0] alloc_rob_tag_i,
-    input wire [(BE_WIDTH*2)-1:0] alloc_size_i, input wire [BE_WIDTH-1:0] alloc_unsigned_i,
-    input wire [BE_WIDTH-1:0] alloc_addr_valid_i, input wire [(BE_WIDTH*32)-1:0] alloc_addr_i,
-    input wire [BE_WIDTH-1:0] alloc_data_valid_i, input wire [(BE_WIDTH*128)-1:0] alloc_store_data_i,
-    input wire [(BE_WIDTH*16)-1:0] alloc_store_mask_i,
-    input wire [BE_WIDTH-1:0] addr_update_valid_i, input wire [(BE_WIDTH*TAG_WIDTH)-1:0] addr_update_tag_i,
-    input wire [(BE_WIDTH*32)-1:0] addr_update_i, input wire [BE_WIDTH-1:0] data_update_valid_i,
-    input wire [(BE_WIDTH*TAG_WIDTH)-1:0] data_update_tag_i, input wire [(BE_WIDTH*128)-1:0] data_update_i,
-    input wire [(BE_WIDTH*16)-1:0] data_mask_update_i, input wire [BE_WIDTH-1:0] wakeup_valid_i,
-    input wire [(BE_WIDTH*TAG_WIDTH)-1:0] wakeup_tag_i, input wire [(BE_WIDTH*128)-1:0] wakeup_value_i,
-    input wire store_commit_valid_i, output wire store_commit_ready_o,
-    input wire [ROB_TAG_WIDTH-1:0] store_commit_rob_tag_i,
-    output wire dcache_req_valid_o, input wire dcache_req_ready_i, output wire dcache_req_is_load_o,
-    output wire dcache_req_is_store_o, output wire [31:0] dcache_req_addr_o, output wire [1:0] dcache_req_size_o,
-    output wire dcache_req_unsigned_o, output wire [15:0] dcache_req_mask_o, output wire [127:0] dcache_req_wdata_o,
-    output wire [ROB_TAG_WIDTH-1:0] dcache_req_rob_tag_o, output wire [TAG_WIDTH-1:0] dcache_req_lsq_tag_o,
-    input wire dcache_resp_valid_i, output wire dcache_resp_ready_o, input wire [TAG_WIDTH-1:0] dcache_resp_lsq_tag_i,
-    input wire [31:0] dcache_resp_addr_i, input wire [127:0] dcache_resp_line_data_i,
-    input wire [31:0] dcache_resp_word_data_i, input wire dcache_resp_line_valid_i, input wire dcache_resp_error_i,
-    output wire load_complete_valid_o, input wire load_complete_ready_i, output wire [ROB_TAG_WIDTH-1:0] load_complete_rob_tag_o,
-    output wire [TAG_WIDTH-1:0] load_complete_lsq_tag_o, output wire [31:0] load_complete_value_o,
-    output wire load_complete_error_o, input wire dcache_store_ack_valid_i, input wire [TAG_WIDTH-1:0] dcache_store_ack_lsq_tag_i,
-    input wire dcache_store_ack_error_i, output wire store_ack_valid_o, input wire store_ack_ready_i,
-    output wire [ROB_TAG_WIDTH-1:0] store_ack_rob_tag_o, output wire [TAG_WIDTH-1:0] store_ack_lsq_tag_o,
-    output wire store_ack_error_o, output wire [((LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES + 1))-1:0] occupancy_o,
-    output wire [((LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES))-1:0] head_o,
-    output wire [((LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES))-1:0] tail_o
-);
-    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(ROB_TAG_WIDTH)) impl (.*);
 endmodule

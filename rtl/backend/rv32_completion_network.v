@@ -17,6 +17,8 @@ module rv32_completion_network #(
     input  wire                         clk_i,
     input  wire                         reset_i,
     input  wire                         flush_i,
+    input  wire                         kill_valid_i,
+    input  wire [FIFO_DEPTH-1:0]        kill_mask_i,
     input  wire [SOURCES-1:0]           producer_valid_i,
     output reg  [SOURCES-1:0]           producer_ready_o,
     input  wire [(SOURCES*TAG_WIDTH)-1:0] producer_tag_i,
@@ -62,6 +64,8 @@ module rv32_completion_network #(
     output wire [BE_WIDTH-1:0]          wakeup_valid_o,
     output wire [(BE_WIDTH*TAG_WIDTH)-1:0] wakeup_tag_o,
     output wire [(BE_WIDTH*32)-1:0]      wakeup_value_o,
+    output wire [FIFO_DEPTH-1:0]        entry_valid_o,
+    output wire [(FIFO_DEPTH*TAG_WIDTH)-1:0] entry_tag_o,
     output wire [COUNT_WIDTH-1:0]       occupancy_o
 );
     reg valid_mem [0:FIFO_DEPTH-1];
@@ -94,6 +98,14 @@ module rv32_completion_network #(
     reg [SOURCES-1:0] source_fire;
     wire [COUNT_WIDTH-1:0] occupancy_wire = count_reg;
     assign occupancy_o = occupancy_wire;
+
+    genvar entry_index;
+    generate
+        for (entry_index = 0; entry_index < FIFO_DEPTH; entry_index = entry_index + 1) begin : g_entry_state
+            assign entry_valid_o[entry_index] = valid_mem[entry_index] && live_mem[entry_index];
+            assign entry_tag_o[(entry_index*TAG_WIDTH) +: TAG_WIDTH] = tag_mem[entry_index];
+        end
+    endgenerate
 
     always @* begin
         producer_ready_o = {SOURCES{1'b0}};
@@ -219,6 +231,10 @@ module rv32_completion_network #(
             tail_reg <= tail_reg + enq_count;
             if (tail_reg + enq_count >= FIFO_DEPTH) tail_reg <= tail_reg + enq_count - FIFO_DEPTH;
             count_reg <= count_reg - pop_count + enq_count;
+            if (kill_valid_i) begin
+                for (slot = 0; slot < FIFO_DEPTH; slot = slot + 1)
+                    if (kill_mask_i[slot]) live_mem[slot] <= 1'b0;
+            end
         end
     end
 endmodule

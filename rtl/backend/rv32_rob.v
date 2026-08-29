@@ -141,9 +141,11 @@ module rv32_rob #(
         integer n;
         begin
             p = start;
-            for (n = 0; n < amount; n = n + 1) begin
-                if (p == ROB_ENTRIES - 1) p = 0;
-                else p = p + 1;
+            for (n = 0; n < ROB_ENTRIES; n = n + 1) begin
+                if (n < amount) begin
+                    if (p == ROB_ENTRIES - 1) p = 0;
+                    else p = p + 1;
+                end
             end
             advance_slot = p[SLOT_WIDTH-1:0];
         end
@@ -312,6 +314,27 @@ module rv32_rob #(
                     ready_mem[reset_slot] <= 1'b0;
                     store_wait_mem[reset_slot] <= 1'b0;
                     store_sent_mem[reset_slot] <= 1'b0;
+                end
+            end
+            // Recovery and the resolving branch completion normally arrive
+            // together.  Retained entries must still observe matching
+            // completions or the branch can become a permanently unready
+            // ROB head after its younger suffix is removed.
+            for (complete_lane = 0; complete_lane < BE_WIDTH; complete_lane = complete_lane + 1) begin
+                if (completion_valid_i[complete_lane] && completion_done_i[complete_lane]) begin
+                    for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
+                        age = slot_index - head_reg;
+                        if (age < 0) age = age + ROB_ENTRIES;
+                        if ((age <= branch_age) &&
+                            tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index)) begin
+                            ready_mem[slot_index] <= 1'b1;
+                            value_mem[slot_index] <= completion_value_i[(complete_lane*32) +: 32];
+                            if (completion_error_i[complete_lane]) error_mem[slot_index] <= 1'b1;
+                            store_addr_mem[slot_index] <= completion_store_addr_i[(complete_lane*32) +: 32];
+                            store_mask_mem[slot_index] <= completion_store_mask_i[(complete_lane*16) +: 16];
+                            store_data_mem[slot_index] <= completion_store_data_i[(complete_lane*128) +: 128];
+                        end
+                    end
                 end
             end
             tail_reg <= advance_slot(chosen_slot[SLOT_WIDTH-1:0], 1);

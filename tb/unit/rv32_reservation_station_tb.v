@@ -77,6 +77,27 @@ module rv32_reservation_station_tb #(
         reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0;
         clear_inputs(); alloc_entry(0, 16'h0601, 30, 1, 1); @(posedge clk); #1; clear_inputs(); flush_valid = 1; flush_mask = {ENTRIES{1'b1}}; @(posedge clk); #1; clear_inputs(); if (occupancy != 0) bad = bad + 1;
 
+        // A selective recovery keeps an older blocked entry and must not lose
+        // a matching wakeup that arrives on the recovery edge.
+        clear_inputs(); alloc_entry(0, 16'h0701, 40, 0, 1); src1_tag[0 +: TAGW] = 16'h0801;
+        @(posedge clk); #1; clear_inputs();
+        flush_valid = 1; flush_mask = {ENTRIES{1'b0}};
+        wake_valid[0] = 1; wake_tag[0 +: TAGW] = 16'h0801; wake_value[31:0] = 99;
+        @(posedge clk); #1; clear_inputs();
+        if (occupancy != 1 || !issue_valid[0] || issue_src1[31:0] != 99) bad = bad + 1;
+        @(posedge clk); #1; clear_inputs();
+
+        // A finite-width tag can alias after enough ROB reuse.  Once an
+        // operand is ready, an aliasing broadcast must not overwrite it.
+        clear_inputs(); alloc_entry(0, 16'h0901, 50, 1, 1);
+        src1_tag[0 +: TAGW] = 16'h0a01; issue_ready = 0;
+        @(posedge clk); #1; clear_inputs(); issue_ready = 0;
+        wake_valid[0] = 1; wake_tag[0 +: TAGW] = 16'h0a01;
+        wake_value[31:0] = 32'hdeadbeef;
+        @(posedge clk); #1; clear_inputs();
+        if (!issue_valid[0] || issue_src1[31:0] != 51) bad = bad + 1;
+        @(posedge clk); #1; clear_inputs();
+
         if (bad != 0) begin $display("FAIL: B-04 RS BE_WIDTH=%0d ENTRIES=%0d checks=%0d", BE_WIDTH, ENTRIES, bad); $finish(1); end
         $display("PASS: B-04 RS BE_WIDTH=%0d ENTRIES=%0d", BE_WIDTH, ENTRIES); $finish(0);
     end

@@ -9,7 +9,10 @@ module rv32_lsq_tb #(
     localparam integer ROB_TAG_WIDTH = 16;
     localparam integer ACW = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
     localparam integer CW = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES + 1);
-    reg clk, reset, flush;
+    reg clk, reset, flush, recovery_valid;
+    reg [ROB_TAG_WIDTH-1:0] recovery_tag;
+    reg [4:0] recovery_head;
+    reg [15:0] recovery_occupancy;
     reg [BE_WIDTH-1:0] alloc_valid, alloc_load, alloc_store, alloc_addr_valid, alloc_data_valid, alloc_unsigned;
     reg [BE_WIDTH*ROB_TAG_WIDTH-1:0] alloc_rob;
     reg [BE_WIDTH*2-1:0] alloc_size;
@@ -50,7 +53,9 @@ module rv32_lsq_tb #(
 
     assign alloc_tag0 = alloc_tag[0 +: TAG_WIDTH];
     rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(ENTRIES), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(ROB_TAG_WIDTH)) dut (
-        .clk_i(clk), .reset_i(reset), .flush_i(flush), .alloc_valid_i(alloc_valid), .alloc_ready_o(alloc_ready),
+        .clk_i(clk), .reset_i(reset), .flush_i(flush), .recovery_valid_i(recovery_valid),
+        .recovery_tag_i(recovery_tag), .recovery_head_i(recovery_head), .recovery_occupancy_i(recovery_occupancy),
+        .alloc_valid_i(alloc_valid), .alloc_ready_o(alloc_ready),
         .alloc_fire_o(alloc_fire), .alloc_count_o(alloc_count), .alloc_lsq_tag_o(alloc_tag), .alloc_is_load_i(alloc_load),
         .alloc_is_store_i(alloc_store), .alloc_rob_tag_i(alloc_rob), .alloc_size_i(alloc_size), .alloc_unsigned_i(alloc_unsigned),
         .alloc_addr_valid_i(alloc_addr_valid), .alloc_addr_i(alloc_addr), .alloc_data_valid_i(alloc_data_valid),
@@ -82,6 +87,7 @@ module rv32_lsq_tb #(
             addr_up = 0; data_up = 0; wake_value = 0; data_up_mask = 0; commit_valid = 0; commit_rob = 0;
             dreq_ready = 1; dresp_valid = 0; dresp_line_valid = 1; dresp_error = 0; dresp_tag = 0; dresp_addr = 0;
             dresp_word = 0; dresp_line = 0; dack_valid = 0; dack_error = 0; dack_tag = 0; load_ready = 1; store_ack_ready = 1;
+            recovery_valid = 0; recovery_tag = 0; recovery_head = 0; recovery_occupancy = 0;
         end
     endtask
 
@@ -163,10 +169,47 @@ module rv32_lsq_tb #(
             flush = 1; @(posedge clk); #1; flush = 0; clear_inputs();
             if (occupancy != 0) bad = bad + 1;
         end
-        // A response for a flushed generation is rejected.
+        // A response for a flushed generation is drained without updating a
+        // reused slot or becoming an architectural completion.
         alloc_one(1, 0, 16'h0909, 32'h00000400, 2, 1, 0, 0);
         dresp_tag = dreq_lsq; @(posedge clk); #1; flush = 1; @(posedge clk); #1; flush = 0; clear_inputs();
-        dresp_valid = 1; @(posedge clk); #1; if (dresp_ready) bad = bad + 1; dresp_valid = 0;
+        dresp_valid = 1; @(posedge clk); #1; if (!dresp_ready || load_valid) bad = bad + 1; dresp_valid = 0;
+
+        // A committed-store acknowledgement can coincide with a younger
+        // branch recovery and must remain visible to the ROB.
+        reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0; #1;
+        alloc_one(0, 1, 16'h0001, 32'h00000500, 2, 0, 128'h12345678, 16'h000f);
+        begin
+            st_tag = last_alloc_tag;
+            commit_rob = 16'h0001; commit_valid = 1'b1;
+            @(posedge clk); #1; commit_valid = 1'b0;
+            @(posedge clk); #1;
+            recovery_valid = 1'b1; recovery_tag = 16'h0011;
+            recovery_head = 0; recovery_occupancy = 3;
+            dack_valid = 1'b1; dack_tag = st_tag;
+            @(posedge clk); #1;
+            recovery_valid = 1'b0; dack_valid = 1'b0;
+            if (!store_ack_valid || store_ack_rob != 16'h0001 || occupancy != 1) bad = bad + 1;
+            @(posedge clk); #1; clear_inputs();
+            if (occupancy != 0) bad = bad + 1;
+        end
+
+        // An older load response arriving on a younger branch recovery edge
+        // completes the retained load rather than disappearing at the cache
+        // handshake boundary.
+        reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0; #1;
+        alloc_one(1, 0, 16'h0001, 32'h00000600, 2, 1, 0, 0);
+        dresp_tag = dreq_lsq;
+        @(posedge clk); #1;
+        recovery_valid = 1'b1; recovery_tag = 16'h0011;
+        recovery_head = 0; recovery_occupancy = 3;
+        dresp_valid = 1'b1; dresp_line_valid = 1'b1;
+        dresp_line = 128'h00000000000000000000000089abcdef;
+        @(posedge clk); #1;
+        recovery_valid = 1'b0; dresp_valid = 1'b0;
+        if (!load_valid || load_value != 32'h89abcdef || occupancy != 1) bad = bad + 1;
+        @(posedge clk); #1; clear_inputs();
+        if (occupancy != 0) bad = bad + 1;
         if (bad != 0) begin $display("FAIL: B-08 LSQ BE_WIDTH=%0d checks=%0d", BE_WIDTH, bad); $finish(1); end
         $display("PASS: B-08 LSQ BE_WIDTH=%0d", BE_WIDTH); $finish(0);
     end

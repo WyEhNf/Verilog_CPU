@@ -85,9 +85,12 @@ module rv32_rename_unit #(
         integer n;
         begin
             p = start;
-            for (n = 0; n < amount; n = n + 1)
-                if (p == FREE_SLOTS - 1) p = 0;
-                else p = p + 1;
+            for (n = 0; n < FREE_SLOTS; n = n + 1) begin
+                if (n < amount) begin
+                    if (p == FREE_SLOTS - 1) p = 0;
+                    else p = p + 1;
+                end
+            end
             advance_ptr = p[PTR_WIDTH-1:0];
         end
     endfunction

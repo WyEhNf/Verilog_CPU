@@ -77,6 +77,9 @@ module cpu_core #(
     wire redirect_valid;
     wire [31:0] redirect_pc;
     wire [3:0] redirect_epoch;
+    wire branch_feedback_valid, branch_feedback_taken, branch_feedback_pred_taken;
+    wire [31:0] branch_feedback_pc, branch_feedback_target, branch_feedback_pred_target;
+    wire [1:0] branch_feedback_kind;
 
     wire pred_taken, pred_btb_hit;
     wire [31:0] pred_target;
@@ -112,11 +115,11 @@ module cpu_core #(
         .query_pc_i(if_resp_pc), .query_inst_i(predictor_query_inst),
         .pred_taken_o(pred_taken), .pred_target_o(pred_target),
         .pred_kind_o(pred_kind), .pred_btb_hit_o(pred_btb_hit),
-        .pred_bht_index_o(pred_bht_index), .pred_btb_index_o(pred_btb_index),
-        .pred_counter_o(pred_counter), .feedback_valid_i(1'b0),
-        .feedback_pc_i(32'd0), .feedback_kind_i(`RV32IM_PRED_NONE),
-        .feedback_taken_i(1'b0), .feedback_target_i(32'd0),
-        .feedback_pred_taken_i(1'b0), .feedback_pred_target_i(32'd0),
+         .pred_bht_index_o(pred_bht_index), .pred_btb_index_o(pred_btb_index),
+         .pred_counter_o(pred_counter), .feedback_valid_i(branch_feedback_valid),
+         .feedback_pc_i(branch_feedback_pc), .feedback_kind_i(branch_feedback_kind),
+         .feedback_taken_i(branch_feedback_taken), .feedback_target_i(branch_feedback_target),
+         .feedback_pred_taken_i(branch_feedback_pred_taken), .feedback_pred_target_i(branch_feedback_pred_target),
         .prediction_count_o(pred_count), .correct_count_o(pred_correct)
     );
 
@@ -176,7 +179,9 @@ module cpu_core #(
     wire [7:0] dc_mem_req_id, dc_mem_resp_id;
     wire dc_event_request, dc_event_hit, dc_event_miss, dc_event_refill, dc_event_writeback, dc_event_stall;
     rv32_dcache dcache (
-        .clk_i(clk), .reset_i(reset), .flush_i(redirect_valid), .dcache_req_valid_i(dcache_req_valid),
+        // LSQ generations reject wrong-path responses while retaining older
+        // loads across a redirect.  The cache itself has no ROB-age context.
+        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(dcache_req_valid),
         .dcache_req_ready_o(dcache_req_ready), .dcache_req_is_load_i(dcache_req_load),
         .dcache_req_is_store_i(dcache_req_store), .dcache_req_addr_i(dcache_req_addr),
         .dcache_req_size_i(dcache_req_size), .dcache_req_unsigned_i(dcache_req_unsigned),
@@ -298,9 +303,12 @@ module cpu_core #(
         .commit_rd_o(commit_rd), .commit_rd_we_o(commit_rd_we), .commit_value_o(commit_value),
         .commit_is_store_o(commit_is_store), .commit_store_addr_o(commit_store_addr),
         .commit_store_mask_o(commit_store_mask), .commit_store_data_o(commit_store_data),
-        .commit_tag_o(commit_tag), .redirect_valid_o(redirect_valid), .redirect_pc_o(redirect_pc),
-        .redirect_epoch_o(redirect_epoch), .halted_o(halted), .error_o(error),
-        .return_value_o(return_value)
+         .commit_tag_o(commit_tag), .redirect_valid_o(redirect_valid), .redirect_pc_o(redirect_pc),
+         .redirect_epoch_o(redirect_epoch), .halted_o(halted), .error_o(error),
+         .return_value_o(return_value), .branch_feedback_valid_o(branch_feedback_valid),
+         .branch_feedback_pc_o(branch_feedback_pc), .branch_feedback_kind_o(branch_feedback_kind),
+         .branch_feedback_taken_o(branch_feedback_taken), .branch_feedback_target_o(branch_feedback_target),
+         .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target)
     );
 
     rv32_cache_stats stats (

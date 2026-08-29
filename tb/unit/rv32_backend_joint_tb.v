@@ -55,6 +55,9 @@ module rv32_backend_joint_tb #(
     integer bad, commit_count;
     reg redirect_seen, younger_commit_seen;
     reg [31:0] redirect_pc_seen;
+    reg free_list_error_seen;
+    integer recovery_branch_slot;
+    reg [5:0] recovery_branch_phys;
     reg [7:0] memory [0:255];
     integer i;
 
@@ -152,8 +155,66 @@ module rv32_backend_joint_tb #(
         end
     endtask
 
+    task check_free_list;
+        integer free_i;
+        integer free_j;
+        integer free_slot_i;
+        integer free_slot_j;
+        integer rat_i;
+        integer rob_i;
+        reg [5:0] free_phys_i;
+        reg [5:0] free_phys_j;
+        begin
+            if (((^dut.free_count) === 1'bx) || (dut.free_count > 63)) begin
+                $display("FREE_LIST_COUNT_FAIL count=%0d", dut.free_count);
+                bad=bad+1;
+                free_list_error_seen=1'b1;
+            end else begin
+                for (free_i=0; free_i<dut.free_count; free_i=free_i+1) begin
+                    free_slot_i=dut.free_head+free_i;
+                    if (free_slot_i >= 63) free_slot_i=free_slot_i-63;
+                    free_phys_i=dut.rename.free_list[free_slot_i];
+                    if (free_phys_i == 0) begin
+                        $display("FREE_LIST_ZERO_FAIL slot=%0d", free_slot_i);
+                        bad=bad+1;
+                        free_list_error_seen=1'b1;
+                    end
+                    for (free_j=free_i+1; free_j<dut.free_count; free_j=free_j+1) begin
+                        free_slot_j=dut.free_head+free_j;
+                        if (free_slot_j >= 63) free_slot_j=free_slot_j-63;
+                        free_phys_j=dut.rename.free_list[free_slot_j];
+                        if (free_phys_i == free_phys_j) begin
+                            $display("FREE_LIST_DUP_FAIL phys=%0d slots=%0d,%0d", free_phys_i, free_slot_i, free_slot_j);
+                            bad=bad+1;
+                            free_list_error_seen=1'b1;
+                        end
+                    end
+                    for (rat_i=0; rat_i<32; rat_i=rat_i+1) begin
+                        if (free_phys_i == dut.rename.rat[rat_i]) begin
+                            $display("FREE_LIST_RAT_FAIL phys=%0d architectural=%0d", free_phys_i, rat_i);
+                            bad=bad+1;
+                            free_list_error_seen=1'b1;
+                        end
+                    end
+                    for (rob_i=0; rob_i<8; rob_i=rob_i+1) begin
+                        if (dut.rob.valid_mem[rob_i] && (dut.rob_old_phys_mem[rob_i] != 0) &&
+                            (free_phys_i == dut.rob_old_phys_mem[rob_i])) begin
+                            $display("FREE_LIST_ROB_OLD_FAIL phys=%0d rob_slot=%0d", free_phys_i, rob_i);
+                            bad=bad+1;
+                            free_list_error_seen=1'b1;
+                        end
+                    end
+                end
+            end
+        end
+    endtask
+
+    always @(negedge clk) begin
+        if (!reset && !free_list_error_seen) check_free_list();
+    end
+
     initial begin
-        bad=0; commit_count=0; redirect_seen=0; younger_commit_seen=0; redirect_pc_seen=0; reset=1; flush=0; commit_ready=1; resp_valid=0; resp_line_valid=1; resp_error=0; resp_lsq_tag=0; resp_addr=0; resp_word=0; resp_line=0; store_ack_valid=0; store_ack_error=0; store_ack_lsq_tag=0; inject_load_error=0; inject_store_error=0; defer_load_response=0; held_load_valid=0; held_load_lsq_tag=0; held_load_addr=0; held_load_word=0; held_load_line=0; completion_collision_seen=0; clear_trace();
+        bad=0; commit_count=0; redirect_seen=0; younger_commit_seen=0; redirect_pc_seen=0; free_list_error_seen=0; recovery_branch_slot=0; recovery_branch_phys=0; reset=1; flush=0; commit_ready=1; resp_valid=0; resp_line_valid=1; resp_error=0; resp_lsq_tag=0; resp_addr=0; resp_word=0; resp_line=0; store_ack_valid=0; store_ack_error=0; store_ack_lsq_tag=0; inject_load_error=0; inject_store_error=0; defer_load_response=0; held_load_valid=0; held_load_lsq_tag=0; held_load_addr=0; held_load_word=0; held_load_line=0; completion_collision_seen=0; clear_trace();
         for (i=0; i<256; i=i+1) memory[i]=0;
         #12; reset=0; #1;
         // RAW chain through rename -> PRF -> RS wakeup -> ALU -> CDB -> ROB.
@@ -239,6 +300,35 @@ module rv32_backend_joint_tb #(
         expect_commit(32'h68, 32'h34, 1);
         expect_commit(32'h6c, 42, 1);
         if (!completion_collision_seen) bad=bad+1;
+
+        // Recover a non-head JALR that writes a destination.  The restored
+        // RAT must keep the branch's new mapping, and the free list must not
+        // contain either live RAT mappings or old mappings owned by the two
+        // surviving ROB entries.
+        reset=1; defer_load_response=0; held_load_valid=0; clear_trace(); @(posedge clk); #1; reset=0; #1;
+        send_inst(32'h70, `RV32IM_OP_ADDI, 32'h88, 20, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0);
+        send_inst(32'h74, `RV32IM_OP_ADDI, 1, 22, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0);
+        expect_commit(32'h70, 32'h88, 1);
+        expect_commit(32'h74, 1, 1);
+        commit_ready=0;
+        send_inst(32'h80, `RV32IM_OP_DIV, 0, 22, 20, 22, 1, 1, 1, 0, 0, 0, 0, 0);
+        send_inst(32'h84, `RV32IM_OP_JALR, 0, 23, 22, 0, 1, 1, 0, 0, 0, 1, 0, 0);
+        recovery_branch_slot=dut.rob_tail-1;
+        if (recovery_branch_slot < 0) recovery_branch_slot=recovery_branch_slot+8;
+        recovery_branch_phys=dut.rob_phys_mem[recovery_branch_slot];
+        send_inst(32'h88, `RV32IM_OP_ADDI, 99, 24, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0);
+        redirect_seen=0;
+        i=0;
+        while (!redirect_seen && i<100) begin @(posedge clk); #1; i=i+1; end
+        if (!redirect_seen || redirect_pc_seen !== 32'h88) bad=bad+1;
+        if (dut.rename.rat[23] !== recovery_branch_phys) begin
+            $display("RECOVERY_BRANCH_MAP_FAIL rat=%0d expected=%0d", dut.rename.rat[23], recovery_branch_phys);
+            bad=bad+1;
+        end
+        check_free_list();
+        commit_ready=1;
+        expect_commit(32'h80, 32'h88, 1);
+        expect_commit(32'h84, 32'h88, 1);
         if (bad != 0) begin $display("FAIL: B-09 backend joint BE_WIDTH=%0d checks=%0d", BE_WIDTH, bad); $finish(1); end
         $display("PASS: B-09 backend joint BE_WIDTH=%0d", BE_WIDTH); $finish(0);
     end

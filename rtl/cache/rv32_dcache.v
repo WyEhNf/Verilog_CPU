@@ -206,9 +206,56 @@ module rv32_dcache #(
             if (store_ack_valid_reg && dcache_store_ack_ready_i) store_ack_valid_reg <= 1'b0;
 
             if (flush_i) begin
-                s0_valid <= 1'b0; s1_valid <= 1'b0; s2_valid <= 1'b0;
+                // A store reaches this interface only after ROB commit.  It
+                // is therefore architectural and must survive a redirect;
+                // speculative load state may be discarded instead.
+                s0_valid <= s0_valid && s0_store;
+                s1_valid <= s1_valid && s1_store;
+                s2_valid <= s2_valid && s2_store;
                 if (mshr_valid && mshr_is_load) mshr_drop_response <= 1'b1;
                 resp_valid_reg <= 1'b0;
+
+                // Complete a store already in the final pipeline stage even
+                // on the redirect cycle.  A miss remains owned by the MSHR;
+                // the normal path holds any store behind an older response.
+                if (s2_valid && s2_store && !mshr_valid) begin
+                    if (s2_hit) begin
+                        event_hit_o <= 1'b1;
+                        merged_line = merge_store(s2_line, s2_wdata, s2_mask);
+                        data_mem[s2_addr[11:4]] <= merged_line;
+                        dirty_mem[s2_addr[11:4]] <= 1'b1;
+                        store_ack_valid_reg <= 1'b1;
+                        store_ack_lsq_reg <= s2_lsq;
+                        store_ack_error_reg <= 1'b0;
+                        s2_valid <= 1'b0;
+                    end else begin
+                        event_miss_o <= 1'b1;
+                        mshr_valid <= 1'b1;
+                        mshr_req_sent <= 1'b0;
+                        mshr_wait_resp <= 1'b0;
+                        mshr_is_load <= 1'b0;
+                        mshr_is_store <= 1'b1;
+                        mshr_drop_response <= 1'b0;
+                        mshr_addr <= s2_addr;
+                        mshr_line_addr <= {s2_addr[31:4],4'b0};
+                        mshr_size <= s2_size;
+                        mshr_unsigned <= s2_unsigned;
+                        mshr_mask <= s2_mask;
+                        mshr_wdata <= s2_wdata;
+                        mshr_lsq <= s2_lsq;
+                        mshr_victim_addr <= {tag_mem[s2_addr[11:4]], s2_addr[11:4], 4'b0};
+                        mshr_victim_data <= data_mem[s2_addr[11:4]];
+                        mshr_writeback <= valid_mem[s2_addr[11:4]] && dirty_mem[s2_addr[11:4]];
+                        valid_mem[s2_addr[11:4]] <= 1'b0;
+                        s2_valid <= 1'b0;
+                    end
+                end
+            end else if (mshr_valid && s2_valid && s2_store) begin
+                // Do not let an older miss erase a committed store waiting
+                // behind it.  The store is retried after the MSHR response.
+                s0_valid <= 1'b0;
+                s1_valid <= 1'b0;
+                s2_valid <= s2_valid;
             end else begin
                 s2_valid <= s1_valid;
                 s2_load <= s1_load; s2_store <= s1_store; s2_hit <= s1_hit;

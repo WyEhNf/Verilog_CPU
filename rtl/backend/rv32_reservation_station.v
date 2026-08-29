@@ -49,6 +49,8 @@ module rv32_reservation_station #(
 
     input  wire                         flush_valid_i,
     input  wire [ENTRIES-1:0]            flush_kill_mask_i,
+    output wire [ENTRIES-1:0]            entry_valid_o,
+    output wire [(ENTRIES*TAG_WIDTH)-1:0] entry_rob_tag_o,
     output wire [((ENTRIES <= 1) ? 1 : $clog2(ENTRIES + 1))-1:0] occupancy_o
 );
     localparam integer COUNT_WIDTH = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES + 1);
@@ -81,6 +83,7 @@ module rv32_reservation_station #(
     integer issue_slot;
     integer issue_fire_lane;
     integer alloc_cursor;
+    integer alloc_search;
     integer flush_count;
     integer remaining_count;
     integer selected_count;
@@ -88,12 +91,21 @@ module rv32_reservation_station #(
     integer chosen_slot;
     reg prefix_open;
     reg found;
+    reg alloc_found;
     reg [ENTRIES-1:0] selected_mask;
     reg [AGE_WIDTH-1:0] chosen_age;
     reg [AGE_WIDTH-1:0] next_age;
 
     assign occupancy_o = occupancy_reg;
     assign alloc_ready_o = (alloc_count_o != 0) && !flush_valid_i;
+
+    genvar entry_index;
+    generate
+        for (entry_index = 0; entry_index < ENTRIES; entry_index = entry_index + 1) begin : g_entry_state
+            assign entry_valid_o[entry_index] = valid_mem[entry_index];
+            assign entry_rob_tag_o[(entry_index*TAG_WIDTH) +: TAG_WIDTH] = rob_tag_mem[entry_index];
+        end
+    endgenerate
 
     // Allocate a contiguous prefix and choose the oldest ready entries for
     // each issue lane. Wakeups intentionally update state on the edge, so a
@@ -185,6 +197,20 @@ module rv32_reservation_station #(
                     flush_count = flush_count + 1;
                 end else if (valid_mem[reset_slot]) begin
                     remaining_count = remaining_count + 1;
+                    for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
+                        if (!src1_ready_mem[reset_slot] && wake_valid_i[lane] &&
+                            wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[reset_slot] &&
+                            wake_tag_i[(lane*TAG_WIDTH)] && src1_tag_mem[reset_slot][0]) begin
+                            src1_ready_mem[reset_slot] <= 1'b1;
+                            src1_value_mem[reset_slot] <= wake_value_i[(lane*32) +: 32];
+                        end
+                        if (!src2_ready_mem[reset_slot] && wake_valid_i[lane] &&
+                            wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[reset_slot] &&
+                            wake_tag_i[(lane*TAG_WIDTH)] && src2_tag_mem[reset_slot][0]) begin
+                            src2_ready_mem[reset_slot] <= 1'b1;
+                            src2_value_mem[reset_slot] <= wake_value_i[(lane*32) +: 32];
+                        end
+                    end
                 end
             end
             occupancy_reg <= remaining_count;
@@ -192,11 +218,11 @@ module rv32_reservation_station #(
             for (wake_slot = 0; wake_slot < ENTRIES; wake_slot = wake_slot + 1) begin
                 if (valid_mem[wake_slot]) begin
                     for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
-                        if (wake_valid_i[lane] && wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[wake_slot] && wake_tag_i[(lane*TAG_WIDTH)] && src1_tag_mem[wake_slot][0]) begin
+                        if (!src1_ready_mem[wake_slot] && wake_valid_i[lane] && wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[wake_slot] && wake_tag_i[(lane*TAG_WIDTH)] && src1_tag_mem[wake_slot][0]) begin
                             src1_ready_mem[wake_slot] <= 1'b1;
                             src1_value_mem[wake_slot] <= wake_value_i[(lane*32) +: 32];
                         end
-                        if (wake_valid_i[lane] && wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[wake_slot] && wake_tag_i[(lane*TAG_WIDTH)] && src2_tag_mem[wake_slot][0]) begin
+                        if (!src2_ready_mem[wake_slot] && wake_valid_i[lane] && wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[wake_slot] && wake_tag_i[(lane*TAG_WIDTH)] && src2_tag_mem[wake_slot][0]) begin
                             src2_ready_mem[wake_slot] <= 1'b1;
                             src2_value_mem[wake_slot] <= wake_value_i[(lane*32) +: 32];
                         end
@@ -206,10 +232,14 @@ module rv32_reservation_station #(
             alloc_cursor = 0;
             for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
                 if (alloc_fire_o[lane]) begin
-                    alloc_slot = alloc_cursor;
-                    while ((alloc_slot < ENTRIES) && valid_mem[alloc_slot])
-                        alloc_slot = alloc_slot + 1;
-                    if (alloc_slot >= ENTRIES) alloc_slot = 0;
+                    alloc_slot = 0;
+                    alloc_found = 1'b0;
+                    for (alloc_search = 0; alloc_search < ENTRIES; alloc_search = alloc_search + 1) begin
+                        if (!alloc_found && (alloc_search >= alloc_cursor) && !valid_mem[alloc_search]) begin
+                            alloc_slot = alloc_search;
+                            alloc_found = 1'b1;
+                        end
+                    end
                     alloc_cursor = alloc_slot + 1;
                     valid_mem[alloc_slot] <= 1'b1;
                     target_live_mem[alloc_slot] <= alloc_target_live_i[lane] && alloc_rob_tag_i[(lane*TAG_WIDTH)];
