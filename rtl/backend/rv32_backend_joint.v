@@ -447,6 +447,7 @@ module rv32_backend_joint #(
     // entries younger than the resolving branch; older unresolved work still
     // belongs to the retained ROB prefix and must remain executable.
     always @* begin
+        recovery_rs_index = 0;
         rs_flush_kill_mask = {RS_ENTRIES{1'b0}};
         recovery_rs_rob_slot = 0;
         recovery_rs_branch_slot = branch_pending_tag[3 +: ROB_SLOT_WIDTH];
@@ -475,6 +476,7 @@ module rv32_backend_joint #(
     // reaches the ROB while reclaimed physical registers cannot be poisoned
     // by wrong-path writeback.
     always @* begin
+        recovery_completion_index = 0;
         completion_kill_mask = 16'b0;
         recovery_completion_rob_slot = 0;
         recovery_completion_age = 0;
@@ -579,6 +581,7 @@ module rv32_backend_joint #(
         producer_valid_r = 3'b0; producer_target_live_r = 3'b0; producer_rd_we_r = 3'b0; producer_store_r = 3'b0; producer_branch_r = 3'b0; producer_taken_r = 3'b0; producer_redirect_r = 3'b0; producer_memory_r = 3'b0; producer_load_r = 3'b0;
         producer_tag_r = 0; producer_phys_r = 0; producer_value_r = 0; producer_addr_r = 0; producer_branch_target_r = 0; producer_store_data_r = 0;
         producer_count = 0; alu_rank = 3; mdu_rank = 3; load_rank = 3;
+        producer_recovery_index = 0;
         if (alu_exec_valid && (!alu_exec_is_load || alu_exec_is_store)) begin
             alu_rank = producer_count; producer_valid_r[producer_count] = 1'b1; producer_target_live_r[producer_count] = 1'b1; producer_tag_r[producer_count*TAG_WIDTH +: TAG_WIDTH] = alu_exec_tag; producer_phys_r[producer_count*PAW +: PAW] = alu_exec_phys; producer_value_r[producer_count*32 +: 32] = alu_exec_value; producer_addr_r[producer_count*32 +: 32] = alu_exec_mem_addr; producer_branch_target_r[producer_count*32 +: 32] = alu_exec_branch_target; producer_store_data_r[producer_count*128 +: 128] = alu_exec_store_data; producer_rd_we_r[producer_count] = alu_exec_rd_we; producer_store_r[producer_count] = alu_exec_is_store; producer_branch_r[producer_count] = alu_exec_is_branch; producer_taken_r[producer_count] = alu_exec_branch_taken; producer_redirect_r[producer_count] = alu_exec_redirect_valid; producer_memory_r[producer_count] = alu_exec_is_memory; producer_count = producer_count + 1;
         end

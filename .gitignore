@@ -7,6 +7,9 @@ lead-in.md
 plan.md
 repo_setting.txt
 
+# Fetched external dependency (ASAP7 libs, fetched by the Makefile step)
+third_party/asap7/
+
 # Operating-system, editor, and IDE files
 .DS_Store
 Thumbs.db
@@ -16,6 +19,21 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Local harness skill roots (session-local; do not commit)
+.dsh/
+
+# Generated ASAP7 genlib/filtered libs (reproduced by tools/*.py)
+_asap7_lib_filtered/
+
+# Diagnostic / scratch files (not part of the design)
+_scan.bat
+synth_cmd.txt
+_tmp_yosys-abc-*/
+synth/abc_map_v1.ys
+synth/abc_map_probe_alu.ys
+synth/pre_abc_diag.tcl
+synth/synth_min.tcl
 
 # Generated project directories and intermediates
 /build/*

@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression
+.PHONY: join02-vlt join02-vlt-build doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression synth synth-bb
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -15,6 +15,17 @@ GTKWAVE ?= $(OSS_CAD_ROOT)/bin/gtkwave.exe
 RISCV_PREFIX ?= $(RV_ROOT)/bin/riscv-none-elf-
 
 OSS_ENV = set "VERILATOR_ROOT=$(OSS_CAD_ROOT_WIN)\share\verilator" && set "YOSYSHQ_ROOT=" && call "$(OSS_CAD_ROOT_WIN)\environment.bat" &&
+
+# Synthesis configuration knobs.  CFG is only the output directory name;
+# FE_WIDTH/BE_WIDTH/PHYS_REGS/ROB_ENTRIES are the real parameters.  Keep the
+# libdir path in forward-slash form: yosys treats backslashes in script
+# strings as escapes.
+FE_WIDTH ?= 1
+BE_WIDTH ?= 1
+PHYS_REGS ?= 64
+ROB_ENTRIES ?= 32
+CFG ?= fe$(FE_WIDTH)_be$(BE_WIDTH)_p$(PHYS_REGS)_r$(ROB_ENTRIES)
+ASAP7_LIB_DIR ?= $(ROOT)/third_party/asap7/lib
 RTL_FILELIST = rtl/filelist.f
 RTL_FILES := $(strip $(file <$(RTL_FILELIST)))
 
@@ -27,6 +38,8 @@ doctor:
 	@"$(RISCV_PREFIX)objdump.exe" --version
 	@"$(RISCV_PREFIX)objcopy.exe" --version
 	@powershell -NoProfile -Command "& '$(RISCV_PREFIX)gcc.exe' -print-multi-lib | Select-String 'rv32i/ilp32|rv32im/ilp32'"
+	@if not exist "$(ASAP7_LIB_DIR)\asap7sc7p5t_SEQ_RVT_TT_nldm_201020.lib" (echo ERROR: ASAP7 RVT TT liberty files missing under $(ASAP7_LIB_DIR); run the third_party/asap7 fetch step & exit /b 1)
+	@echo ASAP7 RVT TT liberty: OK
 
 lint:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core -o build/h00_lint.vvp -c $(RTL_FILELIST)
@@ -69,6 +82,16 @@ join01:
 join02:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Vvp "$(VVP)" -Simulation build/cpu_core_image_tb.vvp -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
+
+# Fast full-system regression: Verilator-compiled cpu_core_image_tb.
+# --timing keeps the tb #5 clock and #12 reset delays; --debug makes the
+# deep hierarchical references in the tb $display diagnostics visible.
+join02-vlt-build:
+	@if not exist "build\vlt" mkdir "build\vlt"
+	@set "PATH=$(ROOT)\..\mingw64\bin;%PATH%" && $(OSS_ENV) "$(VERILATOR)" --binary --timing -Wno-fatal --debug --language 1364-2005 -Irtl --top-module cpu_core_image_tb --Mdir build/vlt/obj_dir -o cpu_core_image_vlt $(RTL_FILES) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+
+join02-vlt: join02-vlt-build
+	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Executable build/vlt/obj_dir/cpu_core_image_vlt.exe -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
 
 join: join01 join02
 
@@ -207,3 +230,16 @@ b09:
 
 regression:
 	@powershell -NoProfile -Command "python tools/regression.py"
+
+# Area synthesis with Yosys + ASAP7 7.5T RVT TT.
+#   make synth CFG=fe1_be1_p64_r32 [FE_WIDTH=1 BE_WIDTH=1 PHYS_REGS=64 ROB_ENTRIES=32]
+# synth = register-based upper bound (memory_dff), synth-bb = blackbox arrays.
+# Artifacts go to build/synth/<CFG>[/_bb]/: yosys.log (verbose run log for the
+# progress window), synth.log, stat_after_abc.log, cpu_core_synth.v.
+synth:
+	@if not exist "build\synth\$(CFG)" mkdir "build\synth\$(CFG)"
+	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)" > "build\synth\$(CFG)\yosys.log" 2>&1
+
+synth-bb:
+	@if not exist "build\synth\$(CFG)_bb" mkdir "build\synth\$(CFG)_bb"
+	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb" > "build\synth\$(CFG)_bb\yosys.log" 2>&1

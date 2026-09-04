@@ -94,6 +94,7 @@ module rv32_completion_network #(
     integer enq_slot;
     integer pop_slot;
     reg prefix_open;
+    reg pop_break;
     reg [BE_WIDTH-1:0] pop_fire;
     reg [SOURCES-1:0] source_fire;
     wire [COUNT_WIDTH-1:0] occupancy_wire = count_reg;
@@ -139,38 +140,41 @@ module rv32_completion_network #(
         cdb_is_load_o = {BE_WIDTH{1'b0}};
         pop_fire = {BE_WIDTH{1'b0}};
         pop_count = 0;
+        pop_slot = 0;
+        pop_break = 1'b0;
         for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
-            pop_slot = head_reg + pop_count;
-            if (pop_slot >= FIFO_DEPTH) pop_slot = pop_slot - FIFO_DEPTH;
-            if (!flush_i && valid_mem[pop_slot] && live_mem[pop_slot] &&
-                (!live_tag_valid_i || tag_mem[pop_slot] == live_tag_i)) begin
-                cdb_valid_o[lane] = 1'b1;
-                cdb_tag_o[(lane*TAG_WIDTH) +: TAG_WIDTH] = tag_mem[pop_slot];
-                cdb_phys_rd_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = phys_mem[pop_slot];
-                cdb_value_o[(lane*32) +: 32] = value_mem[pop_slot];
-                cdb_addr_o[(lane*32) +: 32] = addr_mem[pop_slot];
-                cdb_branch_target_o[(lane*32) +: 32] = branch_target_mem[pop_slot];
-                cdb_store_data_o[(lane*128) +: 128] = store_data_mem[pop_slot];
-                cdb_rd_we_o[lane] = rd_we_mem[pop_slot] && !store_mem[pop_slot];
-                cdb_is_store_o[lane] = store_mem[pop_slot];
-                cdb_is_branch_o[lane] = branch_mem[pop_slot];
-                cdb_branch_taken_o[lane] = branch_taken_mem[pop_slot];
-                cdb_redirect_valid_o[lane] = redirect_mem[pop_slot];
-                cdb_is_memory_o[lane] = memory_mem[pop_slot];
-                cdb_is_load_o[lane] = load_mem[pop_slot];
-                if (cdb_ready_i[lane]) begin
+            if (!pop_break) begin
+                pop_slot = head_reg + pop_count;
+                if (pop_slot >= FIFO_DEPTH) pop_slot = pop_slot - FIFO_DEPTH;
+                if (!flush_i && valid_mem[pop_slot] && live_mem[pop_slot] &&
+                    (!live_tag_valid_i || tag_mem[pop_slot] == live_tag_i)) begin
+                    cdb_valid_o[lane] = 1'b1;
+                    cdb_tag_o[(lane*TAG_WIDTH) +: TAG_WIDTH] = tag_mem[pop_slot];
+                    cdb_phys_rd_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = phys_mem[pop_slot];
+                    cdb_value_o[(lane*32) +: 32] = value_mem[pop_slot];
+                    cdb_addr_o[(lane*32) +: 32] = addr_mem[pop_slot];
+                    cdb_branch_target_o[(lane*32) +: 32] = branch_target_mem[pop_slot];
+                    cdb_store_data_o[(lane*128) +: 128] = store_data_mem[pop_slot];
+                    cdb_rd_we_o[lane] = rd_we_mem[pop_slot] && !store_mem[pop_slot];
+                    cdb_is_store_o[lane] = store_mem[pop_slot];
+                    cdb_is_branch_o[lane] = branch_mem[pop_slot];
+                    cdb_branch_taken_o[lane] = branch_taken_mem[pop_slot];
+                    cdb_redirect_valid_o[lane] = redirect_mem[pop_slot];
+                    cdb_is_memory_o[lane] = memory_mem[pop_slot];
+                    cdb_is_load_o[lane] = load_mem[pop_slot];
+                    if (cdb_ready_i[lane]) begin
+                        pop_fire[lane] = 1'b1;
+                        pop_count = pop_count + 1;
+                    end else begin
+                        pop_break = 1'b1;
+                    end
+                end else if (valid_mem[pop_slot]) begin
+                    // Stale/invalid head entries are discarded before arbitration.
                     pop_fire[lane] = 1'b1;
                     pop_count = pop_count + 1;
                 end else begin
-                    lane = BE_WIDTH;
+                    pop_break = 1'b1;
                 end
-            end else if (valid_mem[pop_slot]) begin
-                // Stale/invalid head entries are discarded before arbitration.
-                pop_fire[lane] = 1'b1;
-                pop_count = pop_count + 1;
-            end
-            else begin
-                lane = BE_WIDTH;
             end
         end
     end

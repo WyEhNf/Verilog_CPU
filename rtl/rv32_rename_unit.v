@@ -128,6 +128,7 @@ module rv32_rename_unit #(
     // Work on a temporary RAT in program order.  Only a contiguous prefix can
     // be accepted, and later lanes see earlier lanes' newly allocated maps.
     always @* begin
+        free_index = 0;
         for (reg_index = 0; reg_index < 32; reg_index = reg_index + 1)
             bundle_rat[reg_index] = rat[reg_index];
         rename_valid_o = {BE_WIDTH{1'b0}};

@@ -132,6 +132,7 @@ module rv32_rob #(
     integer recovery_slot;
     reg recovery_found;
     reg prefix_open;
+    reg commit_break;
     reg [GENERATION_WIDTH-1:0] next_generation;
 
     function [SLOT_WIDTH-1:0] advance_slot;
@@ -187,12 +188,14 @@ module rv32_rob #(
 
     // Allocation and all observable outputs are evaluated from old state.
     always @* begin
+        commit_lane = 0;
         alloc_fire_o = {BE_WIDTH{1'b0}};
         alloc_tag_o = {(BE_WIDTH*TAG_WIDTH){1'b0}};
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
         prefix_open = 1'b1;
         allocation_count = 0;
         free_entries = ROB_ENTRIES - occupancy_reg;
+        alloc_slot = 0;
         for (alloc_lane = 0; alloc_lane < BE_WIDTH; alloc_lane = alloc_lane + 1) begin
             if (prefix_open && alloc_valid_i[alloc_lane] && (allocation_count < free_entries)) begin
                 alloc_fire_o[alloc_lane] = 1'b1;
@@ -250,36 +253,40 @@ module rv32_rob #(
         store_commit_mask_o = 16'b0;
         store_commit_data_o = 128'b0;
         pop_count = 0;
+        commit_slot = 0;
+        commit_break = 1'b0;
         if (!recovery_found) begin
             for (commit_lane = 0; commit_lane < BE_WIDTH; commit_lane = commit_lane + 1) begin
-                commit_slot = head_reg + pop_count;
-                if (commit_slot >= ROB_ENTRIES) commit_slot = commit_slot - ROB_ENTRIES;
-                if (valid_mem[commit_slot] && ready_mem[commit_slot]) begin
-                    commit_valid_o[commit_lane] = 1'b1;
-                    commit_rd_we_o[commit_lane] = rd_we_mem[commit_slot];
-                    commit_rd_o[(commit_lane*5) +: 5] = rd_mem[commit_slot];
-                    commit_pc_o[(commit_lane*32) +: 32] = pc_mem[commit_slot];
-                    commit_inst_o[(commit_lane*32) +: 32] = inst_mem[commit_slot];
-                    commit_value_o[(commit_lane*32) +: 32] = value_mem[commit_slot];
-                    commit_is_store_o[commit_lane] = store_mem[commit_slot];
-                    commit_store_addr_o[(commit_lane*32) +: 32] = store_addr_mem[commit_slot];
-                    commit_store_mask_o[(commit_lane*16) +: 16] = store_mask_mem[commit_slot];
-                    commit_store_data_o[(commit_lane*128) +: 128] = store_data_mem[commit_slot];
-                    commit_tag_o[(commit_lane*TAG_WIDTH) +: TAG_WIDTH] = make_tag(commit_slot, generation_mem[commit_slot]);
-                    if (commit_lane == 0 && store_mem[commit_slot]) begin
-                        commit_valid_o[commit_lane] = store_wait_mem[commit_slot];
+                if (!commit_break) begin
+                    commit_slot = head_reg + pop_count;
+                    if (commit_slot >= ROB_ENTRIES) commit_slot = commit_slot - ROB_ENTRIES;
+                    if (valid_mem[commit_slot] && ready_mem[commit_slot]) begin
+                        commit_valid_o[commit_lane] = 1'b1;
+                        commit_rd_we_o[commit_lane] = rd_we_mem[commit_slot];
+                        commit_rd_o[(commit_lane*5) +: 5] = rd_mem[commit_slot];
+                        commit_pc_o[(commit_lane*32) +: 32] = pc_mem[commit_slot];
+                        commit_inst_o[(commit_lane*32) +: 32] = inst_mem[commit_slot];
+                        commit_value_o[(commit_lane*32) +: 32] = value_mem[commit_slot];
+                        commit_is_store_o[commit_lane] = store_mem[commit_slot];
+                        commit_store_addr_o[(commit_lane*32) +: 32] = store_addr_mem[commit_slot];
+                        commit_store_mask_o[(commit_lane*16) +: 16] = store_mask_mem[commit_slot];
+                        commit_store_data_o[(commit_lane*128) +: 128] = store_data_mem[commit_slot];
+                        commit_tag_o[(commit_lane*TAG_WIDTH) +: TAG_WIDTH] = make_tag(commit_slot, generation_mem[commit_slot]);
+                        if (commit_lane == 0 && store_mem[commit_slot]) begin
+                            commit_valid_o[commit_lane] = store_wait_mem[commit_slot];
+                        end
+                        if (commit_lane == 0 && store_mem[commit_slot] && !store_wait_mem[commit_slot] && !store_sent_mem[commit_slot]) begin
+                            store_commit_valid_o = 1'b1;
+                            store_commit_tag_o = make_tag(commit_slot, generation_mem[commit_slot]);
+                            store_commit_addr_o = store_addr_mem[commit_slot];
+                            store_commit_mask_o = store_mask_mem[commit_slot];
+                            store_commit_data_o = store_data_mem[commit_slot];
+                        end
+                        if (commit_valid_o[commit_lane]) pop_count = pop_count + 1;
+                        else commit_break = 1'b1;
+                    end else begin
+                        commit_break = 1'b1;
                     end
-                    if (commit_lane == 0 && store_mem[commit_slot] && !store_wait_mem[commit_slot] && !store_sent_mem[commit_slot]) begin
-                        store_commit_valid_o = 1'b1;
-                        store_commit_tag_o = make_tag(commit_slot, generation_mem[commit_slot]);
-                        store_commit_addr_o = store_addr_mem[commit_slot];
-                        store_commit_mask_o = store_mask_mem[commit_slot];
-                        store_commit_data_o = store_data_mem[commit_slot];
-                    end
-                    if (commit_valid_o[commit_lane]) pop_count = pop_count + 1;
-                    else commit_lane = BE_WIDTH;
-                end else begin
-                    commit_lane = BE_WIDTH;
                 end
             end
         end
