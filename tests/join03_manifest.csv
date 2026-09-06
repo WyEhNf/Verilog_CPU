@@ -1,0 +1,5 @@
+# name,source,arch,expected,max_cycles,required_mnemonics
+accumulate,tests/programs/accumulate.c,rv32i,186,200000,
+vvadd,tests/programs/vvadd.c,rv32i,72,300000,
+vmul,tests/programs/vmul.c,rv32im,8,300000,mul
+m_isa_smoke,tests/programs/m_isa_smoke.c,rv32im,90,500000,mul|mulh|mulhsu|mulhu|div|divu|rem|remu

@@ -17,7 +17,49 @@ module rv32m_units_tb;
     wire [TAGW-1:0] mul_resp_tag, div_resp_tag;
     wire [PAW-1:0] mul_resp_phys, div_resp_phys;
     wire mul_rd_we, div_rd_we;
-    integer bad, cycle;
+    integer bad, cycle, random_index, random_op_index;
+    reg [31:0] random_a, random_b, random_expected;
+
+    function [31:0] expected_multiply;
+        input [5:0] op;
+        input [31:0] operand_a;
+        input [31:0] operand_b;
+        reg signed [63:0] signed_a;
+        reg signed [63:0] signed_b;
+        reg signed [63:0] signed_unsigned_b;
+        reg [63:0] unsigned_a;
+        reg [63:0] unsigned_b;
+        reg signed [63:0] product_signed;
+        reg [63:0] product_unsigned;
+        begin
+            signed_a = {{32{operand_a[31]}}, operand_a};
+            signed_b = {{32{operand_b[31]}}, operand_b};
+            signed_unsigned_b = {32'b0, operand_b};
+            unsigned_a = {32'b0, operand_a};
+            unsigned_b = {32'b0, operand_b};
+            product_signed = 64'b0;
+            product_unsigned = 64'b0;
+            case (op)
+                `RV32IM_OP_MUL: begin
+                    product_unsigned = unsigned_a * unsigned_b;
+                    expected_multiply = product_unsigned[31:0];
+                end
+                `RV32IM_OP_MULH: begin
+                    product_signed = signed_a * signed_b;
+                    expected_multiply = product_signed[63:32];
+                end
+                `RV32IM_OP_MULHSU: begin
+                    product_signed = signed_a * signed_unsigned_b;
+                    expected_multiply = product_signed[63:32];
+                end
+                `RV32IM_OP_MULHU: begin
+                    product_unsigned = unsigned_a * unsigned_b;
+                    expected_multiply = product_unsigned[63:32];
+                end
+                default: expected_multiply = 32'b0;
+            endcase
+        end
+    endfunction
 
     rv32m_multiplier mul (
         .clk_i(clk), .reset_i(reset), .flush_i(flush), .req_valid_i(mul_valid), .req_ready_o(mul_req_ready),
@@ -66,6 +108,27 @@ module rv32m_units_tb;
         mul_op=`RV32IM_OP_MUL; mul_a=11; mul_b=12; mul_ready=0; mul_valid=1; @(posedge clk); #1; mul_valid=0; repeat (4) @(posedge clk); if (!mul_resp_valid || mul_value != 132) bad=bad+1; mul_ready=1; @(posedge clk); #1;
         // Flush kills all younger multiplier pipeline stages.
         mul_ready=0; mul_op=`RV32IM_OP_MUL; mul_a=3; mul_b=5; mul_valid=1; @(posedge clk); #1; mul_valid=0; flush=1; @(posedge clk); #1; flush=0; mul_ready=1; repeat (4) @(posedge clk); if (mul_resp_valid) bad=bad+1;
+
+        // Random arithmetic comparison covers all four signedness modes.
+        for (random_index = 0; random_index < 128; random_index = random_index + 1) begin
+            random_a = $random;
+            random_b = $random;
+            for (random_op_index = 0; random_op_index < 4; random_op_index = random_op_index + 1) begin
+                case (random_op_index)
+                    0: mul_op = `RV32IM_OP_MUL;
+                    1: mul_op = `RV32IM_OP_MULH;
+                    2: mul_op = `RV32IM_OP_MULHSU;
+                    default: mul_op = `RV32IM_OP_MULHU;
+                endcase
+                mul_a = random_a;
+                mul_b = random_b;
+                random_expected = expected_multiply(mul_op, random_a, random_b);
+                mul_valid = 1;
+                @(posedge clk); #1;
+                mul_valid = 0;
+                wait_mul(random_expected);
+            end
+        end
 
         div_op=`RV32IM_OP_DIV; div_a=100; div_b=7; div_valid=1; @(posedge clk); #1; div_valid=0; wait_div(14);
         div_op=`RV32IM_OP_REM; div_a=32'hffffff9c; div_b=7; div_valid=1; @(posedge clk); #1; div_valid=0; wait_div(32'hfffffffe);
