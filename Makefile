@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: join02-vlt join02-vlt-build doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression synth synth-bb
+.PHONY: join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression synth synth-bb
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -24,6 +24,8 @@ FE_WIDTH ?= 1
 BE_WIDTH ?= 1
 PHYS_REGS ?= 64
 ROB_ENTRIES ?= 32
+RS_ENTRIES ?= 8
+LSQ_ENTRIES ?= 8
 CFG ?= fe$(FE_WIDTH)_be$(BE_WIDTH)_p$(PHYS_REGS)_r$(ROB_ENTRIES)
 ASAP7_LIB_DIR ?= $(ROOT)/third_party/asap7/lib
 RTL_FILELIST = rtl/filelist.f
@@ -92,6 +94,18 @@ join02-vlt-build:
 
 join02-vlt: join02-vlt-build
 	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Executable build/vlt/obj_dir/cpu_core_image_vlt.exe -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
+
+# Fast regression: same image gate minus pi (pi alone costs ~30 min).
+# qsort/tak/superloop/queens still cover branch/recursion/load-store paths.
+join02-vlt-fast: join02-vlt-build
+	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Executable build/vlt/obj_dir/cpu_core_image_vlt.exe -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases -Skip pi
+
+join03-build:
+	@python tools/run_join03.py --build-only --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe"
+
+join03:
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb.vvp
 
 join: join01 join02
 
@@ -238,8 +252,8 @@ regression:
 # progress window), synth.log, stat_after_abc.log, cpu_core_synth.v.
 synth:
 	@if not exist "build\synth\$(CFG)" mkdir "build\synth\$(CFG)"
-	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)" > "build\synth\$(CFG)\yosys.log" 2>&1
+	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG) $(RS_ENTRIES) $(LSQ_ENTRIES)" > "build\synth\$(CFG)\yosys.log" 2>&1
 
 synth-bb:
 	@if not exist "build\synth\$(CFG)_bb" mkdir "build\synth\$(CFG)_bb"
-	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb" > "build\synth\$(CFG)_bb\yosys.log" 2>&1
+	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb $(RS_ENTRIES) $(LSQ_ENTRIES)" > "build\synth\$(CFG)_bb\yosys.log" 2>&1
