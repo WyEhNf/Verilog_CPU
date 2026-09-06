@@ -1,8 +1,8 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// B-09 single-issue backend closure.  The input is a decoded instruction
-// trace; the output is the only architectural observation point, CommitRecord.
+// Parameterized out-of-order backend closure.  The decoded input and
+// CommitRecord output are contiguous BE_WIDTH-wide bundles.
 // Rename, PRF, RS, ALU/MDU, completion, ROB and LSQ remain independent blocks
 // connected by their frozen valid/ready/tag contracts.
 module rv32_backend_joint #(
@@ -11,36 +11,35 @@ module rv32_backend_joint #(
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer RS_ENTRIES = 8,
     parameter integer LSQ_ENTRIES = 8,
-    parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
-    parameter integer CHECKPOINT_WIDTH = 1024
+    parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
     input  wire                         flush_i,
 
-    input  wire                         trace_valid_i,
-    output wire                         trace_ready_o,
-    input  wire [31:0]                  trace_pc_i,
-    input  wire [31:0]                  trace_inst_i,
-    input  wire [`RV32IM_OP_WIDTH-1:0]  trace_op_i,
-    input  wire [31:0]                  trace_imm_i,
-    input  wire [4:0]                   trace_rd_i,
-    input  wire [4:0]                   trace_rs1_i,
-    input  wire [4:0]                   trace_rs2_i,
-    input  wire                         trace_rd_we_i,
-    input  wire                         trace_rs1_used_i,
-    input  wire                         trace_rs2_used_i,
-    input  wire                         trace_is_load_i,
-    input  wire                         trace_is_store_i,
-    input  wire                         trace_is_branch_i,
-    input  wire                         trace_is_halt_i,
-    input  wire                         trace_is_error_i,
-    input  wire [1:0]                   trace_mem_size_i,
-    input  wire                         trace_mem_unsigned_i,
-    input  wire [127:0]                 trace_store_data_i,
-    input  wire                         trace_pred_taken_i,
-    input  wire [31:0]                  trace_pred_target_i,
-    input  wire [1:0]                   trace_pred_kind_i,
+    input  wire [BE_WIDTH-1:0]          trace_valid_i,
+    output wire [BE_WIDTH-1:0]          trace_ready_o,
+    input  wire [BE_WIDTH*32-1:0]       trace_pc_i,
+    input  wire [BE_WIDTH*32-1:0]       trace_inst_i,
+    input  wire [BE_WIDTH*`RV32IM_OP_WIDTH-1:0] trace_op_i,
+    input  wire [BE_WIDTH*32-1:0]       trace_imm_i,
+    input  wire [BE_WIDTH*5-1:0]        trace_rd_i,
+    input  wire [BE_WIDTH*5-1:0]        trace_rs1_i,
+    input  wire [BE_WIDTH*5-1:0]        trace_rs2_i,
+    input  wire [BE_WIDTH-1:0]          trace_rd_we_i,
+    input  wire [BE_WIDTH-1:0]          trace_rs1_used_i,
+    input  wire [BE_WIDTH-1:0]          trace_rs2_used_i,
+    input  wire [BE_WIDTH-1:0]          trace_is_load_i,
+    input  wire [BE_WIDTH-1:0]          trace_is_store_i,
+    input  wire [BE_WIDTH-1:0]          trace_is_branch_i,
+    input  wire [BE_WIDTH-1:0]          trace_is_halt_i,
+    input  wire [BE_WIDTH-1:0]          trace_is_error_i,
+    input  wire [BE_WIDTH*2-1:0]        trace_mem_size_i,
+    input  wire [BE_WIDTH-1:0]          trace_mem_unsigned_i,
+    input  wire [BE_WIDTH*128-1:0]      trace_store_data_i,
+    input  wire [BE_WIDTH-1:0]          trace_pred_taken_i,
+    input  wire [BE_WIDTH*32-1:0]       trace_pred_target_i,
+    input  wire [BE_WIDTH*2-1:0]        trace_pred_kind_i,
 
     output wire                         dcache_req_valid_o,
     input  wire                         dcache_req_ready_i,
@@ -66,17 +65,17 @@ module rv32_backend_joint #(
     input  wire                         dcache_store_ack_error_i,
 
     input  wire                         commit_ready_i,
-    output wire                         commit_valid_o,
-    output wire [31:0]                  commit_pc_o,
-    output wire [31:0]                  commit_inst_o,
-    output wire [4:0]                   commit_rd_o,
-    output wire                         commit_rd_we_o,
-    output wire [31:0]                  commit_value_o,
-    output wire                         commit_is_store_o,
-    output wire [31:0]                  commit_store_addr_o,
-    output wire [15:0]                  commit_store_mask_o,
-    output wire [127:0]                 commit_store_data_o,
-    output wire [TAG_WIDTH-1:0]         commit_tag_o,
+    output wire [BE_WIDTH-1:0]          commit_valid_o,
+    output wire [BE_WIDTH*32-1:0]       commit_pc_o,
+    output wire [BE_WIDTH*32-1:0]       commit_inst_o,
+    output wire [BE_WIDTH*5-1:0]        commit_rd_o,
+    output wire [BE_WIDTH-1:0]          commit_rd_we_o,
+    output wire [BE_WIDTH*32-1:0]       commit_value_o,
+    output wire [BE_WIDTH-1:0]          commit_is_store_o,
+    output wire [BE_WIDTH*32-1:0]       commit_store_addr_o,
+    output wire [BE_WIDTH*16-1:0]       commit_store_mask_o,
+    output wire [BE_WIDTH*128-1:0]      commit_store_data_o,
+    output wire [BE_WIDTH*TAG_WIDTH-1:0] commit_tag_o,
     output wire                         redirect_valid_o,
     output wire [31:0]                  redirect_pc_o,
     output wire [3:0]                   redirect_epoch_o,
@@ -100,16 +99,22 @@ module rv32_backend_joint #(
     localparam integer FREE_COUNT_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1);
     localparam integer CHECK_RAT_WIDTH = 32 * PAW;
     localparam integer CHECK_FREE_WIDTH = FREE_SLOTS * PAW;
+    // The checkpoint only needs the speculative RAT snapshot: the free list is
+    // deterministically rebuilt on recovery from the RAT + surviving ROB old
+    // physical mappings (see the recovery block below).  Keeping the free list
+    // in every checkpoint was pure dead storage (1024 -> 192 bits per entry).
+    localparam integer CHECKPOINT_WIDTH = CHECK_RAT_WIDTH;
+    localparam integer PRODUCERS = BE_WIDTH + 2;
 
-    wire [BE_WIDTH-1:0] dec_valid = {{(BE_WIDTH-1){1'b0}}, trace_valid_i};
-    wire [BE_WIDTH-1:0] dec_rd_we = {{(BE_WIDTH-1){1'b0}}, trace_rd_we_i};
-    wire [BE_WIDTH-1:0] dec_rs1_used = {{(BE_WIDTH-1){1'b0}}, trace_rs1_used_i};
-    wire [BE_WIDTH-1:0] dec_rs2_used = {{(BE_WIDTH-1){1'b0}}, trace_rs2_used_i};
-    wire [BE_WIDTH-1:0] dec_rs_need = {{(BE_WIDTH-1){1'b0}}, trace_valid_i};
-    wire [BE_WIDTH-1:0] dec_lsq_need = {{(BE_WIDTH-1){1'b0}}, trace_is_load_i | trace_is_store_i};
-    wire [(BE_WIDTH*5)-1:0] dec_rd = {{(BE_WIDTH*5-5){1'b0}}, trace_rd_i};
-    wire [(BE_WIDTH*5)-1:0] dec_rs1 = {{(BE_WIDTH*5-5){1'b0}}, trace_rs1_i};
-    wire [(BE_WIDTH*5)-1:0] dec_rs2 = {{(BE_WIDTH*5-5){1'b0}}, trace_rs2_i};
+    wire [BE_WIDTH-1:0] dec_valid = trace_valid_i;
+    wire [BE_WIDTH-1:0] dec_rd_we = trace_rd_we_i;
+    wire [BE_WIDTH-1:0] dec_rs1_used = trace_rs1_used_i;
+    wire [BE_WIDTH-1:0] dec_rs2_used = trace_rs2_used_i;
+    wire [BE_WIDTH-1:0] dec_rs_need = trace_valid_i;
+    wire [BE_WIDTH-1:0] dec_lsq_need = trace_is_load_i | trace_is_store_i;
+    wire [(BE_WIDTH*5)-1:0] dec_rd = trace_rd_i;
+    wire [(BE_WIDTH*5)-1:0] dec_rs1 = trace_rs1_i;
+    wire [(BE_WIDTH*5)-1:0] dec_rs2 = trace_rs2_i;
 
     wire [BE_WIDTH-1:0] rename_valid;
     wire [BE_WIDTH-1:0] rename_rd_we;
@@ -184,14 +189,21 @@ module rv32_backend_joint #(
     wire [RS_ENTRIES*TAG_WIDTH-1:0] rs_entry_rob_tag;
     reg [RS_ENTRIES-1:0] rs_flush_kill_mask;
 
-    wire alu_exec_valid, alu_exec_ready, alu_issue_ready, alu_exec_rd_we, alu_exec_is_branch;
-    wire alu_exec_branch_taken, alu_exec_redirect_valid, alu_exec_is_memory;
-    wire alu_exec_is_load, alu_exec_is_store, alu_exec_mem_unsigned;
-    wire [31:0] alu_exec_value, alu_exec_branch_target, alu_exec_redirect_pc, alu_exec_mem_addr;
-    wire [1:0] alu_exec_mem_size;
-    wire [127:0] alu_exec_store_data;
-    wire [PAW-1:0] alu_exec_phys;
-    wire [TAG_WIDTH-1:0] alu_exec_tag;
+    wire [BE_WIDTH-1:0] alu_exec_valid, alu_exec_ready, alu_issue_ready;
+    wire [BE_WIDTH-1:0] alu_exec_rd_we, alu_exec_is_branch;
+    wire [BE_WIDTH-1:0] alu_exec_branch_taken, alu_exec_redirect_valid, alu_exec_is_memory;
+    wire [BE_WIDTH-1:0] alu_exec_is_load, alu_exec_is_store, alu_exec_mem_unsigned;
+    wire [BE_WIDTH*32-1:0] alu_exec_value, alu_exec_branch_target, alu_exec_redirect_pc, alu_exec_mem_addr;
+    wire [BE_WIDTH*2-1:0] alu_exec_mem_size;
+    wire [BE_WIDTH*128-1:0] alu_exec_store_data;
+    wire [BE_WIDTH*PAW-1:0] alu_exec_phys;
+    wire [BE_WIDTH*TAG_WIDTH-1:0] alu_exec_tag;
+    wire [BE_WIDTH-1:0] rs_issue_is_mdu;
+    reg [BE_WIDTH-1:0] mdu_select;
+    reg [`RV32IM_OP_WIDTH-1:0] mdu_issue_op;
+    reg [31:0] mdu_issue_src1, mdu_issue_src2;
+    reg [TAG_WIDTH-1:0] mdu_issue_tag;
+    reg [PAW-1:0] mdu_issue_phys;
 
     wire mdu_issue_valid, mdu_issue_ready, mdu_completion_valid, mdu_completion_ready, mdu_completion_rd_we;
     wire [31:0] mdu_completion_value;
@@ -204,12 +216,12 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] cdb_value, cdb_addr, cdb_branch_target;
     wire [BE_WIDTH*128-1:0] cdb_store_data;
     wire [BE_WIDTH-1:0] cdb_branch_taken, cdb_redirect_valid, cdb_is_memory, cdb_is_load;
-    wire [2:0] producer_valid, producer_ready;
-    wire [3*TAG_WIDTH-1:0] producer_tag;
-    wire [3*PAW-1:0] producer_phys;
-    wire [3*32-1:0] producer_value, producer_addr, producer_branch_target;
-    wire [3*128-1:0] producer_store_data;
-    wire [2:0] producer_rd_we, producer_store, producer_branch, producer_taken, producer_redirect, producer_memory, producer_load;
+    wire [PRODUCERS-1:0] producer_valid, producer_ready;
+    wire [PRODUCERS*TAG_WIDTH-1:0] producer_tag;
+    wire [PRODUCERS*PAW-1:0] producer_phys;
+    wire [PRODUCERS*32-1:0] producer_value, producer_addr, producer_branch_target;
+    wire [PRODUCERS*128-1:0] producer_store_data;
+    wire [PRODUCERS-1:0] producer_rd_we, producer_store, producer_branch, producer_taken, producer_redirect, producer_memory, producer_load;
     // The recovery cycle uses the ROB completion port for the resolving
     // branch.  Hold queued CDB work for one cycle so an older completion is
     // not popped without reaching the ROB.
@@ -237,11 +249,11 @@ module rv32_backend_joint #(
     wire [TAG_WIDTH-1:0] lsq_store_ack_lsq_tag;
     wire [TAG_WIDTH-1:0] lsq_store_ack_rob_tag;
     wire lsq_store_ack_error;
-    wire lsq_addr_update_valid;
-    wire [TAG_WIDTH-1:0] lsq_addr_update_tag;
-    wire [31:0] lsq_addr_update;
-    wire lsq_data_update_valid;
-    wire [TAG_WIDTH-1:0] lsq_data_update_tag;
+    wire [BE_WIDTH-1:0] lsq_addr_update_valid;
+    wire [BE_WIDTH*TAG_WIDTH-1:0] lsq_addr_update_tag;
+    wire [BE_WIDTH*32-1:0] lsq_addr_update;
+    wire [BE_WIDTH-1:0] lsq_data_update_valid;
+    wire [BE_WIDTH*TAG_WIDTH-1:0] lsq_data_update_tag;
 
     reg [TAG_WIDTH-1:0] rob_to_lsq_mem [0:ROB_ENTRIES-1];
     reg [PAW-1:0] lsq_phys_mem [0:LSQ_ENTRIES-1];
@@ -275,7 +287,8 @@ module rv32_backend_joint #(
     integer map_phys_slot;
     integer producer_index;
     integer producer_count;
-    integer alu_rank, mdu_rank, load_rank;
+    integer mdu_rank, load_rank;
+    integer alu_rank [0:BE_WIDTH-1];
     integer completion_lane;
     integer completion_slot;
     integer recovery_map_index;
@@ -304,32 +317,30 @@ module rv32_backend_joint #(
     reg [FREE_PTR_WIDTH-1:0] recovery_free_tail;
     reg [FREE_COUNT_WIDTH-1:0] recovery_free_count;
     reg [15:0] completion_kill_mask;
-    wire dispatch_valid;
-    wire [TAG_WIDTH-1:0] rs_src1_tag = (rename_rs1_phys[PAW-1:0] < PHYS_REGS) ?
-        phys_tag_mem[rename_rs1_phys[PAW-1:0]] : {TAG_WIDTH{1'b0}};
-    wire [TAG_WIDTH-1:0] rs_src2_tag = (rename_rs2_phys[PAW-1:0] < PHYS_REGS) ?
-        phys_tag_mem[rename_rs2_phys[PAW-1:0]] : {TAG_WIDTH{1'b0}};
-    wire rs_src1_ready = (rename_rs1_phys[PAW-1:0] == 0) || prf_read_ready[0];
-    wire rs_src2_ready = (rename_rs2_phys[PAW-1:0] == 0) || prf_read_ready[1];
-    wire [31:0] rs_issue_imm = rob_imm_mem[rs_issue_tag[3 +: ROB_SLOT_WIDTH]];
-    wire rs_issue_pred_taken = rob_pred_taken_mem[rs_issue_tag[3 +: ROB_SLOT_WIDTH]];
-    wire [31:0] rs_issue_pred_target = rob_pred_target_mem[rs_issue_tag[3 +: ROB_SLOT_WIDTH]];
-    wire [1:0] rs_issue_pred_kind = rob_pred_kind_mem[rs_issue_tag[3 +: ROB_SLOT_WIDTH]];
-    wire [1:0] rs_issue_mem_size = rob_mem_size_mem[rs_issue_tag[3 +: ROB_SLOT_WIDTH]];
-    wire rs_issue_mem_unsigned = rob_mem_unsigned_mem[rs_issue_tag[3 +: ROB_SLOT_WIDTH]];
-    reg [CHECKPOINT_WIDTH-1:0] checkpoint_pack;
+    wire [BE_WIDTH-1:0] dispatch_valid = rename_valid;
+    reg [BE_WIDTH*TAG_WIDTH-1:0] rs_src1_tag, rs_src2_tag;
+    reg [BE_WIDTH-1:0] rs_src1_ready, rs_src2_ready;
+    reg [BE_WIDTH*32-1:0] rs_src1_value, rs_src2_value;
+    wire [BE_WIDTH*32-1:0] rs_issue_imm;
+    wire [BE_WIDTH-1:0] rs_issue_pred_taken;
+    wire [BE_WIDTH*32-1:0] rs_issue_pred_target;
+    wire [BE_WIDTH*2-1:0] rs_issue_pred_kind;
+    wire [BE_WIDTH*2-1:0] rs_issue_mem_size;
+    wire [BE_WIDTH-1:0] rs_issue_mem_unsigned;
+    reg [CHECK_RAT_WIDTH-1:0] checkpoint_rat_work;
     reg [BE_WIDTH-1:0] rob_alloc_is_store, rob_alloc_is_branch, rob_alloc_is_halt, rob_alloc_is_error;
     reg [BE_WIDTH*32-1:0] rob_alloc_pc, rob_alloc_inst;
     reg [BE_WIDTH*5-1:0] rob_alloc_rd;
     reg [BE_WIDTH*PAW-1:0] rob_alloc_old_phys, rob_alloc_new_phys;
     reg [BE_WIDTH*CHECKPOINT_WIDTH-1:0] rob_alloc_checkpoint;
-    reg [3*TAG_WIDTH-1:0] producer_tag_r;
-    reg [3*PAW-1:0] producer_phys_r;
-    reg [3*32-1:0] producer_value_r, producer_addr_r, producer_branch_target_r;
-    reg [3*128-1:0] producer_store_data_r;
-    reg [2:0] producer_valid_r, producer_rd_we_r, producer_store_r, producer_branch_r, producer_taken_r, producer_redirect_r, producer_memory_r, producer_load_r;
-    reg [2:0] producer_target_live_r;
-    wire [2:0] producer_ready_r;
+    reg [PRODUCERS*TAG_WIDTH-1:0] producer_tag_r;
+    reg [PRODUCERS*PAW-1:0] producer_phys_r;
+    reg [PRODUCERS*32-1:0] producer_value_r, producer_addr_r, producer_branch_target_r;
+    reg [PRODUCERS*128-1:0] producer_store_data_r;
+    reg [PRODUCERS-1:0] producer_valid_r, producer_rd_we_r, producer_store_r, producer_branch_r, producer_taken_r, producer_redirect_r, producer_memory_r, producer_load_r;
+    reg [PRODUCERS-1:0] producer_target_live_r;
+    wire [PRODUCERS-1:0] producer_ready_r;
+    reg [BE_WIDTH*PAW-1:0] commit_old_phys, commit_new_phys;
     reg [BE_WIDTH-1:0] completion_valid_r, completion_done_r, completion_error_r;
     reg [BE_WIDTH*TAG_WIDTH-1:0] completion_tag_r;
     reg [BE_WIDTH*32-1:0] completion_value_r, completion_store_addr_r;
@@ -447,6 +458,7 @@ module rv32_backend_joint #(
     // entries younger than the resolving branch; older unresolved work still
     // belongs to the retained ROB prefix and must remain executable.
     always @* begin
+        recovery_rs_index = 0;
         rs_flush_kill_mask = {RS_ENTRIES{1'b0}};
         recovery_rs_rob_slot = 0;
         recovery_rs_branch_slot = branch_pending_tag[3 +: ROB_SLOT_WIDTH];
@@ -475,6 +487,7 @@ module rv32_backend_joint #(
     // reaches the ROB while reclaimed physical registers cannot be poisoned
     // by wrong-path writeback.
     always @* begin
+        recovery_completion_index = 0;
         completion_kill_mask = 16'b0;
         recovery_completion_rob_slot = 0;
         recovery_completion_age = 0;
@@ -525,10 +538,6 @@ module rv32_backend_joint #(
     always @* begin
         checkpoint_pack = {CHECKPOINT_WIDTH{1'b0}};
         checkpoint_pack[CHECK_RAT_WIDTH-1:0] = rat_state;
-        checkpoint_pack[CHECK_RAT_WIDTH+CHECK_FREE_WIDTH-1:CHECK_RAT_WIDTH] = free_list_state;
-        checkpoint_pack[CHECK_RAT_WIDTH+CHECK_FREE_WIDTH+FREE_PTR_WIDTH-1:CHECK_RAT_WIDTH+CHECK_FREE_WIDTH] = free_head;
-        checkpoint_pack[CHECK_RAT_WIDTH+CHECK_FREE_WIDTH+2*FREE_PTR_WIDTH-1:CHECK_RAT_WIDTH+CHECK_FREE_WIDTH+FREE_PTR_WIDTH] = free_tail;
-        checkpoint_pack[CHECK_RAT_WIDTH+CHECK_FREE_WIDTH+2*FREE_PTR_WIDTH+FREE_COUNT_WIDTH-1:CHECK_RAT_WIDTH+CHECK_FREE_WIDTH+2*FREE_PTR_WIDTH] = free_count;
         rob_alloc_checkpoint = {BE_WIDTH{checkpoint_pack}};
         rob_alloc_pc = { {(BE_WIDTH-1)*32{1'b0}}, trace_pc_i };
         rob_alloc_inst = { {(BE_WIDTH-1)*32{1'b0}}, trace_inst_i };
@@ -579,6 +588,7 @@ module rv32_backend_joint #(
         producer_valid_r = 3'b0; producer_target_live_r = 3'b0; producer_rd_we_r = 3'b0; producer_store_r = 3'b0; producer_branch_r = 3'b0; producer_taken_r = 3'b0; producer_redirect_r = 3'b0; producer_memory_r = 3'b0; producer_load_r = 3'b0;
         producer_tag_r = 0; producer_phys_r = 0; producer_value_r = 0; producer_addr_r = 0; producer_branch_target_r = 0; producer_store_data_r = 0;
         producer_count = 0; alu_rank = 3; mdu_rank = 3; load_rank = 3;
+        producer_recovery_index = 0;
         if (alu_exec_valid && (!alu_exec_is_load || alu_exec_is_store)) begin
             alu_rank = producer_count; producer_valid_r[producer_count] = 1'b1; producer_target_live_r[producer_count] = 1'b1; producer_tag_r[producer_count*TAG_WIDTH +: TAG_WIDTH] = alu_exec_tag; producer_phys_r[producer_count*PAW +: PAW] = alu_exec_phys; producer_value_r[producer_count*32 +: 32] = alu_exec_value; producer_addr_r[producer_count*32 +: 32] = alu_exec_mem_addr; producer_branch_target_r[producer_count*32 +: 32] = alu_exec_branch_target; producer_store_data_r[producer_count*128 +: 128] = alu_exec_store_data; producer_rd_we_r[producer_count] = alu_exec_rd_we; producer_store_r[producer_count] = alu_exec_is_store; producer_branch_r[producer_count] = alu_exec_is_branch; producer_taken_r[producer_count] = alu_exec_branch_taken; producer_redirect_r[producer_count] = alu_exec_redirect_valid; producer_memory_r[producer_count] = alu_exec_is_memory; producer_count = producer_count + 1;
         end
