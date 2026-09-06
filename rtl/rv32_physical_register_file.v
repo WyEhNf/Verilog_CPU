@@ -50,7 +50,6 @@ module rv32_physical_register_file #(
         for (read_port = 0; read_port < (2*BE_WIDTH); read_port = read_port + 1) begin : g_read_port
             integer bypass_lane;
             always @(read_phys_i or write_phys_i or write_data_i or write_valid_i or value or ready) begin
-                bypass_lane = 0;
                 read_data_o[(read_port*32) +: 32] = 32'b0;
                 read_ready_o[read_port] = 1'b0;
                 if (read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] == 0) begin

@@ -163,7 +163,6 @@ module rv32_lsq #(
     reg [15:0] target_mask;
     reg [15:0] fwd_mask;
     reg [127:0] fwd_data;
-    reg [15:0] overlap;
     reg [127:0] response_line;
     reg [127:0] merged_line;
     reg [31:0] extracted_value;
@@ -176,16 +175,6 @@ module rv32_lsq #(
     reg load_pop_fire;
     reg store_pop_fire;
     reg [GENERATION_WIDTH-1:0] next_generation;
-
-    function [127:0] expand_bytes;
-        input [15:0] mask;
-        begin
-            expand_bytes = {{8{mask[15]}}, {8{mask[14]}}, {8{mask[13]}}, {8{mask[12]}},
-                            {8{mask[11]}}, {8{mask[10]}}, {8{mask[9]}},  {8{mask[8]}},
-                            {8{mask[7]}},  {8{mask[6]}},  {8{mask[5]}},  {8{mask[4]}},
-                            {8{mask[3]}},  {8{mask[2]}},  {8{mask[1]}},  {8{mask[0]}}};
-        end
-    endfunction
 
     function [TAG_WIDTH-1:0] make_lsq_tag;
         input integer tag_slot;
@@ -293,16 +282,6 @@ module rv32_lsq #(
     end
 
     always @* begin
-        // Unconditional defaults: these temporaries are written only inside
-        // nested conditions below, and a conditional-only write would infer
-        // latches (thousands of proc_dlatch candidates in synthesis).
-        blocked = 1'b0;
-        target_mask = 16'b0;
-        fwd_mask = 16'b0;
-        fwd_data = 128'b0;
-        overlap = 16'b0;
-        alloc_slot = 0;
-        older_age = 0;
         free_count_calc = LSQ_ENTRIES - occupancy_reg;
         alloc_fire_o = {BE_WIDTH{1'b0}};
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
@@ -361,16 +340,11 @@ module rv32_lsq #(
                                     blocked = 1'b1;
                                 end else if ((addr_mem[i][31:4] == addr_mem[scan][31:4])) begin
                                     if (data_ready_mem[i]) begin
-                                        // Word-level merge: same youngest-wins
-                                        // per-byte result as the old byte loop,
-                                        // but every fwd bit is assigned under
-                                        // one uniform condition per store so
-                                        // synthesis proc builds one decoder
-                                        // instead of one per byte.
-                                        overlap = mask_mem[i] & target_mask;
-                                        fwd_data = (data_mem[i] & expand_bytes(overlap)) |
-                                                   (fwd_data & ~expand_bytes(overlap));
-                                        fwd_mask = fwd_mask | overlap;
+                                        for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
+                                            if (mask_mem[i][byte_index] && target_mask[byte_index]) begin
+                                                fwd_mask[byte_index] = 1'b1;
+                                                fwd_data[(byte_index*8) +: 8] = data_mem[i][(byte_index*8) +: 8];
+                                            end
                                     end else if ((mask_mem[i] & target_mask) != 0) begin
                                         blocked = 1'b1;
                                     end
@@ -414,10 +388,11 @@ module rv32_lsq #(
                         if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
                         if (valid_mem[i] && store_mem[i] && addr_ready_mem[i] && data_ready_mem[i] &&
                             (addr_mem[i][31:4] == addr_mem[candidate][31:4])) begin
-                            overlap = mask_mem[i] & target_mask;
-                            fwd_data = (data_mem[i] & expand_bytes(overlap)) |
-                                       (fwd_data & ~expand_bytes(overlap));
-                            fwd_mask = fwd_mask | overlap;
+                            for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
+                                if (mask_mem[i][byte_index] && target_mask[byte_index]) begin
+                                    fwd_mask[byte_index] = 1'b1;
+                                    fwd_data[(byte_index*8) +: 8] = data_mem[i][(byte_index*8) +: 8];
+                                end
                         end
                     end
                 end
