@@ -48,7 +48,7 @@ module rv32_lsq_tb #(
     wire [TAG_WIDTH-1:0] alloc_tag0;
     wire [CW-1:0] occupancy;
     integer bad;
-    reg [15:0] st_tag, st_tag2, st_tag3, unknown_tag;
+    reg [15:0] st_tag, st_tag2, st_tag3, st_tag4, st_tag5, st_tag6, unknown_tag;
     reg [TAG_WIDTH-1:0] last_alloc_tag;
 
     assign alloc_tag0 = alloc_tag[0 +: TAG_WIDTH];
@@ -155,6 +155,36 @@ module rv32_lsq_tb #(
             commit_store(16'h0505, st_tag3);
             if (!load_valid || load_value != 32'h1122aa44) bad = bad + 1;
         end
+        // Multiple older stores merge by byte and the youngest overlapping
+        // store wins.  Only the two uncovered bytes are requested from cache.
+        alloc_one(0, 1, 16'h0610, 32'h00000210, 0, 0,
+                  128'h00000000000000000000000000000011, 16'h0001);
+        st_tag4 = last_alloc_tag;
+        alloc_one(0, 1, 16'h0611, 32'h00000211, 0, 0,
+                  128'h00000000000000000000000000002200, 16'h0002);
+        st_tag5 = last_alloc_tag;
+        alloc_one(0, 1, 16'h0612, 32'h00000210, 0, 0,
+                  128'h000000000000000000000000000000aa, 16'h0001);
+        st_tag6 = last_alloc_tag;
+        alloc_one(1, 0, 16'h0613, 32'h00000210, 2, 1, 0, 0);
+        if (!dreq_valid || !dreq_load || dreq_mask != 16'h000c) bad = bad + 1;
+        dresp_tag = dreq_lsq;
+        dresp_line = 128'h00000000000000000000000044332211;
+        @(posedge clk); #1; dresp_valid = 1; @(posedge clk); #1; dresp_valid = 0;
+        commit_store(16'h0610, st_tag4);
+        commit_store(16'h0611, st_tag5);
+        commit_store(16'h0612, st_tag6);
+        if (!load_valid || load_value != 32'h443322aa) bad = bad + 1;
+
+        // Halfword forwarding keeps access-relative data and sign extension.
+        alloc_one(0, 1, 16'h0620, 32'h00000222, 1, 0,
+                  128'h00000000000000000000000080ff0000, 16'h000c);
+        st_tag4 = last_alloc_tag;
+        alloc_one(1, 0, 16'h0621, 32'h00000222, 1, 0, 0, 0);
+        if (dreq_valid) bad = bad + 1;
+        commit_store(16'h0620, st_tag4);
+        if (!load_valid || load_value != 32'hffff80ff) bad = bad + 1;
+
         // An unknown older store blocks a younger load until its address is known.
         alloc_valid[0] = 1; alloc_store[0] = 1; alloc_data_valid[0] = 1; alloc_addr_valid[0] = 0; alloc_rob[15:0] = 16'h0707;
         alloc_size[1:0] = 0; alloc_data[127:0] = 128'h55; alloc_mask[15:0] = 1; #1; unknown_tag = alloc_tag0; @(posedge clk); #1; clear_inputs();
