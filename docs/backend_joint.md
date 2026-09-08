@@ -32,3 +32,7 @@ load/store error 和 halt 返回值，并包含 100-cycle completion timeout 与
 10,000-time-unit 全局 watchdog。`make b09` 保持单发射兼容性，`make join04` 验证
 双/四发射代表配置，`make join05` 验证全部 9 组 FE/BE 宽度组合，并同时覆盖
 `PHYS_REGS=48/64/96`、`ROB_ENTRIES=16/32/64`。
+
+整机前端为每个 fetch lane 提供独立预测读口。当前实现复制小型 BHT/BTB 状态，并让
+所有副本接收相同反馈以保持一致，避免 lane 1--3 中的分支被固定成 not-taken；fetch
+frontend 仍以 bundle 中最早的 taken 预测截断后续指令。
