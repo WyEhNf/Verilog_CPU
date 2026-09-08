@@ -78,7 +78,9 @@ module rv32_rob #(
     output reg  [7:0]                   return_value_o,
     output wire [SLOT_WIDTH-1:0]        head_o,
     output wire [SLOT_WIDTH-1:0]        tail_o,
-    output wire [((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1))-1:0] occupancy_o
+    output wire [((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1))-1:0] occupancy_o,
+    output wire [ROB_ENTRIES-1:0]       entry_valid_o,
+    output wire [(ROB_ENTRIES*GENERATION_WIDTH)-1:0] entry_generation_o
 );
     localparam integer COUNT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1);
     localparam integer ALLOC_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
@@ -174,6 +176,15 @@ module rv32_rob #(
     assign tail_o = tail_reg;
     assign occupancy_o = occupancy_reg;
     assign alloc_ready_o = (alloc_count_o != 0) && !recovery_accept_o;
+
+    genvar entry_index;
+    generate
+        for (entry_index = 0; entry_index < ROB_ENTRIES; entry_index = entry_index + 1) begin : g_entry_state
+            assign entry_valid_o[entry_index] = valid_mem[entry_index];
+            assign entry_generation_o[(entry_index*GENERATION_WIDTH) +: GENERATION_WIDTH] =
+                generation_mem[entry_index];
+        end
+    endgenerate
 
     initial begin
         if ((BE_WIDTH != 1) && (BE_WIDTH != 2) && (BE_WIDTH != 4)) begin
