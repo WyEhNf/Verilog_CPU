@@ -11,7 +11,9 @@ module rv32_backend_joint #(
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer RS_ENTRIES = 8,
     parameter integer LSQ_ENTRIES = 8,
-    parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT
+    parameter integer TAG_WIDTH = 1 + 2 +
+        ((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES)) +
+        `RV32IM_ROB_GENERATION_WIDTH
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,

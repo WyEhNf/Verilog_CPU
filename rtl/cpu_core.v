@@ -7,7 +7,9 @@ module cpu_core #(
     parameter integer FE_WIDTH = `RV32IM_FE_WIDTH_DEFAULT,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
-    parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT
+    parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
+    parameter integer RS_ENTRIES = 8,
+    parameter integer LSQ_ENTRIES = 8
 ) (
     input  wire       clk,
     input  wire       reset,
@@ -43,6 +45,9 @@ module cpu_core #(
     localparam integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH;
     localparam integer PACKET_WIDTH = `RV32IM_FETCH_PACKET_WIDTH;
     localparam integer DISPATCH_LANES = (FE_WIDTH < BE_WIDTH) ? FE_WIDTH : BE_WIDTH;
+    localparam integer ROB_TAG_WIDTH = 1 + 2 +
+        ((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES)) +
+        `RV32IM_ROB_GENERATION_WIDTH;
 
     initial begin
         if ((FE_WIDTH != 1) && (FE_WIDTH != 2) && (FE_WIDTH != 4)) begin
@@ -164,21 +169,22 @@ module cpu_core #(
     wire dcache_req_valid, dcache_req_ready, dcache_req_load, dcache_req_store, dcache_req_unsigned;
     wire [31:0] dcache_req_addr;
     wire [1:0] dcache_req_size;
-    wire [15:0] dcache_req_mask, dcache_req_rob_tag, dcache_req_lsq_tag;
+    wire [15:0] dcache_req_mask;
+    wire [ROB_TAG_WIDTH-1:0] dcache_req_rob_tag, dcache_req_lsq_tag;
     wire [127:0] dcache_req_wdata;
     wire dcache_resp_valid, dcache_resp_ready, dcache_resp_line_valid, dcache_resp_error;
-    wire [15:0] dcache_resp_lsq_tag;
+    wire [ROB_TAG_WIDTH-1:0] dcache_resp_lsq_tag;
     wire [31:0] dcache_resp_addr, dcache_resp_word;
     wire [127:0] dcache_resp_line;
     wire dcache_store_ack_valid, dcache_store_ack_error;
-    wire [15:0] dcache_store_ack_lsq_tag;
+    wire [ROB_TAG_WIDTH-1:0] dcache_store_ack_lsq_tag;
     wire dc_mem_req_valid, dc_mem_req_ready, dc_mem_req_write, dc_mem_resp_valid, dc_mem_resp_ready, dc_mem_resp_error;
     wire [31:0] dc_mem_req_line_addr, dc_mem_resp_line_addr;
     wire [127:0] dc_mem_req_wdata, dc_mem_resp_data;
     wire [15:0] dc_mem_req_wmask;
     wire [7:0] dc_mem_req_id, dc_mem_resp_id;
     wire dc_event_request, dc_event_hit, dc_event_miss, dc_event_refill, dc_event_writeback, dc_event_stall;
-    rv32_dcache dcache (
+    rv32_dcache #(.TAG_WIDTH(ROB_TAG_WIDTH)) dcache (
         // LSQ generations reject wrong-path responses while retaining older
         // loads across a redirect.  The cache itself has no ROB-age context.
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(dcache_req_valid),
@@ -325,10 +331,11 @@ module cpu_core #(
     wire commit_ready;
     wire [BE_WIDTH*32-1:0] commit_pc, commit_inst, commit_value, commit_store_addr;
     wire [BE_WIDTH*5-1:0] commit_rd;
-    wire [BE_WIDTH*16-1:0] commit_store_mask, commit_tag;
+    wire [BE_WIDTH*16-1:0] commit_store_mask;
+    wire [BE_WIDTH*ROB_TAG_WIDTH-1:0] commit_tag;
     wire [BE_WIDTH*128-1:0] commit_store_data;
     assign commit_ready = 1'b1;
-    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES)) backend (
+    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),

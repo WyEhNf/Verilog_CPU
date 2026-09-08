@@ -555,6 +555,35 @@ module rv32_lsq #(
                     end
                 end
             end
+            // Address generation can complete for a retained memory
+            // instruction on the same edge as a younger branch recovery.
+            // Preserve those tag-qualified updates just as the ROB preserves
+            // same-cycle completions; killed entries are invalidated below
+            // regardless of any update written on this edge.
+            for (update_slot = 0; update_slot < LSQ_ENTRIES; update_slot = update_slot + 1) begin
+                for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
+                    if (addr_update_valid_i[lane] &&
+                        tag_matches_slot(addr_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
+                        addr_ready_mem[update_slot] <= 1'b1;
+                        addr_mem[update_slot] <= addr_update_i[(lane*32) +: 32];
+                        if (mask_mem[update_slot] == 16'b0 && store_mem[update_slot])
+                            mask_mem[update_slot] <= size_mask(
+                                addr_update_i[(lane*32) +: 32], size_mem[update_slot]);
+                    end
+                    if (data_update_valid_i[lane] &&
+                        tag_matches_slot(data_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
+                        data_ready_mem[update_slot] <= 1'b1;
+                        data_mem[update_slot] <= data_update_i[(lane*128) +: 128];
+                        if (data_mask_update_i[(lane*16) +: 16] != 16'b0)
+                            mask_mem[update_slot] <= data_mask_update_i[(lane*16) +: 16];
+                    end
+                    if (wakeup_valid_i[lane] &&
+                        tag_matches_slot(wakeup_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
+                        data_ready_mem[update_slot] <= 1'b1;
+                        data_mem[update_slot] <= wakeup_value_i[(lane*128) +: 128];
+                    end
+                end
+            end
             // Stores are architectural before they enter the D-cache.  If an
             // acknowledgement coincides with recovery, retain it for the
             // surviving store instead of consuming and losing it.

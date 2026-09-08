@@ -58,12 +58,12 @@ module rv32m_mdu_reservation_station #(
     assign completion_phys_rd_o = mul_resp_valid ? mul_resp_phys : div_resp_phys;
     assign completion_rd_we_o = mul_resp_valid ? mul_resp_rd_we : div_resp_rd_we;
 
-    rv32m_multiplier multiplier (
+    rv32m_multiplier #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PHYS_ADDR_WIDTH)) multiplier (
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .req_valid_i(mul_req_valid), .req_ready_o(mul_req_ready),
         .req_op_i(pending_op), .req_src1_i(pending_src1), .req_src2_i(pending_src2), .req_rob_tag_i(pending_tag), .req_phys_rd_i(pending_phys), .req_target_live_i(pending_live),
         .resp_valid_o(mul_resp_valid), .resp_ready_i(mul_resp_ready), .resp_value_o(mul_resp_value), .resp_rob_tag_o(mul_resp_tag), .resp_phys_rd_o(mul_resp_phys), .resp_rd_we_o(mul_resp_rd_we), .live_tag_valid_i(live_tag_valid_i), .live_tag_i(live_tag_i)
     );
-    rv32m_divider divider (
+    rv32m_divider #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PHYS_ADDR_WIDTH)) divider (
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .req_valid_i(div_req_valid), .req_ready_o(div_req_ready),
         .req_op_i(pending_op), .req_src1_i(pending_src1), .req_src2_i(pending_src2), .req_rob_tag_i(pending_tag), .req_phys_rd_i(pending_phys), .req_target_live_i(pending_live),
         .resp_valid_o(div_resp_valid), .resp_ready_i(div_resp_ready), .resp_value_o(div_resp_value), .resp_rob_tag_o(div_resp_tag), .resp_phys_rd_o(div_resp_phys), .resp_rd_we_o(div_resp_rd_we), .live_tag_valid_i(live_tag_valid_i), .live_tag_i(live_tag_i)
