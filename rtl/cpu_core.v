@@ -86,47 +86,52 @@ module cpu_core #(
     wire [31:0] branch_feedback_pc, branch_feedback_target, branch_feedback_pred_target;
     wire [1:0] branch_feedback_kind;
 
-    wire pred_taken, pred_btb_hit;
-    wire [31:0] pred_target;
-    wire [1:0] pred_kind;
-    wire [5:0] pred_bht_index;
-    wire [3:0] pred_btb_index;
-    wire [1:0] pred_counter;
-    wire [31:0] pred_count, pred_correct;
-    reg [31:0] predictor_query_inst;
-    reg [FE_WIDTH-1:0] pred_taken_bus, pred_btb_hit_bus;
-    reg [FE_WIDTH*32-1:0] pred_target_bus;
-    reg [FE_WIDTH*2-1:0] pred_kind_bus;
+    wire [FE_WIDTH-1:0] pred_taken_bus, pred_btb_hit_bus;
+    wire [FE_WIDTH*32-1:0] pred_target_bus;
+    wire [FE_WIDTH*2-1:0] pred_kind_bus;
+    wire [FE_WIDTH*6-1:0] pred_bht_index_bus;
+    wire [FE_WIDTH*4-1:0] pred_btb_index_bus;
+    wire [FE_WIDTH*2-1:0] pred_counter_bus;
+    wire [FE_WIDTH*32-1:0] pred_count_bus, pred_correct_bus;
+    wire [31:0] pred_count = pred_count_bus[31:0];
+    wire [31:0] pred_correct = pred_correct_bus[31:0];
 
-    always @* begin
-        case (if_resp_pc[3:2])
-            2'd0: predictor_query_inst = if_resp_line_data[31:0];
-            2'd1: predictor_query_inst = if_resp_line_data[63:32];
-            2'd2: predictor_query_inst = if_resp_line_data[95:64];
-            default: predictor_query_inst = if_resp_line_data[127:96];
-        endcase
-        pred_taken_bus = {FE_WIDTH{1'b0}};
-        pred_btb_hit_bus = {FE_WIDTH{1'b0}};
-        pred_target_bus = {FE_WIDTH*32{1'b0}};
-        pred_kind_bus = {FE_WIDTH*2{1'b0}};
-        pred_taken_bus[0] = pred_taken;
-        pred_btb_hit_bus[0] = pred_btb_hit;
-        pred_target_bus[31:0] = pred_target;
-        pred_kind_bus[1:0] = pred_kind;
-    end
+    // Every fetch lane needs a predictor read.  The small predictor state is
+    // replicated, while all copies receive identical feedback and therefore
+    // remain coherent.  This avoids forcing lanes 1..N to predict not-taken.
+    genvar predictor_lane;
+    generate
+        for (predictor_lane = 0; predictor_lane < FE_WIDTH;
+             predictor_lane = predictor_lane + 1) begin : g_predictor
+            wire [2:0] query_word_index =
+                {1'b0, if_resp_pc[3:2]} + predictor_lane;
+            wire query_valid = if_resp_valid && (query_word_index < 3'd4);
+            wire [31:0] query_pc = if_resp_pc + (predictor_lane * 32'd4);
+            wire [31:0] query_inst =
+                if_resp_line_data >> (query_word_index * 32);
 
-    rv32_branch_predictor predictor (
-        .clk_i(clk), .reset_i(reset), .query_valid_i(if_resp_valid),
-        .query_pc_i(if_resp_pc), .query_inst_i(predictor_query_inst),
-        .pred_taken_o(pred_taken), .pred_target_o(pred_target),
-        .pred_kind_o(pred_kind), .pred_btb_hit_o(pred_btb_hit),
-         .pred_bht_index_o(pred_bht_index), .pred_btb_index_o(pred_btb_index),
-         .pred_counter_o(pred_counter), .feedback_valid_i(branch_feedback_valid),
-         .feedback_pc_i(branch_feedback_pc), .feedback_kind_i(branch_feedback_kind),
-         .feedback_taken_i(branch_feedback_taken), .feedback_target_i(branch_feedback_target),
-         .feedback_pred_taken_i(branch_feedback_pred_taken), .feedback_pred_target_i(branch_feedback_pred_target),
-        .prediction_count_o(pred_count), .correct_count_o(pred_correct)
-    );
+            rv32_branch_predictor predictor (
+                .clk_i(clk), .reset_i(reset), .query_valid_i(query_valid),
+                .query_pc_i(query_pc), .query_inst_i(query_inst),
+                .pred_taken_o(pred_taken_bus[predictor_lane]),
+                .pred_target_o(pred_target_bus[predictor_lane*32 +: 32]),
+                .pred_kind_o(pred_kind_bus[predictor_lane*2 +: 2]),
+                .pred_btb_hit_o(pred_btb_hit_bus[predictor_lane]),
+                .pred_bht_index_o(pred_bht_index_bus[predictor_lane*6 +: 6]),
+                .pred_btb_index_o(pred_btb_index_bus[predictor_lane*4 +: 4]),
+                .pred_counter_o(pred_counter_bus[predictor_lane*2 +: 2]),
+                .feedback_valid_i(branch_feedback_valid),
+                .feedback_pc_i(branch_feedback_pc),
+                .feedback_kind_i(branch_feedback_kind),
+                .feedback_taken_i(branch_feedback_taken),
+                .feedback_target_i(branch_feedback_target),
+                .feedback_pred_taken_i(branch_feedback_pred_taken),
+                .feedback_pred_target_i(branch_feedback_pred_target),
+                .prediction_count_o(pred_count_bus[predictor_lane*32 +: 32]),
+                .correct_count_o(pred_correct_bus[predictor_lane*32 +: 32])
+            );
+        end
+    endgenerate
 
     rv32_fetch_frontend #(.FE_WIDTH(FE_WIDTH)) frontend (
         .clk_i(clk), .reset_i(reset), .redirect_valid_i(redirect_valid),
