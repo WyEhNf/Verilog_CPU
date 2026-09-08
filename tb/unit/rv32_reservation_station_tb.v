@@ -16,7 +16,7 @@ module rv32_reservation_station_tb #(
     reg [(BE_WIDTH*32)-1:0] alloc_pc, src1_value, src2_value;
     reg [(BE_WIDTH*TAGW)-1:0] alloc_tag, src1_tag, src2_tag;
     reg [(BE_WIDTH*PAW)-1:0] alloc_phys;
-    reg [(BE_WIDTH*128)-1:0] alloc_store;
+    reg [(BE_WIDTH*32)-1:0] alloc_store;
     wire alloc_ready;
     wire [BE_WIDTH-1:0] alloc_fire;
     wire [ACW-1:0] alloc_count;
@@ -29,7 +29,7 @@ module rv32_reservation_station_tb #(
     wire [(BE_WIDTH*32)-1:0] issue_pc, issue_src1, issue_src2;
     wire [(BE_WIDTH*TAGW)-1:0] issue_tag;
     wire [(BE_WIDTH*PAW)-1:0] issue_phys;
-    wire [(BE_WIDTH*128)-1:0] issue_store;
+    wire [(BE_WIDTH*32)-1:0] issue_store;
     wire [(BE_WIDTH*SW)-1:0] issue_slot;
     reg flush_valid;
     reg [ENTRIES-1:0] flush_mask;

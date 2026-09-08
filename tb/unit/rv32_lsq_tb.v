@@ -17,13 +17,13 @@ module rv32_lsq_tb #(
     reg [BE_WIDTH*ROB_TAG_WIDTH-1:0] alloc_rob;
     reg [BE_WIDTH*2-1:0] alloc_size;
     reg [BE_WIDTH*32-1:0] alloc_addr;
-    reg [BE_WIDTH*128-1:0] alloc_data;
-    reg [BE_WIDTH*16-1:0] alloc_mask;
+    reg [BE_WIDTH*32-1:0] alloc_data;
+    reg [BE_WIDTH*4-1:0] alloc_mask;
     reg [BE_WIDTH-1:0] addr_up_valid, data_up_valid, wake_valid;
     reg [BE_WIDTH*TAG_WIDTH-1:0] addr_up_tag, data_up_tag, wake_tag;
     reg [BE_WIDTH*32-1:0] addr_up;
-    reg [BE_WIDTH*128-1:0] data_up, wake_value;
-    reg [BE_WIDTH*16-1:0] data_up_mask;
+    reg [BE_WIDTH*32-1:0] data_up, wake_value;
+    reg [BE_WIDTH*4-1:0] data_up_mask;
     reg commit_valid;
     reg [ROB_TAG_WIDTH-1:0] commit_rob;
     reg dreq_ready;
@@ -98,12 +98,12 @@ module rv32_lsq_tb #(
         input [31:0] address;
         input [1:0] size;
         input unsign;
-        input [127:0] data;
-        input [15:0] mask;
+        input [31:0] data;
+        input [3:0] mask;
         begin
             alloc_valid[0] = 1'b1; alloc_load[0] = is_load; alloc_store[0] = is_store; alloc_rob[15:0] = rob;
             alloc_addr_valid[0] = 1'b1; alloc_data_valid[0] = is_store; alloc_unsigned[0] = unsign;
-            alloc_addr[31:0] = address; alloc_size[1:0] = size; alloc_data[127:0] = data; alloc_mask[15:0] = mask;
+            alloc_addr[31:0] = address; alloc_size[1:0] = size; alloc_data[31:0] = data; alloc_mask[3:0] = mask;
             #1; last_alloc_tag = alloc_tag0;
             @(posedge clk); #1; clear_inputs();
         end
@@ -127,7 +127,7 @@ module rv32_lsq_tb #(
         bad = 0; reset = 1; flush = 0; clear_inputs(); #12; reset = 0; #1;
         // A byte store forwards to all byte/word load forms and retains the
         // store until the ROB grants visibility.
-        alloc_one(0, 1, 16'h0101, 32'h00000100, 0, 0, 128'h00000000000000000000000000000080, 16'h0001);
+        alloc_one(0, 1, 16'h0101, 32'h00000100, 0, 0, 32'h00000080, 4'h1);
         if (!last_alloc_tag[0]) bad = bad + 1;
         begin
             st_tag = last_alloc_tag;
@@ -137,7 +137,7 @@ module rv32_lsq_tb #(
             if (!load_valid || load_value != 32'h00000080) bad = bad + 1;
         end
         // Signed load must sign extend the forwarded byte.
-        alloc_one(0, 1, 16'h0303, 32'h00000110, 0, 0, 128'h00000000000000000000000000000080, 16'h0001);
+        alloc_one(0, 1, 16'h0303, 32'h00000110, 0, 0, 32'h00000080, 4'h1);
         begin
             st_tag2 = last_alloc_tag;
             alloc_one(1, 0, 16'h0404, 32'h00000110, 0, 0, 0, 0);
@@ -145,7 +145,7 @@ module rv32_lsq_tb #(
             if (!load_valid || load_value != 32'hffffff80) bad = bad + 1;
         end
         // Partial forwarding leaves a cache request for the uncovered bytes.
-        alloc_one(0, 1, 16'h0505, 32'h00000201, 0, 0, 128'h0000000000000000000000000000aa00, 16'h0002);
+        alloc_one(0, 1, 16'h0505, 32'h00000201, 0, 0, 32'h000000aa, 4'h1);
         begin
             st_tag3 = last_alloc_tag;
             alloc_one(1, 0, 16'h0606, 32'h00000200, 2, 1, 0, 0);
@@ -158,13 +158,13 @@ module rv32_lsq_tb #(
         // Multiple older stores merge by byte and the youngest overlapping
         // store wins.  Only the two uncovered bytes are requested from cache.
         alloc_one(0, 1, 16'h0610, 32'h00000210, 0, 0,
-                  128'h00000000000000000000000000000011, 16'h0001);
+                  32'h00000011, 4'h1);
         st_tag4 = last_alloc_tag;
         alloc_one(0, 1, 16'h0611, 32'h00000211, 0, 0,
-                  128'h00000000000000000000000000002200, 16'h0002);
+                  32'h00000022, 4'h1);
         st_tag5 = last_alloc_tag;
         alloc_one(0, 1, 16'h0612, 32'h00000210, 0, 0,
-                  128'h000000000000000000000000000000aa, 16'h0001);
+                  32'h000000aa, 4'h1);
         st_tag6 = last_alloc_tag;
         alloc_one(1, 0, 16'h0613, 32'h00000210, 2, 1, 0, 0);
         if (!dreq_valid || !dreq_load || dreq_mask != 16'h000c) bad = bad + 1;
@@ -178,7 +178,7 @@ module rv32_lsq_tb #(
 
         // Halfword forwarding keeps access-relative data and sign extension.
         alloc_one(0, 1, 16'h0620, 32'h00000222, 1, 0,
-                  128'h00000000000000000000000080ff0000, 16'h000c);
+                  32'h000080ff, 4'h3);
         st_tag4 = last_alloc_tag;
         alloc_one(1, 0, 16'h0621, 32'h00000222, 1, 0, 0, 0);
         if (dreq_valid) bad = bad + 1;
@@ -187,7 +187,7 @@ module rv32_lsq_tb #(
 
         // An unknown older store blocks a younger load until its address is known.
         alloc_valid[0] = 1; alloc_store[0] = 1; alloc_data_valid[0] = 1; alloc_addr_valid[0] = 0; alloc_rob[15:0] = 16'h0707;
-        alloc_size[1:0] = 0; alloc_data[127:0] = 128'h55; alloc_mask[15:0] = 1; #1; unknown_tag = alloc_tag0; @(posedge clk); #1; clear_inputs();
+        alloc_size[1:0] = 0; alloc_data[31:0] = 32'h55; alloc_mask[3:0] = 1; #1; unknown_tag = alloc_tag0; @(posedge clk); #1; clear_inputs();
         begin
             alloc_one(1, 0, 16'h0808, 32'h00000300, 0, 1, 0, 0);
             if (dreq_valid) bad = bad + 1;
@@ -208,7 +208,7 @@ module rv32_lsq_tb #(
         // A committed-store acknowledgement can coincide with a younger
         // branch recovery and must remain visible to the ROB.
         reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0; #1;
-        alloc_one(0, 1, 16'h0001, 32'h00000500, 2, 0, 128'h12345678, 16'h000f);
+        alloc_one(0, 1, 16'h0001, 32'h00000500, 2, 0, 32'h12345678, 4'hf);
         begin
             st_tag = last_alloc_tag;
             commit_rob = 16'h0001; commit_valid = 1'b1;

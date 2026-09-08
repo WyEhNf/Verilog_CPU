@@ -9,7 +9,7 @@ module rv32i_alu_tb;
     reg issue_valid, exec_ready;
     reg [`RV32IM_OP_WIDTH-1:0] issue_op;
     reg [31:0] issue_pc, issue_imm, issue_src1, issue_src2;
-    reg [127:0] issue_store_data;
+    reg [31:0] issue_store_data;
     reg [PAW-1:0] issue_phys_rd;
     reg [TAGW-1:0] issue_tag;
     reg [EW-1:0] issue_epoch;
@@ -23,7 +23,7 @@ module rv32i_alu_tb;
     wire [TAGW-1:0] exec_tag;
     wire [EW-1:0] exec_epoch;
     wire [1:0] exec_mem_size;
-    wire [127:0] exec_store_data;
+    wire [31:0] exec_store_data;
     reg live_tag_valid;
     reg [TAGW-1:0] live_tag;
     integer bad;
@@ -98,7 +98,7 @@ module rv32i_alu_tb;
 
         clear_issue(); issue_op = `RV32IM_OP_LW; issue_src1 = 32'hfffffffc; issue_imm = 8; issue_mem_size = `RV32IM_MEM_WORD; issue_valid = 1; @(posedge clk); #1; issue_valid = 0;
         if (!exec_valid || !exec_is_memory || !exec_is_load || exec_mem_addr != 32'h4) bad = bad + 1; @(posedge clk); #1;
-        clear_issue(); issue_op = `RV32IM_OP_SB; issue_src1 = 32'hffffffff; issue_imm = 1; issue_store_data = 128'hdeadbeef; issue_mem_size = `RV32IM_MEM_BYTE; issue_valid = 1; @(posedge clk); #1; issue_valid = 0;
+        clear_issue(); issue_op = `RV32IM_OP_SB; issue_src1 = 32'hffffffff; issue_imm = 1; issue_store_data = 32'hdeadbeef; issue_mem_size = `RV32IM_MEM_BYTE; issue_valid = 1; @(posedge clk); #1; issue_valid = 0;
         if (!exec_valid || !exec_is_store || exec_mem_addr != 32'h0 || exec_store_data[31:0] != 32'hdeadbeef) bad = bad + 1; @(posedge clk); #1;
 
         // Registered output and backpressure stability.

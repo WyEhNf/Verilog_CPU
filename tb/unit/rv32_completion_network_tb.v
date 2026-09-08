@@ -11,7 +11,7 @@ module rv32_completion_network_tb #(
     reg [SOURCES*16-1:0] producer_tag;
     reg [SOURCES*6-1:0] producer_phys;
     reg [SOURCES*32-1:0] producer_value, producer_addr, producer_branch_target;
-    reg [SOURCES*128-1:0] producer_store_data;
+    reg [SOURCES*32-1:0] producer_store_data;
     reg [15:0] live_tag;
     reg [BE_WIDTH-1:0] cdb_ready;
     wire [SOURCES-1:0] producer_ready;
@@ -19,7 +19,7 @@ module rv32_completion_network_tb #(
     wire [BE_WIDTH*16-1:0] cdb_tag;
     wire [BE_WIDTH*6-1:0] cdb_phys;
     wire [BE_WIDTH*32-1:0] cdb_value, cdb_addr;
-    wire [BE_WIDTH*128-1:0] cdb_store_data;
+    wire [BE_WIDTH*32-1:0] cdb_store_data;
     wire [BE_WIDTH-1:0] rob_valid;
     wire [BE_WIDTH*16-1:0] rob_tag;
     wire [BE_WIDTH*32-1:0] rob_value;
