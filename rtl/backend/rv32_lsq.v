@@ -99,7 +99,6 @@ module rv32_lsq #(
     output wire [SLOT_WIDTH-1:0]        head_o,
     output wire [SLOT_WIDTH-1:0]        tail_o
 );
-    localparam integer BYTES_WIDTH = 3;
     localparam integer TAG_SLOT_LSB = 3;
     localparam integer TAG_GEN_LSB = TAG_SLOT_LSB + SLOT_WIDTH;
     localparam integer ROB_SLOT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES);
@@ -157,11 +156,6 @@ module rv32_lsq #(
     integer recovery_keep_count;
     integer recovery_first_killed;
     integer recovery_kill_found;
-    integer byte_index;
-    integer byte_count;
-    integer byte_offset;
-    integer req_offset;
-    reg prefix_open;
     reg candidate_found;
     reg blocked;
     reg [3:0] target_mask;
@@ -173,21 +167,8 @@ module rv32_lsq #(
     reg request_fire;
     reg response_match;
     reg response_fire;
-    reg commit_match;
     reg commit_fire;
-    reg load_pop_fire;
-    reg store_pop_fire;
     reg [GENERATION_WIDTH-1:0] next_generation;
-
-    function [127:0] expand_bytes;
-        input [15:0] mask;
-        begin
-            expand_bytes = {{8{mask[15]}}, {8{mask[14]}}, {8{mask[13]}}, {8{mask[12]}},
-                            {8{mask[11]}}, {8{mask[10]}}, {8{mask[9]}},  {8{mask[8]}},
-                            {8{mask[7]}},  {8{mask[6]}},  {8{mask[5]}},  {8{mask[4]}},
-                            {8{mask[3]}},  {8{mask[2]}},  {8{mask[1]}},  {8{mask[0]}}};
-        end
-    endfunction
 
     function [31:0] expand_word_bytes;
         input [3:0] mask;
@@ -312,57 +293,6 @@ module rv32_lsq #(
         end
     endfunction
 
-    function [15:0] size_mask;
-        input [31:0] address;
-        input [1:0] size;
-        integer n;
-        integer first;
-        integer count;
-        begin
-            size_mask = 16'b0;
-            first = address[3:0];
-            case (size)
-                2'd0: count = 1;
-                2'd1: count = 2;
-                default: count = 4;
-            endcase
-            for (n = 0; n < 16; n = n + 1)
-                if ((n >= first) && (n < first + count)) size_mask[n] = 1'b1;
-        end
-    endfunction
-
-    function [31:0] extract_value;
-        input [127:0] line_data;
-        input [31:0] address;
-        input [1:0] size;
-        input unsigned_load;
-        integer n;
-        integer first;
-        integer count;
-        reg [31:0] result;
-        reg [7:0] b;
-        begin
-            first = address[3:0];
-            case (size)
-                2'd0: count = 1;
-                2'd1: count = 2;
-                default: count = 4;
-            endcase
-            result = 32'b0;
-            for (n = 0; n < 4; n = n + 1) begin
-                if (n < count) begin
-                    b = line_data[((first + n) * 8) +: 8];
-                    result[(n*8) +: 8] = b;
-                end
-            end
-            if (!unsigned_load && (count < 4) && result[(count*8)-1]) begin
-                for (n = 0; n < 4; n = n + 1)
-                    if (n >= count) result[(n*8) +: 8] = 8'hff;
-            end
-            extract_value = result;
-        end
-    endfunction
-
     function [SLOT_WIDTH-1:0] advance_slot;
         input [SLOT_WIDTH-1:0] start;
         input integer amount;
@@ -414,7 +344,6 @@ module rv32_lsq #(
         alloc_fire_o = {BE_WIDTH{1'b0}};
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
         alloc_lsq_tag_o = {(BE_WIDTH*TAG_WIDTH){1'b0}};
-        prefix_open = 1'b1;
         alloc_count_calc = 0;
         for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
             // Memory operations are a sparse subset of the dispatch bundle.
@@ -436,13 +365,11 @@ module rv32_lsq #(
         // The ROB only presents a store at its head.  LSQ also checks that
         // the corresponding entry is its own head and operands are ready.
         store_commit_ready_o = 1'b0;
-        commit_match = 1'b0;
         if (!flush_i && occupancy_reg != 0 && valid_mem[head_reg] &&
             store_mem[head_reg] && addr_ready_mem[head_reg] &&
             data_ready_mem[head_reg] && !store_commit_mem[head_reg] &&
             (rob_tag_mem[head_reg] == store_commit_rob_tag_i)) begin
             store_commit_ready_o = 1'b1;
-            commit_match = 1'b1;
         end
 
         // Select the oldest eligible memory operation.  A younger load is
@@ -551,10 +478,6 @@ module rv32_lsq #(
 
         // A fully covered load never touches the cache.  It becomes a
         // completion at the next edge, preserving the same handshake timing.
-        load_pop_fire = 1'b0;
-        store_pop_fire = 1'b0;
-        if (load_complete_valid_o && load_complete_ready_i) load_pop_fire = 1'b1;
-        if (store_ack_valid_o && store_ack_ready_i) store_pop_fire = 1'b1;
         response_match = 1'b0;
         response_slot = 0;
         for (i = 0; i < LSQ_ENTRIES; i = i + 1)
