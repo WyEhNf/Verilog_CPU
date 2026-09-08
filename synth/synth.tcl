@@ -1,7 +1,8 @@
 # ASAP7 area synthesis flow for cpu_core (Yosys) -- register-based variant.
 #
-# Every SRAM array (cache tag/data, predictor tables) is mapped to DFFs via
-# memory_dff.  This is the register-based AREA UPPER BOUND of plan.md ENV-04.
+# Every array is explicitly mapped to logic after memory_dff.  memory_dff by
+# itself only merges surrounding flops into memories; it does not provide the
+# register-based reference promised by plan.md ENV-04.
 # The SRAM-blackbox metric is synth_bb.tcl; the two numbers must be reported
 # separately.
 #
@@ -43,6 +44,10 @@ opt
 fsm
 opt
 memory_dff
+# Record the original memory shapes before the deliberately expensive
+# register/mux expansion used by the A_ff_reference profile.
+tee -o $outdir/memory_manifest.il dump {t:$mem*}
+memory_map
 techmap
 opt
 # ABC's bundled liberty->genlib conversion cannot ingest ASAP7 NLDM libs

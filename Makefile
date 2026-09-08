@@ -261,13 +261,15 @@ regression:
 
 # Area synthesis with Yosys + ASAP7 7.5T RVT TT.
 #   make synth CFG=fe1_be1_p64_r32 [FE_WIDTH=1 BE_WIDTH=1 PHYS_REGS=64 ROB_ENTRIES=32]
-# synth = register-based upper bound (memory_dff), synth-bb = blackbox arrays.
+# synth = explicit register/mux reference (memory_map), synth-bb = blackbox arrays.
 # Artifacts go to build/synth/<CFG>[/_bb]/: yosys.log (verbose run log for the
 # progress window), synth.log, stat_after_abc.log, cpu_core_synth.v.
 synth:
 	@if not exist "build\synth\$(CFG)" mkdir "build\synth\$(CFG)"
 	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG) $(RS_ENTRIES) $(LSQ_ENTRIES)" > "build\synth\$(CFG)\yosys.log" 2>&1
+	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)/synth.log" --memory-dump "build/synth/$(CFG)/memory_manifest.il" --output "build/synth/$(CFG)/area_audit.json" --profile ff-reference --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES)
 
 synth-bb:
 	@if not exist "build\synth\$(CFG)_bb" mkdir "build\synth\$(CFG)_bb"
 	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb $(RS_ENTRIES) $(LSQ_ENTRIES)" > "build\synth\$(CFG)_bb\yosys.log" 2>&1
+	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)_bb/synth.log" --memory-dump "build/synth/$(CFG)_bb/memory_manifest.il" --output "build/synth/$(CFG)_bb/area_audit.json" --profile logic-blackbox --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES)

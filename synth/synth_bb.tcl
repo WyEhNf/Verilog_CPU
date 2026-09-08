@@ -37,6 +37,11 @@ opt
 fsm
 opt
 memory -nomap
+# Preserve the memory geometry and port counts before technology mapping.  The
+# post-run audit treats every one of these cells as unpriced until an SRAM,
+# banked/replicated macro implementation, or explicit standard-cell mapping is
+# assigned.
+tee -o $outdir/memory_manifest.il dump {t:$mem*}
 techmap
 opt
 # ABC's bundled liberty->genlib conversion cannot ingest ASAP7 NLDM libs
