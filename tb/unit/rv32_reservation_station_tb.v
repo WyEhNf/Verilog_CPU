@@ -13,9 +13,7 @@ module rv32_reservation_station_tb #(
     reg clk, reset;
     reg [BE_WIDTH-1:0] alloc_valid, target_live, src1_ready, src2_ready;
     reg [(BE_WIDTH*OPW)-1:0] alloc_op;
-    reg [(BE_WIDTH*32)-1:0] alloc_pc, alloc_imm, alloc_pred_target, src1_value, src2_value;
-    reg [BE_WIDTH-1:0] alloc_pred_taken, alloc_mem_unsigned;
-    reg [(BE_WIDTH*2)-1:0] alloc_pred_kind, alloc_mem_size;
+    reg [(BE_WIDTH*32)-1:0] alloc_pc, src1_value, src2_value;
     reg [(BE_WIDTH*TAGW)-1:0] alloc_tag, src1_tag, src2_tag;
     reg [(BE_WIDTH*PAW)-1:0] alloc_phys;
     reg [(BE_WIDTH*32)-1:0] alloc_store;
@@ -28,9 +26,7 @@ module rv32_reservation_station_tb #(
     reg [BE_WIDTH-1:0] issue_ready;
     wire [BE_WIDTH-1:0] issue_valid;
     wire [(BE_WIDTH*OPW)-1:0] issue_op;
-    wire [(BE_WIDTH*32)-1:0] issue_pc, issue_imm, issue_pred_target, issue_src1, issue_src2;
-    wire [BE_WIDTH-1:0] issue_pred_taken, issue_mem_unsigned;
-    wire [(BE_WIDTH*2)-1:0] issue_pred_kind, issue_mem_size;
+    wire [(BE_WIDTH*32)-1:0] issue_pc, issue_src1, issue_src2;
     wire [(BE_WIDTH*TAGW)-1:0] issue_tag;
     wire [(BE_WIDTH*PAW)-1:0] issue_phys;
     wire [(BE_WIDTH*32)-1:0] issue_store;
@@ -42,13 +38,13 @@ module rv32_reservation_station_tb #(
     reg [TAGW-1:0] tag0, tag1, stale_tag;
 
     rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(ENTRIES)) dut (
-        .clk_i(clk), .reset_i(reset), .alloc_valid_i(alloc_valid), .alloc_op_i(alloc_op), .alloc_pc_i(alloc_pc), .alloc_imm_i(alloc_imm), .alloc_pred_taken_i(alloc_pred_taken), .alloc_pred_target_i(alloc_pred_target), .alloc_pred_kind_i(alloc_pred_kind), .alloc_mem_size_i(alloc_mem_size), .alloc_mem_unsigned_i(alloc_mem_unsigned), .alloc_rob_tag_i(alloc_tag), .alloc_target_live_i(target_live), .alloc_phys_rd_i(alloc_phys), .alloc_src1_value_i(src1_value), .alloc_src1_tag_i(src1_tag), .alloc_src1_ready_i(src1_ready), .alloc_src2_value_i(src2_value), .alloc_src2_tag_i(src2_tag), .alloc_src2_ready_i(src2_ready), .alloc_store_data_i(alloc_store), .alloc_ready_o(alloc_ready), .alloc_fire_o(alloc_fire), .alloc_count_o(alloc_count), .wake_valid_i(wake_valid), .wake_tag_i(wake_tag), .wake_value_i(wake_value), .issue_ready_i(issue_ready), .issue_valid_o(issue_valid), .issue_op_o(issue_op), .issue_pc_o(issue_pc), .issue_imm_o(issue_imm), .issue_pred_taken_o(issue_pred_taken), .issue_pred_target_o(issue_pred_target), .issue_pred_kind_o(issue_pred_kind), .issue_mem_size_o(issue_mem_size), .issue_mem_unsigned_o(issue_mem_unsigned), .issue_rob_tag_o(issue_tag), .issue_phys_rd_o(issue_phys), .issue_src1_value_o(issue_src1), .issue_src2_value_o(issue_src2), .issue_store_data_o(issue_store), .issue_slot_o(issue_slot), .flush_valid_i(flush_valid), .flush_kill_mask_i(flush_mask), .occupancy_o(occupancy)
+        .clk_i(clk), .reset_i(reset), .alloc_valid_i(alloc_valid), .alloc_op_i(alloc_op), .alloc_pc_i(alloc_pc), .alloc_rob_tag_i(alloc_tag), .alloc_target_live_i(target_live), .alloc_phys_rd_i(alloc_phys), .alloc_src1_value_i(src1_value), .alloc_src1_tag_i(src1_tag), .alloc_src1_ready_i(src1_ready), .alloc_src2_value_i(src2_value), .alloc_src2_tag_i(src2_tag), .alloc_src2_ready_i(src2_ready), .alloc_store_data_i(alloc_store), .alloc_ready_o(alloc_ready), .alloc_fire_o(alloc_fire), .alloc_count_o(alloc_count), .wake_valid_i(wake_valid), .wake_tag_i(wake_tag), .wake_value_i(wake_value), .issue_ready_i(issue_ready), .issue_valid_o(issue_valid), .issue_op_o(issue_op), .issue_pc_o(issue_pc), .issue_rob_tag_o(issue_tag), .issue_phys_rd_o(issue_phys), .issue_src1_value_o(issue_src1), .issue_src2_value_o(issue_src2), .issue_store_data_o(issue_store), .issue_slot_o(issue_slot), .flush_valid_i(flush_valid), .flush_kill_mask_i(flush_mask), .occupancy_o(occupancy)
     );
     initial begin clk = 0; forever #5 clk = ~clk; end
 
     task clear_inputs;
         begin
-            alloc_valid = 0; target_live = 0; src1_ready = 0; src2_ready = 0; alloc_op = 0; alloc_pc = 0; alloc_imm = 0; alloc_pred_taken = 0; alloc_pred_target = 0; alloc_pred_kind = 0; alloc_mem_size = 0; alloc_mem_unsigned = 0; alloc_tag = 0; alloc_phys = 0; src1_value = 0; src1_tag = 0; src2_value = 0; src2_tag = 0; alloc_store = 0; wake_valid = 0; wake_tag = 0; wake_value = 0; issue_ready = {BE_WIDTH{1'b1}}; flush_valid = 0; flush_mask = 0;
+            alloc_valid = 0; target_live = 0; src1_ready = 0; src2_ready = 0; alloc_op = 0; alloc_pc = 0; alloc_tag = 0; alloc_phys = 0; src1_value = 0; src1_tag = 0; src2_value = 0; src2_tag = 0; alloc_store = 0; wake_valid = 0; wake_tag = 0; wake_value = 0; issue_ready = {BE_WIDTH{1'b1}}; flush_valid = 0; flush_mask = 0;
         end
     endtask
     task alloc_entry;

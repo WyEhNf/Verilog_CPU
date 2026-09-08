@@ -12,7 +12,6 @@ module rv32_completion_network_tb #(
     reg [SOURCES*6-1:0] producer_phys;
     reg [SOURCES*32-1:0] producer_value, producer_addr, producer_branch_target;
     reg [SOURCES*32-1:0] producer_store_data;
-    reg [SOURCES*4-1:0] producer_store_mask;
     reg [15:0] live_tag;
     reg [BE_WIDTH-1:0] cdb_ready;
     wire [SOURCES-1:0] producer_ready;
@@ -21,7 +20,6 @@ module rv32_completion_network_tb #(
     wire [BE_WIDTH*6-1:0] cdb_phys;
     wire [BE_WIDTH*32-1:0] cdb_value, cdb_addr;
     wire [BE_WIDTH*32-1:0] cdb_store_data;
-    wire [BE_WIDTH*4-1:0] cdb_store_mask;
     wire [BE_WIDTH-1:0] rob_valid;
     wire [BE_WIDTH*16-1:0] rob_tag;
     wire [BE_WIDTH*32-1:0] rob_value;
@@ -39,14 +37,14 @@ module rv32_completion_network_tb #(
     integer test_slot;
     rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .SOURCES(SOURCES), .FIFO_DEPTH(8)) dut (
         .clk_i(clk), .reset_i(reset), .flush_i(flush), .kill_valid_i(kill_valid), .kill_mask_i(kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready),
-        .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_store_mask_i(producer_store_mask),
+        .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data),
         .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live), .live_tag_valid_i(live_tag_valid), .live_tag_i(live_tag),
-        .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_store_mask_o(cdb_store_mask), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect), .cdb_is_memory_o(cdb_memory), .cdb_is_load_o(cdb_load),
+        .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect), .cdb_is_memory_o(cdb_memory), .cdb_is_load_o(cdb_load),
         .prf_write_valid_o(prf_valid), .prf_write_tag_o(prf_tag), .prf_write_phys_rd_o(prf_phys), .prf_write_value_o(prf_value), .rob_ready_valid_o(rob_valid), .rob_ready_tag_o(rob_tag), .rob_ready_value_o(rob_value), .wakeup_valid_o(wakeup_valid), .wakeup_tag_o(wake_tag), .wakeup_value_o(wake_value), .entry_valid_o(entry_valid), .entry_tag_o(entry_tag), .occupancy_o()
     );
     initial begin clk=0; forever #5 clk=~clk; end
     task clear_inputs;
-        begin producer_valid=0; producer_target_live=0; producer_rd_we=0; producer_store=0; producer_branch=0; producer_taken=0; producer_redirect=0; producer_memory=0; producer_load=0; producer_tag=0; producer_phys=0; producer_value=0; producer_addr=0; producer_branch_target=0; producer_store_data=0; producer_store_mask=0; cdb_ready={BE_WIDTH{1'b1}}; flush=0; kill_valid=0; kill_mask=0; live_tag_valid=0; live_tag=0; end
+        begin producer_valid=0; producer_target_live=0; producer_rd_we=0; producer_store=0; producer_branch=0; producer_taken=0; producer_redirect=0; producer_memory=0; producer_load=0; producer_tag=0; producer_phys=0; producer_value=0; producer_addr=0; producer_branch_target=0; producer_store_data=0; cdb_ready={BE_WIDTH{1'b1}}; flush=0; kill_valid=0; kill_mask=0; live_tag_valid=0; live_tag=0; end
     endtask
     initial begin
         bad=0; reset=1; clear_inputs(); #12; reset=0; #1;

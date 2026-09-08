@@ -108,7 +108,9 @@ module rv32_rob_tb #(
         // Store visibility is separate from retirement and waits for ack.
         clear_inputs(); alloc_store[0] = 1; alloc_one(0, 8, 0); alloc_store[0] = 1; #1; saved_store_tag = alloc_tag[0 +: TAG_W]; @(posedge clk); #1; clear_inputs();
         complete_one(0, saved_store_tag, 99); cpl_addr[31:0] = 32'h100; cpl_mask[3:0] = 4'hf; cpl_data[31:0] = 32'h1234; @(posedge clk); #1; clear_inputs();
-        if (!store_valid || commit_valid != 0 || store_addr != 32'h100) bad = bad + 1;
+        if (!store_valid || commit_valid != 0 || store_addr != 32'h100 ||
+            store_mask != 16'h000f || store_data != 128'h00000000000000000000000000001234)
+            bad = bad + 1;
         @(posedge clk); #1; clear_inputs(); store_ack_valid = 1; store_ack_tag = saved_store_tag; @(posedge clk); #1; clear_inputs();
         if (!commit_valid[0] || !commit_store[0]) bad = bad + 1;
         @(posedge clk); #1;
@@ -159,8 +161,12 @@ module rv32_rob_tb #(
         // the acknowledged store retires.
         reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0; #1;
         clear_inputs(); alloc_store[0] = 1; alloc_one(0, 36, 0); alloc_store[0] = 1; #1; saved_store_tag = alloc_tag[0 +: TAG_W]; @(posedge clk); #1; clear_inputs();
-        complete_one(0, saved_store_tag, 0); cpl_addr[31:0] = 32'h104; cpl_mask[3:0] = 4'hf; @(posedge clk); #1; clear_inputs();
-        if (!store_valid || commit_valid != 0) bad = bad + 1;
+        complete_one(0, saved_store_tag, 0); cpl_addr[31:0] = 32'h104; cpl_mask[3:0] = 4'h3;
+        cpl_data[31:0] = 32'h89abcdef; @(posedge clk); #1; clear_inputs();
+        if (!store_valid || commit_valid != 0 || store_addr != 32'h104 ||
+            store_mask != 16'h0030 ||
+            store_data != 128'h000000000000000089abcdef00000000)
+            bad = bad + 1;
         @(posedge clk); #1; clear_inputs(); store_ack_valid = 1; store_ack_tag = saved_store_tag; store_ack_error = 1; @(posedge clk); #1; clear_inputs();
         if (!commit_valid[0] || !commit_store[0]) bad = bad + 1;
         @(posedge clk); #1;
