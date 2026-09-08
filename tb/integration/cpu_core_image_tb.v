@@ -2,7 +2,14 @@
 
 // JOIN-02 image runner.  The memory model loads an @address byte image and
 // the testbench checks only architectural termination and a0[7:0].
-module cpu_core_image_tb;
+module cpu_core_image_tb #(
+    parameter integer FE_WIDTH = 1,
+    parameter integer BE_WIDTH = 1,
+    parameter integer PHYS_REGS = 48,
+    parameter integer ROB_ENTRIES = 16,
+    parameter integer RS_ENTRIES = 4,
+    parameter integer LSQ_ENTRIES = 4
+);
     reg clk;
     reg reset;
     wire halted;
@@ -47,8 +54,12 @@ module cpu_core_image_tb;
     reg [1023:0] test_name;
 
     cpu_core #(
-        .FE_WIDTH(1),
-        .BE_WIDTH(1)
+        .FE_WIDTH(FE_WIDTH),
+        .BE_WIDTH(BE_WIDTH),
+        .PHYS_REGS(PHYS_REGS),
+        .ROB_ENTRIES(ROB_ENTRIES),
+        .RS_ENTRIES(RS_ENTRIES),
+        .LSQ_ENTRIES(LSQ_ENTRIES)
     ) dut (
         .clk(clk), .reset(reset), .halted(halted), .error(error),
         .return_value(return_value), .cycles(cycles), .instret(instret),
@@ -141,12 +152,12 @@ module cpu_core_image_tb;
                      dut.dcache.mshr_valid, dut.dcache.store_ack_valid_reg,
                      dut.dcache.resp_valid_reg);
             $display("STATE: branch_pending=%b alu=%b mdu_pending=%b div_busy=%b div_result=%b completion=%0d/%0d/%0d prf_ready=%016x",
-                     dut.backend.branch_pending, dut.backend.alu.result_valid_reg,
+                     dut.backend.branch_pending, dut.backend.g_alu[0].alu.result_valid_reg,
                      dut.backend.mdu.pending_valid, dut.backend.mdu.divider.busy_reg,
                      dut.backend.mdu.divider.result_valid_reg,
                      dut.backend.completion.head_reg, dut.backend.completion.tail_reg,
                      dut.backend.completion.count_reg, dut.backend.prf.ready);
-            for (diag_slot = 0; diag_slot < 32; diag_slot = diag_slot + 1)
+            for (diag_slot = 0; diag_slot < 16; diag_slot = diag_slot + 1)
                 if (dut.backend.rob.valid_mem[diag_slot])
                     $display("ROB[%0d] gen=%0h ready=%b pc=%08x inst=%08x rd=%0d oldp=%0d newp=%0d store=%b wait=%b sent=%b",
                              diag_slot, dut.backend.rob.generation_mem[diag_slot],
@@ -155,7 +166,7 @@ module cpu_core_image_tb;
                              dut.backend.rob.old_phys_mem[diag_slot], dut.backend.rob.new_phys_mem[diag_slot],
                              dut.backend.rob.store_mem[diag_slot], dut.backend.rob.store_wait_mem[diag_slot],
                              dut.backend.rob.store_sent_mem[diag_slot]);
-            for (diag_slot = 0; diag_slot < 8; diag_slot = diag_slot + 1) begin
+            for (diag_slot = 0; diag_slot < 4; diag_slot = diag_slot + 1) begin
                 if (dut.backend.rs.valid_mem[diag_slot])
                     $display("RS[%0d] rob=%04x pc=%08x op=%0d src1=%b/%04x src2=%b/%04x phys=%0d age=%0d",
                              diag_slot, dut.backend.rs.rob_tag_mem[diag_slot],
