@@ -16,6 +16,43 @@
 - 目前处于 JOIN-05 功能收口完成、JOIN-06 PPA/性能分析已启动的状态。不能宣称
   整个项目最终完成：完整面积、时序和 performance/area 门尚未完成，最新多发射 RTL
   也尚未重跑 18 个历史镜像的发布级全量回归。
+- 已按 `docs/area_optimization_strategy_2026-09-08.md` 开始单发射面积优化。当前已完成
+  P0 面积审计、固定 completion producer、LSQ 32-bit/4-byte 相对数据重构、LSQ 重复
+  转发扫描合并，以及 completion FIFO 深度参数化；结果和未决限制见下节。
+
+## 面积优化执行批次（2026-09-08）
+
+统一实验配置为 `FE=1/BE=1/PHYS=48/ROB=16/RS=4/LSQ=4`，使用 `make synth-bb`。
+因为网表仍含 `$mem_v2`、`$_MUX_`、`$_NOT_` 等未定价单元，以下面积都是
+`known_standard_cell_um2`，只能做同流程趋势对比，不能当作完整 `A_total`。
+
+| 批次 | 改动 | 已知面积 µm² | 未定价实例 | `$mem` bits |
+| --- | --- | ---: | ---: | ---: |
+| Stage A | 审计基线 | 15864.57090 | 21094 | 66300 |
+| P1 | 固定 ALU/MDU/LSQ producer 位置 | 15708.69612 | 21094 | 66300 |
+| P2 | PRF data 不复位 | 15822.42012 | 19654 | 66300 |
+| P3b | LSQ 相对 32/4-bit 状态 + 单次转发合并 | 15054.19992 | 19371 | 65436 |
+| P4 | completion 深度按 BE=1/2/4 取 4/8/16 | 15027.34356 | 19367 | 62388 |
+
+与 Stage A 相比，P4 的已知面积下降 `837.22734 µm²`（`5.28%`），未定价实例减少
+1727 个，manifest 中的存储位减少 3912 bit。P2 单独看已知面积上升，但同时减少了
+1472 个未定价 mux；在 generic cell 全部合法化前，PRF data 不复位只标为“物理方向合理、
+完整面积待确认”，不把它记成已证实的面积收益。
+
+实现细节和验证：
+
+- `tools/audit_synth.py` 将所有未知面积 cell 和 `$mem*` 列入 JSON；存在任一未知项时
+  状态为 `INCOMPLETE` 且总面积为 null。`tools/test_audit_synth.py` 的 2 项测试通过。
+- completion producer 固定为 `[ALU lanes][MDU][LSQ]`，删除动态 rank/压缩网络；该步
+  后端局部已知面积从 5396.30586 降至 5240.43108 µm²。
+- LSQ 每项 store/forward payload 从 `128+16+128+16=288 bit` 降至
+  `32+4+32+4=72 bit`；资格阶段不再搬运数据，只有最终选中的 load 做一次 4-byte
+  最近 store 优先合并，缓存边界才展开为 128/16 bit。
+- B-08 新增多 store 字节合并、最近 store 覆盖和 halfword 符号扩展测试；B-08 的
+  BE=1/2、B-09、JOIN-03 均通过。completion 深度降至 4 后，1/1 四程序周期保持
+  2558/1288/1288/2083，没有观察到性能回退。
+- P3 的中间版本曾在每次扫描中重建 128-bit line，已知面积升至 16119.96876 µm²；
+  该结构已被 P3b 替代，保留这条记录用于避免以后重复引入宽可变移位网络。
 
 ## 本轮实现
 
@@ -100,12 +137,14 @@ speedup 约为 1.27/1.26/1.25；4/4 约为 1.10/1.30/1.27。控制流密集的 a
 
 1. 在当前多发射源代码上跑 `make join02-vlt-fast`，再单独跑长耗时 `pi`，完成最新
    18/18 历史镜像发布门；随后重跑 `make join03 join04 join05` 固化同一版本证据。
-2. 继续 JOIN-06：补跑 4/4，并对至少 1/1、2/2、4/4 运行 `make synth`，提取
+2. 继续面积计划：优先收窄 completion/ROB/RS 的 128-bit store payload、消除 joint/ROB
+   重复元数据，再评估 free-list bitmap/串行 rollback；每项都沿用 P4 配置做独立 A/B。
+3. 继续 JOIN-06：补跑 4/4，并对至少 1/1、2/2、4/4 运行 `make synth`，提取
    ASAP7 面积、ABC delay，并把 cycles/IPC、预测率、Cache 命中率、stall 和面积合并
    为 Pareto/performance-area 报告。
-3. 针对前端控制流瓶颈优化：检查多 lane 预测、bundle 内首个 taken branch 截断、
+4. 针对前端控制流瓶颈优化：检查多 lane 预测、bundle 内首个 taken branch 截断、
    redirect 后 fetch queue 利用率，再用同一程序矩阵确认收益而不是只优化单点。
-4. 补齐 C++ reference 的逐条 CommitRecord 差分、宽配置性能计数器导出，以及发布级
+5. 补齐 C++ reference 的逐条 CommitRecord 差分、宽配置性能计数器导出，以及发布级
    日志/哈希索引。若 PPA 不达标，再根据综合层级报告选择 RS/ROB/PRF/Wallace 结构优化。
 
 常用入口：`make doctor`、`make lint unit matrix`、`make b06 b09`、`make join03`、
