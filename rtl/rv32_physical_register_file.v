@@ -55,12 +55,11 @@ module rv32_physical_register_file #(
                 if (read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] == 0) begin
                     read_ready_o[read_port] = 1'b1;
                 end else if (read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] < PHYS_REGS) begin
+                    read_data_o[(read_port*32) +: 32] = value[(read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]*32) +: 32];
                     read_ready_o[read_port] = ready[read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]];
-                    // Data in an unready physical register is architecturally
-                    // don't-care.  Keep it off the observable output so reset
-                    // only needs to initialize the readiness scoreboard.
-                    if (ready[read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]])
-                        read_data_o[(read_port*32) +: 32] = value[(read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]*32) +: 32];
+                    // When ready is low this data is architecturally don't-care;
+                    // consumers must wait for writeback rather than depend on a
+                    // reset value in the data array.
                     for (bypass_lane = 0; bypass_lane < BE_WIDTH; bypass_lane = bypass_lane + 1) begin
                         if (write_valid_i[bypass_lane] &&
                             (write_phys_i[(bypass_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] ==
