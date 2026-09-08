@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression synth synth-bb
+.PHONY: join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build join04 doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression synth synth-bb
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -106,6 +106,14 @@ join03-build:
 join03:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb.vvp
+
+# JOIN-04 proves that the same full-system path executes with real two- and
+# four-wide decode/rename/dispatch/issue/commit configurations.
+join04: join03-build
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=2 -P cpu_core_image_tb.BE_WIDTH=2 -P cpu_core_image_tb.PHYS_REGS=64 -P cpu_core_image_tb.ROB_ENTRIES=32 -P cpu_core_image_tb.RS_ENTRIES=8 -P cpu_core_image_tb.LSQ_ENTRIES=8 -s cpu_core_image_tb -o build/cpu_core_image_tb_w2.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb_w2.vvp --report build/join03/report_w2.json
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=4 -P cpu_core_image_tb.BE_WIDTH=4 -P cpu_core_image_tb.PHYS_REGS=96 -P cpu_core_image_tb.ROB_ENTRIES=64 -P cpu_core_image_tb.RS_ENTRIES=16 -P cpu_core_image_tb.LSQ_ENTRIES=16 -s cpu_core_image_tb -o build/cpu_core_image_tb_w4.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb_w4.vvp --report build/join03/report_w4.json
 
 join: join01 join02
 
