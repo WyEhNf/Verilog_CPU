@@ -1,9 +1,8 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// JOIN-01 top-level.  The interfaces remain scalar at the backend boundary;
-// wider frontend/backend configurations are elaborated for the parameter
-// matrix while lane zero forms the first integration path.
+// Parameterized RV32IM out-of-order top-level. Frontend bundles are decoded
+// lane-wise and a contiguous prefix is dispatched to the backend each cycle.
 module cpu_core #(
     parameter integer FE_WIDTH = `RV32IM_FE_WIDTH_DEFAULT,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
@@ -43,6 +42,7 @@ module cpu_core #(
 );
     localparam integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH;
     localparam integer PACKET_WIDTH = `RV32IM_FETCH_PACKET_WIDTH;
+    localparam integer DISPATCH_LANES = (FE_WIDTH < BE_WIDTH) ? FE_WIDTH : BE_WIDTH;
 
     initial begin
         if ((FE_WIDTH != 1) && (FE_WIDTH != 2) && (FE_WIDTH != 4)) begin
@@ -232,60 +232,111 @@ module cpu_core #(
         .event_d_mem_read_o(), .event_d_mem_write_o()
     );
 
-    wire trace_valid = fetch_valid[0];
-    wire trace_ready;
-    assign fetch_ready = {{(FE_WIDTH-1){1'b0}}, trace_ready};
-    wire [PACKET_WIDTH-1:0] trace_packet = fetch_packet[PACKET_WIDTH-1:0];
-    wire [31:0] trace_pc = trace_packet[31:0];
-    wire [31:0] trace_inst = trace_packet[63:32];
-    wire trace_pred_taken = trace_packet[64];
-    wire [31:0] trace_pred_target = trace_packet[96:65];
-    wire [1:0] trace_pred_kind = trace_packet[98:97];
+    wire [BE_WIDTH-1:0] trace_valid, trace_ready;
+    wire [BE_WIDTH*PACKET_WIDTH-1:0] trace_packet;
+    wire [BE_WIDTH*32-1:0] trace_pc, trace_inst;
+    wire [BE_WIDTH-1:0] trace_pred_taken;
+    wire [BE_WIDTH*32-1:0] trace_pred_target;
+    wire [BE_WIDTH*2-1:0] trace_pred_kind;
+    wire [BE_WIDTH-1:0] dec_legal, dec_rd_we, dec_rs1_used, dec_rs2_used;
+    wire [BE_WIDTH*`RV32IM_OP_WIDTH-1:0] dec_op, backend_op;
+    wire [BE_WIDTH*4-1:0] dec_class;
+    wire [BE_WIDTH*5-1:0] dec_rd, dec_rs1, dec_rs2, backend_rs1, backend_rs2;
+    wire [BE_WIDTH*32-1:0] dec_imm;
+    wire [BE_WIDTH-1:0] dec_load, dec_store, dec_branch, dec_jump, dec_serialize;
+    wire [BE_WIDTH*2-1:0] dec_mem_size;
+    wire [BE_WIDTH-1:0] dec_mem_unsigned;
+    wire [BE_WIDTH*4-1:0] dec_mem_base_mask;
+    wire [BE_WIDTH-1:0] dec_jalr_clear_lsb, is_halt_trace, backend_rs1_used;
 
-    wire dec_legal, dec_rd_we, dec_rs1_used, dec_rs2_used;
-    wire [5:0] dec_op;
-    wire [3:0] dec_class;
-    wire [4:0] dec_rd, dec_rs1, dec_rs2;
-    wire [31:0] dec_imm;
-    wire dec_load, dec_store, dec_branch, dec_jump, dec_serialize;
-    wire [1:0] dec_mem_size;
-    wire dec_mem_unsigned;
-    wire [3:0] dec_mem_base_mask;
-    wire dec_jalr_clear_lsb;
-    rv32im_decoder decoder (
-        .inst_i(trace_inst), .legal_o(dec_legal), .op_o(dec_op), .class_o(dec_class),
-        .rd_o(dec_rd), .rs1_o(dec_rs1), .rs2_o(dec_rs2), .rd_we_o(dec_rd_we),
-        .rs1_used_o(dec_rs1_used), .rs2_used_o(dec_rs2_used), .imm_o(dec_imm),
-        .is_load_o(dec_load), .is_store_o(dec_store), .is_branch_o(dec_branch),
-        .is_jump_o(dec_jump), .is_serialize_o(dec_serialize), .mem_size_o(dec_mem_size),
-        .mem_unsigned_o(dec_mem_unsigned), .mem_base_mask_o(dec_mem_base_mask),
-        .jalr_clear_lsb_o(dec_jalr_clear_lsb)
-    );
+    genvar frontend_lane;
+    generate
+        for (frontend_lane = 0; frontend_lane < FE_WIDTH; frontend_lane = frontend_lane + 1) begin : g_frontend_ready
+            if (frontend_lane < BE_WIDTH)
+                assign fetch_ready[frontend_lane] = trace_ready[frontend_lane];
+            else
+                assign fetch_ready[frontend_lane] = 1'b0;
+        end
+    endgenerate
 
-    // The HALT sentinel is a control marker, but its return value is the
-    // committed architectural a0.  Reuse the ALU path to read x10 without
-    // changing the decoder's precise sentinel classification.
-    wire is_halt_trace = (dec_op == `RV32IM_OP_HALT);
-    wire [5:0] backend_op = is_halt_trace ? `RV32IM_OP_ADD : dec_op;
-    wire [4:0] backend_rs1 = is_halt_trace ? 5'd10 : dec_rs1;
-    wire [4:0] backend_rs2 = is_halt_trace ? 5'd0 : dec_rs2;
-    wire backend_rs1_used = is_halt_trace ? 1'b1 : dec_rs1_used;
+    genvar decode_lane;
+    generate
+        for (decode_lane = 0; decode_lane < BE_WIDTH; decode_lane = decode_lane + 1) begin : g_decode
+            if (decode_lane < FE_WIDTH) begin : g_has_frontend_lane
+                assign trace_valid[decode_lane] = fetch_valid[decode_lane];
+                assign trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH] =
+                    fetch_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH];
+            end else begin : g_no_frontend_lane
+                assign trace_valid[decode_lane] = 1'b0;
+                assign trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH] =
+                    {PACKET_WIDTH{1'b0}};
+            end
+            assign trace_pc[decode_lane*32 +: 32] =
+                trace_packet[decode_lane*PACKET_WIDTH +: 32];
+            assign trace_inst[decode_lane*32 +: 32] =
+                trace_packet[decode_lane*PACKET_WIDTH + 32 +: 32];
+            assign trace_pred_taken[decode_lane] =
+                trace_packet[decode_lane*PACKET_WIDTH + 64];
+            assign trace_pred_target[decode_lane*32 +: 32] =
+                trace_packet[decode_lane*PACKET_WIDTH + 65 +: 32];
+            assign trace_pred_kind[decode_lane*2 +: 2] =
+                trace_packet[decode_lane*PACKET_WIDTH + 97 +: 2];
 
-    wire commit_valid, commit_ready, commit_rd_we, commit_is_store;
-    wire [31:0] commit_pc, commit_inst, commit_value, commit_store_addr;
-    wire [4:0] commit_rd;
-    wire [15:0] commit_store_mask, commit_tag;
-    wire [127:0] commit_store_data;
+            rv32im_decoder decoder (
+                .inst_i(trace_inst[decode_lane*32 +: 32]),
+                .legal_o(dec_legal[decode_lane]),
+                .op_o(dec_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH]),
+                .class_o(dec_class[decode_lane*4 +: 4]),
+                .rd_o(dec_rd[decode_lane*5 +: 5]),
+                .rs1_o(dec_rs1[decode_lane*5 +: 5]),
+                .rs2_o(dec_rs2[decode_lane*5 +: 5]),
+                .rd_we_o(dec_rd_we[decode_lane]),
+                .rs1_used_o(dec_rs1_used[decode_lane]),
+                .rs2_used_o(dec_rs2_used[decode_lane]),
+                .imm_o(dec_imm[decode_lane*32 +: 32]),
+                .is_load_o(dec_load[decode_lane]),
+                .is_store_o(dec_store[decode_lane]),
+                .is_branch_o(dec_branch[decode_lane]),
+                .is_jump_o(dec_jump[decode_lane]),
+                .is_serialize_o(dec_serialize[decode_lane]),
+                .mem_size_o(dec_mem_size[decode_lane*2 +: 2]),
+                .mem_unsigned_o(dec_mem_unsigned[decode_lane]),
+                .mem_base_mask_o(dec_mem_base_mask[decode_lane*4 +: 4]),
+                .jalr_clear_lsb_o(dec_jalr_clear_lsb[decode_lane])
+            );
+
+            // HALT commits the live architectural a0 value through the normal
+            // ALU/read path while retaining precise sentinel classification.
+            assign is_halt_trace[decode_lane] =
+                (dec_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_HALT);
+            assign backend_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] =
+                is_halt_trace[decode_lane] ? `RV32IM_OP_ADD :
+                dec_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH];
+            assign backend_rs1[decode_lane*5 +: 5] =
+                is_halt_trace[decode_lane] ? 5'd10 : dec_rs1[decode_lane*5 +: 5];
+            assign backend_rs2[decode_lane*5 +: 5] =
+                is_halt_trace[decode_lane] ? 5'd0 : dec_rs2[decode_lane*5 +: 5];
+            assign backend_rs1_used[decode_lane] =
+                is_halt_trace[decode_lane] ? 1'b1 : dec_rs1_used[decode_lane];
+        end
+    endgenerate
+
+    wire [BE_WIDTH-1:0] commit_valid, commit_rd_we, commit_is_store;
+    wire commit_ready;
+    wire [BE_WIDTH*32-1:0] commit_pc, commit_inst, commit_value, commit_store_addr;
+    wire [BE_WIDTH*5-1:0] commit_rd;
+    wire [BE_WIDTH*16-1:0] commit_store_mask, commit_tag;
+    wire [BE_WIDTH*128-1:0] commit_store_data;
     assign commit_ready = 1'b1;
     rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),
         .trace_rs2_i(backend_rs2), .trace_rd_we_i(dec_rd_we), .trace_rs1_used_i(backend_rs1_used),
-        .trace_rs2_used_i(is_halt_trace ? 1'b0 : dec_rs2_used), .trace_is_load_i(dec_load), .trace_is_store_i(dec_store),
-        .trace_is_branch_i(dec_branch || dec_jump), .trace_is_halt_i(is_halt_trace),
-        .trace_is_error_i(trace_valid && !dec_legal), .trace_mem_size_i(dec_mem_size),
-        .trace_mem_unsigned_i(dec_mem_unsigned), .trace_store_data_i(128'd0),
+        .trace_rs2_used_i(dec_rs2_used & ~is_halt_trace), .trace_is_load_i(dec_load), .trace_is_store_i(dec_store),
+        .trace_is_branch_i(dec_branch | dec_jump), .trace_is_halt_i(is_halt_trace),
+        .trace_is_error_i(trace_valid & ~dec_legal), .trace_mem_size_i(dec_mem_size),
+        .trace_mem_unsigned_i(dec_mem_unsigned), .trace_store_data_i({BE_WIDTH*128{1'b0}}),
         .trace_pred_taken_i(trace_pred_taken), .trace_pred_target_i(trace_pred_target),
         .trace_pred_kind_i(trace_pred_kind), .dcache_req_valid_o(dcache_req_valid),
         .dcache_req_ready_i(dcache_req_ready), .dcache_req_is_load_o(dcache_req_load),
@@ -322,14 +373,24 @@ module cpu_core #(
         .d_stall_count_o(), .i_mem_request_count_o(), .d_mem_read_count_o(), .d_mem_write_count_o()
     );
 
+    function [31:0] commit_popcount;
+        input [BE_WIDTH-1:0] bits;
+        integer lane;
+        begin
+            commit_popcount = 32'd0;
+            for (lane = 0; lane < BE_WIDTH; lane = lane + 1)
+                if (bits[lane]) commit_popcount = commit_popcount + 32'd1;
+        end
+    endfunction
+
     always @(posedge clk) begin
         if (reset) begin
             cycles <= 32'd0;
             instret <= 32'd0;
         end else begin
             cycles <= cycles + 32'd1;
-            if (commit_valid && commit_ready)
-                instret <= instret + 32'd1;
+            if ((|commit_valid) && commit_ready)
+                instret <= instret + commit_popcount(commit_valid);
         end
     end
 endmodule
