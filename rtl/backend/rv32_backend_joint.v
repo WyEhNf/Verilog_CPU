@@ -290,6 +290,7 @@ module rv32_backend_joint #(
     integer checkpoint_lane;
     integer dependency_lane;
     integer issue_lane;
+    integer alu_ready_lane;
     integer ready_rob_used;
     integer ready_rs_used;
     integer ready_lsq_used;
@@ -771,7 +772,6 @@ module rv32_backend_joint #(
         producer_tag_r = 0; producer_phys_r = 0; producer_value_r = 0; producer_addr_r = 0; producer_branch_target_r = 0; producer_store_data_r = 0;
         producer_count = 0; mdu_rank = PRODUCERS; load_rank = PRODUCERS;
         producer_recovery_index = 0;
-        alu_exec_ready_r = {BE_WIDTH{1'b0}};
         for (producer_index = 0; producer_index < BE_WIDTH; producer_index = producer_index + 1) begin
             alu_rank[producer_index] = PRODUCERS;
             if (alu_exec_valid[producer_index] &&
@@ -820,12 +820,6 @@ module rv32_backend_joint #(
                     producer_target_live_r[producer_recovery_index] = 1'b0;
             end
         end
-        for (producer_index = 0; producer_index < BE_WIDTH; producer_index = producer_index + 1) begin
-            if (alu_exec_is_load[producer_index])
-                alu_exec_ready_r[producer_index] = 1'b1;
-            else if (alu_rank[producer_index] < PRODUCERS)
-                alu_exec_ready_r[producer_index] = producer_ready[alu_rank[producer_index]];
-        end
     end
     assign producer_valid = producer_valid_r;
     assign producer_ready = producer_ready_r;
@@ -842,6 +836,15 @@ module rv32_backend_joint #(
     assign producer_redirect = producer_redirect_r;
     assign producer_memory = producer_memory_r;
     assign producer_load = producer_load_r;
+    always @* begin
+        alu_exec_ready_r = {BE_WIDTH{1'b0}};
+        for (alu_ready_lane = 0; alu_ready_lane < BE_WIDTH; alu_ready_lane = alu_ready_lane + 1) begin
+            if (alu_exec_is_load[alu_ready_lane])
+                alu_exec_ready_r[alu_ready_lane] = 1'b1;
+            else if (alu_rank[alu_ready_lane] < PRODUCERS)
+                alu_exec_ready_r[alu_ready_lane] = producer_ready[alu_rank[alu_ready_lane]];
+        end
+    end
     assign alu_exec_ready = alu_exec_ready_r;
 
     rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .SOURCES(PRODUCERS), .FIFO_DEPTH(16), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW)) completion (
