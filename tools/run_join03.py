@@ -70,6 +70,7 @@ def main(argv=None):
     parser.add_argument("--executable")
     parser.add_argument("--build-only", action="store_true")
     parser.add_argument("--report", default="build/join03/report.json")
+    parser.add_argument("--config", default="unspecified")
     args = parser.parse_args(argv)
 
     root = Path(__file__).resolve().parents[1]
@@ -107,12 +108,21 @@ def main(argv=None):
             marker = "PASS: JOIN-02 image={} return={}".format(row["name"], row["expected"])
             if marker not in output:
                 raise Join03Error("{} did not produce its architectural PASS marker".format(row["name"]))
+            metrics = re.search(
+                r"PASS: JOIN-02 image={} return={} cycles=(\d+) instret=(\d+)".format(
+                    re.escape(row["name"]), row["expected"]), output)
+            if not metrics:
+                raise Join03Error("{} PASS marker misses cycle/instret metrics".format(row["name"]))
+            result["cycles"] = int(metrics.group(1))
+            result["instret"] = int(metrics.group(2))
+            result["ipc"] = round(result["instret"] / result["cycles"], 6)
             result["status"] = "passed"
         results.append(result)
 
     report_path = root / args.report
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps({"format": "join03-v1", "results": results},
+    report_path.write_text(json.dumps({"format": "join03-v2", "config": args.config,
+                                      "results": results},
                                       indent=2) + "\n", encoding="utf-8")
     print("PASS: JOIN-03 {} programs {}".format(
         len(results), "built" if args.build_only else "executed with expected results"))
