@@ -157,7 +157,7 @@ module cpu_core_image_tb #(
                      dut.backend.mdu.divider.result_valid_reg,
                      dut.backend.completion.head_reg, dut.backend.completion.tail_reg,
                      dut.backend.completion.count_reg, dut.backend.prf.ready);
-            for (diag_slot = 0; diag_slot < 16; diag_slot = diag_slot + 1)
+            for (diag_slot = 0; diag_slot < ROB_ENTRIES; diag_slot = diag_slot + 1)
                 if (dut.backend.rob.valid_mem[diag_slot])
                     $display("ROB[%0d] gen=%0h ready=%b pc=%08x inst=%08x rd=%0d oldp=%0d newp=%0d store=%b wait=%b sent=%b",
                              diag_slot, dut.backend.rob.generation_mem[diag_slot],
@@ -166,7 +166,7 @@ module cpu_core_image_tb #(
                              dut.backend.rob.old_phys_mem[diag_slot], dut.backend.rob.new_phys_mem[diag_slot],
                              dut.backend.rob.store_mem[diag_slot], dut.backend.rob.store_wait_mem[diag_slot],
                              dut.backend.rob.store_sent_mem[diag_slot]);
-            for (diag_slot = 0; diag_slot < 4; diag_slot = diag_slot + 1) begin
+            for (diag_slot = 0; diag_slot < RS_ENTRIES; diag_slot = diag_slot + 1) begin
                 if (dut.backend.rs.valid_mem[diag_slot])
                     $display("RS[%0d] rob=%04x pc=%08x op=%0d src1=%b/%04x src2=%b/%04x phys=%0d age=%0d",
                              diag_slot, dut.backend.rs.rob_tag_mem[diag_slot],
@@ -174,6 +174,8 @@ module cpu_core_image_tb #(
                              dut.backend.rs.src1_ready_mem[diag_slot], dut.backend.rs.src1_tag_mem[diag_slot],
                              dut.backend.rs.src2_ready_mem[diag_slot], dut.backend.rs.src2_tag_mem[diag_slot],
                              dut.backend.rs.phys_rd_mem[diag_slot], dut.backend.rs.age_mem[diag_slot]);
+            end
+            for (diag_slot = 0; diag_slot < LSQ_ENTRIES; diag_slot = diag_slot + 1) begin
                 if (dut.backend.lsq.valid_mem[diag_slot])
                     $display("LSQ[%0d] gen=%0h rob=%04x load=%b store=%b addr=%b/%08x data=%b sent=%b wait=%b complete=%b commit=%b ack=%b",
                              diag_slot, dut.backend.lsq.generation_mem[diag_slot],
