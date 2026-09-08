@@ -869,6 +869,8 @@ module rv32_backend_joint #(
     // younger operations that were already in flight.
     always @* begin
         alu_flush_r = {BE_WIDTH{flush_i}};
+        alu_recovery_slot = 0;
+        alu_recovery_age = 0;
         alu_recovery_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head;
         if (alu_recovery_branch_age < 0)
             alu_recovery_branch_age = alu_recovery_branch_age + ROB_ENTRIES;
