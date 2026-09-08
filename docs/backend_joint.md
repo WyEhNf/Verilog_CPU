@@ -1,8 +1,8 @@
 # B-09 后端联合门
 
-`rv32_backend_joint` 是单发射后端闭环。输入是已经解码的 trace，输出只暴露
-`CommitRecord` 字段；D-Cache 侧直接复用 `rv32_lsq` 的请求、响应和 store ack
-协议，不建立第二套内存字段。
+`rv32_backend_joint` 是 `BE_WIDTH=1/2/4` 参数化的多发射乱序后端闭环。输入和
+`CommitRecord` 均为按 lane 压平的连续 bundle；D-Cache 侧直接复用 `rv32_lsq`
+的请求、响应和 store ack 协议，不建立第二套内存字段。
 
 ## 数据路径
 
@@ -11,20 +11,24 @@ Rename 为每条 trace 分配 ROB tag 和物理目的寄存器。PRF 提供两�
 CDB wakeup 后再发射。立即数、分支预测信息和访存属性按 ROB slot 保存，避免
 trace 输入撤销后改变已分派指令。
 
-RS 的整数操作进入 ALU，MUL/DIV 进入 MDU。ALU、MDU 和 LSQ load completion
+RS 每周期按年龄选择最多 `BE_WIDTH` 条 ready 指令，每个 lane 有独立整数 ALU；
+MUL/DIV 由一个共享 MDU 接受当拍最老的 M 类指令。ALU、MDU 和 LSQ load completion
 统一进入 completion network，再同时驱动 PRF、ROB 和 RS wakeup。ROB 只在队首
-产生提交记录；store 先通过 LSQ 的 commit/ack 握手才可提交。load response 的 error
+产生最多 `BE_WIDTH` 条连续提交记录；store 必须成为 lane 0/实际 ROB head，并先通过
+LSQ 的 commit/ack 握手才可提交。load response 的 error
 按 ROB slot 保留到 completion，store ack 的 error 直接送入 ROB；两者都只在对应指令
 精确提交时更新 `error_o`。
 
 分支恢复由带有效 tag 的 ALU completion 触发。ROB 保留分支及更老条目、恢复
-checkpoint，并用一次性 `branch_pending` completion 使分支精确提交。
+逐 lane 构造的 RAT checkpoint。RS、LSQ、completion FIFO 按 ROB 年龄杀死严格年轻项；
+恢复同拍的老路径 completion/AGU 更新会被保留。长延迟 MDU 继续运行，输出用动态
+slot+8-bit generation tag 校验，避免旧结果写入复用后的 ROB/物理寄存器。
 
 ## 单元门
 
 `tb/unit/rv32_backend_joint_tb.v` 覆盖 RAW/WAR/WAW、长延迟 DIV、MUL 与 load
 同周期完成、store/load responder 往返、字节转发、checkpoint recovery、精确
 load/store error 和 halt 返回值，并包含 100-cycle completion timeout 与
-10,000-time-unit 全局 watchdog。运行 `make b09` 验证 `BE_WIDTH=1` 的单发射闭环；
-PRF、rename、ROB、RS、LSQ 和 completion 的内部接口仍使用 B-01 至 B-08 定义的
-flattened lane 协议，多发射 trace/CommitRecord 外壳留给 JOIN-04。
+10,000-time-unit 全局 watchdog。`make b09` 保持单发射兼容性，`make join04` 验证
+双/四发射代表配置，`make join05` 验证全部 9 组 FE/BE 宽度组合，并同时覆盖
+`PHYS_REGS=48/64/96`、`ROB_ENTRIES=16/32/64`。
