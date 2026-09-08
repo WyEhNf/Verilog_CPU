@@ -1,6 +1,6 @@
 # 项目进度与跨对话接续
 
-更新时间：2026-09-08。后续对话应先读本文件，再读 `instructions.md` 和
+更新时间：2026-09-09。后续对话应先读本文件，再读 `instructions.md` 和
 `plan.md`；本文件记录已经验证的事实、当前工作树和下一步，不替代验收要求。
 
 ## 当前结论
@@ -18,7 +18,8 @@
   也尚未重跑 18 个历史镜像的发布级全量回归。
 - 已按 `docs/area_optimization_strategy_2026-09-08.md` 开始单发射面积优化。当前已完成
   P0 面积审计、固定 completion producer、LSQ 32-bit/4-byte 相对数据重构、LSQ 重复
-  转发扫描合并，以及 completion FIFO 深度参数化；结果和未决限制见下节。
+  转发扫描合并、completion FIFO 深度参数化，以及从 RS 到 ROB/LSQ 的 store payload
+  全链路 32-bit/4-byte 收窄；结果和未决限制见下节。
 
 ## 面积优化执行批次（2026-09-08）
 
@@ -33,9 +34,12 @@
 | P2 | PRF data 不复位 | 15822.42012 | 19654 | 66300 |
 | P3b | LSQ 相对 32/4-bit 状态 + 单次转发合并 | 15054.19992 | 19371 | 65436 |
 | P4 | completion 深度按 BE=1/2/4 取 4/8/16 | 15027.34356 | 19367 | 62388 |
+| P5 | RS→ALU→completion→ROB/LSQ store payload 收窄为 32/4 bit | 13513.23972 | 15623 | 61620 |
 
-与 Stage A 相比，P4 的已知面积下降 `837.22734 µm²`（`5.28%`），未定价实例减少
-1727 个，manifest 中的存储位减少 3912 bit。P2 单独看已知面积上升，但同时减少了
+与 Stage A 相比，P5 的已知面积下降 `2351.33118 µm²`（`14.82%`），未定价实例减少
+5471 个，manifest 中的存储位减少 4680 bit。P5 相对 P4 单步下降
+`1514.10384 µm²`（`10.08%`）、未定价实例减少 3744 个、存储位减少 768 bit。
+P2 单独看已知面积上升，但同时减少了
 1472 个未定价 mux；在 generic cell 全部合法化前，PRF data 不复位只标为“物理方向合理、
 完整面积待确认”，不把它记成已证实的面积收益。
 
@@ -48,11 +52,23 @@
 - LSQ 每项 store/forward payload 从 `128+16+128+16=288 bit` 降至
   `32+4+32+4=72 bit`；资格阶段不再搬运数据，只有最终选中的 load 做一次 4-byte
   最近 store 优先合并，缓存边界才展开为 128/16 bit。
+- P5 将 store payload 在 RS、ALU、completion FIFO、ROB 和 LSQ 的内部契约统一成
+  access-relative `32-bit data + 4-bit mask`；只有 ROB commit 与 LSQ D-cache 边界展开
+  为 128/16 bit。分模块已知面积相对 P4：ROB `-735.37`、LSQ `-621.90`、ALU
+  `-90.78`、RS `-33.90`、completion `-34.99 µm²`，joint 胶水约 `+2.83 µm²`。
+  B-03 还直接检查了地址偏移 0 和 4 时，ROB 边界输出能分别展开为正确的
+  128-bit line data 与 16-bit byte mask。
 - B-08 新增多 store 字节合并、最近 store 覆盖和 halfword 符号扩展测试；B-08 的
-  BE=1/2、B-09、JOIN-03 均通过。completion 深度降至 4 后，1/1 四程序周期保持
+  BE=1/2、B-09、JOIN-03 均通过。P5 后 B-03/04/05/07/08/09、lint、JOIN-03、
+  JOIN-04 均通过；1/1 四程序周期保持
   2558/1288/1288/2083，没有观察到性能回退。
 - P3 的中间版本曾在每次扫描中重建 128-bit line，已知面积升至 16119.96876 µm²；
   该结构已被 P3b 替代，保留这条记录用于避免以后重复引入宽可变移位网络。
+- P6 曾尝试把 joint 中按 ROB 深度保存的 imm/prediction/memory metadata 迁到 RS，并
+  随 ALU 结果携带分支预测元数据。该实验存储位降到 60284 bit，但已知面积升至
+  `13728.80502 µm²`、未定价实例升至 16026，分别比 P5 增加 `215.56530 µm²` 和
+  403 个；已回退，不在当前 RTL 中。后续若继续消除元数据重复，应优先做窄 lookup
+  或改变所有权接口，而不是把整组字段搬进 RS/ALU。
 
 ## 本轮实现
 
@@ -137,8 +153,9 @@ speedup 约为 1.27/1.26/1.25；4/4 约为 1.10/1.30/1.27。控制流密集的 a
 
 1. 在当前多发射源代码上跑 `make join02-vlt-fast`，再单独跑长耗时 `pi`，完成最新
    18/18 历史镜像发布门；随后重跑 `make join03 join04 join05` 固化同一版本证据。
-2. 继续面积计划：优先收窄 completion/ROB/RS 的 128-bit store payload、消除 joint/ROB
-   重复元数据，再评估 free-list bitmap/串行 rollback；每项都沿用 P4 配置做独立 A/B。
+2. 继续面积计划：P5 的 store payload 收窄已完成；下一步优先评估 free-list bitmap/
+   串行 rollback，或让 ROB 提供窄 lookup 以消除 joint 重复元数据。继续沿用统一配置
+   做独立 A/B，并避免重复采用已被 P6 证伪的“整组元数据搬入 RS/ALU”方案。
 3. 继续 JOIN-06：补跑 4/4，并对至少 1/1、2/2、4/4 运行 `make synth`，提取
    ASAP7 面积、ABC delay，并把 cycles/IPC、预测率、Cache 命中率、stall 和面积合并
    为 Pareto/performance-area 报告。
