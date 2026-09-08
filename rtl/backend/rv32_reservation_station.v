@@ -18,12 +18,6 @@ module rv32_reservation_station #(
     input  wire [BE_WIDTH-1:0]           alloc_valid_i,
     input  wire [(BE_WIDTH*OP_WIDTH)-1:0] alloc_op_i,
     input  wire [(BE_WIDTH*32)-1:0]      alloc_pc_i,
-    input  wire [(BE_WIDTH*32)-1:0]      alloc_imm_i,
-    input  wire [BE_WIDTH-1:0]           alloc_pred_taken_i,
-    input  wire [(BE_WIDTH*32)-1:0]      alloc_pred_target_i,
-    input  wire [(BE_WIDTH*2)-1:0]       alloc_pred_kind_i,
-    input  wire [(BE_WIDTH*2)-1:0]       alloc_mem_size_i,
-    input  wire [BE_WIDTH-1:0]           alloc_mem_unsigned_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] alloc_rob_tag_i,
     input  wire [BE_WIDTH-1:0]           alloc_target_live_i,
     input  wire [(BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] alloc_phys_rd_i,
@@ -46,12 +40,6 @@ module rv32_reservation_station #(
     output reg  [BE_WIDTH-1:0]           issue_valid_o,
     output reg  [(BE_WIDTH*OP_WIDTH)-1:0] issue_op_o,
     output reg  [(BE_WIDTH*32)-1:0]      issue_pc_o,
-    output reg  [(BE_WIDTH*32)-1:0]      issue_imm_o,
-    output reg  [BE_WIDTH-1:0]           issue_pred_taken_o,
-    output reg  [(BE_WIDTH*32)-1:0]      issue_pred_target_o,
-    output reg  [(BE_WIDTH*2)-1:0]       issue_pred_kind_o,
-    output reg  [(BE_WIDTH*2)-1:0]       issue_mem_size_o,
-    output reg  [BE_WIDTH-1:0]           issue_mem_unsigned_o,
     output reg  [(BE_WIDTH*TAG_WIDTH)-1:0] issue_rob_tag_o,
     output reg  [(BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] issue_phys_rd_o,
     output reg  [(BE_WIDTH*32)-1:0]      issue_src1_value_o,
@@ -72,12 +60,6 @@ module rv32_reservation_station #(
     reg target_live_mem [0:ENTRIES-1];
     reg [OP_WIDTH-1:0] op_mem [0:ENTRIES-1];
     reg [31:0] pc_mem [0:ENTRIES-1];
-    reg [31:0] imm_mem [0:ENTRIES-1];
-    reg pred_taken_mem [0:ENTRIES-1];
-    reg [31:0] pred_target_mem [0:ENTRIES-1];
-    reg [1:0] pred_kind_mem [0:ENTRIES-1];
-    reg [1:0] mem_size_mem [0:ENTRIES-1];
-    reg mem_unsigned_mem [0:ENTRIES-1];
     reg [TAG_WIDTH-1:0] rob_tag_mem [0:ENTRIES-1];
     reg [PHYS_ADDR_WIDTH-1:0] phys_rd_mem [0:ENTRIES-1];
     reg [31:0] src1_value_mem [0:ENTRIES-1];
@@ -147,12 +129,6 @@ module rv32_reservation_station #(
         issue_valid_o = {BE_WIDTH{1'b0}};
         issue_op_o = {(BE_WIDTH*OP_WIDTH){1'b0}};
         issue_pc_o = {(BE_WIDTH*32){1'b0}};
-        issue_imm_o = {(BE_WIDTH*32){1'b0}};
-        issue_pred_taken_o = {BE_WIDTH{1'b0}};
-        issue_pred_target_o = {(BE_WIDTH*32){1'b0}};
-        issue_pred_kind_o = {(BE_WIDTH*2){1'b0}};
-        issue_mem_size_o = {(BE_WIDTH*2){1'b0}};
-        issue_mem_unsigned_o = {BE_WIDTH{1'b0}};
         issue_rob_tag_o = {(BE_WIDTH*TAG_WIDTH){1'b0}};
         issue_phys_rd_o = {(BE_WIDTH*PHYS_ADDR_WIDTH){1'b0}};
         issue_src1_value_o = {(BE_WIDTH*32){1'b0}};
@@ -177,12 +153,6 @@ module rv32_reservation_station #(
                 issue_valid_o[lane] = 1'b1;
                 issue_op_o[(lane*OP_WIDTH) +: OP_WIDTH] = op_mem[chosen_slot];
                 issue_pc_o[(lane*32) +: 32] = pc_mem[chosen_slot];
-                issue_imm_o[(lane*32) +: 32] = imm_mem[chosen_slot];
-                issue_pred_taken_o[lane] = pred_taken_mem[chosen_slot];
-                issue_pred_target_o[(lane*32) +: 32] = pred_target_mem[chosen_slot];
-                issue_pred_kind_o[(lane*2) +: 2] = pred_kind_mem[chosen_slot];
-                issue_mem_size_o[(lane*2) +: 2] = mem_size_mem[chosen_slot];
-                issue_mem_unsigned_o[lane] = mem_unsigned_mem[chosen_slot];
                 issue_rob_tag_o[(lane*TAG_WIDTH) +: TAG_WIDTH] = rob_tag_mem[chosen_slot];
                 issue_phys_rd_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = phys_rd_mem[chosen_slot];
                 issue_src1_value_o[(lane*32) +: 32] = src1_value_mem[chosen_slot];
@@ -275,12 +245,6 @@ module rv32_reservation_station #(
                     target_live_mem[alloc_slot] <= alloc_target_live_i[lane] && alloc_rob_tag_i[(lane*TAG_WIDTH)];
                     op_mem[alloc_slot] <= alloc_op_i[(lane*OP_WIDTH) +: OP_WIDTH];
                     pc_mem[alloc_slot] <= alloc_pc_i[(lane*32) +: 32];
-                    imm_mem[alloc_slot] <= alloc_imm_i[(lane*32) +: 32];
-                    pred_taken_mem[alloc_slot] <= alloc_pred_taken_i[lane];
-                    pred_target_mem[alloc_slot] <= alloc_pred_target_i[(lane*32) +: 32];
-                    pred_kind_mem[alloc_slot] <= alloc_pred_kind_i[(lane*2) +: 2];
-                    mem_size_mem[alloc_slot] <= alloc_mem_size_i[(lane*2) +: 2];
-                    mem_unsigned_mem[alloc_slot] <= alloc_mem_unsigned_i[lane];
                     rob_tag_mem[alloc_slot] <= alloc_rob_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH];
                     phys_rd_mem[alloc_slot] <= alloc_phys_rd_i[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
                     src1_value_mem[alloc_slot] <= alloc_src1_value_i[(lane*32) +: 32];

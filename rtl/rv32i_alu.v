@@ -42,10 +42,6 @@ module rv32i_alu #(
     output wire                         exec_is_branch_o,
     output wire                         exec_branch_taken_o,
     output wire [31:0]                  exec_branch_target_o,
-    output wire [31:0]                  exec_source_pc_o,
-    output wire                         exec_pred_taken_o,
-    output wire [31:0]                  exec_pred_target_o,
-    output wire [1:0]                   exec_pred_kind_o,
     output wire                         exec_redirect_valid_o,
     output wire [31:0]                  exec_redirect_pc_o,
     output wire                         exec_is_memory_o,
@@ -68,10 +64,6 @@ module rv32i_alu #(
     reg result_is_branch_reg;
     reg result_branch_taken_reg;
     reg [31:0] result_branch_target_reg;
-    reg [31:0] result_source_pc_reg;
-    reg result_pred_taken_reg;
-    reg [31:0] result_pred_target_reg;
-    reg [1:0] result_pred_kind_reg;
     reg result_redirect_valid_reg;
     reg [31:0] result_redirect_pc_reg;
     reg result_is_memory_reg;
@@ -115,10 +107,6 @@ module rv32i_alu #(
     assign exec_is_branch_o = result_is_branch_reg;
     assign exec_branch_taken_o = result_branch_taken_reg;
     assign exec_branch_target_o = result_branch_target_reg;
-    assign exec_source_pc_o = result_source_pc_reg;
-    assign exec_pred_taken_o = result_pred_taken_reg;
-    assign exec_pred_target_o = result_pred_target_reg;
-    assign exec_pred_kind_o = result_pred_kind_reg;
     assign exec_redirect_valid_o = result_redirect_valid_reg;
     assign exec_redirect_pc_o = result_redirect_pc_reg;
     assign exec_is_memory_o = result_is_memory_reg;
@@ -249,10 +237,6 @@ module rv32i_alu #(
             result_is_branch_reg <= 1'b0;
             result_branch_taken_reg <= 1'b0;
             result_branch_target_reg <= 32'b0;
-            result_source_pc_reg <= 32'b0;
-            result_pred_taken_reg <= 1'b0;
-            result_pred_target_reg <= 32'b0;
-            result_pred_kind_reg <= 2'b0;
             result_redirect_valid_reg <= 1'b0;
             result_redirect_pc_reg <= 32'b0;
             result_is_memory_reg <= 1'b0;
@@ -277,10 +261,6 @@ module rv32i_alu #(
                 result_is_branch_reg <= calc_is_branch;
                 result_branch_taken_reg <= calc_branch_taken;
                 result_branch_target_reg <= calc_branch_target;
-                result_source_pc_reg <= issue_pc_i;
-                result_pred_taken_reg <= issue_pred_taken_i;
-                result_pred_target_reg <= issue_pred_target_i;
-                result_pred_kind_reg <= issue_pred_kind_i;
                 result_redirect_valid_reg <= calc_redirect_valid;
                 result_redirect_pc_reg <= calc_redirect_pc;
                 result_is_memory_reg <= calc_is_memory;
