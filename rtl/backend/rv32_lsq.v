@@ -164,14 +164,12 @@ module rv32_lsq #(
     reg prefix_open;
     reg candidate_found;
     reg blocked;
-    reg [15:0] target_mask;
-    reg [15:0] fwd_mask;
-    reg [127:0] fwd_data;
-    reg [15:0] overlap;
-    reg [127:0] response_line;
-    reg [127:0] merged_line;
-    reg [31:0] extracted_value;
-    reg [7:0] extracted_byte;
+    reg [3:0] target_mask;
+    reg [3:0] fwd_mask;
+    reg [31:0] fwd_data;
+    reg [3:0] overlap;
+    reg [31:0] response_word;
+    reg [31:0] merged_word;
     reg request_fire;
     reg response_match;
     reg response_fire;
@@ -188,6 +186,14 @@ module rv32_lsq #(
                             {8{mask[11]}}, {8{mask[10]}}, {8{mask[9]}},  {8{mask[8]}},
                             {8{mask[7]}},  {8{mask[6]}},  {8{mask[5]}},  {8{mask[4]}},
                             {8{mask[3]}},  {8{mask[2]}},  {8{mask[1]}},  {8{mask[0]}}};
+        end
+    endfunction
+
+    function [31:0] expand_word_bytes;
+        input [3:0] mask;
+        begin
+            expand_word_bytes = {{8{mask[3]}}, {8{mask[2]}},
+                                 {8{mask[1]}}, {8{mask[0]}}};
         end
     endfunction
 
@@ -231,6 +237,60 @@ module rv32_lsq #(
         input [31:0] address;
         begin
             relative_data_from_line = (line_data >> (address[3:0] * 8));
+        end
+    endfunction
+
+    // Return the bytes of one older store in coordinates relative to a load.
+    // Accesses crossing a 16-byte cache-line boundary are outside the current
+    // cache contract, matching the previous line-based implementation.
+    function [3:0] relative_overlap;
+        input [3:0] store_offset;
+        input [3:0] store_mask;
+        input [3:0] load_offset;
+        input [3:0] load_mask;
+        integer load_byte;
+        integer store_byte;
+        begin
+            relative_overlap = 4'b0;
+            for (load_byte = 0; load_byte < 4; load_byte = load_byte + 1)
+                for (store_byte = 0; store_byte < 4; store_byte = store_byte + 1)
+                    if (load_mask[load_byte] && store_mask[store_byte] &&
+                        ((load_offset + load_byte) == (store_offset + store_byte)))
+                        relative_overlap[load_byte] = 1'b1;
+        end
+    endfunction
+
+    function [31:0] store_data_relative_to_load;
+        input [31:0] store_data;
+        input [3:0] store_offset;
+        input [3:0] store_mask;
+        input [3:0] load_offset;
+        input [3:0] load_mask;
+        integer load_byte;
+        integer store_byte;
+        begin
+            store_data_relative_to_load = 32'b0;
+            for (load_byte = 0; load_byte < 4; load_byte = load_byte + 1)
+                for (store_byte = 0; store_byte < 4; store_byte = store_byte + 1)
+                    if (load_mask[load_byte] && store_mask[store_byte] &&
+                        ((load_offset + load_byte) == (store_offset + store_byte)))
+                        store_data_relative_to_load[(load_byte*8) +: 8] =
+                            store_data[(store_byte*8) +: 8];
+        end
+    endfunction
+
+    function [31:0] format_relative_value;
+        input [31:0] raw_value;
+        input [1:0] size;
+        input unsigned_load;
+        begin
+            case (size)
+                2'd0: format_relative_value = unsigned_load ?
+                    {24'b0, raw_value[7:0]} : {{24{raw_value[7]}}, raw_value[7:0]};
+                2'd1: format_relative_value = unsigned_load ?
+                    {16'b0, raw_value[15:0]} : {{16{raw_value[15]}}, raw_value[15:0]};
+                default: format_relative_value = raw_value;
+            endcase
         end
     endfunction
 
@@ -344,10 +404,10 @@ module rv32_lsq #(
         // nested conditions below, and a conditional-only write would infer
         // latches (thousands of proc_dlatch candidates in synthesis).
         blocked = 1'b0;
-        target_mask = 16'b0;
-        fwd_mask = 16'b0;
-        fwd_data = 128'b0;
-        overlap = 16'b0;
+        target_mask = 4'b0;
+        fwd_mask = 4'b0;
+        fwd_data = 32'b0;
+        overlap = 4'b0;
         alloc_slot = 0;
         older_age = 0;
         free_count_calc = LSQ_ENTRIES - occupancy_reg;
@@ -397,9 +457,7 @@ module rv32_lsq #(
             if (age < occupancy_reg && valid_mem[scan] && !candidate_found) begin
                 blocked = 1'b0;
                 if (load_mem[scan] && addr_ready_mem[scan] && !request_sent_mem[scan] && !complete_mem[scan]) begin
-                    target_mask = size_mask(addr_mem[scan], size_mem[scan]);
-                    fwd_mask = 16'b0;
-                    fwd_data = 128'b0;
+                    target_mask = access_mask(size_mem[scan]);
                     for (older_age = 0; older_age < LSQ_ENTRIES; older_age = older_age + 1) begin
                         if (older_age < age) begin
                             i = head_reg + older_age;
@@ -408,18 +466,9 @@ module rv32_lsq #(
                                 if (!addr_ready_mem[i]) begin
                                     blocked = 1'b1;
                                 end else if ((addr_mem[i][31:4] == addr_mem[scan][31:4])) begin
-                                    if (data_ready_mem[i]) begin
-                                        // Word-level merge: same youngest-wins
-                                        // per-byte result as the old byte loop,
-                                        // but every fwd bit is assigned under
-                                        // one uniform condition per store so
-                                        // synthesis proc builds one decoder
-                                        // instead of one per byte.
-                                        overlap = line_mask_from_relative(mask_mem[i], addr_mem[i]) & target_mask;
-                                        fwd_data = (line_data_from_relative(data_mem[i], addr_mem[i]) & expand_bytes(overlap)) |
-                                                   (fwd_data & ~expand_bytes(overlap));
-                                        fwd_mask = fwd_mask | overlap;
-                                    end else if ((line_mask_from_relative(mask_mem[i], addr_mem[i]) & target_mask) != 0) begin
+                                    if (!data_ready_mem[i] &&
+                                        (relative_overlap(addr_mem[i][3:0], mask_mem[i],
+                                                          addr_mem[scan][3:0], target_mask) != 0)) begin
                                         blocked = 1'b1;
                                     end
                                 end
@@ -453,18 +502,22 @@ module rv32_lsq #(
         request_fire = 1'b0;
         if (!flush_i && candidate_found && !response_wait_mem[candidate]) begin
             if (load_mem[candidate]) begin
-                target_mask = size_mask(addr_mem[candidate], size_mem[candidate]);
-                fwd_mask = 16'b0;
-                fwd_data = 128'b0;
+                target_mask = access_mask(size_mem[candidate]);
+                fwd_mask = 4'b0;
+                fwd_data = 32'b0;
                 for (older_age = 0; older_age < LSQ_ENTRIES; older_age = older_age + 1) begin
                     if (older_age < candidate_age) begin
                         i = head_reg + older_age;
                         if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
                         if (valid_mem[i] && store_mem[i] && addr_ready_mem[i] && data_ready_mem[i] &&
                             (addr_mem[i][31:4] == addr_mem[candidate][31:4])) begin
-                            overlap = line_mask_from_relative(mask_mem[i], addr_mem[i]) & target_mask;
-                            fwd_data = (line_data_from_relative(data_mem[i], addr_mem[i]) & expand_bytes(overlap)) |
-                                       (fwd_data & ~expand_bytes(overlap));
+                            overlap = relative_overlap(addr_mem[i][3:0], mask_mem[i],
+                                                       addr_mem[candidate][3:0], target_mask);
+                            fwd_data = (store_data_relative_to_load(
+                                            data_mem[i], addr_mem[i][3:0], mask_mem[i],
+                                            addr_mem[candidate][3:0], target_mask) &
+                                        expand_word_bytes(overlap)) |
+                                       (fwd_data & ~expand_word_bytes(overlap));
                             fwd_mask = fwd_mask | overlap;
                         end
                     end
@@ -475,8 +528,9 @@ module rv32_lsq #(
                     dcache_req_addr_o = addr_mem[candidate];
                     dcache_req_size_o = size_mem[candidate];
                     dcache_req_unsigned_o = unsigned_mem[candidate];
-                    dcache_req_mask_o = target_mask & ~fwd_mask;
-                    dcache_req_wdata_o = fwd_data;
+                    dcache_req_mask_o = line_mask_from_relative(target_mask & ~fwd_mask,
+                                                                 addr_mem[candidate]);
+                    dcache_req_wdata_o = line_data_from_relative(fwd_data, addr_mem[candidate]);
                     dcache_req_rob_tag_o = rob_tag_mem[candidate];
                     dcache_req_lsq_tag_o = make_lsq_tag(candidate, generation_mem[candidate]);
                     request_fire = dcache_req_ready_i;
@@ -662,16 +716,15 @@ module rv32_lsq #(
                 if (recovery_entry_age < 0) recovery_entry_age = recovery_entry_age + ROB_ENTRIES;
                 if (!((recovery_entry_age > recovery_branch_age) &&
                       (recovery_entry_age < recovery_occupancy_i))) begin
-                    response_line = dcache_resp_line_valid_i ? dcache_resp_line_data_i :
-                                    {96'b0, dcache_resp_word_data_i};
-                    merged_line = response_line;
-                    for (byte_index = 0; byte_index < 4; byte_index = byte_index + 1)
-                        if (forward_mask_mem[response_slot][byte_index])
-                            merged_line[((addr_mem[response_slot][3:0] + byte_index)*8) +: 8] =
-                                forward_data_mem[response_slot][(byte_index*8) +: 8];
-                    complete_value_mem[response_slot] <= extract_value(
-                        merged_line, addr_mem[response_slot], size_mem[response_slot],
-                        unsigned_mem[response_slot]);
+                    response_word = dcache_resp_line_valid_i ?
+                        relative_data_from_line(dcache_resp_line_data_i, addr_mem[response_slot]) :
+                        dcache_resp_word_data_i;
+                    merged_word = (forward_data_mem[response_slot] &
+                                   expand_word_bytes(forward_mask_mem[response_slot])) |
+                                  (response_word &
+                                   ~expand_word_bytes(forward_mask_mem[response_slot]));
+                    complete_value_mem[response_slot] <= format_relative_value(
+                        merged_word, size_mem[response_slot], unsigned_mem[response_slot]);
                     complete_error_mem[response_slot] <= dcache_resp_error_i;
                     complete_mem[response_slot] <= 1'b1;
                     response_wait_mem[response_slot] <= 1'b0;
@@ -718,27 +771,12 @@ module rv32_lsq #(
                 end
             end
 
-            // A fully forwarded load is marked complete without a cache trip.
+            // The selected load's forwarding result was computed once in the
+            // request combinational block.  Reuse it here for cache bypass.
             if (candidate_found && load_mem[candidate] && !request_sent_mem[candidate] && !complete_mem[candidate]) begin
-                target_mask = size_mask(addr_mem[candidate], size_mem[candidate]);
-                fwd_mask = 16'b0;
-                fwd_data = 128'b0;
-                for (older_age = 0; older_age < LSQ_ENTRIES; older_age = older_age + 1) begin
-                    if (older_age < candidate_age) begin
-                        i = head_reg + older_age;
-                        if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
-                        if (valid_mem[i] && store_mem[i] && addr_ready_mem[i] && data_ready_mem[i] &&
-                            (addr_mem[i][31:4] == addr_mem[candidate][31:4])) begin
-                            overlap = line_mask_from_relative(mask_mem[i], addr_mem[i]) & target_mask;
-                            fwd_data = (line_data_from_relative(data_mem[i], addr_mem[i]) & expand_bytes(overlap)) |
-                                       (fwd_data & ~expand_bytes(overlap));
-                            fwd_mask = fwd_mask | overlap;
-                        end
-                    end
-                end
                 if ((fwd_mask & target_mask) == target_mask) begin
-                    merged_line = fwd_data;
-                    complete_value_mem[candidate] <= extract_value(merged_line, addr_mem[candidate], size_mem[candidate], unsigned_mem[candidate]);
+                    complete_value_mem[candidate] <= format_relative_value(
+                        fwd_data, size_mem[candidate], unsigned_mem[candidate]);
                     complete_error_mem[candidate] <= 1'b0;
                     complete_mem[candidate] <= 1'b1;
                 end
@@ -748,21 +786,23 @@ module rv32_lsq #(
                 request_sent_mem[candidate] <= 1'b1;
                 if (load_mem[candidate]) begin
                     response_wait_mem[candidate] <= 1'b1;
-                    forward_mask_mem[candidate] <= relative_mask_from_line(fwd_mask, addr_mem[candidate]);
-                    forward_data_mem[candidate] <= relative_data_from_line(fwd_data, addr_mem[candidate]);
+                    forward_mask_mem[candidate] <= fwd_mask;
+                    forward_data_mem[candidate] <= fwd_data;
                 end else begin
                     response_wait_mem[candidate] <= 1'b1;
                 end
             end
 
             if (response_fire) begin
-                response_line = dcache_resp_line_valid_i ? dcache_resp_line_data_i : {96'b0, dcache_resp_word_data_i};
-                merged_line = response_line;
-                for (byte_index = 0; byte_index < 4; byte_index = byte_index + 1)
-                    if (forward_mask_mem[response_slot][byte_index])
-                        merged_line[((addr_mem[response_slot][3:0] + byte_index)*8) +: 8] =
-                            forward_data_mem[response_slot][(byte_index*8) +: 8];
-                complete_value_mem[response_slot] <= extract_value(merged_line, addr_mem[response_slot], size_mem[response_slot], unsigned_mem[response_slot]);
+                response_word = dcache_resp_line_valid_i ?
+                    relative_data_from_line(dcache_resp_line_data_i, addr_mem[response_slot]) :
+                    dcache_resp_word_data_i;
+                merged_word = (forward_data_mem[response_slot] &
+                               expand_word_bytes(forward_mask_mem[response_slot])) |
+                              (response_word &
+                               ~expand_word_bytes(forward_mask_mem[response_slot]));
+                complete_value_mem[response_slot] <= format_relative_value(
+                    merged_word, size_mem[response_slot], unsigned_mem[response_slot]);
                 complete_error_mem[response_slot] <= dcache_resp_error_i;
                 complete_mem[response_slot] <= 1'b1;
                 response_wait_mem[response_slot] <= 1'b0;
