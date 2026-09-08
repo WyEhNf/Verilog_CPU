@@ -37,8 +37,8 @@ module rv32_rob #(
     input  wire [BE_WIDTH-1:0]           completion_done_i,
     input  wire [BE_WIDTH-1:0]           completion_error_i,
     input  wire [(BE_WIDTH*32)-1:0]      completion_store_addr_i,
-    input  wire [(BE_WIDTH*16)-1:0]      completion_store_mask_i,
-    input  wire [(BE_WIDTH*128)-1:0]     completion_store_data_i,
+    input  wire [(BE_WIDTH*4)-1:0]       completion_store_mask_i,
+    input  wire [(BE_WIDTH*32)-1:0]      completion_store_data_i,
 
     input  wire                         commit_ready_i,
     output reg  [BE_WIDTH-1:0]           commit_valid_o,
@@ -107,8 +107,10 @@ module rv32_rob #(
     reg [PHYS_ADDR_WIDTH-1:0] new_phys_mem [0:ROB_ENTRIES-1];
     reg [31:0] value_mem [0:ROB_ENTRIES-1];
     reg [31:0] store_addr_mem [0:ROB_ENTRIES-1];
-    reg [15:0] store_mask_mem [0:ROB_ENTRIES-1];
-    reg [127:0] store_data_mem [0:ROB_ENTRIES-1];
+    // Store payloads stay access-relative in the ROB.  Expand to the
+    // cache-line representation only on the external commit interface.
+    reg [3:0] store_mask_mem [0:ROB_ENTRIES-1];
+    reg [31:0] store_data_mem [0:ROB_ENTRIES-1];
     reg [CHECKPOINT_WIDTH-1:0] checkpoint_mem [0:ROB_ENTRIES-1];
 
     reg [SLOT_WIDTH-1:0] head_reg;
@@ -159,6 +161,22 @@ module rv32_rob #(
         input [GENERATION_WIDTH-1:0] generation;
         begin
             make_tag = {generation, slot[SLOT_WIDTH-1:0], 2'b00, 1'b1};
+        end
+    endfunction
+
+    function [15:0] line_mask_from_relative;
+        input [3:0] relative_mask;
+        input [31:0] address;
+        begin
+            line_mask_from_relative = {12'b0, relative_mask} << address[3:0];
+        end
+    endfunction
+
+    function [127:0] line_data_from_relative;
+        input [31:0] relative_data;
+        input [31:0] address;
+        begin
+            line_data_from_relative = {96'b0, relative_data} << (address[3:0] * 8);
         end
     endfunction
 
@@ -280,8 +298,10 @@ module rv32_rob #(
                         commit_value_o[(commit_lane*32) +: 32] = value_mem[commit_slot];
                         commit_is_store_o[commit_lane] = store_mem[commit_slot];
                         commit_store_addr_o[(commit_lane*32) +: 32] = store_addr_mem[commit_slot];
-                        commit_store_mask_o[(commit_lane*16) +: 16] = store_mask_mem[commit_slot];
-                        commit_store_data_o[(commit_lane*128) +: 128] = store_data_mem[commit_slot];
+                        commit_store_mask_o[(commit_lane*16) +: 16] =
+                            line_mask_from_relative(store_mask_mem[commit_slot], store_addr_mem[commit_slot]);
+                        commit_store_data_o[(commit_lane*128) +: 128] =
+                            line_data_from_relative(store_data_mem[commit_slot], store_addr_mem[commit_slot]);
                         commit_tag_o[(commit_lane*TAG_WIDTH) +: TAG_WIDTH] = make_tag(commit_slot, generation_mem[commit_slot]);
                         // Stores must become the actual ROB head before the
                         // cache side effect is issued/acknowledged. If a store
@@ -297,8 +317,10 @@ module rv32_rob #(
                             store_commit_valid_o = 1'b1;
                             store_commit_tag_o = make_tag(commit_slot, generation_mem[commit_slot]);
                             store_commit_addr_o = store_addr_mem[commit_slot];
-                            store_commit_mask_o = store_mask_mem[commit_slot];
-                            store_commit_data_o = store_data_mem[commit_slot];
+                            store_commit_mask_o = line_mask_from_relative(
+                                store_mask_mem[commit_slot], store_addr_mem[commit_slot]);
+                            store_commit_data_o = line_data_from_relative(
+                                store_data_mem[commit_slot], store_addr_mem[commit_slot]);
                         end
                         if (commit_valid_o[commit_lane]) pop_count = pop_count + 1;
                         else commit_break = 1'b1;
@@ -356,8 +378,8 @@ module rv32_rob #(
                             value_mem[slot_index] <= completion_value_i[(complete_lane*32) +: 32];
                             if (completion_error_i[complete_lane]) error_mem[slot_index] <= 1'b1;
                             store_addr_mem[slot_index] <= completion_store_addr_i[(complete_lane*32) +: 32];
-                            store_mask_mem[slot_index] <= completion_store_mask_i[(complete_lane*16) +: 16];
-                            store_data_mem[slot_index] <= completion_store_data_i[(complete_lane*128) +: 128];
+                            store_mask_mem[slot_index] <= completion_store_mask_i[(complete_lane*4) +: 4];
+                            store_data_mem[slot_index] <= completion_store_data_i[(complete_lane*32) +: 32];
                         end
                     end
                 end
@@ -375,8 +397,8 @@ module rv32_rob #(
                             value_mem[slot_index] <= completion_value_i[(complete_lane*32) +: 32];
                             if (completion_error_i[complete_lane]) error_mem[slot_index] <= 1'b1;
                             store_addr_mem[slot_index] <= completion_store_addr_i[(complete_lane*32) +: 32];
-                            store_mask_mem[slot_index] <= completion_store_mask_i[(complete_lane*16) +: 16];
-                            store_data_mem[slot_index] <= completion_store_data_i[(complete_lane*128) +: 128];
+                            store_mask_mem[slot_index] <= completion_store_mask_i[(complete_lane*4) +: 4];
+                            store_data_mem[slot_index] <= completion_store_data_i[(complete_lane*32) +: 32];
                         end
                     end
                 end

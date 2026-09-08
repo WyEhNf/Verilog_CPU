@@ -26,7 +26,7 @@ module rv32_completion_network #(
     input  wire [(SOURCES*32)-1:0]       producer_value_i,
     input  wire [(SOURCES*32)-1:0]       producer_addr_i,
     input  wire [(SOURCES*32)-1:0]       producer_branch_target_i,
-    input  wire [(SOURCES*128)-1:0]      producer_store_data_i,
+    input  wire [(SOURCES*32)-1:0]       producer_store_data_i,
     input  wire [SOURCES-1:0]           producer_rd_we_i,
     input  wire [SOURCES-1:0]           producer_is_store_i,
     input  wire [SOURCES-1:0]           producer_is_branch_i,
@@ -45,7 +45,7 @@ module rv32_completion_network #(
     output reg  [(BE_WIDTH*32)-1:0]      cdb_value_o,
     output reg  [(BE_WIDTH*32)-1:0]      cdb_addr_o,
     output reg  [(BE_WIDTH*32)-1:0]      cdb_branch_target_o,
-    output reg  [(BE_WIDTH*128)-1:0]     cdb_store_data_o,
+    output reg  [(BE_WIDTH*32)-1:0]      cdb_store_data_o,
     output reg  [BE_WIDTH-1:0]          cdb_rd_we_o,
     output reg  [BE_WIDTH-1:0]          cdb_is_store_o,
     output reg  [BE_WIDTH-1:0]          cdb_is_branch_o,
@@ -74,7 +74,7 @@ module rv32_completion_network #(
     reg [31:0] value_mem [0:FIFO_DEPTH-1];
     reg [31:0] addr_mem [0:FIFO_DEPTH-1];
     reg [31:0] branch_target_mem [0:FIFO_DEPTH-1];
-    reg [127:0] store_data_mem [0:FIFO_DEPTH-1];
+    reg [31:0] store_data_mem [0:FIFO_DEPTH-1];
     reg rd_we_mem [0:FIFO_DEPTH-1];
     reg store_mem [0:FIFO_DEPTH-1];
     reg branch_mem [0:FIFO_DEPTH-1];
@@ -139,7 +139,7 @@ module rv32_completion_network #(
         cdb_value_o = {(BE_WIDTH*32){1'b0}};
         cdb_addr_o = {(BE_WIDTH*32){1'b0}};
         cdb_branch_target_o = {(BE_WIDTH*32){1'b0}};
-        cdb_store_data_o = {(BE_WIDTH*128){1'b0}};
+        cdb_store_data_o = {(BE_WIDTH*32){1'b0}};
         cdb_rd_we_o = {BE_WIDTH{1'b0}};
         cdb_is_store_o = {BE_WIDTH{1'b0}};
         cdb_is_branch_o = {BE_WIDTH{1'b0}};
@@ -163,7 +163,7 @@ module rv32_completion_network #(
                     cdb_value_o[(lane*32) +: 32] = value_mem[pop_slot];
                     cdb_addr_o[(lane*32) +: 32] = addr_mem[pop_slot];
                     cdb_branch_target_o[(lane*32) +: 32] = branch_target_mem[pop_slot];
-                    cdb_store_data_o[(lane*128) +: 128] = store_data_mem[pop_slot];
+                    cdb_store_data_o[(lane*32) +: 32] = store_data_mem[pop_slot];
                     cdb_rd_we_o[lane] = rd_we_mem[pop_slot] && !store_mem[pop_slot];
                     cdb_is_store_o[lane] = store_mem[pop_slot];
                     cdb_is_branch_o[lane] = branch_mem[pop_slot];
@@ -228,7 +228,7 @@ module rv32_completion_network #(
                     value_mem[enq_slot] <= producer_value_i[(source*32) +: 32];
                     addr_mem[enq_slot] <= producer_addr_i[(source*32) +: 32];
                     branch_target_mem[enq_slot] <= producer_branch_target_i[(source*32) +: 32];
-                    store_data_mem[enq_slot] <= producer_store_data_i[(source*128) +: 128];
+                    store_data_mem[enq_slot] <= producer_store_data_i[(source*32) +: 32];
                     rd_we_mem[enq_slot] <= producer_rd_we_i[source];
                     store_mem[enq_slot] <= producer_is_store_i[source];
                     branch_mem[enq_slot] <= producer_is_branch_i[source];

@@ -40,19 +40,19 @@ module rv32_lsq #(
     input  wire [BE_WIDTH-1:0]           alloc_addr_valid_i,
     input  wire [(BE_WIDTH*32)-1:0]      alloc_addr_i,
     input  wire [BE_WIDTH-1:0]           alloc_data_valid_i,
-    input  wire [(BE_WIDTH*128)-1:0]     alloc_store_data_i,
-    input  wire [(BE_WIDTH*16)-1:0]      alloc_store_mask_i,
+    input  wire [(BE_WIDTH*32)-1:0]      alloc_store_data_i,
+    input  wire [(BE_WIDTH*4)-1:0]       alloc_store_mask_i,
 
     input  wire [BE_WIDTH-1:0]           addr_update_valid_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] addr_update_tag_i,
     input  wire [(BE_WIDTH*32)-1:0]      addr_update_i,
     input  wire [BE_WIDTH-1:0]           data_update_valid_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] data_update_tag_i,
-    input  wire [(BE_WIDTH*128)-1:0]     data_update_i,
-    input  wire [(BE_WIDTH*16)-1:0]      data_mask_update_i,
+    input  wire [(BE_WIDTH*32)-1:0]      data_update_i,
+    input  wire [(BE_WIDTH*4)-1:0]       data_mask_update_i,
     input  wire [BE_WIDTH-1:0]           wakeup_valid_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] wakeup_tag_i,
-    input  wire [(BE_WIDTH*128)-1:0]     wakeup_value_i,
+    input  wire [(BE_WIDTH*32)-1:0]      wakeup_value_i,
 
     input  wire                         store_commit_valid_i,
     output reg                          store_commit_ready_o,
@@ -202,14 +202,6 @@ module rv32_lsq #(
         input [31:0] address;
         begin
             line_data_from_relative = {96'b0, relative_data} << (address[3:0] * 8);
-        end
-    endfunction
-
-    function [3:0] relative_mask_from_line;
-        input [15:0] line_mask;
-        input [31:0] address;
-        begin
-            relative_mask_from_line = (line_mask >> address[3:0]);
         end
     endfunction
 
@@ -596,25 +588,14 @@ module rv32_lsq #(
                     if (data_update_valid_i[lane] &&
                         tag_matches_slot(data_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
                         data_ready_mem[update_slot] <= 1'b1;
-                        data_mem[update_slot] <= relative_data_from_line(
-                            data_update_i[(lane*128) +: 128],
-                            (addr_update_valid_i[lane] &&
-                             (addr_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] ==
-                              data_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH])) ?
-                            addr_update_i[(lane*32) +: 32] : addr_mem[update_slot]);
-                        if (data_mask_update_i[(lane*16) +: 16] != 16'b0)
-                            mask_mem[update_slot] <= relative_mask_from_line(
-                                data_mask_update_i[(lane*16) +: 16],
-                                (addr_update_valid_i[lane] &&
-                                 (addr_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] ==
-                                  data_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH])) ?
-                                addr_update_i[(lane*32) +: 32] : addr_mem[update_slot]);
+                        data_mem[update_slot] <= data_update_i[(lane*32) +: 32];
+                        if (data_mask_update_i[(lane*4) +: 4] != 4'b0)
+                            mask_mem[update_slot] <= data_mask_update_i[(lane*4) +: 4];
                     end
                     if (wakeup_valid_i[lane] &&
                         tag_matches_slot(wakeup_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
                         data_ready_mem[update_slot] <= 1'b1;
-                        data_mem[update_slot] <= relative_data_from_line(
-                            wakeup_value_i[(lane*128) +: 128], addr_mem[update_slot]);
+                        data_mem[update_slot] <= wakeup_value_i[(lane*32) +: 32];
                     end
                 end
             end
@@ -672,24 +653,13 @@ module rv32_lsq #(
                     end
                     if (data_update_valid_i[lane] && tag_matches_slot(data_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
                         data_ready_mem[update_slot] <= 1'b1;
-                        data_mem[update_slot] <= relative_data_from_line(
-                            data_update_i[(lane*128) +: 128],
-                            (addr_update_valid_i[lane] &&
-                             (addr_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] ==
-                              data_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH])) ?
-                            addr_update_i[(lane*32) +: 32] : addr_mem[update_slot]);
-                        if (data_mask_update_i[(lane*16) +: 16] != 16'b0)
-                            mask_mem[update_slot] <= relative_mask_from_line(
-                                data_mask_update_i[(lane*16) +: 16],
-                                (addr_update_valid_i[lane] &&
-                                 (addr_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] ==
-                                  data_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH])) ?
-                                addr_update_i[(lane*32) +: 32] : addr_mem[update_slot]);
+                        data_mem[update_slot] <= data_update_i[(lane*32) +: 32];
+                        if (data_mask_update_i[(lane*4) +: 4] != 4'b0)
+                            mask_mem[update_slot] <= data_mask_update_i[(lane*4) +: 4];
                     end
                     if (wakeup_valid_i[lane] && tag_matches_slot(wakeup_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
                         data_ready_mem[update_slot] <= 1'b1;
-                        data_mem[update_slot] <= relative_data_from_line(
-                            wakeup_value_i[(lane*128) +: 128], addr_mem[update_slot]);
+                        data_mem[update_slot] <= wakeup_value_i[(lane*32) +: 32];
                     end
                 end
             end
@@ -770,15 +740,9 @@ module rv32_lsq #(
                     addr_ready_mem[alloc_slot] <= alloc_addr_valid_i[lane];
                     data_ready_mem[alloc_slot] <= alloc_data_valid_i[lane] || alloc_is_load_i[lane];
                     addr_mem[alloc_slot] <= alloc_addr_i[(lane*32) +: 32];
-                    data_mem[alloc_slot] <= alloc_addr_valid_i[lane] ?
-                        relative_data_from_line(alloc_store_data_i[(lane*128) +: 128],
-                                                alloc_addr_i[(lane*32) +: 32]) :
-                        alloc_store_data_i[(lane*128) +: 32];
-                    mask_mem[alloc_slot] <= (alloc_store_mask_i[(lane*16) +: 16] != 16'b0) ?
-                        (alloc_addr_valid_i[lane] ?
-                         relative_mask_from_line(alloc_store_mask_i[(lane*16) +: 16],
-                                                 alloc_addr_i[(lane*32) +: 32]) :
-                         alloc_store_mask_i[(lane*16) +: 4]) :
+                    data_mem[alloc_slot] <= alloc_store_data_i[(lane*32) +: 32];
+                    mask_mem[alloc_slot] <= (alloc_store_mask_i[(lane*4) +: 4] != 4'b0) ?
+                        alloc_store_mask_i[(lane*4) +: 4] :
                         ((alloc_is_store_i[lane] && alloc_addr_valid_i[lane]) ?
                          access_mask(alloc_size_i[(lane*2) +: 2]) : 4'b0);
                     request_sent_mem[alloc_slot] <= 1'b0;

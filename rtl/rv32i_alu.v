@@ -21,7 +21,7 @@ module rv32i_alu #(
     input  wire [31:0]                  issue_imm_i,
     input  wire [31:0]                  issue_src1_value_i,
     input  wire [31:0]                  issue_src2_value_i,
-    input  wire [127:0]                 issue_store_data_i,
+    input  wire [31:0]                  issue_store_data_i,
     input  wire [PHYS_ADDR_WIDTH-1:0]   issue_phys_rd_i,
     input  wire [TAG_WIDTH-1:0]         issue_rob_tag_i,
     input  wire [EPOCH_WIDTH-1:0]       issue_epoch_i,
@@ -50,7 +50,7 @@ module rv32i_alu #(
     output wire [31:0]                  exec_mem_addr_o,
     output wire [1:0]                   exec_mem_size_o,
     output wire                         exec_mem_unsigned_o,
-    output wire [127:0]                 exec_store_data_o,
+    output wire [31:0]                  exec_store_data_o,
 
     input  wire                         live_tag_valid_i,
     input  wire [TAG_WIDTH-1:0]         live_tag_i
@@ -72,7 +72,7 @@ module rv32i_alu #(
     reg [31:0] result_mem_addr_reg;
     reg [1:0] result_mem_size_reg;
     reg result_mem_unsigned_reg;
-    reg [127:0] result_store_data_reg;
+    reg [31:0] result_store_data_reg;
 
     reg [31:0] calc_value;
     reg calc_rd_we;
@@ -87,7 +87,7 @@ module rv32i_alu #(
     reg [31:0] calc_mem_addr;
     reg [1:0] calc_mem_size;
     reg calc_mem_unsigned;
-    reg [127:0] calc_store_data;
+    reg [31:0] calc_store_data;
     reg actual_control;
     reg [31:0] actual_next_pc;
     reg live_match;
@@ -185,13 +185,11 @@ module rv32i_alu #(
             `RV32IM_OP_SW: begin
                 calc_is_memory = 1'b1;
                 calc_is_store = 1'b1;
-                // Integration callers may provide an already positioned
-                // line payload.  A zero payload means the normal CPU path:
-                // use the live rs2 value and position it at the byte offset
-                // of the effective address.  The fallback also covers a
-                // dependent store whose rs2 was not ready at RS allocation.
-                if (issue_store_data_i == 128'b0)
-                    calc_store_data = ({96'b0, issue_src2_value_i} << (calc_mem_addr[3:0] * 8));
+                // Store data remains access-relative inside the backend.
+                // A zero predecoded payload selects the live rs2 value; the
+                // LSQ expands it to cache-line coordinates at its boundary.
+                if (issue_store_data_i == 32'b0)
+                    calc_store_data = issue_src2_value_i;
             end
             `RV32IM_OP_ADDI,
             `RV32IM_OP_ADD: begin calc_value = issue_src1_value_i + ((issue_op_i == `RV32IM_OP_ADDI) ? issue_imm_i : issue_src2_value_i); calc_rd_we = 1'b1; end
