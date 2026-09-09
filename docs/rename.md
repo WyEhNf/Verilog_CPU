@@ -2,7 +2,7 @@
 
 `rv32_rename_unit` 维护推测 RAT、已提交 RRAT 和非零物理寄存器 free bitmap。输入 bundle
 按 lane 顺序处理，只产生资源足够的连续前缀。组合阶段先复制 RAT 到临时工作映射；每个
-写 rd 的 lane 通过分层优先选择取一个空闲物理寄存器，并在 bundle 工作位图中清除；后续
+写 rd 的 lane 通过优先选择取一个空闲物理寄存器，并在 bundle 工作位图中清除；后续
 lane 的源查询立即看到该新映射，因而
 覆盖 bundle 内 RAW 和 WAW。
 
