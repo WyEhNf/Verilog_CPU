@@ -149,6 +149,7 @@ module rv32_backend_joint #(
     wire [(BE_WIDTH*16)-1:0] rob_commit_store_mask;
     wire [(BE_WIDTH*128)-1:0] rob_commit_store_data;
     wire [(BE_WIDTH*TAG_WIDTH)-1:0] rob_commit_tag;
+    wire [(BE_WIDTH*PAW)-1:0] commit_old_phys, commit_new_phys;
     wire rob_store_commit_valid, rob_store_commit_ready, rob_store_ack_valid;
     wire [TAG_WIDTH-1:0] rob_store_commit_tag, rob_store_ack_tag;
     wire [31:0] rob_store_commit_addr;
@@ -158,6 +159,11 @@ module rv32_backend_joint #(
     wire [31:0] rob_redirect_pc;
     wire [3:0] rob_redirect_epoch;
     wire [CHECKPOINT_WIDTH-1:0] rob_checkpoint_restore;
+    wire rob_recovery_rd_we;
+    wire [4:0] rob_recovery_rd;
+    wire [PAW-1:0] rob_recovery_new_phys;
+    wire [PHYS_REGS-1:0] rob_recovery_reclaim_bitmap;
+    wire [FREE_COUNT_WIDTH-1:0] rob_recovery_reclaim_count;
     wire [ROB_SLOT_WIDTH-1:0] rob_head, rob_tail;
     wire [ROB_COUNT_WIDTH-1:0] rob_occupancy;
     wire [ROB_ENTRIES-1:0] rob_entry_valid;
@@ -263,10 +269,6 @@ module rv32_backend_joint #(
 
     reg [TAG_WIDTH-1:0] rob_to_lsq_mem [0:ROB_ENTRIES-1];
     reg [PAW-1:0] lsq_phys_mem [0:LSQ_ENTRIES-1];
-    reg [PAW-1:0] rob_phys_mem [0:ROB_ENTRIES-1];
-    reg [PAW-1:0] rob_old_phys_mem [0:ROB_ENTRIES-1];
-    reg [4:0] rob_rd_mem [0:ROB_ENTRIES-1];
-    reg rob_rd_we_mem [0:ROB_ENTRIES-1];
     reg [TAG_WIDTH-1:0] phys_tag_mem [0:PHYS_REGS-1];
     reg [31:0] rob_pc_mem [0:ROB_ENTRIES-1];
     reg load_error_mem [0:ROB_ENTRIES-1];
@@ -308,12 +310,6 @@ module rv32_backend_joint #(
     integer producer_index;
     integer completion_lane;
     integer completion_slot;
-    integer recovery_map_index;
-    integer recovery_slot_index;
-    integer recovery_branch_slot;
-    integer recovery_branch_age;
-    integer recovery_slot_age;
-    integer recovery_phys_index;
     integer recovery_rs_index;
     integer recovery_rs_rob_slot;
     integer recovery_rs_branch_slot;
@@ -334,7 +330,6 @@ module rv32_backend_joint #(
     integer alu_recovery_branch_age;
     reg [CHECK_RAT_WIDTH-1:0] recovery_rat_state;
     reg [PHYS_REGS-1:0] recovery_free_bitmap;
-    reg [PHYS_REGS-1:0] recovery_reserved;
     reg [FREE_COUNT_WIDTH-1:0] recovery_free_count;
     reg [COMPLETION_DEPTH-1:0] completion_kill_mask;
     wire [BE_WIDTH-1:0] dispatch_valid = rename_valid;
@@ -362,7 +357,6 @@ module rv32_backend_joint #(
     wire [PRODUCERS-1:0] producer_ready_r;
     reg [BE_WIDTH-1:0] alu_exec_ready_r;
     reg [BE_WIDTH-1:0] alu_flush_r;
-    reg [BE_WIDTH*PAW-1:0] commit_old_phys, commit_new_phys;
     reg [BE_WIDTH-1:0] trace_ready_r;
     reg [BE_WIDTH-1:0] completion_valid_r, completion_done_r, completion_error_r;
     reg [BE_WIDTH*TAG_WIDTH-1:0] completion_tag_r;
@@ -506,41 +500,16 @@ module rv32_backend_joint #(
     assign rob_completion_store_mask = completion_store_mask_r;
     assign rob_completion_store_data = completion_store_data_r;
 
-    // Rebuild recovery rename state from the mappings and ROB entries that
-    // survive the branch.  Old physical mappings remain reserved until their
-    // owning instruction commits, preventing duplicate free-list entries.
+    // The ROB owns the physical mappings of in-flight instructions.  Recovery
+    // restores the branch RAT checkpoint, keeps the branch's own destination,
+    // and returns only destinations allocated by the killed younger suffix.
     always @* begin
         recovery_rat_state = rob_checkpoint_restore[CHECK_RAT_WIDTH-1:0];
-        recovery_free_bitmap = {PHYS_REGS{1'b0}};
-        recovery_reserved = {PHYS_REGS{1'b0}};
-        recovery_reserved[0] = 1'b1;
-        recovery_branch_slot = branch_pending_tag[3 +: ROB_SLOT_WIDTH];
-        if (rob_rd_we_mem[recovery_branch_slot] && (rob_rd_mem[recovery_branch_slot] != 0))
-            recovery_rat_state[(rob_rd_mem[recovery_branch_slot]*PAW) +: PAW] =
-                rob_phys_mem[recovery_branch_slot];
-        for (recovery_map_index = 0; recovery_map_index < 32; recovery_map_index = recovery_map_index + 1) begin
-            recovery_phys_index = recovery_rat_state[(recovery_map_index*PAW) +: PAW];
-            if ((recovery_phys_index >= 0) && (recovery_phys_index < PHYS_REGS))
-                recovery_reserved[recovery_phys_index] = 1'b1;
-        end
-        recovery_branch_age = recovery_branch_slot - rob_head;
-        if (recovery_branch_age < 0) recovery_branch_age = recovery_branch_age + ROB_ENTRIES;
-        for (recovery_slot_index = 0; recovery_slot_index < ROB_ENTRIES; recovery_slot_index = recovery_slot_index + 1) begin
-            recovery_slot_age = recovery_slot_index - rob_head;
-            if (recovery_slot_age < 0) recovery_slot_age = recovery_slot_age + ROB_ENTRIES;
-            if ((recovery_slot_age <= recovery_branch_age) && (recovery_slot_age < rob_occupancy) &&
-                rob_rd_we_mem[recovery_slot_index] &&
-                (rob_old_phys_mem[recovery_slot_index] != 0) &&
-                (rob_old_phys_mem[recovery_slot_index] < PHYS_REGS))
-                recovery_reserved[rob_old_phys_mem[recovery_slot_index]] = 1'b1;
-        end
-        recovery_free_count = {FREE_COUNT_WIDTH{1'b0}};
-        for (recovery_phys_index = 1; recovery_phys_index < PHYS_REGS; recovery_phys_index = recovery_phys_index + 1) begin
-            if (!recovery_reserved[recovery_phys_index]) begin
-                recovery_free_bitmap[recovery_phys_index] = 1'b1;
-                recovery_free_count = recovery_free_count + 1'b1;
-            end
-        end
+        if (rob_recovery_rd_we && (rob_recovery_rd != 0))
+            recovery_rat_state[(rob_recovery_rd*PAW) +: PAW] = rob_recovery_new_phys;
+        recovery_free_bitmap = free_bitmap_state | rob_recovery_reclaim_bitmap;
+        recovery_free_bitmap[0] = 1'b0;
+        recovery_free_count = free_count + rob_recovery_reclaim_count;
     end
 
     // External flushes clear the station.  A branch recovery clears only
@@ -608,8 +577,6 @@ module rv32_backend_joint #(
         rs_src2_ready = {BE_WIDTH{1'b0}};
         rs_src1_value = {BE_WIDTH*32{1'b0}};
         rs_src2_value = {BE_WIDTH*32{1'b0}};
-        commit_old_phys = {BE_WIDTH*PAW{1'b0}};
-        commit_new_phys = {BE_WIDTH*PAW{1'b0}};
         for (source_lane = 0; source_lane < BE_WIDTH; source_lane = source_lane + 1) begin
             rs_src1_value[source_lane*32 +: 32] =
                 prf_read_data[(2*source_lane)*32 +: 32];
@@ -646,12 +613,6 @@ module rv32_backend_joint #(
                         rob_alloc_tag[dependency_lane*TAG_WIDTH +: TAG_WIDTH];
                     rs_src2_ready[source_lane] = 1'b0;
                 end
-            end
-            if (rob_commit_valid[source_lane]) begin
-                commit_old_phys[source_lane*PAW +: PAW] =
-                    rob_old_phys_mem[rob_commit_tag[source_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-                commit_new_phys[source_lane*PAW +: PAW] =
-                    rob_phys_mem[rob_commit_tag[source_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
             end
         end
     end
@@ -698,7 +659,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH)) rob (
+    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH)) rob (
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rob_alloc_valid), .alloc_pc_i(rob_alloc_pc), .alloc_inst_i(rob_alloc_inst), .alloc_rd_i(rob_alloc_rd),
         .alloc_rd_we_i(rename_rd_we), .alloc_old_phys_i(rob_alloc_old_phys), .alloc_new_phys_i(rob_alloc_new_phys), .alloc_is_store_i(rob_alloc_is_store),
         .alloc_is_branch_i(rob_alloc_is_branch), .alloc_is_halt_i(rob_alloc_is_halt), .alloc_is_error_i(rob_alloc_is_error), .alloc_checkpoint_i(rob_alloc_checkpoint),
@@ -706,10 +667,10 @@ module rv32_backend_joint #(
         .completion_valid_i(rob_completion_valid), .completion_tag_i(rob_completion_tag), .completion_value_i(rob_completion_value), .completion_done_i(rob_completion_done), .completion_error_i(rob_completion_error),
         .completion_store_addr_i(rob_completion_store_addr), .completion_store_mask_i(rob_completion_store_mask), .completion_store_data_i(rob_completion_store_data),
         .commit_ready_i(commit_ready_i), .commit_valid_o(rob_commit_valid), .commit_rd_we_o(rob_commit_rd_we), .commit_rd_o(rob_commit_rd), .commit_pc_o(rob_commit_pc), .commit_inst_o(rob_commit_inst), .commit_value_o(rob_commit_value), .commit_is_store_o(rob_commit_is_store),
-        .commit_store_addr_o(rob_commit_store_addr), .commit_store_mask_o(rob_commit_store_mask), .commit_store_data_o(rob_commit_store_data), .commit_tag_o(rob_commit_tag),
+        .commit_store_addr_o(rob_commit_store_addr), .commit_store_mask_o(rob_commit_store_mask), .commit_store_data_o(rob_commit_store_data), .commit_tag_o(rob_commit_tag), .commit_old_phys_o(commit_old_phys), .commit_new_phys_o(commit_new_phys),
         .store_commit_valid_o(rob_store_commit_valid), .store_commit_ready_i(rob_store_commit_ready), .store_commit_tag_o(rob_store_commit_tag), .store_commit_addr_o(rob_store_commit_addr), .store_commit_mask_o(rob_store_commit_mask), .store_commit_data_o(rob_store_commit_data), .store_ack_valid_i(rob_store_ack_valid), .store_ack_tag_i(rob_store_ack_tag), .store_ack_error_i(lsq_store_ack_error),
         .recovery_valid_i({ {(BE_WIDTH-1){1'b0}}, branch_pending }), .recovery_tag_i({ {(BE_WIDTH-1)*TAG_WIDTH{1'b0}}, branch_pending_tag }), .recovery_pc_i({ {(BE_WIDTH-1)*32{1'b0}}, branch_pending_pc }),
-        .recovery_accept_o(rob_recovery_accept), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation)
+        .recovery_accept_o(rob_recovery_accept), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation)
     );
 
     rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .STORE_DATA_WIDTH(32)) rs (
@@ -946,10 +907,6 @@ module rv32_backend_joint #(
             branch_pending_pred_target <= 0;
             for (map_index = 0; map_index < ROB_ENTRIES; map_index = map_index + 1) begin
                 rob_to_lsq_mem[map_index] <= 0;
-                rob_phys_mem[map_index] <= 0;
-                rob_old_phys_mem[map_index] <= 0;
-                rob_rd_mem[map_index] <= 0;
-                rob_rd_we_mem[map_index] <= 1'b0;
                 rob_pc_mem[map_index] <= 0;
             end
             for (map_index = 0; map_index < LSQ_ENTRIES; map_index = map_index + 1)
@@ -996,10 +953,6 @@ module rv32_backend_joint #(
             for (map_lane = 0; map_lane < BE_WIDTH; map_lane = map_lane + 1) begin
                 if (dispatch_valid[map_lane] && rob_alloc_fire[map_lane]) begin
                     map_rob_slot = rob_alloc_tag[map_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH];
-                    rob_phys_mem[map_rob_slot] <= rename_new_phys[map_lane*PAW +: PAW];
-                    rob_old_phys_mem[map_rob_slot] <= rename_old_phys[map_lane*PAW +: PAW];
-                    rob_rd_mem[map_rob_slot] <= rename_rd[map_lane*5 +: 5];
-                    rob_rd_we_mem[map_rob_slot] <= rename_rd_we[map_lane];
                     rob_pc_mem[map_rob_slot] <= trace_pc_i[map_lane*32 +: 32];
                     load_error_mem[map_rob_slot] <= 1'b0;
                     rob_imm_mem[map_rob_slot] <= trace_imm_i[map_lane*32 +: 32];

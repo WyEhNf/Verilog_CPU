@@ -6,6 +6,7 @@
 module rv32_rob #(
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
+    parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
     parameter integer SLOT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES),
     parameter integer GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH,
@@ -52,6 +53,8 @@ module rv32_rob #(
     output reg  [(BE_WIDTH*16)-1:0]      commit_store_mask_o,
     output reg  [(BE_WIDTH*128)-1:0]     commit_store_data_o,
     output reg  [(BE_WIDTH*TAG_WIDTH)-1:0] commit_tag_o,
+    output reg  [(BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] commit_old_phys_o,
+    output reg  [(BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] commit_new_phys_o,
 
     output reg                          store_commit_valid_o,
     input  wire                         store_commit_ready_i,
@@ -72,6 +75,11 @@ module rv32_rob #(
     output reg  [3:0]                   redirect_epoch_o,
     output reg                          checkpoint_restore_valid_o,
     output reg  [CHECKPOINT_WIDTH-1:0]  checkpoint_restore_o,
+    output reg                          recovery_rd_we_o,
+    output reg  [4:0]                   recovery_rd_o,
+    output reg  [PHYS_ADDR_WIDTH-1:0]   recovery_new_phys_o,
+    output reg  [PHYS_REGS-1:0]         recovery_reclaim_bitmap_o,
+    output reg  [((PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1))-1:0] recovery_reclaim_count_o,
 
     output reg                          halted_o,
     output reg                          error_o,
@@ -134,6 +142,8 @@ module rv32_rob #(
     integer commit_slot;
     integer younger_age;
     integer recovery_slot;
+    integer reclaim_slot;
+    integer reclaim_age;
     reg recovery_found;
     reg prefix_open;
     reg commit_break;
@@ -260,9 +270,29 @@ module rv32_rob #(
         redirect_epoch_o = epoch_reg + 1'b1;
         checkpoint_restore_valid_o = recovery_found;
         checkpoint_restore_o = {CHECKPOINT_WIDTH{1'b0}};
+        recovery_rd_we_o = 1'b0;
+        recovery_rd_o = 5'b0;
+        recovery_new_phys_o = {PHYS_ADDR_WIDTH{1'b0}};
+        recovery_reclaim_bitmap_o = {PHYS_REGS{1'b0}};
+        recovery_reclaim_count_o = 0;
         if (recovery_found) begin
             redirect_pc_o = recovery_pc_i[0 +: 32];
             checkpoint_restore_o = checkpoint_mem[chosen_slot];
+            recovery_rd_we_o = rd_we_mem[chosen_slot];
+            recovery_rd_o = rd_mem[chosen_slot];
+            recovery_new_phys_o = new_phys_mem[chosen_slot];
+            for (reclaim_slot = 0; reclaim_slot < ROB_ENTRIES; reclaim_slot = reclaim_slot + 1) begin
+                reclaim_age = reclaim_slot - head_reg;
+                if (reclaim_age < 0) reclaim_age = reclaim_age + ROB_ENTRIES;
+                if (valid_mem[reclaim_slot] && (reclaim_age > chosen_age) &&
+                    (reclaim_age < occupancy_reg) && rd_we_mem[reclaim_slot] &&
+                    (new_phys_mem[reclaim_slot] != 0) &&
+                    (new_phys_mem[reclaim_slot] < PHYS_REGS) &&
+                    !recovery_reclaim_bitmap_o[new_phys_mem[reclaim_slot]]) begin
+                    recovery_reclaim_bitmap_o[new_phys_mem[reclaim_slot]] = 1'b1;
+                    recovery_reclaim_count_o = recovery_reclaim_count_o + 1'b1;
+                end
+            end
         end
 
         commit_valid_o = {BE_WIDTH{1'b0}};
@@ -276,6 +306,8 @@ module rv32_rob #(
         commit_store_mask_o = {(BE_WIDTH*16){1'b0}};
         commit_store_data_o = {(BE_WIDTH*128){1'b0}};
         commit_tag_o = {(BE_WIDTH*TAG_WIDTH){1'b0}};
+        commit_old_phys_o = {(BE_WIDTH*PHYS_ADDR_WIDTH){1'b0}};
+        commit_new_phys_o = {(BE_WIDTH*PHYS_ADDR_WIDTH){1'b0}};
         store_commit_valid_o = 1'b0;
         store_commit_tag_o = {TAG_WIDTH{1'b0}};
         store_commit_addr_o = 32'b0;
@@ -303,6 +335,8 @@ module rv32_rob #(
                         commit_store_data_o[(commit_lane*128) +: 128] =
                             line_data_from_relative(store_data_mem[commit_slot], store_addr_mem[commit_slot]);
                         commit_tag_o[(commit_lane*TAG_WIDTH) +: TAG_WIDTH] = make_tag(commit_slot, generation_mem[commit_slot]);
+                        commit_old_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = old_phys_mem[commit_slot];
+                        commit_new_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = new_phys_mem[commit_slot];
                         // Stores must become the actual ROB head before the
                         // cache side effect is issued/acknowledged. If a store
                         // appears behind another commit in this bundle, stop
