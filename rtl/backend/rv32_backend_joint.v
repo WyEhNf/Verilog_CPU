@@ -99,11 +99,8 @@ module rv32_backend_joint #(
     localparam integer ROB_COUNT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1);
     localparam integer ROB_GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH;
     localparam integer LSQ_SLOT_WIDTH = (LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES);
-    localparam integer FREE_SLOTS = PHYS_REGS - 1;
-    localparam integer FREE_PTR_WIDTH = (FREE_SLOTS <= 1) ? 1 : $clog2(FREE_SLOTS);
     localparam integer FREE_COUNT_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1);
     localparam integer CHECK_RAT_WIDTH = 32 * PAW;
-    localparam integer CHECK_FREE_WIDTH = FREE_SLOTS * PAW;
     // The checkpoint only needs the speculative RAT snapshot: the free list is
     // deterministically rebuilt on recovery from the RAT + surviving ROB old
     // physical mappings (see the recovery block below).  Keeping the free list
@@ -130,8 +127,7 @@ module rv32_backend_joint #(
     wire [(BE_WIDTH*PAW)-1:0] rename_rs1_phys, rename_rs2_phys;
     wire [((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))-1:0] rename_count;
     wire [(32*PAW)-1:0] rat_state, rrat_state;
-    wire [(FREE_SLOTS*PAW)-1:0] free_list_state;
-    wire [FREE_PTR_WIDTH-1:0] free_head, free_tail;
+    wire [PHYS_REGS-1:0] free_bitmap_state;
     wire [FREE_COUNT_WIDTH-1:0] free_count;
 
     wire [BE_WIDTH-1:0] rob_alloc_valid;
@@ -318,7 +314,6 @@ module rv32_backend_joint #(
     integer recovery_branch_age;
     integer recovery_slot_age;
     integer recovery_phys_index;
-    integer recovery_free_index;
     integer recovery_rs_index;
     integer recovery_rs_rob_slot;
     integer recovery_rs_branch_slot;
@@ -338,9 +333,8 @@ module rv32_backend_joint #(
     integer alu_recovery_age;
     integer alu_recovery_branch_age;
     reg [CHECK_RAT_WIDTH-1:0] recovery_rat_state;
-    reg [CHECK_FREE_WIDTH-1:0] recovery_free_list_state;
+    reg [PHYS_REGS-1:0] recovery_free_bitmap;
     reg [PHYS_REGS-1:0] recovery_reserved;
-    reg [FREE_PTR_WIDTH-1:0] recovery_free_tail;
     reg [FREE_COUNT_WIDTH-1:0] recovery_free_count;
     reg [COMPLETION_DEPTH-1:0] completion_kill_mask;
     wire [BE_WIDTH-1:0] dispatch_valid = rename_valid;
@@ -517,7 +511,7 @@ module rv32_backend_joint #(
     // owning instruction commits, preventing duplicate free-list entries.
     always @* begin
         recovery_rat_state = rob_checkpoint_restore[CHECK_RAT_WIDTH-1:0];
-        recovery_free_list_state = {CHECK_FREE_WIDTH{1'b0}};
+        recovery_free_bitmap = {PHYS_REGS{1'b0}};
         recovery_reserved = {PHYS_REGS{1'b0}};
         recovery_reserved[0] = 1'b1;
         recovery_branch_slot = branch_pending_tag[3 +: ROB_SLOT_WIDTH];
@@ -540,18 +534,13 @@ module rv32_backend_joint #(
                 (rob_old_phys_mem[recovery_slot_index] < PHYS_REGS))
                 recovery_reserved[rob_old_phys_mem[recovery_slot_index]] = 1'b1;
         end
-        recovery_free_index = 0;
+        recovery_free_count = {FREE_COUNT_WIDTH{1'b0}};
         for (recovery_phys_index = 1; recovery_phys_index < PHYS_REGS; recovery_phys_index = recovery_phys_index + 1) begin
             if (!recovery_reserved[recovery_phys_index]) begin
-                recovery_free_list_state[(recovery_free_index*PAW) +: PAW] = recovery_phys_index[PAW-1:0];
-                recovery_free_index = recovery_free_index + 1;
+                recovery_free_bitmap[recovery_phys_index] = 1'b1;
+                recovery_free_count = recovery_free_count + 1'b1;
             end
         end
-        recovery_free_count = recovery_free_index[FREE_COUNT_WIDTH-1:0];
-        if (recovery_free_index >= FREE_SLOTS)
-            recovery_free_tail = {FREE_PTR_WIDTH{1'b0}};
-        else
-            recovery_free_tail = recovery_free_index[FREE_PTR_WIDTH-1:0];
     end
 
     // External flushes clear the station.  A branch recovery clears only
@@ -674,12 +663,11 @@ module rv32_backend_joint #(
         .rob_free_count_i(rob_free_count), .rs_free_count_i(rs_free_count), .lsq_free_count_i(lsq_free_count),
         .rename_valid_o(rename_valid), .rename_rd_we_o(rename_rd_we), .rename_rd_o(rename_rd), .rename_old_phys_o(rename_old_phys), .rename_new_phys_o(rename_new_phys),
         .rename_rs1_phys_o(rename_rs1_phys), .rename_rs2_phys_o(rename_rs2_phys), .rename_count_o(rename_count), .rat_state_o(rat_state), .rrat_state_o(rrat_state),
-        .free_list_state_o(free_list_state), .free_head_o(free_head), .free_tail_o(free_tail), .free_count_o(free_count),
+        .free_bitmap_state_o(free_bitmap_state), .free_count_o(free_count),
         .commit_valid_i((|rob_commit_valid) && commit_ready_i), .commit_rd_we_i(rob_commit_rd_we), .commit_rd_i(rob_commit_rd),
         .commit_old_phys_i(commit_old_phys), .commit_new_phys_i(commit_new_phys),
         .restore_valid_i(rob_checkpoint_restore_valid), .restore_rat_i(recovery_rat_state),
-        .restore_free_list_i(recovery_free_list_state), .restore_free_head_i({FREE_PTR_WIDTH{1'b0}}),
-        .restore_free_tail_i(recovery_free_tail), .restore_free_count_i(recovery_free_count)
+        .restore_free_bitmap_i(recovery_free_bitmap), .restore_free_count_i(recovery_free_count)
     );
 
     rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS)) prf (
