@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// Speculative register renaming and physical-register free list.
+// Speculative register renaming with a physical-register free bitmap.
 // All bundle buses are flattened in program/lane order.
 module rv32_rename_unit #(
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,

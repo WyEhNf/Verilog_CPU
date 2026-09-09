@@ -101,9 +101,9 @@ module rv32_backend_joint #(
     localparam integer LSQ_SLOT_WIDTH = (LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES);
     localparam integer FREE_COUNT_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1);
     localparam integer CHECK_RAT_WIDTH = 32 * PAW;
-    // The checkpoint only needs the speculative RAT snapshot: the free list is
+    // The checkpoint only needs the speculative RAT snapshot: the free bitmap is
     // deterministically rebuilt on recovery from the RAT + surviving ROB old
-    // physical mappings (see the recovery block below).  Keeping the free list
+    // physical mappings (see the recovery block below).  Keeping the free state
     // in every checkpoint was pure dead storage (1024 -> 192 bits per entry).
     localparam integer CHECKPOINT_WIDTH = CHECK_RAT_WIDTH;
     localparam integer PRODUCERS = BE_WIDTH + 2;
