@@ -23,6 +23,8 @@ LSQ 的 commit/ack 握手才可提交。load response 的 error
 逐 lane 构造的 RAT checkpoint。RS、LSQ、completion FIFO 按 ROB 年龄杀死严格年轻项；
 恢复同拍的老路径 completion/AGU 更新会被保留。长延迟 MDU 继续运行，输出用动态
 slot+8-bit generation tag 校验，避免旧结果写入复用后的 ROB/物理寄存器。
+free bitmap 则由恢复后的 RAT、分支自身映射和幸存 ROB old-phys 直接重建，不经过
+空闲寄存器编号压缩或环形 free-list head/tail 恢复。
 
 ## 单元门
 
