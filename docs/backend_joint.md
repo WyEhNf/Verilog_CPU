@@ -22,9 +22,11 @@ LSQ 的 commit/ack 握手才可提交。load response 的 error
 分支恢复由带有效 tag 的 ALU completion 触发。ROB 保留分支及更老条目、恢复
 逐 lane 构造的 RAT checkpoint。RS、LSQ、completion FIFO 按 ROB 年龄杀死严格年轻项；
 恢复同拍的老路径 completion/AGU 更新会被保留。长延迟 MDU 继续运行，输出用动态
-slot+8-bit generation tag 校验，避免旧结果写入复用后的 ROB/物理寄存器。
-free bitmap 则由恢复后的 RAT、分支自身映射和幸存 ROB old-phys 直接重建，不经过
-空闲寄存器编号压缩或环形 free-list head/tail 恢复。
+slot+8-bit generation tag 校验，避免旧结果写入复用后的 ROB/物理寄存器。ROB 同时是
+`rd/rd_we/new_phys/old_phys` 的唯一按 slot 所有者：提交时直接输出 old/new phys，
+恢复时输出分支自身目的映射，并把严格年轻项的 new phys 汇总为 reclaim bitmap/count。
+backend 以当前 free bitmap 与 reclaim bitmap 的并集恢复空闲状态，不经过空闲寄存器
+编号压缩、环形 free-list head/tail 恢复，也不在 joint 中维护第二套重复 phys/rd 表。
 
 ## 单元门
 

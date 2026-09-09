@@ -22,7 +22,7 @@
   全链路 32-bit/4-byte 收窄，并以 free bitmap 替代环形 free-list 与恢复压缩网络；结果
   和未决限制见下节。
 
-## 面积优化执行批次（2026-09-08）
+## 面积优化执行批次（2026-09-08 至 2026-09-09）
 
 统一实验配置为 `FE=1/BE=1/PHYS=48/ROB=16/RS=4/LSQ=4`，使用 `make synth-bb`。
 因为网表仍含 `$mem_v2`、`$_MUX_`、`$_NOT_` 等未定价单元，以下面积都是
@@ -37,9 +37,11 @@
 | P4 | completion 深度按 BE=1/2/4 取 4/8/16 | 15027.34356 | 19367 | 62388 |
 | P5 | RS→ALU→completion→ROB/LSQ store payload 收窄为 32/4 bit | 13513.23972 | 15623 | 61620 |
 | P7 | free bitmap + 恢复 reserved bitmap，删除 free-list 动态压缩 | 9525.31812 | 15684 | 61236 |
+| P8 | ROB 直接提供提交 phys 元数据与恢复 reclaim bitmap，删除 joint 重复表 | 9314.03934 | 15682 | 61140 |
 
-与 Stage A 相比，P7 的已知面积下降 `6339.25278 µm²`（`39.96%`），未定价实例减少
-5410 个，manifest 中的存储位减少 5064 bit。P7 相对 P5 单步下降
+与 Stage A 相比，P8 的已知面积下降 `6550.53156 µm²`（`41.29%`），未定价实例减少
+5412 个，manifest 中的存储位减少 5160 bit。P8 相对 P7 单步下降
+`211.27878 µm²`（`2.22%`），未定价实例减少 2 个、存储位减少 96 bit。P7 相对 P5 单步下降
 `3987.92160 µm²`（`29.51%`）；未定价实例增加 61 个，但少了一个高端口 `$mem_v2`，
 存储位减少 384 bit。P5 相对 P4 单步下降 `1514.10384 µm²`（`10.08%`）。
 P2 单独看已知面积上升，但同时减少了
@@ -79,6 +81,13 @@ P2 单独看已知面积上升，但同时减少了
   µm²，但 backend joint 减少 `4018.64166 µm²`，净收益显著。B-02 的三组 BE/PHYS
   参数、B-09、lint、JOIN-03、JOIN-04、JOIN-05 均通过；1/1 周期保持不变。宽配置周期
   明显下降，但尚未用 stall/mispredict 计数器完成归因，不能先验地全部记为 bitmap 收益。
+- P8 删除 backend joint 中与 ROB 重复的 `new_phys/old_phys/rd/rd_we` 四组按 ROB slot
+  元数据。commit 的 old/new phys 直接由 ROB 输出；恢复时 ROB 输出分支自身目的映射，
+  并扫描严格年轻的 live 项生成待回收物理寄存器 bitmap/count，rename 以当前 free
+  bitmap 与 reclaim bitmap 的并集恢复。分模块已知面积相对 P7：ROB 增加
+  `572.07546 µm²`，joint 减少 `783.35424 µm²`，净下降 `211.27878 µm²`；memory
+  数量从 103 降至 101。B-03、B-09、lint、JOIN-03、JOIN-04、JOIN-05 均通过，
+  9 组配置的周期与 P7 基线一致。P8 审计仍为 `INCOMPLETE`，不可当作完整芯片面积。
 
 ## 本轮实现
 
@@ -115,7 +124,7 @@ P2 单独看已知面积上升，但同时减少了
 - `make lint`：退出码 0；本轮新增的组合逻辑 latch 告警已清除。仍有数组敏感列表、
   unused/empty pin 等非致命告警，不能把“lint 通过”解释为零告警。
 - `make unit`、`make matrix`：退出码 0。
-- `make b03 b06 b09`、随后 `make b07 b09`：退出码 0，覆盖 ROB、Wallace MUL/DIV、
+- `make b03 b06 b09`、随后 `make b07 b09`；P8 后再次运行 `make b03 b09`：退出码 0，覆盖 ROB、Wallace MUL/DIV、
   completion stale-result drain 和后端恢复路径。
 - `make join04`：双发射和四发射各 4 个程序全部通过。
 - `make join05`：9 个配置、27 次整机执行全部通过。机器可读报告位于被忽略的
@@ -164,9 +173,9 @@ accumulate 在 FE4 下不再退化，但需要进一步采集 free-list stall、
 
 1. 在当前多发射源代码上跑 `make join02-vlt-fast`，再单独跑长耗时 `pi`，完成最新
    18/18 历史镜像发布门；随后重跑 `make join03 join04 join05` 固化同一版本证据。
-2. 继续面积计划：P7 free bitmap 已完成并保留；下一步优先让 ROB 提供窄 lookup，逐项
-   消除 joint 重复元数据，或优化 Cache hit pipeline。继续沿用统一配置做独立 A/B，并
-   避免重复采用已被 P6 证伪的“整组元数据搬入 RS/ALU”方案。
+2. 继续面积计划：P8 已完成并保留；下一步做 P8b 独立 A/B，优先尝试删除 joint 的
+   `rob_pc_mem` 重复项，由 ROB 提供窄 lookup；若读取 mux 抵消存储收益则立即回退，转向
+   Cache hit pipeline。继续避免已被 P6 证伪的“整组元数据搬入 RS/ALU”方案。
 3. 继续 JOIN-06：补跑 4/4，并对至少 1/1、2/2、4/4 运行 `make synth`，提取
    ASAP7 面积、ABC delay，并把 cycles/IPC、预测率、Cache 命中率、stall 和面积合并
    为 Pareto/performance-area 报告。

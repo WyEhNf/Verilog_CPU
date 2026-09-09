@@ -15,8 +15,9 @@ old phys bit。恢复沿以完整 RAT、free bitmap 和 count 替换推测状态
 位图初始时 P1 到 `P{PHYS_REGS-1}` 为 1，P0 恒为 0，因此无需非二幂环形指针。
 `rename_new_phys_o` 与 `rename_rd_we_o` 同时驱动 PRF 的 allocation clear 端口。
 
-分支 checkpoint 仍只保存 RAT。恢复时 backend 从 checkpoint RAT、分支自身映射和幸存
-ROB 项的 old phys 构造 reserved bitmap，取反后直接恢复 free bitmap；不再把空闲寄存器
-动态压缩成宽 free-list 总线。
+分支 checkpoint 仍只保存 RAT。恢复时先装入 checkpoint RAT，再重放分支自身的目的映射；
+ROB 汇总严格年轻项的 new phys 为 reclaim bitmap，backend 将它与当前 free bitmap 取并集，
+得到恢复后的空闲状态。该路径不再把空闲寄存器动态压缩成宽 free-list 总线，也不需要
+在 backend joint 中复制 ROB 的 phys/rd 元数据。
 
 验证命令：`make b02`，覆盖 `BE_WIDTH=1/2/4` 与 `PHYS_REGS=48/64/96`。
