@@ -157,53 +157,47 @@ module rv32_backend_joint_tb #(
 
     task check_free_list;
         integer free_i;
-        integer free_j;
-        integer free_slot_i;
-        integer free_slot_j;
+        integer bitmap_count;
         integer rat_i;
         integer rob_i;
         reg [5:0] free_phys_i;
-        reg [5:0] free_phys_j;
         begin
             if (((^dut.free_count) === 1'bx) || (dut.free_count > 63)) begin
                 $display("FREE_LIST_COUNT_FAIL count=%0d", dut.free_count);
                 bad=bad+1;
                 free_list_error_seen=1'b1;
             end else begin
-                for (free_i=0; free_i<dut.free_count; free_i=free_i+1) begin
-                    free_slot_i=dut.free_head+free_i;
-                    if (free_slot_i >= 63) free_slot_i=free_slot_i-63;
-                    free_phys_i=dut.rename.free_list[free_slot_i];
-                    if (free_phys_i == 0) begin
-                        $display("FREE_LIST_ZERO_FAIL slot=%0d", free_slot_i);
-                        bad=bad+1;
-                        free_list_error_seen=1'b1;
-                    end
-                    for (free_j=free_i+1; free_j<dut.free_count; free_j=free_j+1) begin
-                        free_slot_j=dut.free_head+free_j;
-                        if (free_slot_j >= 63) free_slot_j=free_slot_j-63;
-                        free_phys_j=dut.rename.free_list[free_slot_j];
-                        if (free_phys_i == free_phys_j) begin
-                            $display("FREE_LIST_DUP_FAIL phys=%0d slots=%0d,%0d", free_phys_i, free_slot_i, free_slot_j);
-                            bad=bad+1;
-                            free_list_error_seen=1'b1;
+                bitmap_count=0;
+                if (dut.rename.free_bitmap[0]) begin
+                    $display("FREE_BITMAP_ZERO_FAIL");
+                    bad=bad+1;
+                    free_list_error_seen=1'b1;
+                end
+                for (free_i=1; free_i<64; free_i=free_i+1) begin
+                    if (dut.rename.free_bitmap[free_i]) begin
+                        bitmap_count=bitmap_count+1;
+                        free_phys_i=free_i;
+                        for (rat_i=0; rat_i<32; rat_i=rat_i+1) begin
+                            if (free_phys_i == dut.rename.rat[rat_i]) begin
+                                $display("FREE_BITMAP_RAT_FAIL phys=%0d architectural=%0d", free_phys_i, rat_i);
+                                bad=bad+1;
+                                free_list_error_seen=1'b1;
+                            end
+                        end
+                        for (rob_i=0; rob_i<8; rob_i=rob_i+1) begin
+                            if (dut.rob.valid_mem[rob_i] && (dut.rob_old_phys_mem[rob_i] != 0) &&
+                                (free_phys_i == dut.rob_old_phys_mem[rob_i])) begin
+                                $display("FREE_BITMAP_ROB_OLD_FAIL phys=%0d rob_slot=%0d", free_phys_i, rob_i);
+                                bad=bad+1;
+                                free_list_error_seen=1'b1;
+                            end
                         end
                     end
-                    for (rat_i=0; rat_i<32; rat_i=rat_i+1) begin
-                        if (free_phys_i == dut.rename.rat[rat_i]) begin
-                            $display("FREE_LIST_RAT_FAIL phys=%0d architectural=%0d", free_phys_i, rat_i);
-                            bad=bad+1;
-                            free_list_error_seen=1'b1;
-                        end
-                    end
-                    for (rob_i=0; rob_i<8; rob_i=rob_i+1) begin
-                        if (dut.rob.valid_mem[rob_i] && (dut.rob_old_phys_mem[rob_i] != 0) &&
-                            (free_phys_i == dut.rob_old_phys_mem[rob_i])) begin
-                            $display("FREE_LIST_ROB_OLD_FAIL phys=%0d rob_slot=%0d", free_phys_i, rob_i);
-                            bad=bad+1;
-                            free_list_error_seen=1'b1;
-                        end
-                    end
+                end
+                if (bitmap_count != dut.free_count) begin
+                    $display("FREE_BITMAP_COUNT_FAIL bitmap=%0d count=%0d", bitmap_count, dut.free_count);
+                    bad=bad+1;
+                    free_list_error_seen=1'b1;
                 end
             end
         end

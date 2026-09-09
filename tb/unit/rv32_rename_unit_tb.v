@@ -7,7 +7,6 @@ module rv32_rename_unit_tb #(
     localparam integer AW = $clog2(PHYS_REGS);
     localparam integer FREE = PHYS_REGS - 1;
     localparam integer CW = $clog2(PHYS_REGS + 1);
-    localparam integer PW = (FREE <= 1) ? 1 : $clog2(FREE);
     localparam integer RW = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
     reg clk, reset, rename_ready;
     reg [BE_WIDTH-1:0] valid, rd_we, rs1_used, rs2_used, rs_need, lsq_need;
@@ -18,8 +17,7 @@ module rv32_rename_unit_tb #(
     wire [(BE_WIDTH*AW)-1:0] old_phys, new_phys, out_rs1, out_rs2;
     wire [RW-1:0] count;
     wire [(32*AW)-1:0] rat_state, rrat_state;
-    wire [(FREE*AW)-1:0] free_state;
-    wire [PW-1:0] free_head, free_tail;
+    wire [PHYS_REGS-1:0] free_bitmap;
     wire [CW-1:0] free_count;
     reg commit_valid;
     reg [BE_WIDTH-1:0] commit_rd_we;
@@ -27,16 +25,15 @@ module rv32_rename_unit_tb #(
     reg [(BE_WIDTH*AW)-1:0] commit_old, commit_new;
     reg restore_valid;
     reg [(32*AW)-1:0] restore_rat;
-    reg [(FREE*AW)-1:0] restore_free_state;
-    reg [PW-1:0] restore_head, restore_tail;
+    reg [PHYS_REGS-1:0] restore_free_bitmap;
     reg [CW-1:0] restore_count;
     integer bad;
     integer lane;
     integer exhaust_cycles;
     reg [(32*AW)-1:0] saved_rat;
-    reg [(FREE*AW)-1:0] saved_free_state;
-    reg [PW-1:0] saved_head, saved_tail;
+    reg [PHYS_REGS-1:0] saved_free_bitmap;
     reg [CW-1:0] saved_count;
+    integer expected_phys;
 
     rv32_rename_unit #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS)) dut (
         .clk_i(clk), .reset_i(reset), .rename_ready_i(rename_ready),
@@ -45,9 +42,9 @@ module rv32_rename_unit_tb #(
         .rob_free_count_i(rob_free), .rs_free_count_i(rs_free), .lsq_free_count_i(lsq_free),
         .rename_valid_o(out_valid), .rename_rd_we_o(out_rd_we), .rename_rd_o(out_rd), .rename_old_phys_o(old_phys),
         .rename_new_phys_o(new_phys), .rename_rs1_phys_o(out_rs1), .rename_rs2_phys_o(out_rs2), .rename_count_o(count),
-        .rat_state_o(rat_state), .rrat_state_o(rrat_state), .free_list_state_o(free_state), .free_head_o(free_head), .free_tail_o(free_tail), .free_count_o(free_count),
+        .rat_state_o(rat_state), .rrat_state_o(rrat_state), .free_bitmap_state_o(free_bitmap), .free_count_o(free_count),
         .commit_valid_i(commit_valid), .commit_rd_we_i(commit_rd_we), .commit_rd_i(commit_rd), .commit_old_phys_i(commit_old), .commit_new_phys_i(commit_new),
-        .restore_valid_i(restore_valid), .restore_rat_i(restore_rat), .restore_free_list_i(restore_free_state), .restore_free_head_i(restore_head), .restore_free_tail_i(restore_tail), .restore_free_count_i(restore_count)
+        .restore_valid_i(restore_valid), .restore_rat_i(restore_rat), .restore_free_bitmap_i(restore_free_bitmap), .restore_free_count_i(restore_count)
     );
     initial begin clk = 0; forever #5 clk = ~clk; end
 
@@ -56,7 +53,7 @@ module rv32_rename_unit_tb #(
             valid = 0; rd_we = 0; rs1_used = 0; rs2_used = 0; rs_need = 0; lsq_need = 0;
             rd = 0; rs1 = 0; rs2 = 0; rob_free = 16'hffff; rs_free = 16'hffff; lsq_free = 16'hffff;
             commit_valid = 0; commit_rd_we = 0; commit_rd = 0; commit_old = 0; commit_new = 0;
-            restore_valid = 0; restore_rat = 0; restore_free_state = 0; restore_head = 0; restore_tail = 0; restore_count = 0;
+            restore_valid = 0; restore_rat = 0; restore_free_bitmap = 0; restore_count = 0;
         end
     endtask
     task set_decoded;
@@ -100,12 +97,15 @@ module rv32_rename_unit_tb #(
         if (count != 0 || out_valid != 0) bad = bad + 1;
 
         // Restore the checkpoint snapshot and verify allocation restarts at its head.
-        saved_rat = rat_state; saved_free_state = free_state; saved_head = free_head; saved_tail = free_tail; saved_count = free_count;
+        saved_rat = rat_state; saved_free_bitmap = free_bitmap; saved_count = free_count;
+        expected_phys = 0;
+        for (lane = PHYS_REGS - 1; lane > 0; lane = lane - 1)
+            if (saved_free_bitmap[lane]) expected_phys = lane;
         clear_inputs(); set_decoded(0, 10, 0, 0); @(posedge clk); #1; clear_inputs();
-        restore_rat = saved_rat; restore_free_state = saved_free_state; restore_head = saved_head; restore_tail = saved_tail; restore_count = saved_count;
+        restore_rat = saved_rat; restore_free_bitmap = saved_free_bitmap; restore_count = saved_count;
         restore_valid = 1; @(posedge clk); #1; restore_valid = 0;
         set_decoded(0, 10, 0, 0); #1;
-        if (new_phys[AW-1:0] != saved_free_state[(saved_head*AW) +: AW]) bad = bad + 1;
+        if (new_phys[AW-1:0] != expected_phys[AW-1:0]) bad = bad + 1;
 
         // Exhaust the free list, then prove allocation resumes after release.
         clear_inputs(); exhaust_cycles = 0;
