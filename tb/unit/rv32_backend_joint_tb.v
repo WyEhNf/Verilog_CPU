@@ -185,8 +185,8 @@ module rv32_backend_joint_tb #(
                             end
                         end
                         for (rob_i=0; rob_i<8; rob_i=rob_i+1) begin
-                            if (dut.rob.valid_mem[rob_i] && (dut.rob_old_phys_mem[rob_i] != 0) &&
-                                (free_phys_i == dut.rob_old_phys_mem[rob_i])) begin
+                            if (dut.rob.valid_mem[rob_i] && (dut.rob.old_phys_mem[rob_i] != 0) &&
+                                (free_phys_i == dut.rob.old_phys_mem[rob_i])) begin
                                 $display("FREE_BITMAP_ROB_OLD_FAIL phys=%0d rob_slot=%0d", free_phys_i, rob_i);
                                 bad=bad+1;
                                 free_list_error_seen=1'b1;
@@ -309,7 +309,7 @@ module rv32_backend_joint_tb #(
         send_inst(32'h84, `RV32IM_OP_JALR, 0, 23, 22, 0, 1, 1, 0, 0, 0, 1, 0, 0);
         recovery_branch_slot=dut.rob_tail-1;
         if (recovery_branch_slot < 0) recovery_branch_slot=recovery_branch_slot+8;
-        recovery_branch_phys=dut.rob_phys_mem[recovery_branch_slot];
+        recovery_branch_phys=dut.rob.new_phys_mem[recovery_branch_slot];
         send_inst(32'h88, `RV32IM_OP_ADDI, 99, 24, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0);
         redirect_seen=0;
         i=0;

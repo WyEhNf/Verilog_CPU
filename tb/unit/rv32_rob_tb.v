@@ -46,6 +46,12 @@ module rv32_rob_tb #(
     wire [31:0] redirect_pc;
     wire [3:0] redirect_epoch;
     wire [CP_W-1:0] checkpoint;
+    wire recovery_rd_we;
+    wire [4:0] recovery_rd;
+    wire [PHYS_AW-1:0] recovery_new_phys;
+    wire [(1<<PHYS_AW)-1:0] recovery_reclaim_bitmap;
+    wire [PHYS_AW:0] recovery_reclaim_count;
+    wire [(BE_WIDTH*PHYS_AW)-1:0] commit_old_phys, commit_new_phys;
     reg [TAG_W-1:0] store_ack_tag;
     wire halted, error;
     wire [7:0] return_value;
@@ -56,14 +62,14 @@ module rv32_rob_tb #(
     reg [TAG_W-1:0] saved_tag0, saved_tag1, saved_store_tag, saved_branch_tag, stale_tag;
     reg [TAG_W-1:0] reused_tag, current_tag;
 
-    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PHYS_AW), .CHECKPOINT_WIDTH(CP_W)) dut (
+    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(1<<PHYS_AW), .PHYS_ADDR_WIDTH(PHYS_AW), .CHECKPOINT_WIDTH(CP_W)) dut (
         .clk_i(clk), .reset_i(reset), .alloc_valid_i(alloc_valid), .alloc_pc_i(alloc_pc), .alloc_inst_i(alloc_inst), .alloc_rd_i(alloc_rd), .alloc_rd_we_i(alloc_rd_we),
         .alloc_old_phys_i(alloc_old), .alloc_new_phys_i(alloc_new), .alloc_is_store_i(alloc_store), .alloc_is_branch_i(alloc_branch), .alloc_is_halt_i(alloc_halt), .alloc_is_error_i(alloc_error), .alloc_checkpoint_i(alloc_cp),
         .alloc_ready_o(alloc_ready), .alloc_fire_o(alloc_fire), .alloc_tag_o(alloc_tag), .alloc_count_o(alloc_count),
         .completion_valid_i(cpl_valid), .completion_tag_i(cpl_tag), .completion_value_i(cpl_value), .completion_done_i(cpl_done), .completion_error_i(cpl_error), .completion_store_addr_i(cpl_addr), .completion_store_mask_i(cpl_mask), .completion_store_data_i(cpl_data),
-        .commit_ready_i(commit_ready), .commit_valid_o(commit_valid), .commit_rd_we_o(commit_rd_we), .commit_rd_o(commit_rd), .commit_pc_o(commit_pc), .commit_inst_o(commit_inst), .commit_value_o(commit_value), .commit_is_store_o(commit_store), .commit_store_addr_o(commit_addr), .commit_store_mask_o(commit_mask), .commit_store_data_o(commit_data), .commit_tag_o(commit_tag),
+        .commit_ready_i(commit_ready), .commit_valid_o(commit_valid), .commit_rd_we_o(commit_rd_we), .commit_rd_o(commit_rd), .commit_pc_o(commit_pc), .commit_inst_o(commit_inst), .commit_value_o(commit_value), .commit_is_store_o(commit_store), .commit_store_addr_o(commit_addr), .commit_store_mask_o(commit_mask), .commit_store_data_o(commit_data), .commit_tag_o(commit_tag), .commit_old_phys_o(commit_old_phys), .commit_new_phys_o(commit_new_phys),
         .store_commit_valid_o(store_valid), .store_commit_ready_i(store_ready), .store_commit_tag_o(store_tag), .store_commit_addr_o(store_addr), .store_commit_mask_o(store_mask), .store_commit_data_o(store_data), .store_ack_valid_i(store_ack_valid), .store_ack_tag_i(store_ack_tag), .store_ack_error_i(store_ack_error),
-        .recovery_valid_i(recovery_valid), .recovery_tag_i(recovery_tag), .recovery_pc_i(recovery_pc), .recovery_accept_o(recovery_accept), .redirect_valid_o(redirect_valid), .redirect_pc_o(redirect_pc), .redirect_epoch_o(redirect_epoch), .checkpoint_restore_valid_o(checkpoint_valid), .checkpoint_restore_o(checkpoint),
+        .recovery_valid_i(recovery_valid), .recovery_tag_i(recovery_tag), .recovery_pc_i(recovery_pc), .recovery_accept_o(recovery_accept), .redirect_valid_o(redirect_valid), .redirect_pc_o(redirect_pc), .redirect_epoch_o(redirect_epoch), .checkpoint_restore_valid_o(checkpoint_valid), .checkpoint_restore_o(checkpoint), .recovery_rd_we_o(recovery_rd_we), .recovery_rd_o(recovery_rd), .recovery_new_phys_o(recovery_new_phys), .recovery_reclaim_bitmap_o(recovery_reclaim_bitmap), .recovery_reclaim_count_o(recovery_reclaim_count),
         .halted_o(halted), .error_o(error), .return_value_o(return_value), .head_o(head), .tail_o(tail), .occupancy_o(occupancy)
     );
     initial begin clk = 0; forever #5 clk = ~clk; end
@@ -123,7 +129,9 @@ module rv32_rob_tb #(
         clear_inputs(); alloc_one(0, 24, 3); #1; stale_tag = alloc_tag[0 +: TAG_W]; @(posedge clk); #1; clear_inputs();
         recovery_valid[0] = 1; recovery_tag[0 +: TAG_W] = saved_branch_tag; recovery_pc[31:0] = 32'h200;
         complete_one(0, saved_branch_tag, 33); #1;
-        if (!recovery_accept || !redirect_valid || redirect_pc != 32'h200 || !checkpoint_valid || checkpoint != 32'hcafe) bad = bad + 1;
+        if (!recovery_accept || !redirect_valid || redirect_pc != 32'h200 || !checkpoint_valid || checkpoint != 32'hcafe ||
+            recovery_rd_we || recovery_rd != 0 || recovery_new_phys != 1 ||
+            recovery_reclaim_count != 1 || !recovery_reclaim_bitmap[4]) bad = bad + 1;
         @(posedge clk); #1; clear_inputs();
         if (occupancy != 2 || !dut.ready_mem[saved_branch_tag[3 +: SLOT_W]] ||
             dut.value_mem[saved_branch_tag[3 +: SLOT_W]] != 33) bad = bad + 1;
