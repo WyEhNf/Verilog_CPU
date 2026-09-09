@@ -78,6 +78,7 @@ module rv32_rob #(
     output reg                          recovery_rd_we_o,
     output reg  [4:0]                   recovery_rd_o,
     output reg  [PHYS_ADDR_WIDTH-1:0]   recovery_new_phys_o,
+    output reg  [31:0]                  recovery_source_pc_o,
     output reg  [PHYS_REGS-1:0]         recovery_reclaim_bitmap_o,
     output reg  [((PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1))-1:0] recovery_reclaim_count_o,
 
@@ -273,6 +274,7 @@ module rv32_rob #(
         recovery_rd_we_o = 1'b0;
         recovery_rd_o = 5'b0;
         recovery_new_phys_o = {PHYS_ADDR_WIDTH{1'b0}};
+        recovery_source_pc_o = 32'b0;
         recovery_reclaim_bitmap_o = {PHYS_REGS{1'b0}};
         recovery_reclaim_count_o = 0;
         if (recovery_found) begin
@@ -281,6 +283,7 @@ module rv32_rob #(
             recovery_rd_we_o = rd_we_mem[chosen_slot];
             recovery_rd_o = rd_mem[chosen_slot];
             recovery_new_phys_o = new_phys_mem[chosen_slot];
+            recovery_source_pc_o = pc_mem[chosen_slot];
             for (reclaim_slot = 0; reclaim_slot < ROB_ENTRIES; reclaim_slot = reclaim_slot + 1) begin
                 reclaim_age = reclaim_slot - head_reg;
                 if (reclaim_age < 0) reclaim_age = reclaim_age + ROB_ENTRIES;
