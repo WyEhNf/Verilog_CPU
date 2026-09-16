@@ -4,6 +4,7 @@ rtl/cache/rv32_icache.v
 rtl/cache/rv32_dcache.v
 rtl/cache/rv32_cache_stats.v
 rtl/memory/rv32_memory_bridge.v
+rtl/memory/rv32_uncached_memory.v
 rtl/frontend/rv32_fetch_frontend.v
 rtl/rv32i_alu.v
 rtl/rv32m_multiplier.v
