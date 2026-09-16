@@ -10,6 +10,7 @@ module cpu_core #(
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer RS_ENTRIES = 8,
     parameter integer LSQ_ENTRIES = 8,
+    parameter integer ENABLE_CACHE_STATS = 0,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16)
 ) (
@@ -376,16 +377,20 @@ module cpu_core #(
          .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target)
     );
 
-    rv32_cache_stats stats (
-        .clk_i(clk), .reset_i(reset), .i_event_request_i(ic_event_request), .i_event_hit_i(ic_event_hit),
-        .i_event_miss_i(ic_event_miss), .i_event_refill_i(ic_event_refill), .i_event_stall_i(ic_event_stall),
-        .d_event_request_i(dc_event_request), .d_event_hit_i(dc_event_hit), .d_event_miss_i(dc_event_miss),
-        .d_event_refill_i(dc_event_refill), .d_event_writeback_i(dc_event_writeback), .d_event_stall_i(dc_event_stall),
-        .i_mem_request_fire_i(1'b0), .d_mem_read_fire_i(1'b0), .d_mem_write_fire_i(1'b0),
-        .i_request_count_o(), .i_hit_count_o(), .i_miss_count_o(), .i_refill_count_o(), .i_stall_count_o(),
-        .d_request_count_o(), .d_hit_count_o(), .d_miss_count_o(), .d_refill_count_o(), .d_writeback_count_o(),
-        .d_stall_count_o(), .i_mem_request_count_o(), .d_mem_read_count_o(), .d_mem_write_count_o()
-    );
+    generate
+        if (ENABLE_CACHE_STATS != 0) begin : gen_cache_stats
+            rv32_cache_stats stats (
+                .clk_i(clk), .reset_i(reset), .i_event_request_i(ic_event_request), .i_event_hit_i(ic_event_hit),
+                .i_event_miss_i(ic_event_miss), .i_event_refill_i(ic_event_refill), .i_event_stall_i(ic_event_stall),
+                .d_event_request_i(dc_event_request), .d_event_hit_i(dc_event_hit), .d_event_miss_i(dc_event_miss),
+                .d_event_refill_i(dc_event_refill), .d_event_writeback_i(dc_event_writeback), .d_event_stall_i(dc_event_stall),
+                .i_mem_request_fire_i(1'b0), .d_mem_read_fire_i(1'b0), .d_mem_write_fire_i(1'b0),
+                .i_request_count_o(), .i_hit_count_o(), .i_miss_count_o(), .i_refill_count_o(), .i_stall_count_o(),
+                .d_request_count_o(), .d_hit_count_o(), .d_miss_count_o(), .d_refill_count_o(), .d_writeback_count_o(),
+                .d_stall_count_o(), .i_mem_request_count_o(), .d_mem_read_count_o(), .d_mem_write_count_o()
+            );
+        end
+    endgenerate
 
     function [31:0] commit_popcount;
         input [BE_WIDTH-1:0] bits;
