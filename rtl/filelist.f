@@ -17,7 +17,6 @@ rtl/backend/rv32_rob.v
 rtl/backend/rv32_reservation_station.v
 rtl/backend/rv32m_mdu_reservation_station.v
 rtl/backend/rv32_completion_network.v
-rtl/backend/rv32_completion_bypass.v
 rtl/backend/rv32_lsq.v
 rtl/backend/rv32_backend_joint.v
 rtl/common/rv32im_tag_compare.v

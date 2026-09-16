@@ -11,6 +11,7 @@ module rv32_completion_network #(
     parameter integer FIFO_DEPTH = 16,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
+    parameter integer BYPASS = 0,
     parameter integer SLOT_WIDTH = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH),
     parameter integer COUNT_WIDTH = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH + 1)
 ) (
@@ -97,20 +98,26 @@ module rv32_completion_network #(
     reg pop_break;
     reg [BE_WIDTH-1:0] pop_fire;
     reg [SOURCES-1:0] source_fire;
-    wire [COUNT_WIDTH-1:0] occupancy_wire = count_reg;
+    reg bypass_selected;
+    reg [TAG_WIDTH-1:0] bypass_source_tag;
+    wire [COUNT_WIDTH-1:0] occupancy_wire = BYPASS ? {COUNT_WIDTH{1'b0}} : count_reg;
     assign occupancy_o = occupancy_wire;
 
     genvar entry_index;
     generate
         for (entry_index = 0; entry_index < FIFO_DEPTH; entry_index = entry_index + 1) begin : g_entry_state
-            assign entry_valid_o[entry_index] = valid_mem[entry_index] && live_mem[entry_index];
-            assign entry_tag_o[(entry_index*TAG_WIDTH) +: TAG_WIDTH] = tag_mem[entry_index];
+            assign entry_valid_o[entry_index] = BYPASS ? 1'b0 :
+                (valid_mem[entry_index] && live_mem[entry_index]);
+            assign entry_tag_o[(entry_index*TAG_WIDTH) +: TAG_WIDTH] =
+                BYPASS ? {TAG_WIDTH{1'b0}} : tag_mem[entry_index];
         end
     endgenerate
 
     always @* begin
         producer_ready_o = {SOURCES{1'b0}};
         source_fire = {SOURCES{1'b0}};
+        bypass_selected = 1'b0;
+        bypass_source_tag = {TAG_WIDTH{1'b0}};
         prefix_open = 1'b1;
         enq_count = 0;
         free_slots = FIFO_DEPTH - count_reg;
@@ -186,6 +193,58 @@ module rv32_completion_network #(
                 end
             end
         end
+
+        // Minimum-area single-CDB mode. Producers already retain their result
+        // until ready, so they directly provide the only required storage.
+        if (BYPASS != 0) begin
+            producer_ready_o = {SOURCES{1'b0}};
+            source_fire = {SOURCES{1'b0}};
+            cdb_valid_o = {BE_WIDTH{1'b0}};
+            cdb_tag_o = {(BE_WIDTH*TAG_WIDTH){1'b0}};
+            cdb_phys_rd_o = {(BE_WIDTH*PHYS_ADDR_WIDTH){1'b0}};
+            cdb_value_o = {(BE_WIDTH*32){1'b0}};
+            cdb_addr_o = {(BE_WIDTH*32){1'b0}};
+            cdb_branch_target_o = {(BE_WIDTH*32){1'b0}};
+            cdb_store_data_o = {(BE_WIDTH*32){1'b0}};
+            cdb_rd_we_o = {BE_WIDTH{1'b0}};
+            cdb_is_store_o = {BE_WIDTH{1'b0}};
+            cdb_is_branch_o = {BE_WIDTH{1'b0}};
+            cdb_branch_taken_o = {BE_WIDTH{1'b0}};
+            cdb_redirect_valid_o = {BE_WIDTH{1'b0}};
+            cdb_is_memory_o = {BE_WIDTH{1'b0}};
+            cdb_is_load_o = {BE_WIDTH{1'b0}};
+            pop_fire = {BE_WIDTH{1'b0}};
+            enq_count = 0;
+            pop_count = 0;
+            bypass_selected = 1'b0;
+            bypass_source_tag = {TAG_WIDTH{1'b0}};
+            for (source = 0; source < SOURCES; source = source + 1) begin
+                bypass_source_tag = producer_tag_i[(source*TAG_WIDTH) +: TAG_WIDTH];
+                if (producer_valid_i[source] &&
+                    (!producer_target_live_i[source] ||
+                     (live_tag_valid_i && bypass_source_tag != live_tag_i))) begin
+                    producer_ready_o[source] = !flush_i;
+                end else if (!bypass_selected && producer_valid_i[source]) begin
+                    bypass_selected = 1'b1;
+                    cdb_valid_o[0] = !flush_i;
+                    cdb_tag_o[0 +: TAG_WIDTH] = bypass_source_tag;
+                    cdb_phys_rd_o[0 +: PHYS_ADDR_WIDTH] =
+                        producer_phys_rd_i[(source*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
+                    cdb_value_o[0 +: 32] = producer_value_i[(source*32) +: 32];
+                    cdb_addr_o[0 +: 32] = producer_addr_i[(source*32) +: 32];
+                    cdb_branch_target_o[0 +: 32] = producer_branch_target_i[(source*32) +: 32];
+                    cdb_store_data_o[0 +: 32] = producer_store_data_i[(source*32) +: 32];
+                    cdb_rd_we_o[0] = producer_rd_we_i[source] && !producer_is_store_i[source];
+                    cdb_is_store_o[0] = producer_is_store_i[source];
+                    cdb_is_branch_o[0] = producer_is_branch_i[source];
+                    cdb_branch_taken_o[0] = producer_branch_taken_i[source];
+                    cdb_redirect_valid_o[0] = producer_redirect_valid_i[source];
+                    cdb_is_memory_o[0] = producer_is_memory_i[source];
+                    cdb_is_load_o[0] = producer_is_load_i[source];
+                    producer_ready_o[source] = !flush_i && cdb_ready_i[0];
+                end
+            end
+        end
     end
 
     assign prf_write_valid_o = cdb_valid_o & cdb_rd_we_o;
@@ -200,7 +259,15 @@ module rv32_completion_network #(
     assign wakeup_value_o = cdb_value_o;
 
     always @(posedge clk_i) begin
-        if (reset_i || flush_i) begin
+        if (BYPASS != 0) begin
+            head_reg <= 0;
+            tail_reg <= 0;
+            count_reg <= 0;
+            for (slot = 0; slot < FIFO_DEPTH; slot = slot + 1) begin
+                valid_mem[slot] <= 1'b0;
+                live_mem[slot] <= 1'b0;
+            end
+        end else if (reset_i || flush_i) begin
             head_reg <= 0;
             tail_reg <= 0;
             count_reg <= 0;
