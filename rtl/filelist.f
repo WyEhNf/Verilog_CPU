@@ -7,6 +7,7 @@ rtl/memory/rv32_memory_bridge.v
 rtl/frontend/rv32_fetch_frontend.v
 rtl/rv32i_alu.v
 rtl/rv32m_multiplier.v
+rtl/rv32m_multiplier_radix4.v
 rtl/rv32m_divider.v
 rtl/rv32_physical_register_file.v
 rtl/rv32_rename_unit.v

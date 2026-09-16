@@ -132,6 +132,8 @@ def build_report(args):
             "rob_entries": args.rob_entries,
             "rs_entries": args.rs_entries,
             "lsq_entries": args.lsq_entries,
+            "cache_stats_enabled": bool(args.cache_stats),
+            "mul_impl": args.mul_impl,
         },
         "area": {
             "known_standard_cell_um2": synthesis["top_area_um2_known_cells_only"],
@@ -161,6 +163,8 @@ def main(argv=None):
     parser.add_argument("--rob-entries", type=int, required=True)
     parser.add_argument("--rs-entries", type=int, required=True)
     parser.add_argument("--lsq-entries", type=int, required=True)
+    parser.add_argument("--cache-stats", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--mul-impl", type=int, choices=(0, 1), default=0)
     parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args(argv)
 

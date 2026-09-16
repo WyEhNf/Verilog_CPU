@@ -19,8 +19,12 @@ set rob_entries [lindex $argv 3]
 set outdir      [lindex $argv 4]
 set rs_entries  [lindex $argv 5]
 set lsq_entries [lindex $argv 6]
+set cache_stats [lindex $argv 7]
+set mul_impl    [lindex $argv 8]
 if {$rs_entries eq ""}  { set rs_entries 8 }
 if {$lsq_entries eq ""} { set lsq_entries 8 }
+if {$cache_stats eq ""} { set cache_stats 0 }
+if {$mul_impl eq ""}    { set mul_impl 0 }
 set libdir      "third_party/asap7/lib"
 
 file mkdir $outdir
@@ -35,7 +39,8 @@ close $f
 read_verilog -I rtl {*}$rtl_files
 chparam -set FE_WIDTH $fe_width -set BE_WIDTH $be_width \
         -set PHYS_REGS $phys_regs -set ROB_ENTRIES $rob_entries \
-        -set RS_ENTRIES $rs_entries -set LSQ_ENTRIES $lsq_entries cpu_core
+        -set RS_ENTRIES $rs_entries -set LSQ_ENTRIES $lsq_entries \
+        -set ENABLE_CACHE_STATS $cache_stats -set MUL_IMPL $mul_impl cpu_core
 hierarchy -check -top cpu_core
 procs
 opt

@@ -147,7 +147,7 @@ module rv32_backend_joint_tb #(
     task release_held_load_with_mul;
         begin
             while (!held_load_valid) begin @(posedge clk); #1; end
-            while (!dut.mdu.multiplier.s2_valid) begin @(posedge clk); #1; end
+            while (!dut.mdu.gen_wallace_multiplier.multiplier.s2_valid) begin @(posedge clk); #1; end
             @(negedge clk);
             resp_valid=1'b1; resp_error=inject_load_error; resp_lsq_tag=held_load_lsq_tag;
             resp_addr=held_load_addr; resp_line_valid=1'b1; resp_line=held_load_line; resp_word=held_load_word;

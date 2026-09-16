@@ -8,7 +8,8 @@ module cpu_core_image_tb #(
     parameter integer PHYS_REGS = 48,
     parameter integer ROB_ENTRIES = 16,
     parameter integer RS_ENTRIES = 4,
-    parameter integer LSQ_ENTRIES = 4
+    parameter integer LSQ_ENTRIES = 4,
+    parameter integer MUL_IMPL = 0
 );
     reg clk;
     reg reset;
@@ -62,7 +63,8 @@ module cpu_core_image_tb #(
         .PHYS_REGS(PHYS_REGS),
         .ROB_ENTRIES(ROB_ENTRIES),
         .RS_ENTRIES(RS_ENTRIES),
-        .LSQ_ENTRIES(LSQ_ENTRIES)
+        .LSQ_ENTRIES(LSQ_ENTRIES),
+        .MUL_IMPL(MUL_IMPL)
     ) dut (
         .clk(clk), .reset(reset), .halted(halted), .error(error),
         .return_value(return_value), .cycles(cycles), .instret(instret),

@@ -4,7 +4,8 @@ module cpu_core_h00_tb #(
     parameter integer FE_WIDTH = 1,
     parameter integer BE_WIDTH = 1,
     parameter integer PHYS_REGS = 64,
-    parameter integer ROB_ENTRIES = 32
+    parameter integer ROB_ENTRIES = 32,
+    parameter integer ENABLE_CACHE_STATS = 0
 );
 
     reg clk;
@@ -17,7 +18,8 @@ module cpu_core_h00_tb #(
         .FE_WIDTH(FE_WIDTH),
         .BE_WIDTH(BE_WIDTH),
         .PHYS_REGS(PHYS_REGS),
-        .ROB_ENTRIES(ROB_ENTRIES)
+        .ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLE_CACHE_STATS(ENABLE_CACHE_STATS)
     ) dut (
         .clk(clk),
         .reset(reset),
