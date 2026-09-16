@@ -134,6 +134,7 @@ def build_report(args):
             "lsq_entries": args.lsq_entries,
             "cache_stats_enabled": bool(args.cache_stats),
             "caches_enabled": bool(args.caches),
+            "predictor_enabled": bool(args.predictor),
             "mul_impl": args.mul_impl,
         },
         "area": {
@@ -166,6 +167,7 @@ def main(argv=None):
     parser.add_argument("--lsq-entries", type=int, required=True)
     parser.add_argument("--cache-stats", type=int, choices=(0, 1), default=0)
     parser.add_argument("--caches", type=int, choices=(0, 1), default=1)
+    parser.add_argument("--predictor", type=int, choices=(0, 1), default=1)
     parser.add_argument("--mul-impl", type=int, choices=(0, 1), default=0)
     parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args(argv)
