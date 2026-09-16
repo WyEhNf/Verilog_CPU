@@ -13,6 +13,7 @@ module cpu_core_image_tb #(
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
+    parameter integer SHIFT_IMPL = 0,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16)
 );
@@ -73,6 +74,7 @@ module cpu_core_image_tb #(
         .ENABLE_PREDICTOR(ENABLE_PREDICTOR),
         .FETCH_QUEUE_DEPTH(FETCH_QUEUE_DEPTH),
         .MUL_IMPL(MUL_IMPL),
+        .SHIFT_IMPL(SHIFT_IMPL),
         .COMPLETION_DEPTH(COMPLETION_DEPTH)
     ) dut (
         .clk(clk), .reset(reset), .halted(halted), .error(error),
