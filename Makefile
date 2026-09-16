@@ -28,6 +28,7 @@ ROB_ENTRIES ?= 32
 RS_ENTRIES ?= 8
 LSQ_ENTRIES ?= 8
 ENABLE_CACHE_STATS ?= 0
+ENABLE_CACHES ?= 1
 MUL_IMPL ?= 0
 CFG ?= fe$(FE_WIDTH)_be$(BE_WIDTH)_p$(PHYS_REGS)_r$(ROB_ENTRIES)
 ASAP7_LIB_DIR ?= $(ROOT)/third_party/asap7/lib
@@ -87,7 +88,7 @@ join01:
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_join01_tb.vvp | findstr /C:"PASS: JOIN-01"
 
 join02:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.ENABLE_CACHES=$(ENABLE_CACHES) -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Vvp "$(VVP)" -Simulation build/cpu_core_image_tb.vvp -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
 
 # Fast full-system regression: Verilator-compiled cpu_core_image_tb.
@@ -109,7 +110,7 @@ join03-build:
 	@python tools/run_join03.py --build-only --report build/join03/build_report.json --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe"
 
 join03:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.ENABLE_CACHES=$(ENABLE_CACHES) -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb.vvp --config fe1_be1_p64_r32
 
 # JOIN-04 proves that the same full-system path executes with real two- and
@@ -285,10 +286,10 @@ asap7-maplib:
 
 synth: asap7-maplib
 	@if not exist "build\synth\$(CFG)" mkdir "build\synth\$(CFG)"
-	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG) $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL)" > "build\synth\$(CFG)\yosys.log" 2>&1
-	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)/synth.log" --memory-dump "build/synth/$(CFG)/memory_manifest.il" --output "build/synth/$(CFG)/area_audit.json" --profile ff-reference --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL)
+	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG) $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL) $(ENABLE_CACHES)" > "build\synth\$(CFG)\yosys.log" 2>&1
+	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)/synth.log" --memory-dump "build/synth/$(CFG)/memory_manifest.il" --output "build/synth/$(CFG)/area_audit.json" --profile ff-reference --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL) --caches $(ENABLE_CACHES)
 
 synth-bb: asap7-maplib
 	@if not exist "build\synth\$(CFG)_bb" mkdir "build\synth\$(CFG)_bb"
-	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL)" > "build\synth\$(CFG)_bb\yosys.log" 2>&1
-	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)_bb/synth.log" --memory-dump "build/synth/$(CFG)_bb/memory_manifest.il" --output "build/synth/$(CFG)_bb/area_audit.json" --profile logic-blackbox --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL)
+	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL) $(ENABLE_CACHES)" > "build\synth\$(CFG)_bb\yosys.log" 2>&1
+	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)_bb/synth.log" --memory-dump "build/synth/$(CFG)_bb/memory_manifest.il" --output "build/synth/$(CFG)_bb/area_audit.json" --profile logic-blackbox --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL) --caches $(ENABLE_CACHES)
