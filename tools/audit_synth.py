@@ -144,6 +144,7 @@ def build_report(args):
             "fetch_queue_depth": args.fetch_queue_depth,
             "completion_depth": args.completion_depth,
             "completion_bypass": bool(args.completion_bypass),
+            "serial_backend": bool(args.serial_backend),
             "mul_impl": args.mul_impl,
             "shift_impl": args.shift_impl,
             "phys_tag_impl": args.phys_tag_impl,
@@ -188,6 +189,7 @@ def main(argv=None):
     parser.add_argument("--fetch-queue-depth", type=int, default=16)
     parser.add_argument("--completion-depth", type=int, default=4)
     parser.add_argument("--completion-bypass", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--serial-backend", type=int, choices=(0, 1), default=0)
     parser.add_argument("--mul-impl", type=int, choices=(0, 1, 2), default=0)
     parser.add_argument("--shift-impl", type=int, choices=(0, 1), default=0)
     parser.add_argument("--phys-tag-impl", type=int, choices=(0, 1), default=0)
