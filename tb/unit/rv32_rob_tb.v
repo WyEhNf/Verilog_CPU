@@ -162,6 +162,7 @@ module rv32_rob_tb #(
         clear_inputs(); alloc_halt[0] = 1; alloc_one(0, 28, 10); alloc_halt[0] = 1; #1; stale_tag = alloc_tag[0 +: TAG_W]; @(posedge clk); #1; clear_inputs(); complete_one(0, stale_tag, 8'h5a); @(posedge clk); #1; clear_inputs();
         if (!commit_valid[0]) bad = bad + 1; @(posedge clk); #1;
         if (!halted || return_value != 8'h5a) bad = bad + 1;
+        reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0; #1;
         clear_inputs(); alloc_error[0] = 1; alloc_one(0, 32, 0); alloc_error[0] = 1; #1; stale_tag = alloc_tag[0 +: TAG_W]; @(posedge clk); #1; clear_inputs(); complete_one(0, stale_tag, 0); cpl_error[0] = 1; @(posedge clk); #1; clear_inputs(); @(posedge clk); #1;
         if (!error) bad = bad + 1;
 
