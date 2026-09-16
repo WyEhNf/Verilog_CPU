@@ -14,5 +14,11 @@ branch recovery 以 distance-from-head 选择最老的 live request，恢复该 
 checkpoint，保留 branch 及其以前的 entry，截断年轻 ROB 项并递增 epoch。恢复优先于普通
 completion、commit 和 allocation。
 
+Recovery tag 已包含 ROB slot，因此候选选择直接用 tag 中的 slot 索引 live generation，
+再比较相对 head 的 age 以选择最老 recovery；不会再为每个 lane 扫描全部 ROB entry。
+Completion 和 store-ack 的时序写回仍保留逐 entry 常量索引形式：当前小容量 FF-reference
+综合证明 variable-index 写入会增加 decoder/mux 面积，不能只按 blackbox memory 推断结果
+判断收益。
+
 验证命令：`make b03`，覆盖 BE_WIDTH=1/2/4、generation stale completion、store ordering、
 branch recovery、HALT、completion error 和 store-ack precise error。

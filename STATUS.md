@@ -30,7 +30,8 @@
   P0 面积审计、固定 completion producer、LSQ 32-bit/4-byte 相对数据重构、LSQ 重复
   转发扫描合并、completion FIFO 深度参数化，以及从 RS 到 ROB/LSQ 的 store payload
   全链路 32-bit/4-byte 收窄，并以 free bitmap 替代环形 free-list 与恢复压缩网络；P8
-  又删除了 joint 与 ROB 重复的 phys/rd 元数据表。结果和未决限制见下节。
+  又删除了 joint 与 ROB 重复的 phys/rd 元数据表，P10 将 ROB recovery lookup 改为
+  tag-slot 直接索引。结果和未决限制见下节。
 
 ## 面积优化执行批次（2026-09-08 至 2026-09-09）
 
@@ -49,6 +50,7 @@
 | P7 | free bitmap + 恢复 reserved bitmap，删除 free-list 动态压缩 | 9525.31812 | 15684 | 61236 |
 | P8 | ROB 直接提供提交 phys 元数据与恢复 reclaim bitmap，删除 joint 重复表 | 9314.03934 | 15682 | 61140 |
 | P9 | 增加 radix-4 紧凑乘法档；同源码 Wallace→radix-4 | 8618.67540 | 14636 | 61140 |
+| P10 | ROB recovery 从 tag 直接索引 slot，删除 BE×ROB 候选扫描 | 8549.18712 | 14636 | 61140 |
 
 与 Stage A 相比，P8 的已知面积下降 `6550.53156 µm²`（`41.29%`），未定价实例减少
 5412 个，manifest 中的存储位减少 5160 bit。P8 相对 P7 单步下降
@@ -105,6 +107,17 @@ P2 单独看已知面积上升，但同时减少了
   `8618.67540 µm² / 14636 unknown`，已知面积下降 `735.98382 µm²`（`7.87%`），未计价
   实例减少 1046，memory 保持 `101/61140`。JOIN-03 单发射四程序周期不变；宽配置只有
   `vmul` 回退，FE2/BE2 `1001→1069`（`6.8%`），FE4/BE4 `981→1079`（`10.0%`）。
+- P10 利用 generation-qualified ROB tag 已编码 slot 的事实，只对 `BE_WIDTH` 个 recovery
+  候选做 valid/generation/age 校验，不再让每个候选扫描全部 ROB 项。相对 P9 radix-4
+  点，blackbox 已知面积从 `8618.67540` 降至 `8549.18712 µm²`（`-69.48828`，
+  `-0.81%`），unknown 与 memory 保持 `14636` 和 `101/61140`；FF-reference 也从
+  `57804.96150` 降至 `57728.91222 µm²`（`-76.04928`，`-0.13%`）。B-03、B-09、
+  width matrix、radix-4 JOIN-03/04 均通过，代表程序周期不变。
+- P10 的更激进版本曾把 completion 和 store ack 也改成 variable-index 写入。全量版本
+  blackbox 降到 `7698.00672 µm²`，但使四组 16-entry ROB payload 重新推断为 1R1W
+  memory，manifest 增加 1600 bit，FF-reference 反升至 `58849.64766 µm²`；单独保留
+  store ack 直接索引时 FF-reference 也升到 `58824.81792 µm²`。两者均已回退，不能把
+  黑盒中移入未计价 memory 的面积当作真实收益。
 - cache stats 参数关闭实验的顶层面积前后均为 `9354.65922 µm²`。此前看到的
   `772.28802 µm²` 是未被顶层引用的独立模块统计，Yosys 原本已从 `cpu_core` 层次优化掉
   该实例；因此它不是实际面积机会。保留 `ENABLE_CACHE_STATS` 仅用于明确 production/profile
@@ -129,7 +142,8 @@ P8 小配置的已知标准单元面积热点为：ROB `1811.23`、PRF `1731.59`
 2. P9 已完成 radix-4 紧凑乘法档：面积优先的单发射点用 `MUL_IMPL=1`，宽核或乘法吞吐
    优先点保留 Wallace；后续只在需要中间 Pareto 点时再研究 17x17 分解。
 3. ROB 研究小型 branch checkpoint pool 或串行 rollback。该方向同时针对 `1811 µm²`
-   已知逻辑和 3072 bit checkpoint 黑盒，但恢复语义风险高于前两项。
+   已知逻辑和 3072 bit checkpoint 黑盒，但恢复语义风险高于前两项。P10 已先移除
+   recovery lookup 的 BE×ROB 扫描；completion/store-ack 直接索引的 FF 实验已证伪。
 4. 性能侧优先消除 D-Cache hit 路径 `pipeline_empty && outputs_free` 的全 drain；这比继续
    搬移 joint 元数据更可能让紧凑 2/2 配置越过 1.3x 周期性能门。
 5. 宽核后续再做 issue/CDB/PRF 端口解耦或分簇。P6、P8b 已证明简单搬移元数据可能反增
