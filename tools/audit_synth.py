@@ -174,7 +174,7 @@ def main(argv=None):
     parser.add_argument("--fetch-queue-depth", type=int, default=16)
     parser.add_argument("--completion-depth", type=int, default=4)
     parser.add_argument("--mul-impl", type=int, choices=(0, 1, 2), default=0)
-    parser.add_argument("--shift-impl", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--shift-impl", type=int, choices=(0, 1, 2), default=0)
     parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args(argv)
 
