@@ -1,7 +1,14 @@
 # 项目进度与跨对话接续
 
-更新时间：2026-09-09。后续对话应先读本文件，再读 `instructions.md` 和
+更新时间：2026-09-16。后续对话应先读本文件，再读 `instructions.md` 和
 `plan.md`；本文件记录已经验证的事实、当前工作树和下一步，不替代验收要求。
+
+## 当前冻结项
+
+- `pi` 由用户于 2026-09-16 明确暂时冻结；当前回归、差分和优化筛选均不得运行它，
+  也不得把跳过 `pi` 描述为 18/18 发布门完成。解除冻结后再补最终长程序验收。
+- `LH/LHU/SH` 本轮不补链路，继续保持 decoder 显式 `legal=0`。当前功能声明限定为
+  已验收的 RV32IM 算术/控制流以及 `LB/LBU/LW/SB/SW` 访存范围。
 
 ## 当前结论
 
@@ -13,14 +20,16 @@
 - 后端已经是真实的 `BE_WIDTH=1/2/4` 多发射实现，不只是接口变宽：每 lane 独立
   ALU，bundle 内 RAW rename 旁路，多分配 ROB/RS/LSQ，多路 completion/writeback，
   连续 ROB 多提交；MUL/DIV 共享一个 MDU，并按年龄选择。
-- 目前处于 JOIN-05 功能收口完成、JOIN-06 PPA/性能分析已启动的状态。不能宣称
-  整个项目最终完成：完整面积、时序和 performance/area 门尚未完成，最新多发射 RTL
-  也尚未重跑 18 个历史镜像的发布级全量回归。
+- 2026-09-16 在当前多发射 RTL 上运行了排除 `pi` 的 JOIN-02 Verilator 回归，17/17
+  镜像均以期望返回值停止；`pi` 因上述冻结未运行。C++ reference 逐条 CommitRecord
+  差分仍在补齐，因此 JOIN-02 只能记为“17 项返回值门通过、完整对拍未闭环”。
+- 目前处于 JOIN-05 功能收口完成、JOIN-06 PPA/性能分析进行中的状态。不能宣称
+  整个项目最终完成：完整面积、真实时序和 performance/area 门尚未完成。
 - 已按 `docs/area_optimization_strategy_2026-09-08.md` 开始单发射面积优化。当前已完成
   P0 面积审计、固定 completion producer、LSQ 32-bit/4-byte 相对数据重构、LSQ 重复
   转发扫描合并、completion FIFO 深度参数化，以及从 RS 到 ROB/LSQ 的 store payload
-  全链路 32-bit/4-byte 收窄，并以 free bitmap 替代环形 free-list 与恢复压缩网络；结果
-  和未决限制见下节。
+  全链路 32-bit/4-byte 收窄，并以 free bitmap 替代环形 free-list 与恢复压缩网络；P8
+  又删除了 joint 与 ROB 重复的 phys/rd 元数据表。结果和未决限制见下节。
 
 ## 面积优化执行批次（2026-09-08 至 2026-09-09）
 
@@ -88,6 +97,32 @@ P2 单独看已知面积上升，但同时减少了
   `572.07546 µm²`，joint 减少 `783.35424 µm²`，净下降 `211.27878 µm²`；memory
   数量从 103 降至 101。B-03、B-09、lint、JOIN-03、JOIN-04、JOIN-05 均通过，
   9 组配置的周期与 P7 基线一致。P8 审计仍为 `INCOMPLETE`，不可当作完整芯片面积。
+- P8b 曾进一步删除 joint 的 `rob_pc_mem`，改由 ROB 在恢复选择后输出 source PC。
+  B-03/B-09 通过，memory/bits 从 P8 的 `101/61140` 降至 `100/60628`，但已知面积升至
+  `9381.80718 µm²`，比 P8 增加 `67.76784 µm²`（`0.73%`）。该实验已回退；结论是当前
+  综合口径下，恢复路径新增的 ROB PC 读取 mux 抵消了 512 bit 重复存储的收益。
+
+### 2026-09-16 面积方向复核
+
+P8 小配置的已知标准单元面积热点为：ROB `1811.23`、PRF `1731.59`、乘法器
+`1086.02`、LSQ `1061.57`、D-Cache `1002.35`、cache stats `772.29 µm²`。由于仍有
+8518 个 `$_MUX_`、6817 个 `$_NOT_` 和 101 个 `$mem_v2` 未定价，这个排序只用于同流程
+定位，不是 `A_total`。
+
+当前价值排序：
+
+1. 先补全综合账本并让最新 P8 的性能点、面积点使用同一源码；旧 JOIN-06 面积不可继续
+   与最新周期结果混用。
+2. 生产面积配置移除或参数关闭输出全悬空的 `rv32_cache_stats`；保留独立 profile 配置，
+   这是低风险、约占当前已知面积 8.3% 的直接机会。
+3. 乘法器增加紧凑实现档（优先比较 radix-4 iterative 与 17x17 分解），当前 Wallace 树
+   保留为吞吐档。不能只看面积，必须用 `vmul/m_isa_smoke` 记录周期变化。
+4. ROB 研究小型 branch checkpoint pool 或串行 rollback。该方向同时针对 `1811 µm²`
+   已知逻辑和 3072 bit checkpoint 黑盒，但恢复语义风险高于前两项。
+5. 性能侧优先消除 D-Cache hit 路径 `pipeline_empty && outputs_free` 的全 drain；这比继续
+   搬移 joint 元数据更可能让紧凑 2/2 配置越过 1.3x 周期性能门。
+6. 宽核后续再做 issue/CDB/PRF 端口解耦或分簇。P6、P8b 已证明简单搬移元数据可能反增
+   mux 面积，不再重复。
 
 ## 本轮实现
 
@@ -129,10 +164,11 @@ P2 单独看已知面积上升，但同时减少了
 - `make join04`：双发射和四发射各 4 个程序全部通过。
 - `make join05`：9 个配置、27 次整机执行全部通过。机器可读报告位于被忽略的
   `build/join05/report.json`，可随时重生成。
-- JOIN-06 blackbox ASAP7 已完成同容量的 1/1 与 2/2：外围逻辑面积分别为
-  26959.5135 和 37324.8 um2，面积倍数约 1.384x。两份报告仍有 104 个 `$mem_v2`
-  未计面积，且当前脚本没有输出可用的 ABC delay，因此这些数字只能按同口径比较，
-  不能当作完整芯片面积/时序结论。
+- JOIN-06 blackbox ASAP7 已有 1/1、2/2、4/4 三点报告，已知外围逻辑面积分别为
+  26959.5135、37324.8、113312.8294 um2；对应四程序几何平均周期加速约为
+  1.000x、1.248x、1.377x。但这些综合产物早于最新 P8 面积优化，且仍有
+  104/105/107 个 `$mem_v2` 未计面积，也没有可用的真实 STA。它们只能证明旧版本宽度
+  扩展趋势，不能与最新性能报告拼接成最终 Pareto 结论。
 
 JOIN-04 代表配置结果（cycles/instret）：
 
@@ -160,7 +196,9 @@ accumulate 在 FE4 下不再退化，但需要进一步采集 free-list stall、
 
 ## 工作树注意事项
 
-- 工作树原本就有未提交改动和未跟踪文档；不要 reset、checkout 或覆盖用户改动。
+- 2026-09-16 正在把此前未提交的多发射、面积优化、回归工具和文档整理为可审计提交；
+  完成前不要 reset、checkout 或覆盖共享工作树。外部研究论文 PDF 只保留本地副本并由
+  `.gitignore` 排除，不作为项目源码提交。
 - 本轮主要相关文件：`Makefile`、`rtl/cpu_core.v`、`rtl/rv32m_multiplier.v`、
   `rtl/backend/{rv32_backend_joint,rv32_rob,rv32_lsq,rv32_completion_network}.v`、
   `tb/integration/cpu_core_image_tb.v`、`tb/unit/rv32m_units_tb.v`、
@@ -171,18 +209,16 @@ accumulate 在 FE4 下不再退化，但需要进一步采集 free-list stall、
 
 ## 下一步执行顺序
 
-1. 在当前多发射源代码上跑 `make join02-vlt-fast`，再单独跑长耗时 `pi`，完成最新
-   18/18 历史镜像发布门；随后重跑 `make join03 join04 join05` 固化同一版本证据。
-2. 继续面积计划：P8 已完成并保留；下一步做 P8b 独立 A/B，优先尝试删除 joint 的
-   `rob_pc_mem` 重复项，由 ROB 提供窄 lookup；若读取 mux 抵消存储收益则立即回退，转向
-   Cache hit pipeline。继续避免已被 P6 证伪的“整组元数据搬入 RS/ALU”方案。
-3. 继续 JOIN-06：补跑 4/4，并对至少 1/1、2/2、4/4 运行 `make synth`，提取
-   ASAP7 面积、ABC delay，并把 cycles/IPC、预测率、Cache 命中率、stall 和面积合并
-   为 Pareto/performance-area 报告。
-4. 针对前端控制流瓶颈优化：检查多 lane 预测、bundle 内首个 taken branch 截断、
-   redirect 后 fetch queue 利用率，再用同一程序矩阵确认收益而不是只优化单点。
-5. 补齐 C++ reference 的逐条 CommitRecord 差分、宽配置性能计数器导出，以及发布级
-   日志/哈希索引。若 PPA 不达标，再根据综合层级报告选择 RS/ROB/PRF/Wallace 结构优化。
+1. 保持 `pi` 冻结，使用 17 项快速门和 JOIN-03/04/05 做当前迭代验证；修复标准
+   `make join02-vlt-fast` 的 Windows/Verilator 子 Make 构建，不再依赖手工归档。
+2. 补齐 C++ reference 的逐条 CommitRecord 差分、发布级日志/哈希索引；参考仓库保持只读。
+3. 重新用最新 P8 源码对 1/1、2/2、4/4 生成同版本性能与综合报告。当前旧 JOIN-06
+   面积不得与最新周期数据混用；完整结论仍需 SRAM 计价与真实 STA。
+4. 面积优化近期优先级：先让综合面积账本完整并去除生产核中悬空的 cache stats，随后
+   比较乘法器 Wallace/紧凑实现档和 ROB checkpoint pool/rollback；性能侧优先消除
+   D-Cache hit 路径的全流水 drain。P8b 与 P6 已证伪的结构不重复尝试。
+5. 完成宽配置性能计数器导出，再依据 frontend、ROB/RS/LSQ、MDU、Cache stall 数据决定
+   是否做前端预测、容量缩减或 BE4 分簇，避免只按源码直觉优化。
 
 常用入口：`make doctor`、`make lint unit matrix`、`make b06 b09`、`make join03`、
 `make join04`、`make join05`、`make join02-vlt-fast`、`make synth`、`make synth-bb`。
