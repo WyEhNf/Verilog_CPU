@@ -12,6 +12,7 @@ module rv32_backend_joint #(
     parameter integer RS_ENTRIES = 8,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer MUL_IMPL = 0,
+    parameter integer SHIFT_IMPL = 0,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16),
     parameter integer TAG_WIDTH = 1 + 2 +
@@ -683,7 +684,7 @@ module rv32_backend_joint #(
     genvar alu_lane;
     generate
         for (alu_lane = 0; alu_lane < BE_WIDTH; alu_lane = alu_lane + 1) begin : g_alu
-            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW)) alu (
+            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL)) alu (
                 .clk_i(clk_i), .reset_i(reset_i), .flush_i(alu_flush_r[alu_lane]),
                 .issue_valid_i(rs_issue_valid[alu_lane] && !rs_issue_is_mdu[alu_lane]),
                 .issue_ready_o(alu_issue_ready[alu_lane]),

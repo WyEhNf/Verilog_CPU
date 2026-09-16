@@ -8,7 +8,8 @@ module rv32i_alu #(
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
-    parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH
+    parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH,
+    parameter integer SHIFT_IMPL = 0
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -96,11 +97,27 @@ module rv32i_alu #(
     reg adder_subtract;
     reg [31:0] shared_sum;
     reg [31:0] pc_plus_four;
+    reg shift_busy;
+    reg [4:0] shift_remaining;
+    reg shift_right;
+    reg shift_arithmetic;
+
+    wire issue_is_shift = (issue_op_i == `RV32IM_OP_SLLI) ||
+        (issue_op_i == `RV32IM_OP_SRLI) ||
+        (issue_op_i == `RV32IM_OP_SRAI) ||
+        (issue_op_i == `RV32IM_OP_SLL) ||
+        (issue_op_i == `RV32IM_OP_SRL) ||
+        (issue_op_i == `RV32IM_OP_SRA);
+    wire [4:0] issue_shift_amount =
+        ((issue_op_i == `RV32IM_OP_SLLI) ||
+         (issue_op_i == `RV32IM_OP_SRLI) ||
+         (issue_op_i == `RV32IM_OP_SRAI)) ?
+        issue_imm_i[4:0] : issue_src2_value_i[4:0];
 
     wire result_visible = result_valid_reg &&
         (!live_tag_valid_i || (result_rob_tag_reg == live_tag_i));
     assign exec_valid_o = result_visible;
-    assign issue_ready_o = !flush_i &&
+    assign issue_ready_o = !flush_i && !shift_busy &&
         (!result_valid_reg || exec_ready_i ||
          (live_tag_valid_i && (result_rob_tag_reg != live_tag_i)));
 
@@ -242,16 +259,28 @@ module rv32i_alu #(
             `RV32IM_OP_XORI: begin calc_value = issue_src1_value_i ^ issue_imm_i; calc_rd_we = 1'b1; end
             `RV32IM_OP_ORI: begin calc_value = issue_src1_value_i | issue_imm_i; calc_rd_we = 1'b1; end
             `RV32IM_OP_ANDI: begin calc_value = issue_src1_value_i & issue_imm_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SLLI: begin calc_value = issue_src1_value_i << issue_imm_i[4:0]; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SRLI: begin calc_value = issue_src1_value_i >> issue_imm_i[4:0]; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SRAI: begin calc_value = $signed(issue_src1_value_i) >>> issue_imm_i[4:0]; calc_rd_we = 1'b1; end
+            `RV32IM_OP_SLLI: begin calc_value = (SHIFT_IMPL == 0) ? (issue_src1_value_i << issue_imm_i[4:0]) : issue_src1_value_i; calc_rd_we = 1'b1; end
+            `RV32IM_OP_SRLI: begin calc_value = (SHIFT_IMPL == 0) ? (issue_src1_value_i >> issue_imm_i[4:0]) : issue_src1_value_i; calc_rd_we = 1'b1; end
+            `RV32IM_OP_SRAI: begin
+                if (SHIFT_IMPL == 0)
+                    calc_value = $signed(issue_src1_value_i) >>> issue_imm_i[4:0];
+                else
+                    calc_value = issue_src1_value_i;
+                calc_rd_we = 1'b1;
+            end
             `RV32IM_OP_SUB: begin calc_value = shared_sum; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SLL: begin calc_value = issue_src1_value_i << issue_src2_value_i[4:0]; calc_rd_we = 1'b1; end
+            `RV32IM_OP_SLL: begin calc_value = (SHIFT_IMPL == 0) ? (issue_src1_value_i << issue_src2_value_i[4:0]) : issue_src1_value_i; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLT: begin calc_value = ($signed(issue_src1_value_i) < $signed(issue_src2_value_i)) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLTU: begin calc_value = (issue_src1_value_i < issue_src2_value_i) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
             `RV32IM_OP_XOR: begin calc_value = issue_src1_value_i ^ issue_src2_value_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SRL: begin calc_value = issue_src1_value_i >> issue_src2_value_i[4:0]; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SRA: begin calc_value = $signed(issue_src1_value_i) >>> issue_src2_value_i[4:0]; calc_rd_we = 1'b1; end
+            `RV32IM_OP_SRL: begin calc_value = (SHIFT_IMPL == 0) ? (issue_src1_value_i >> issue_src2_value_i[4:0]) : issue_src1_value_i; calc_rd_we = 1'b1; end
+            `RV32IM_OP_SRA: begin
+                if (SHIFT_IMPL == 0)
+                    calc_value = $signed(issue_src1_value_i) >>> issue_src2_value_i[4:0];
+                else
+                    calc_value = issue_src1_value_i;
+                calc_rd_we = 1'b1;
+            end
             `RV32IM_OP_OR: begin calc_value = issue_src1_value_i | issue_src2_value_i; calc_rd_we = 1'b1; end
             `RV32IM_OP_AND: begin calc_value = issue_src1_value_i & issue_src2_value_i; calc_rd_we = 1'b1; end
             default: begin end
@@ -274,6 +303,7 @@ module rv32i_alu #(
     always @(posedge clk_i) begin
         if (reset_i || flush_i) begin
             result_valid_reg <= 1'b0;
+            shift_busy <= 1'b0;
             result_value_reg <= 32'b0;
             result_phys_rd_reg <= {PHYS_ADDR_WIDTH{1'b0}};
             result_rob_tag_reg <= {TAG_WIDTH{1'b0}};
@@ -291,13 +321,45 @@ module rv32i_alu #(
             result_mem_size_reg <= `RV32IM_MEM_NONE;
             result_mem_unsigned_reg <= 1'b0;
             result_store_data_reg <= 32'b0;
+        end else if (shift_busy) begin
+            if (live_tag_valid_i && (result_rob_tag_reg != live_tag_i)) begin
+                shift_busy <= 1'b0;
+            end else begin
+                if (shift_right) begin
+                    if (shift_arithmetic)
+                        result_value_reg <= $signed(result_value_reg) >>> 1;
+                    else
+                        result_value_reg <= result_value_reg >> 1;
+                end else begin
+                    result_value_reg <= result_value_reg << 1;
+                end
+                shift_remaining <= shift_remaining - 1'b1;
+                if (shift_remaining == 5'd1) begin
+                    shift_busy <= 1'b0;
+                    result_valid_reg <= 1'b1;
+                end
+            end
         end else if (result_valid_reg && live_tag_valid_i && (result_rob_tag_reg != live_tag_i) && !exec_ready_i) begin
             // A stale completion cannot remain buffered when the live-tag
             // authority has already moved on, even under output backpressure.
             result_valid_reg <= 1'b0;
         end else if (issue_ready_o) begin
             if (issue_valid_i) begin
-                result_valid_reg <= issue_target_live_i && issue_rob_tag_i[0];
+                if ((SHIFT_IMPL != 0) && issue_is_shift &&
+                    issue_target_live_i && issue_rob_tag_i[0]) begin
+                    result_valid_reg <= (issue_shift_amount == 0);
+                    shift_busy <= (issue_shift_amount != 0);
+                    shift_remaining <= issue_shift_amount;
+                    shift_right <= (issue_op_i == `RV32IM_OP_SRLI) ||
+                        (issue_op_i == `RV32IM_OP_SRAI) ||
+                        (issue_op_i == `RV32IM_OP_SRL) ||
+                        (issue_op_i == `RV32IM_OP_SRA);
+                    shift_arithmetic <= (issue_op_i == `RV32IM_OP_SRAI) ||
+                        (issue_op_i == `RV32IM_OP_SRA);
+                end else begin
+                    result_valid_reg <= issue_target_live_i && issue_rob_tag_i[0];
+                    shift_busy <= 1'b0;
+                end
                 result_value_reg <= calc_value;
                 result_phys_rd_reg <= issue_phys_rd_i;
                 result_rob_tag_reg <= issue_rob_tag_i;
