@@ -27,6 +27,8 @@ set fetch_queue_depth [lindex $argv 11]
 set completion_depth [lindex $argv 12]
 set shift_impl [lindex $argv 13]
 set phys_tag_impl [lindex $argv 14]
+set generation_width [lindex $argv 15]
+set checkpoint_impl [lindex $argv 16]
 if {$rs_entries eq ""}  { set rs_entries 8 }
 if {$lsq_entries eq ""} { set lsq_entries 8 }
 if {$cache_stats eq ""} { set cache_stats 0 }
@@ -37,6 +39,8 @@ if {$fetch_queue_depth eq ""} { set fetch_queue_depth 16 }
 if {$completion_depth eq ""} { set completion_depth 4 }
 if {$shift_impl eq ""} { set shift_impl 0 }
 if {$phys_tag_impl eq ""} { set phys_tag_impl 0 }
+if {$generation_width eq ""} { set generation_width 8 }
+if {$checkpoint_impl eq ""} { set checkpoint_impl 0 }
 set libdir      "_asap7_lib_filtered"
 
 file mkdir $outdir
@@ -58,7 +62,9 @@ chparam -set FE_WIDTH $fe_width -set BE_WIDTH $be_width \
         -set FETCH_QUEUE_DEPTH $fetch_queue_depth \
         -set COMPLETION_DEPTH $completion_depth \
         -set SHIFT_IMPL $shift_impl \
-        -set PHYS_TAG_IMPL $phys_tag_impl cpu_core
+        -set PHYS_TAG_IMPL $phys_tag_impl \
+        -set GENERATION_WIDTH $generation_width \
+        -set CHECKPOINT_IMPL $checkpoint_impl cpu_core
 hierarchy -check -top cpu_core
 procs
 opt
