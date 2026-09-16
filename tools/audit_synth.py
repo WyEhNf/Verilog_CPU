@@ -135,6 +135,8 @@ def build_report(args):
             "cache_stats_enabled": bool(args.cache_stats),
             "caches_enabled": bool(args.caches),
             "predictor_enabled": bool(args.predictor),
+            "fetch_queue_depth": args.fetch_queue_depth,
+            "completion_depth": args.completion_depth,
             "mul_impl": args.mul_impl,
         },
         "area": {
@@ -168,6 +170,8 @@ def main(argv=None):
     parser.add_argument("--cache-stats", type=int, choices=(0, 1), default=0)
     parser.add_argument("--caches", type=int, choices=(0, 1), default=1)
     parser.add_argument("--predictor", type=int, choices=(0, 1), default=1)
+    parser.add_argument("--fetch-queue-depth", type=int, default=16)
+    parser.add_argument("--completion-depth", type=int, default=4)
     parser.add_argument("--mul-impl", type=int, choices=(0, 1, 2), default=0)
     parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args(argv)
