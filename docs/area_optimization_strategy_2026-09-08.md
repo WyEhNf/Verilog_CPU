@@ -191,6 +191,12 @@ joint 当前另建了按 ROB 深度的 `rob_to_lsq`、phys、old_phys、rd、rd_
 - RS 当前每项有两份 32-bit operand、两份完整 tag 和 32-bit age。把 age 改为 ROB slot/generation 或较窄的环形序号；不能简单截短全局 counter 导致回绕乱序。
 - 预计算一次 branch younger mask，供 RS、completion、producer、LSQ 使用；注意共享大扇出与局部复制之间的物理权衡。
 
+2026-09-16 实施结果：先只对 recovery 候选采用 tag-slot 直接索引，P9 radix-4 小配置的
+blackbox 已知面积从 `8618.67540` 降到 `8549.18712 µm²`，FF-reference 从
+`57804.96150` 降到 `57728.91222 µm²`，两个口径同向。completion/store-ack 的
+variable-index 写入会让小 ROB payload 转为未计价 memory，并使 FF-reference 上升，已回退；
+后续不能把这种 blackbox 数字下降误报为面积收益。
+
 ### 5.7 PRF 和 RS 组织
 
 当前 PRF 在 BE=1 已经是 2R1W，因此“把单发射 PRF 改成 2R1W”没有新增收益。优先做以下改动：
