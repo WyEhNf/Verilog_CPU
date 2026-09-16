@@ -253,15 +253,17 @@ module rv32_rob #(
         chosen_age = ROB_ENTRIES + 1;
         chosen_slot = 0;
         for (recovery_lane = 0; recovery_lane < BE_WIDTH; recovery_lane = recovery_lane + 1) begin
-            for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
-                age = slot_index - head_reg;
-                if (age < 0) age = age + ROB_ENTRIES;
-                if (recovery_valid_i[recovery_lane] && tag_matches(recovery_tag_i[(recovery_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index) &&
-                    (age < occupancy_reg) && (!recovery_found || age < chosen_age)) begin
-                    recovery_found = 1'b1;
-                    chosen_age = age;
-                    chosen_slot = slot_index;
-                end
+            // A generation-qualified ROB tag already carries its slot.  Use
+            // that slot directly and compare only the BE_WIDTH candidates.
+            recovery_slot = recovery_tag_i[(recovery_lane*TAG_WIDTH) + SLOT_LSB +: SLOT_WIDTH];
+            age = recovery_slot - head_reg;
+            if (age < 0) age = age + ROB_ENTRIES;
+            if (recovery_valid_i[recovery_lane] &&
+                tag_matches(recovery_tag_i[(recovery_lane*TAG_WIDTH) +: TAG_WIDTH], recovery_slot) &&
+                (age < occupancy_reg) && (!recovery_found || age < chosen_age)) begin
+                recovery_found = 1'b1;
+                chosen_age = age;
+                chosen_slot = recovery_slot;
             end
         end
         recovery_accept_o = recovery_found;
