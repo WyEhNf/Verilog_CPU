@@ -11,7 +11,8 @@ module rv32_rob #(
     parameter integer SLOT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES),
     parameter integer GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH,
     parameter integer TAG_WIDTH = 1 + 2 + SLOT_WIDTH + GENERATION_WIDTH,
-    parameter integer CHECKPOINT_WIDTH = 1024
+    parameter integer CHECKPOINT_WIDTH = 1024,
+    parameter integer CHECKPOINT_IMPL = 0
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -89,7 +90,10 @@ module rv32_rob #(
     output wire [((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1))-1:0] occupancy_o,
     output wire [ROB_ENTRIES-1:0]       entry_valid_o,
     output wire [(ROB_ENTRIES*GENERATION_WIDTH)-1:0] entry_generation_o,
-    output wire [(ROB_ENTRIES*PHYS_ADDR_WIDTH)-1:0] entry_new_phys_o
+    output wire [(ROB_ENTRIES*PHYS_ADDR_WIDTH)-1:0] entry_new_phys_o,
+    output wire [ROB_ENTRIES-1:0] entry_rd_we_o,
+    output wire [(ROB_ENTRIES*5)-1:0] entry_rd_o,
+    output wire [(ROB_ENTRIES*PHYS_ADDR_WIDTH)-1:0] entry_old_phys_o
 );
     localparam integer COUNT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1);
     localparam integer ALLOC_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
@@ -214,6 +218,10 @@ module rv32_rob #(
                 generation_mem[entry_index];
             assign entry_new_phys_o[(entry_index*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] =
                 new_phys_mem[entry_index];
+            assign entry_rd_we_o[entry_index] = rd_we_mem[entry_index];
+            assign entry_rd_o[(entry_index*5) +: 5] = rd_mem[entry_index];
+            assign entry_old_phys_o[(entry_index*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] =
+                old_phys_mem[entry_index];
         end
     endgenerate
 
@@ -282,7 +290,8 @@ module rv32_rob #(
         recovery_reclaim_count_o = 0;
         if (recovery_found) begin
             redirect_pc_o = recovery_pc_i[0 +: 32];
-            checkpoint_restore_o = checkpoint_mem[chosen_slot];
+            if (CHECKPOINT_IMPL == 0)
+                checkpoint_restore_o = checkpoint_mem[chosen_slot];
             recovery_rd_we_o = rd_we_mem[chosen_slot];
             recovery_rd_o = rd_mem[chosen_slot];
             recovery_new_phys_o = new_phys_mem[chosen_slot];
@@ -497,7 +506,8 @@ module rv32_rob #(
                     rd_we_mem[alloc_slot] <= alloc_rd_we_i[alloc_lane];
                     old_phys_mem[alloc_slot] <= alloc_old_phys_i[(alloc_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
                     new_phys_mem[alloc_slot] <= alloc_new_phys_i[(alloc_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
-                    checkpoint_mem[alloc_slot] <= alloc_checkpoint_i[(alloc_lane*CHECKPOINT_WIDTH) +: CHECKPOINT_WIDTH];
+                    if (CHECKPOINT_IMPL == 0)
+                        checkpoint_mem[alloc_slot] <= alloc_checkpoint_i[(alloc_lane*CHECKPOINT_WIDTH) +: CHECKPOINT_WIDTH];
                 end
             end
             head_reg <= advance_slot(head_reg, (commit_ready_i ? pop_count : 0));

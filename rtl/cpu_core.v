@@ -17,6 +17,8 @@ module cpu_core #(
     parameter integer MUL_IMPL = 0,
     parameter integer SHIFT_IMPL = 0,
     parameter integer PHYS_TAG_IMPL = 0,
+    parameter integer CHECKPOINT_IMPL = 0,
+    parameter integer GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16)
 ) (
@@ -56,7 +58,7 @@ module cpu_core #(
     localparam integer DISPATCH_LANES = (FE_WIDTH < BE_WIDTH) ? FE_WIDTH : BE_WIDTH;
     localparam integer ROB_TAG_WIDTH = 1 + 2 +
         ((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES)) +
-        `RV32IM_ROB_GENERATION_WIDTH;
+        GENERATION_WIDTH;
 
     initial begin
         if ((FE_WIDTH != 1) && (FE_WIDTH != 2) && (FE_WIDTH != 4)) begin
@@ -449,7 +451,7 @@ module cpu_core #(
     wire [BE_WIDTH*ROB_TAG_WIDTH-1:0] commit_tag;
     wire [BE_WIDTH*128-1:0] commit_store_data;
     assign commit_ready = 1'b1;
-    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
+    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),

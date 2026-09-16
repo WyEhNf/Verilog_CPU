@@ -14,6 +14,7 @@ module rv32_backend_joint #(
     parameter integer MUL_IMPL = 0,
     parameter integer SHIFT_IMPL = 0,
     parameter integer PHYS_TAG_IMPL = 0,
+    parameter integer CHECKPOINT_IMPL = 0,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16),
     parameter integer TAG_WIDTH = 1 + 2 +
@@ -100,7 +101,7 @@ module rv32_backend_joint #(
     localparam integer PAW = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS);
     localparam integer ROB_SLOT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES);
     localparam integer ROB_COUNT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1);
-    localparam integer ROB_GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH;
+    localparam integer ROB_GENERATION_WIDTH = TAG_WIDTH - ROB_SLOT_WIDTH - 3;
     localparam integer LSQ_SLOT_WIDTH = (LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES);
     localparam integer FREE_COUNT_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1);
     localparam integer CHECK_RAT_WIDTH = 32 * PAW;
@@ -172,6 +173,9 @@ module rv32_backend_joint #(
     wire [ROB_ENTRIES-1:0] rob_entry_valid;
     wire [ROB_ENTRIES*ROB_GENERATION_WIDTH-1:0] rob_entry_generation;
     wire [ROB_ENTRIES*PAW-1:0] rob_entry_new_phys;
+    wire [ROB_ENTRIES-1:0] rob_entry_rd_we;
+    wire [ROB_ENTRIES*5-1:0] rob_entry_rd;
+    wire [ROB_ENTRIES*PAW-1:0] rob_entry_old_phys;
     wire [15:0] rob_free_count = (rob_occupancy < ROB_ENTRIES) ? ROB_ENTRIES - rob_occupancy : 16'd0;
 
     wire [(2*BE_WIDTH*PAW)-1:0] prf_read_phys;
@@ -333,6 +337,9 @@ module rv32_backend_joint #(
     integer alu_recovery_slot;
     integer alu_recovery_age;
     integer alu_recovery_branch_age;
+    integer recovery_rat_age;
+    integer recovery_rat_slot;
+    integer recovery_rat_branch_age;
     reg [CHECK_RAT_WIDTH-1:0] recovery_rat_state;
     reg [PHYS_REGS-1:0] recovery_free_bitmap;
     reg [FREE_COUNT_WIDTH-1:0] recovery_free_count;
@@ -509,7 +516,31 @@ module rv32_backend_joint #(
     // restores the branch RAT checkpoint, keeps the branch's own destination,
     // and returns only destinations allocated by the killed younger suffix.
     always @* begin
-        recovery_rat_state = rob_checkpoint_restore[CHECK_RAT_WIDTH-1:0];
+        recovery_rat_state = (CHECKPOINT_IMPL == 0) ?
+            rob_checkpoint_restore[CHECK_RAT_WIDTH-1:0] : rat_state;
+        recovery_rat_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head;
+        if (recovery_rat_branch_age < 0)
+            recovery_rat_branch_age = recovery_rat_branch_age + ROB_ENTRIES;
+        if (CHECKPOINT_IMPL != 0) begin
+            // Undo the killed suffix youngest-to-oldest.  Each old-physical
+            // link restores the mapping that existed immediately before that
+            // instruction, so repeated writes to one architectural register
+            // collapse correctly without a full RAT snapshot per ROB entry.
+            for (recovery_rat_age = ROB_ENTRIES - 1; recovery_rat_age >= 0;
+                 recovery_rat_age = recovery_rat_age - 1) begin
+                recovery_rat_slot = rob_head + recovery_rat_age;
+                if (recovery_rat_slot >= ROB_ENTRIES)
+                    recovery_rat_slot = recovery_rat_slot - ROB_ENTRIES;
+                if ((recovery_rat_age > recovery_rat_branch_age) &&
+                    (recovery_rat_age < rob_occupancy) &&
+                    rob_entry_valid[recovery_rat_slot] &&
+                    rob_entry_rd_we[recovery_rat_slot] &&
+                    (rob_entry_rd[recovery_rat_slot*5 +: 5] != 0))
+                    recovery_rat_state[
+                        rob_entry_rd[recovery_rat_slot*5 +: 5]*PAW +: PAW] =
+                        rob_entry_old_phys[recovery_rat_slot*PAW +: PAW];
+            end
+        end
         if (rob_recovery_rd_we && (rob_recovery_rd != 0))
             recovery_rat_state[(rob_recovery_rd*PAW) +: PAW] = rob_recovery_new_phys;
         recovery_free_bitmap = free_bitmap_state | rob_recovery_reclaim_bitmap;
@@ -683,7 +714,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH)) rob (
+    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL)) rob (
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rob_alloc_valid), .alloc_pc_i(rob_alloc_pc), .alloc_inst_i(rob_alloc_inst), .alloc_rd_i(rob_alloc_rd),
         .alloc_rd_we_i(rename_rd_we), .alloc_old_phys_i(rob_alloc_old_phys), .alloc_new_phys_i(rob_alloc_new_phys), .alloc_is_store_i(rob_alloc_is_store),
         .alloc_is_branch_i(rob_alloc_is_branch), .alloc_is_halt_i(rob_alloc_is_halt), .alloc_is_error_i(rob_alloc_is_error), .alloc_checkpoint_i(rob_alloc_checkpoint),
@@ -694,7 +725,7 @@ module rv32_backend_joint #(
         .commit_store_addr_o(rob_commit_store_addr), .commit_store_mask_o(rob_commit_store_mask), .commit_store_data_o(rob_commit_store_data), .commit_tag_o(rob_commit_tag), .commit_old_phys_o(commit_old_phys), .commit_new_phys_o(commit_new_phys),
         .store_commit_valid_o(rob_store_commit_valid), .store_commit_ready_i(rob_store_commit_ready), .store_commit_tag_o(rob_store_commit_tag), .store_commit_addr_o(rob_store_commit_addr), .store_commit_mask_o(rob_store_commit_mask), .store_commit_data_o(rob_store_commit_data), .store_ack_valid_i(rob_store_ack_valid), .store_ack_tag_i(rob_store_ack_tag), .store_ack_error_i(lsq_store_ack_error),
         .recovery_valid_i({ {(BE_WIDTH-1){1'b0}}, branch_pending }), .recovery_tag_i({ {(BE_WIDTH-1)*TAG_WIDTH{1'b0}}, branch_pending_tag }), .recovery_pc_i({ {(BE_WIDTH-1)*32{1'b0}}, branch_pending_pc }),
-        .recovery_accept_o(rob_recovery_accept), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation), .entry_new_phys_o(rob_entry_new_phys)
+        .recovery_accept_o(rob_recovery_accept), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation), .entry_new_phys_o(rob_entry_new_phys), .entry_rd_we_o(rob_entry_rd_we), .entry_rd_o(rob_entry_rd), .entry_old_phys_o(rob_entry_old_phys)
     );
 
     rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .STORE_DATA_WIDTH(32)) rs (
