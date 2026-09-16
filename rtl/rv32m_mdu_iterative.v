@@ -70,12 +70,10 @@ module rv32m_mdu_iterative #(
 
     reg [64:0] next_state;
     reg [32:0] upper_sum;
-    reg [63:0] product_magnitude;
-    reg [63:0] product_signed;
-    reg [31:0] quotient_magnitude;
-    reg [31:0] remainder_magnitude;
-    reg [31:0] quotient_signed;
-    reg [31:0] remainder_signed;
+    reg [31:0] result_magnitude;
+    reg result_needs_negate;
+    reg result_negate_increment;
+    reg [31:0] corrected_result;
     reg [31:0] final_value;
 
     wire out_discard = out_valid && (!out_live ||
@@ -97,22 +95,29 @@ module rv32m_mdu_iterative #(
             end
         end
 
-        product_magnitude = next_state[63:0];
-        product_signed = result_negative ?
-            (~product_magnitude + 64'd1) : product_magnitude;
-        quotient_magnitude = next_state[31:0];
-        remainder_magnitude = next_state[63:32];
-        quotient_signed = result_negative ?
-            (~quotient_magnitude + 32'd1) : quotient_magnitude;
-        remainder_signed = remainder_negative ?
-            (~remainder_magnitude + 32'd1) : remainder_magnitude;
+        // All ordinary results share one 32-bit sign-correction adder.  For a
+        // negative high-half multiply, the carry into bit 32 is one exactly
+        // when the low magnitude word is zero:
+        //   (-M)[63:32] = ~M[63:32] + (M[31:0] == 0)
+        result_magnitude = next_state[31:0];
+        result_needs_negate = result_negative;
+        result_negate_increment = 1'b1;
+        if (mode_mul && (operation != `RV32IM_OP_MUL)) begin
+            result_magnitude = next_state[63:32];
+            result_negate_increment = (next_state[31:0] == 0);
+        end else if (!mode_mul &&
+                     ((operation == `RV32IM_OP_REM) ||
+                      (operation == `RV32IM_OP_REMU))) begin
+            result_magnitude = next_state[63:32];
+            result_needs_negate = remainder_negative;
+        end
+        corrected_result = result_needs_negate ?
+            (~result_magnitude + {{31{1'b0}}, result_negate_increment}) :
+            result_magnitude;
 
         final_value = 32'b0;
         if (mode_mul) begin
-            case (operation)
-                `RV32IM_OP_MUL: final_value = product_signed[31:0];
-                default: final_value = product_signed[63:32];
-            endcase
+            final_value = corrected_result;
         end else if (divide_zero) begin
             if ((operation == `RV32IM_OP_REM) || (operation == `RV32IM_OP_REMU))
                 final_value = original_a;
@@ -120,10 +125,8 @@ module rv32m_mdu_iterative #(
                 final_value = 32'hffffffff;
         end else if (signed_overflow) begin
             final_value = (operation == `RV32IM_OP_REM) ? 32'b0 : 32'h80000000;
-        end else if ((operation == `RV32IM_OP_REM) || (operation == `RV32IM_OP_REMU)) begin
-            final_value = remainder_signed;
         end else begin
-            final_value = quotient_signed;
+            final_value = corrected_result;
         end
     end
 
