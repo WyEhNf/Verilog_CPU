@@ -445,11 +445,10 @@ module rv32_rob #(
                     end
                 end
             end
-            for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
-                if (store_ack_valid_i && tag_matches(store_ack_tag_i, slot_index)) begin
-                    store_wait_mem[slot_index] <= 1'b1;
-                    if (store_ack_error_i) error_mem[slot_index] <= 1'b1;
-                end
+            recovery_slot = store_ack_tag_i[SLOT_LSB +: SLOT_WIDTH];
+            if (store_ack_valid_i && tag_matches(store_ack_tag_i, recovery_slot)) begin
+                store_wait_mem[recovery_slot] <= 1'b1;
+                if (store_ack_error_i) error_mem[recovery_slot] <= 1'b1;
             end
             if (store_commit_valid_o && store_commit_ready_i) begin
                 store_sent_mem[head_reg] <= 1'b1;
