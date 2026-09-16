@@ -9,6 +9,7 @@ module cpu_core_image_tb #(
     parameter integer ROB_ENTRIES = 16,
     parameter integer RS_ENTRIES = 4,
     parameter integer LSQ_ENTRIES = 4,
+    parameter integer ENABLE_CACHES = 1,
     parameter integer MUL_IMPL = 0
 );
     reg clk;
@@ -64,6 +65,7 @@ module cpu_core_image_tb #(
         .ROB_ENTRIES(ROB_ENTRIES),
         .RS_ENTRIES(RS_ENTRIES),
         .LSQ_ENTRIES(LSQ_ENTRIES),
+        .ENABLE_CACHES(ENABLE_CACHES),
         .MUL_IMPL(MUL_IMPL)
     ) dut (
         .clk(clk), .reset(reset), .halted(halted), .error(error),
@@ -162,9 +164,9 @@ module cpu_core_image_tb #(
                      dut.backend.lsq.store_commit_mem[dut.backend.lsq.head_reg],
                      dut.backend.lsq.request_sent_mem[dut.backend.lsq.head_reg],
                      dut.backend.lsq.response_wait_mem[dut.backend.lsq.head_reg],
-                     dut.dcache.s0_valid, dut.dcache.s1_valid, dut.dcache.s2_valid,
-                     dut.dcache.mshr_valid, dut.dcache.store_ack_valid_reg,
-                     dut.dcache.resp_valid_reg);
+                     dut.dcache_debug_s0_valid, dut.dcache_debug_s1_valid,
+                     dut.dcache_debug_s2_valid, dut.dcache_debug_mshr_valid,
+                     dut.dcache_debug_ack_valid, dut.dcache_debug_resp_valid);
             $display("STATE: branch_pending=%b alu=%b mdu_pending=%b div_busy=%b div_result=%b completion=%0d/%0d/%0d prf_ready=%016x",
                      dut.backend.branch_pending, dut.backend.g_alu[0].alu.result_valid_reg,
                      dut.backend.mdu.pending_valid, dut.backend.mdu.divider.busy_reg,
@@ -272,11 +274,14 @@ module cpu_core_image_tb #(
         if (trace_enable && dut.dcache_resp_valid)
             $display("TRACE: dcache load-resp lsq=%04x addr=%08x value=%08x error=%b", dut.dcache_resp_lsq_tag,
                      dut.dcache_resp_addr, dut.dcache_resp_word, dut.dcache_resp_error);
-        if (trace_enable && (dut.dcache.s0_valid || dut.dcache.s1_valid || dut.dcache.s2_valid || dut.dcache.mshr_valid || dut.dcache.store_ack_valid_reg))
-            $display("TRACE: dcstate s0=%b/%b s1=%b/%b s2=%b/%b hit=%b mshr=%b ack=%b resp=%b", dut.dcache.s0_valid,
-                     dut.dcache.s0_store, dut.dcache.s1_valid, dut.dcache.s1_store, dut.dcache.s2_valid,
-                     dut.dcache.s2_store, dut.dcache.s2_hit, dut.dcache.mshr_valid, dut.dcache.store_ack_valid_reg,
-                     dut.dcache.resp_valid_reg);
+        if (trace_enable && (dut.dcache_debug_s0_valid || dut.dcache_debug_s1_valid ||
+            dut.dcache_debug_s2_valid || dut.dcache_debug_mshr_valid || dut.dcache_debug_ack_valid))
+            $display("TRACE: dcstate s0=%b/%b s1=%b/%b s2=%b/%b hit=%b mshr=%b ack=%b resp=%b",
+                     dut.dcache_debug_s0_valid, dut.dcache_debug_s0_store,
+                     dut.dcache_debug_s1_valid, dut.dcache_debug_s1_store,
+                     dut.dcache_debug_s2_valid, dut.dcache_debug_s2_store,
+                     dut.dcache_debug_s2_hit, dut.dcache_debug_mshr_valid,
+                     dut.dcache_debug_ack_valid, dut.dcache_debug_resp_valid);
         if (trace_enable && (dut.redirect_valid || dut.backend.rob_recovery_accept || dut.backend.branch_pending))
             $display("TRACE: control redirect=%b pc=%08x epoch=%0d recovery=%b pending=%b frontend_pc=%08x epoch=%0d", dut.redirect_valid,
                      dut.redirect_pc, dut.redirect_epoch, dut.backend.rob_recovery_accept, dut.backend.branch_pending,
