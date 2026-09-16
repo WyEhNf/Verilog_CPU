@@ -252,10 +252,14 @@ b06:
 	@$(OSS_ENV) "$(VVP)" -N build/b06.vvp | findstr /C:"PASS: B-06 multiplier/divider"
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32m_units_tb.MUL_IMPL=1 -s rv32m_units_tb -o build/b06_radix4.vvp -c $(RTL_FILELIST) tb/unit/rv32m_units_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b06_radix4.vvp | findstr /C:"PASS: B-06 multiplier/divider"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32m_units_tb.MUL_IMPL=2 -s rv32m_units_tb -o build/b06_unified.vvp -c $(RTL_FILELIST) tb/unit/rv32m_units_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b06_unified.vvp | findstr /C:"PASS: B-06 multiplier/divider"
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32m_mdu_reservation_station_tb -o build/b06_mdu.vvp -c $(RTL_FILELIST) tb/unit/rv32m_mdu_reservation_station_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu.vvp | findstr /C:"PASS: B-06 MDU RS"
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32m_mdu_reservation_station_tb.MUL_IMPL=1 -s rv32m_mdu_reservation_station_tb -o build/b06_mdu_radix4.vvp -c $(RTL_FILELIST) tb/unit/rv32m_mdu_reservation_station_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu_radix4.vvp | findstr /C:"PASS: B-06 MDU RS"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32m_mdu_reservation_station_tb.MUL_IMPL=2 -s rv32m_mdu_reservation_station_tb -o build/b06_mdu_unified.vvp -c $(RTL_FILELIST) tb/unit/rv32m_mdu_reservation_station_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu_unified.vvp | findstr /C:"PASS: B-06 MDU RS"
 
 b07:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_completion_network_tb.BE_WIDTH=1 -s rv32_completion_network_tb -o build/b07_be1.vvp -c $(RTL_FILELIST) tb/unit/rv32_completion_network_tb.v

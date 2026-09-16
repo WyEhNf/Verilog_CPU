@@ -168,7 +168,7 @@ def main(argv=None):
     parser.add_argument("--cache-stats", type=int, choices=(0, 1), default=0)
     parser.add_argument("--caches", type=int, choices=(0, 1), default=1)
     parser.add_argument("--predictor", type=int, choices=(0, 1), default=1)
-    parser.add_argument("--mul-impl", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--mul-impl", type=int, choices=(0, 1, 2), default=0)
     parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args(argv)
 
