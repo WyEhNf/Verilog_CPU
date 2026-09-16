@@ -90,7 +90,7 @@ join02:
 # deep hierarchical references in the tb $display diagnostics visible.
 join02-vlt-build:
 	@if not exist "build\vlt" mkdir "build\vlt"
-	@set "PATH=$(ROOT)\..\mingw64\bin;%PATH%" && $(OSS_ENV) "$(VERILATOR)" --binary --timing -Wno-fatal --debug --language 1364-2005 -Irtl --top-module cpu_core_image_tb --Mdir build/vlt/obj_dir -o cpu_core_image_vlt $(RTL_FILES) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_join02_verilator.ps1 -Verilator "$(VERILATOR)" -VerilatorRoot "$(OSS_CAD_ROOT)/share/verilator" -CompilerBin "$(ROOT)/../mingw64/bin"
 
 join02-vlt: join02-vlt-build
 	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Executable build/vlt/obj_dir/cpu_core_image_vlt.exe -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
