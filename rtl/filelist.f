@@ -19,6 +19,7 @@ rtl/backend/rv32m_mdu_reservation_station.v
 rtl/backend/rv32_completion_network.v
 rtl/backend/rv32_lsq.v
 rtl/backend/rv32_backend_joint.v
+rtl/backend/rv32_serial_backend.v
 rtl/common/rv32im_tag_compare.v
 rtl/common/rv32im_fifo.v
 rtl/common/rv32im_skid_buffer.v
