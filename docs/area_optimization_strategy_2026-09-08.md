@@ -235,6 +235,11 @@ completion FIFO 当前深度固定 16，每项携带普通写回数据外，还�
 
 必须用 vmul 和 M 指令 smoke 衡量。不能因为“单发射”就认定 32-cycle MUL 可接受；vmul 正是要求中的重要程序。MUL low 结果可利用低位不需要完整 64-bit 高半部分的剪枝，但 MULH/MULHSU/MULHU 仍要求完整高位路径，是否共享硬件由 workload 决定。
 
+2026-09-16 实施结果：`MUL_IMPL=1` 已实现 16-cycle radix-4 shift/add，`MUL_IMPL=0`
+保留原 Wallace 树。P8 小配置的同源码已知面积下降 `7.87%`，单发射 JOIN-03 周期不变；
+FE2/BE2 与 FE4/BE4 的 `vmul` 分别回退 `6.8%` 和 `10.0%`，其余代表程序不变。
+因此实际配置采用“小核面积档 / 宽核吞吐档”，17x17 仅作为尚未实现的中间候选。
+
 ### 6.3 除法器
 
 现有 32-step restoring divider 面积通常不是首要热点。可做低风险收敛：删除未使用状态，如经审计确认 `signed_mode_reg/original_b_reg` 不参与结果；异常路径在 request 时直接记录最终值并缩短活动周期；乘除法共享输入/输出缓冲和 MDU 内部 adder，但不能未经仲裁直接复用主 ALU。

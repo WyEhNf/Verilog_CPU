@@ -14,9 +14,9 @@
 
 - JOIN-03、JOIN-04、JOIN-05 的功能实现已经完成。自行编译的 RV32IM 程序、双/四
   发射代表配置和全部 9 组 `FE_WIDTH x BE_WIDTH` 组合均运行通过。
-- 乘法器已经改为显式部分积 + 3:2 CSA（全加器形式的三进二出压缩器）Wallace
-  归约树；DUT 中没有行为级 `*`。三级 ready/valid 流水支持
-  `MUL/MULH/MULHSU/MULHU`、反压和 tag/物理寄存器元数据。
+- 乘法器提供两种可参数化实现：`MUL_IMPL=0` 是显式部分积 + 3:2 CSA Wallace 三级
+  流水吞吐档，`MUL_IMPL=1` 是 16-cycle radix-4 shift/add 面积档；DUT 中均没有行为级
+  `*`，且都支持 `MUL/MULH/MULHSU/MULHU`、反压和 tag/物理寄存器元数据。
 - 后端已经是真实的 `BE_WIDTH=1/2/4` 多发射实现，不只是接口变宽：每 lane 独立
   ALU，bundle 内 RAW rename 旁路，多分配 ROB/RS/LSQ，多路 completion/writeback，
   连续 ROB 多提交；MUL/DIV 共享一个 MDU，并按年龄选择。
@@ -48,6 +48,7 @@
 | P5 | RS→ALU→completion→ROB/LSQ store payload 收窄为 32/4 bit | 13513.23972 | 15623 | 61620 |
 | P7 | free bitmap + 恢复 reserved bitmap，删除 free-list 动态压缩 | 9525.31812 | 15684 | 61236 |
 | P8 | ROB 直接提供提交 phys 元数据与恢复 reclaim bitmap，删除 joint 重复表 | 9314.03934 | 15682 | 61140 |
+| P9 | 增加 radix-4 紧凑乘法档；同源码 Wallace→radix-4 | 8618.67540 | 14636 | 61140 |
 
 与 Stage A 相比，P8 的已知面积下降 `6550.53156 µm²`（`41.29%`），未定价实例减少
 5412 个，manifest 中的存储位减少 5160 bit。P8 相对 P7 单步下降
@@ -98,6 +99,16 @@ P2 单独看已知面积上升，但同时减少了
   `572.07546 µm²`，joint 减少 `783.35424 µm²`，净下降 `211.27878 µm²`；memory
   数量从 103 降至 101。B-03、B-09、lint、JOIN-03、JOIN-04、JOIN-05 均通过，
   9 组配置的周期与 P7 基线一致。P8 审计仍为 `INCOMPLETE`，不可当作完整芯片面积。
+- P9 为 MDU 增加 `MUL_IMPL`：`0` 保留 Wallace 吞吐档，`1` 选择 16-cycle radix-4
+  shift/add 面积档。为避免把 HALT 修复等后续源码变化混入收益，使用同一源码重新生成
+  Wallace 基线 `9354.65922 µm² / 15682 unknown`；radix-4 为
+  `8618.67540 µm² / 14636 unknown`，已知面积下降 `735.98382 µm²`（`7.87%`），未计价
+  实例减少 1046，memory 保持 `101/61140`。JOIN-03 单发射四程序周期不变；宽配置只有
+  `vmul` 回退，FE2/BE2 `1001→1069`（`6.8%`），FE4/BE4 `981→1079`（`10.0%`）。
+- cache stats 参数关闭实验的顶层面积前后均为 `9354.65922 µm²`。此前看到的
+  `772.28802 µm²` 是未被顶层引用的独立模块统计，Yosys 原本已从 `cpu_core` 层次优化掉
+  该实例；因此它不是实际面积机会。保留 `ENABLE_CACHE_STATS` 仅用于明确 production/profile
+  配置，不能把它计入 P9 收益。
 - P8b 曾进一步删除 joint 的 `rob_pc_mem`，改由 ROB 在恢复选择后输出 source PC。
   B-03/B-09 通过，memory/bits 从 P8 的 `101/61140` 降至 `100/60628`，但已知面积升至
   `9381.80718 µm²`，比 P8 增加 `67.76784 µm²`（`0.73%`）。该实验已回退；结论是当前
@@ -106,7 +117,8 @@ P2 单独看已知面积上升，但同时减少了
 ### 2026-09-16 面积方向复核
 
 P8 小配置的已知标准单元面积热点为：ROB `1811.23`、PRF `1731.59`、乘法器
-`1086.02`、LSQ `1061.57`、D-Cache `1002.35`、cache stats `772.29 µm²`。由于仍有
+`1086.02`、LSQ `1061.57`、D-Cache `1002.35 µm²`。cache stats 的 `772.29 µm²` 是独立
+模块统计，不属于优化前的顶层面积。由于仍有
 8518 个 `$_MUX_`、6817 个 `$_NOT_` 和 101 个 `$mem_v2` 未定价，这个排序只用于同流程
 定位，不是 `A_total`。
 
@@ -114,15 +126,13 @@ P8 小配置的已知标准单元面积热点为：ROB `1811.23`、PRF `1731.59`
 
 1. 先补全综合账本并让最新 P8 的性能点、面积点使用同一源码；旧 JOIN-06 面积不可继续
    与最新周期结果混用。
-2. 生产面积配置移除或参数关闭输出全悬空的 `rv32_cache_stats`；保留独立 profile 配置，
-   这是低风险、约占当前已知面积 8.3% 的直接机会。
-3. 乘法器增加紧凑实现档（优先比较 radix-4 iterative 与 17x17 分解），当前 Wallace 树
-   保留为吞吐档。不能只看面积，必须用 `vmul/m_isa_smoke` 记录周期变化。
-4. ROB 研究小型 branch checkpoint pool 或串行 rollback。该方向同时针对 `1811 µm²`
+2. P9 已完成 radix-4 紧凑乘法档：面积优先的单发射点用 `MUL_IMPL=1`，宽核或乘法吞吐
+   优先点保留 Wallace；后续只在需要中间 Pareto 点时再研究 17x17 分解。
+3. ROB 研究小型 branch checkpoint pool 或串行 rollback。该方向同时针对 `1811 µm²`
    已知逻辑和 3072 bit checkpoint 黑盒，但恢复语义风险高于前两项。
-5. 性能侧优先消除 D-Cache hit 路径 `pipeline_empty && outputs_free` 的全 drain；这比继续
+4. 性能侧优先消除 D-Cache hit 路径 `pipeline_empty && outputs_free` 的全 drain；这比继续
    搬移 joint 元数据更可能让紧凑 2/2 配置越过 1.3x 周期性能门。
-6. 宽核后续再做 issue/CDB/PRF 端口解耦或分簇。P6、P8b 已证明简单搬移元数据可能反增
+5. 宽核后续再做 issue/CDB/PRF 端口解耦或分簇。P6、P8b 已证明简单搬移元数据可能反增
    mux 面积，不再重复。
 
 ## 本轮实现
@@ -160,11 +170,14 @@ P8 小配置的已知标准单元面积热点为：ROB `1811.23`、PRF `1731.59`
 - `make lint`：退出码 0；本轮新增的组合逻辑 latch 告警已清除。仍有数组敏感列表、
   unused/empty pin 等非致命告警，不能把“lint 通过”解释为零告警。
 - `make unit`、`make matrix`：退出码 0。
-- `make b03 b06 b09`、随后 `make b07 b09`；P8 后再次运行 `make b03 b09`：退出码 0，覆盖 ROB、Wallace MUL/DIV、
-  completion stale-result drain 和后端恢复路径。
+- `make b03 b06 b09`、随后 `make b07 b09`；P9 后再次运行 `make b03 b06 b09`：退出码
+  0。B-06 现在分别运行 Wallace 与 radix-4 的边界值、反压、flush、四模式各 128 组随机
+  操作数，以及两种 MDU RS 集成路径。
 - `make join04`：双发射和四发射各 4 个程序全部通过。
 - `make join05`：9 个配置、27 次整机执行全部通过。机器可读报告位于被忽略的
   `build/join05/report.json`，可随时重生成。
+- P9 上 `make join03 MUL_IMPL=1` 与 `make join04 MUL_IMPL=1` 全部通过；默认 Wallace 的
+  JOIN-03 也已复跑。`make join02-vlt-fast` 的 17 个非 pi 镜像全部通过，pi 保持冻结。
 - JOIN-06 blackbox ASAP7 已有 1/1、2/2、4/4 三点报告，已知外围逻辑面积分别为
   26959.5135、37324.8、113312.8294 um2；对应四程序几何平均周期加速约为
   1.000x、1.248x、1.377x。但这些综合产物早于最新 P8 面积优化，且仍有
@@ -215,9 +228,9 @@ accumulate 在 FE4 下不再退化，但需要进一步采集 free-list stall、
    发布级日志/哈希索引；参考仓库保持只读。
 3. 重新用最新 P8 源码对 1/1、2/2、4/4 生成同版本性能与综合报告。当前旧 JOIN-06
    面积不得与最新周期数据混用；完整结论仍需 SRAM 计价与真实 STA。
-4. 面积优化近期优先级：先让综合面积账本完整并去除生产核中悬空的 cache stats，随后
-   比较乘法器 Wallace/紧凑实现档和 ROB checkpoint pool/rollback；性能侧优先消除
-   D-Cache hit 路径的全流水 drain。P8b 与 P6 已证伪的结构不重复尝试。
+4. 面积优化近期优先级：先让综合面积账本完整；乘法器 Wallace/radix-4 双档已形成
+   Pareto，下一项面积研究转向 ROB checkpoint pool/rollback。性能侧优先消除 D-Cache
+   hit 路径的全流水 drain。cache stats、P8b 与 P6 已证伪的方向不重复尝试。
 5. 完成宽配置性能计数器导出，再依据 frontend、ROB/RS/LSQ、MDU、Cache stall 数据决定
    是否做前端预测、容量缩减或 BE4 分簇，避免只按源码直觉优化。
 
