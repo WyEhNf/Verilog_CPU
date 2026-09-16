@@ -88,7 +88,8 @@ module rv32_rob #(
     output wire [SLOT_WIDTH-1:0]        tail_o,
     output wire [((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1))-1:0] occupancy_o,
     output wire [ROB_ENTRIES-1:0]       entry_valid_o,
-    output wire [(ROB_ENTRIES*GENERATION_WIDTH)-1:0] entry_generation_o
+    output wire [(ROB_ENTRIES*GENERATION_WIDTH)-1:0] entry_generation_o,
+    output wire [(ROB_ENTRIES*PHYS_ADDR_WIDTH)-1:0] entry_new_phys_o
 );
     localparam integer COUNT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1);
     localparam integer ALLOC_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
@@ -211,6 +212,8 @@ module rv32_rob #(
             assign entry_valid_o[entry_index] = valid_mem[entry_index];
             assign entry_generation_o[(entry_index*GENERATION_WIDTH) +: GENERATION_WIDTH] =
                 generation_mem[entry_index];
+            assign entry_new_phys_o[(entry_index*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] =
+                new_phys_mem[entry_index];
         end
     endgenerate
 

@@ -13,6 +13,7 @@ module rv32_backend_joint #(
     parameter integer LSQ_ENTRIES = 8,
     parameter integer MUL_IMPL = 0,
     parameter integer SHIFT_IMPL = 0,
+    parameter integer PHYS_TAG_IMPL = 0,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16),
     parameter integer TAG_WIDTH = 1 + 2 +
@@ -170,6 +171,7 @@ module rv32_backend_joint #(
     wire [ROB_COUNT_WIDTH-1:0] rob_occupancy;
     wire [ROB_ENTRIES-1:0] rob_entry_valid;
     wire [ROB_ENTRIES*ROB_GENERATION_WIDTH-1:0] rob_entry_generation;
+    wire [ROB_ENTRIES*PAW-1:0] rob_entry_new_phys;
     wire [15:0] rob_free_count = (rob_occupancy < ROB_ENTRIES) ? ROB_ENTRIES - rob_occupancy : 16'd0;
 
     wire [(2*BE_WIDTH*PAW)-1:0] prf_read_phys;
@@ -297,6 +299,7 @@ module rv32_backend_joint #(
     integer branch_capture_found;
     integer ready_lane;
     integer source_lane;
+    integer source_rob_slot;
     integer checkpoint_lane;
     integer dependency_lane;
     integer issue_lane;
@@ -585,11 +588,30 @@ module rv32_backend_joint #(
             rs_src2_value[source_lane*32 +: 32] =
                 prf_read_data[(2*source_lane+1)*32 +: 32];
             if (rename_rs1_phys[source_lane*PAW +: PAW] < PHYS_REGS)
-                rs_src1_tag[source_lane*TAG_WIDTH +: TAG_WIDTH] =
-                    phys_tag_mem[rename_rs1_phys[source_lane*PAW +: PAW]];
+                if (PHYS_TAG_IMPL == 0)
+                    rs_src1_tag[source_lane*TAG_WIDTH +: TAG_WIDTH] =
+                        phys_tag_mem[rename_rs1_phys[source_lane*PAW +: PAW]];
             if (rename_rs2_phys[source_lane*PAW +: PAW] < PHYS_REGS)
-                rs_src2_tag[source_lane*TAG_WIDTH +: TAG_WIDTH] =
-                    phys_tag_mem[rename_rs2_phys[source_lane*PAW +: PAW]];
+                if (PHYS_TAG_IMPL == 0)
+                    rs_src2_tag[source_lane*TAG_WIDTH +: TAG_WIDTH] =
+                        phys_tag_mem[rename_rs2_phys[source_lane*PAW +: PAW]];
+            if (PHYS_TAG_IMPL != 0) begin
+                for (source_rob_slot = 0; source_rob_slot < ROB_ENTRIES;
+                     source_rob_slot = source_rob_slot + 1) begin
+                    if (rob_entry_valid[source_rob_slot] &&
+                        (rob_entry_new_phys[source_rob_slot*PAW +: PAW] ==
+                         rename_rs1_phys[source_lane*PAW +: PAW]))
+                        rs_src1_tag[source_lane*TAG_WIDTH +: TAG_WIDTH] =
+                            {rob_entry_generation[source_rob_slot*ROB_GENERATION_WIDTH +: ROB_GENERATION_WIDTH],
+                             source_rob_slot[ROB_SLOT_WIDTH-1:0], 2'b00, 1'b1};
+                    if (rob_entry_valid[source_rob_slot] &&
+                        (rob_entry_new_phys[source_rob_slot*PAW +: PAW] ==
+                         rename_rs2_phys[source_lane*PAW +: PAW]))
+                        rs_src2_tag[source_lane*TAG_WIDTH +: TAG_WIDTH] =
+                            {rob_entry_generation[source_rob_slot*ROB_GENERATION_WIDTH +: ROB_GENERATION_WIDTH],
+                             source_rob_slot[ROB_SLOT_WIDTH-1:0], 2'b00, 1'b1};
+                end
+            end
             rs_src1_ready[source_lane] =
                 (rename_rs1_phys[source_lane*PAW +: PAW] == 0) ||
                 prf_read_ready[2*source_lane];
@@ -672,7 +694,7 @@ module rv32_backend_joint #(
         .commit_store_addr_o(rob_commit_store_addr), .commit_store_mask_o(rob_commit_store_mask), .commit_store_data_o(rob_commit_store_data), .commit_tag_o(rob_commit_tag), .commit_old_phys_o(commit_old_phys), .commit_new_phys_o(commit_new_phys),
         .store_commit_valid_o(rob_store_commit_valid), .store_commit_ready_i(rob_store_commit_ready), .store_commit_tag_o(rob_store_commit_tag), .store_commit_addr_o(rob_store_commit_addr), .store_commit_mask_o(rob_store_commit_mask), .store_commit_data_o(rob_store_commit_data), .store_ack_valid_i(rob_store_ack_valid), .store_ack_tag_i(rob_store_ack_tag), .store_ack_error_i(lsq_store_ack_error),
         .recovery_valid_i({ {(BE_WIDTH-1){1'b0}}, branch_pending }), .recovery_tag_i({ {(BE_WIDTH-1)*TAG_WIDTH{1'b0}}, branch_pending_tag }), .recovery_pc_i({ {(BE_WIDTH-1)*32{1'b0}}, branch_pending_pc }),
-        .recovery_accept_o(rob_recovery_accept), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation)
+        .recovery_accept_o(rob_recovery_accept), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation), .entry_new_phys_o(rob_entry_new_phys)
     );
 
     rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .STORE_DATA_WIDTH(32)) rs (
@@ -913,8 +935,9 @@ module rv32_backend_joint #(
             end
             for (map_index = 0; map_index < LSQ_ENTRIES; map_index = map_index + 1)
                 lsq_phys_mem[map_index] <= 0;
-            for (map_phys_slot = 0; map_phys_slot < PHYS_REGS; map_phys_slot = map_phys_slot + 1)
-                phys_tag_mem[map_phys_slot] <= 0;
+            if (PHYS_TAG_IMPL == 0)
+                for (map_phys_slot = 0; map_phys_slot < PHYS_REGS; map_phys_slot = map_phys_slot + 1)
+                    phys_tag_mem[map_phys_slot] <= 0;
             for (map_index = 0; map_index < ROB_ENTRIES; map_index = map_index + 1)
                 load_error_mem[map_index] <= 1'b0;
             for (map_index = 0; map_index < ROB_ENTRIES; map_index = map_index + 1) begin
@@ -963,7 +986,7 @@ module rv32_backend_joint #(
                     rob_pred_kind_mem[map_rob_slot] <= trace_pred_kind_i[map_lane*2 +: 2];
                     rob_mem_size_mem[map_rob_slot] <= trace_mem_size_i[map_lane*2 +: 2];
                     rob_mem_unsigned_mem[map_rob_slot] <= trace_mem_unsigned_i[map_lane];
-                    if (rename_rd_we[map_lane] &&
+                    if ((PHYS_TAG_IMPL == 0) && rename_rd_we[map_lane] &&
                         (rename_new_phys[map_lane*PAW +: PAW] < PHYS_REGS))
                         phys_tag_mem[rename_new_phys[map_lane*PAW +: PAW]] <=
                             rob_alloc_tag[map_lane*TAG_WIDTH +: TAG_WIDTH];
