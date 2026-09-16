@@ -22,7 +22,10 @@ module rv32_physical_register_file #(
     input  wire [(BE_WIDTH*32)-1:0]      write_data_i,
     input  wire [BE_WIDTH-1:0]           write_valid_i
 );
-    reg [(PHYS_REGS*32)-1:0] value;
+    // Keep the value store as a word array so synthesis can implement it as
+    // a compact multi-ported memory.  The previous flattened vector forced
+    // every data bit into a flip-flop plus a large read mux.
+    reg [31:0] value [0:PHYS_REGS-1];
     reg [PHYS_REGS-1:0] ready;
     integer alloc_lane;
     integer write_lane;
@@ -42,20 +45,20 @@ module rv32_physical_register_file #(
         end
     end
 
-    // Reads are combinational.  Each generated process has constant part
-    // selects, avoiding simulator ambiguity around variable slice sensitivity.
+    // Reads are combinational.  Each generated process has constant output
+    // slices; @* also expands the word-array dependency for simulators.
     genvar read_port;
     generate
         for (read_port = 0; read_port < (2*BE_WIDTH); read_port = read_port + 1) begin : g_read_port
             integer bypass_lane;
-            always @(read_phys_i or write_phys_i or write_data_i or write_valid_i or value or ready) begin
+            always @* begin
                 bypass_lane = 0;
                 read_data_o[(read_port*32) +: 32] = 32'b0;
                 read_ready_o[read_port] = 1'b0;
                 if (read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] == 0) begin
                     read_ready_o[read_port] = 1'b1;
                 end else if (read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] < PHYS_REGS) begin
-                    read_data_o[(read_port*32) +: 32] = value[(read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]*32) +: 32];
+                    read_data_o[(read_port*32) +: 32] = value[read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]];
                     read_ready_o[read_port] = ready[read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]];
                     // When ready is low this data is architecturally don't-care;
                     // consumers must wait for writeback rather than depend on a
@@ -92,7 +95,7 @@ module rv32_physical_register_file #(
                 if (write_valid_i[write_lane] &&
                     (write_phys_i[(write_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] != 0) &&
                     (write_phys_i[(write_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] < PHYS_REGS)) begin
-                    value[(write_phys_i[(write_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]*32) +: 32] <= write_data_i[(write_lane*32) +: 32];
+                    value[write_phys_i[(write_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]] <= write_data_i[(write_lane*32) +: 32];
                     ready[write_phys_i[(write_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]] <= 1'b1;
                 end
             end
