@@ -10,6 +10,7 @@ rtl/rv32i_alu.v
 rtl/rv32m_multiplier.v
 rtl/rv32m_multiplier_radix4.v
 rtl/rv32m_divider.v
+rtl/rv32m_mdu_iterative.v
 rtl/rv32_physical_register_file.v
 rtl/rv32_rename_unit.v
 rtl/backend/rv32_rob.v

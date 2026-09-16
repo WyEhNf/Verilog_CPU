@@ -66,19 +66,41 @@ module rv32m_mdu_reservation_station #(
                 .req_op_i(pending_op), .req_src1_i(pending_src1), .req_src2_i(pending_src2), .req_rob_tag_i(pending_tag), .req_phys_rd_i(pending_phys), .req_target_live_i(pending_live),
                 .resp_valid_o(mul_resp_valid), .resp_ready_i(mul_resp_ready), .resp_value_o(mul_resp_value), .resp_rob_tag_o(mul_resp_tag), .resp_phys_rd_o(mul_resp_phys), .resp_rd_we_o(mul_resp_rd_we), .live_tag_valid_i(live_tag_valid_i), .live_tag_i(live_tag_i)
             );
-        end else begin : gen_radix4_multiplier
+        end else if (MUL_IMPL == 1) begin : gen_radix4_multiplier
             rv32m_multiplier_radix4 #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PHYS_ADDR_WIDTH)) multiplier (
                 .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .req_valid_i(mul_req_valid), .req_ready_o(mul_req_ready),
                 .req_op_i(pending_op), .req_src1_i(pending_src1), .req_src2_i(pending_src2), .req_rob_tag_i(pending_tag), .req_phys_rd_i(pending_phys), .req_target_live_i(pending_live),
                 .resp_valid_o(mul_resp_valid), .resp_ready_i(mul_resp_ready), .resp_value_o(mul_resp_value), .resp_rob_tag_o(mul_resp_tag), .resp_phys_rd_o(mul_resp_phys), .resp_rd_we_o(mul_resp_rd_we), .live_tag_valid_i(live_tag_valid_i), .live_tag_i(live_tag_i)
             );
+        end else begin : gen_unified_mdu
+            rv32m_mdu_iterative #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PHYS_ADDR_WIDTH)) unified (
+                .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i),
+                .req_valid_i(pending_valid), .req_ready_o(mul_req_ready),
+                .req_op_i(pending_op), .req_src1_i(pending_src1), .req_src2_i(pending_src2),
+                .req_rob_tag_i(pending_tag), .req_phys_rd_i(pending_phys),
+                .req_target_live_i(pending_live), .resp_valid_o(mul_resp_valid),
+                .resp_ready_i(mul_resp_ready), .resp_value_o(mul_resp_value),
+                .resp_rob_tag_o(mul_resp_tag), .resp_phys_rd_o(mul_resp_phys),
+                .resp_rd_we_o(mul_resp_rd_we), .live_tag_valid_i(live_tag_valid_i),
+                .live_tag_i(live_tag_i)
+            );
+            assign div_req_ready = mul_req_ready;
+            assign div_resp_valid = 1'b0;
+            assign div_resp_value = 32'b0;
+            assign div_resp_tag = {TAG_WIDTH{1'b0}};
+            assign div_resp_phys = {PHYS_ADDR_WIDTH{1'b0}};
+            assign div_resp_rd_we = 1'b0;
         end
     endgenerate
+    generate
+    if (MUL_IMPL < 2) begin : gen_divider
     rv32m_divider #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PHYS_ADDR_WIDTH)) divider (
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .req_valid_i(div_req_valid), .req_ready_o(div_req_ready),
         .req_op_i(pending_op), .req_src1_i(pending_src1), .req_src2_i(pending_src2), .req_rob_tag_i(pending_tag), .req_phys_rd_i(pending_phys), .req_target_live_i(pending_live),
         .resp_valid_o(div_resp_valid), .resp_ready_i(div_resp_ready), .resp_value_o(div_resp_value), .resp_rob_tag_o(div_resp_tag), .resp_phys_rd_o(div_resp_phys), .resp_rd_we_o(div_resp_rd_we), .live_tag_valid_i(live_tag_valid_i), .live_tag_i(live_tag_i)
     );
+    end
+    endgenerate
 
     always @(posedge clk_i) begin
         if (reset_i || flush_i) begin
