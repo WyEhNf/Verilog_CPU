@@ -48,10 +48,13 @@ module cpu_core_image_tb #(
     integer no_retire_cycles;
     integer finish_code;
     integer diag_slot;
+    integer trace_file;
+    integer trace_lane;
     reg [31:0] last_instret;
     reg trace_enable;
     reg watchdog_expired;
     reg [1023:0] test_name;
+    reg [1023:0] trace_file_name;
 
     cpu_core #(
         .FE_WIDTH(FE_WIDTH),
@@ -104,14 +107,23 @@ module cpu_core_image_tb #(
         max_no_retire_cycles = 100000;
         no_retire_cycles = 0;
         finish_code = 0;
+        trace_file = 0;
         last_instret = 0;
         trace_enable = 1'b0;
         watchdog_expired = 1'b0;
         test_name = "image";
+        trace_file_name = 0;
         if ($value$plusargs("EXPECTED=%d", expected_value)) begin end
         if ($value$plusargs("MAX_CYCLES=%d", max_cycles)) begin end
         if ($value$plusargs("MAX_NO_RETIRE_CYCLES=%d", max_no_retire_cycles)) begin end
         if ($value$plusargs("TEST=%s", test_name)) begin end
+        if ($value$plusargs("COMMIT_TRACE=%s", trace_file_name)) begin
+            trace_file = $fopen(trace_file_name, "w");
+            if (trace_file == 0) begin
+                $display("FAIL: cannot open CommitRecord trace file %0s", trace_file_name);
+                $finish(1);
+            end
+        end
         if ($test$plusargs("TRACE")) trace_enable = 1'b1;
         reset = 1'b1;
         #12;
@@ -206,10 +218,33 @@ module cpu_core_image_tb #(
         end else begin
             $display("PASS: JOIN-02 image=%0s return=%0d cycles=%0d instret=%0d", test_name, return_value, cycles, instret);
         end
+        if (trace_file != 0)
+            $fclose(trace_file);
         $finish(finish_code);
     end
 
     always @(posedge clk) begin
+        if (trace_file != 0) begin
+            for (trace_lane = 0; trace_lane < BE_WIDTH; trace_lane = trace_lane + 1) begin
+                if (dut.commit_valid[trace_lane]) begin
+                    $fwrite(trace_file,
+                            "{\"cycle\":%0d,\"lane\":%0d,\"valid\":true,\"pc\":%0d,\"inst\":%0d,\"rd\":%0d,\"rd_we\":%0d,\"value\":%0d,\"is_store\":%0d,\"store_addr\":%0d,\"store_mask\":%0d,\"store_data\":%0d,\"halted\":%0d,\"return_value\":%0d}\n",
+                            cycles, trace_lane,
+                            dut.commit_pc[trace_lane*32 +: 32],
+                            dut.commit_inst[trace_lane*32 +: 32],
+                            dut.commit_rd[trace_lane*5 +: 5],
+                            dut.commit_rd_we[trace_lane],
+                            dut.commit_value[trace_lane*32 +: 32],
+                            dut.commit_is_store[trace_lane],
+                            dut.commit_store_addr[trace_lane*32 +: 32],
+                            dut.commit_store_mask[trace_lane*16 +: 16],
+                            dut.commit_store_data[trace_lane*128 +: 128],
+                            dut.commit_inst[trace_lane*32 +: 32] == 32'h0ff00513,
+                            (dut.commit_inst[trace_lane*32 +: 32] == 32'h0ff00513) ?
+                                dut.commit_value[trace_lane*32 +: 32] : 32'd0);
+                end
+            end
+        end
         if (trace_enable && (cycles != 0) && ((cycles % 500) == 0))
             $display("TRACE: periodic cycles=%0d instret=%0d pc=%08x rob_head=%0d rob_tail=%0d rob_occ=%0d rob_tag=%04x rob_ready=%b rob_store=%b rob_wait=%b rob_sent=%b free_count=%0d restore=%b rs_occ=%0d lsq_head=%0d lsq_tail=%0d lsq_occ=%0d lsq_tag=%04x lsq_valid=%b lsq_store=%b lsq_addr=%b lsq_data=%b lsq_commit=%b lsq_sent=%b lsq_ack=%b lsq_ackvalid=%b lsq_commitready=%b fetch_valid=%b fetch_ready=%b trace_ready=%b", cycles, instret, dut.frontend.pc_reg, dut.backend.rob.head_reg, dut.backend.rob.tail_reg, dut.backend.rob.occupancy_reg, dut.backend.rob.generation_mem[dut.backend.rob.head_reg], dut.backend.rob.ready_mem[dut.backend.rob.head_reg], dut.backend.rob.store_mem[dut.backend.rob.head_reg], dut.backend.rob.store_wait_mem[dut.backend.rob.head_reg], dut.backend.rob.store_sent_mem[dut.backend.rob.head_reg], dut.backend.free_count, dut.backend.rob_checkpoint_restore_valid, dut.backend.rs_occupancy, dut.backend.lsq.head_reg, dut.backend.lsq.tail_reg, dut.backend.lsq_occupancy, dut.backend.lsq.rob_tag_mem[dut.backend.lsq.head_reg], dut.backend.lsq.valid_mem[dut.backend.lsq.head_reg], dut.backend.lsq.store_mem[dut.backend.lsq.head_reg], dut.backend.lsq.addr_ready_mem[dut.backend.lsq.head_reg], dut.backend.lsq.data_ready_mem[dut.backend.lsq.head_reg], dut.backend.lsq.store_commit_mem[dut.backend.lsq.head_reg], dut.backend.lsq.request_sent_mem[dut.backend.lsq.head_reg], dut.backend.lsq.store_ack_mem[dut.backend.lsq.head_reg], dut.backend.lsq.store_ack_valid_o, dut.backend.rob_store_commit_ready, dut.frontend.fetch_valid_o, dut.frontend.fetch_ready_i, dut.backend.trace_ready_o);
         if (trace_enable && (dut.backend.lsq_occupancy != 0) && !dut.backend.lsq.valid_mem[dut.backend.lsq.head_reg])
