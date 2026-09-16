@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+`include "rv32im_defs.vh"
 
 // JOIN-02 image runner.  The memory model loads an @address byte image and
 // the testbench checks only architectural termination and a0[7:0].
@@ -15,6 +16,8 @@ module cpu_core_image_tb #(
     parameter integer MUL_IMPL = 0,
     parameter integer SHIFT_IMPL = 0,
     parameter integer PHYS_TAG_IMPL = 0,
+    parameter integer CHECKPOINT_IMPL = 0,
+    parameter integer GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16)
 );
@@ -77,6 +80,8 @@ module cpu_core_image_tb #(
         .MUL_IMPL(MUL_IMPL),
         .SHIFT_IMPL(SHIFT_IMPL),
         .PHYS_TAG_IMPL(PHYS_TAG_IMPL),
+        .CHECKPOINT_IMPL(CHECKPOINT_IMPL),
+        .GENERATION_WIDTH(GENERATION_WIDTH),
         .COMPLETION_DEPTH(COMPLETION_DEPTH)
     ) dut (
         .clk(clk), .reset(reset), .halted(halted), .error(error),
