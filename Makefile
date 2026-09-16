@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build join04 join05 join06-report reference-trace-build reference-trace-test doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression synth synth-bb
+.PHONY: join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build join04 join05 join06-report reference-trace-build reference-trace-test doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression asap7-maplib synth synth-bb
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -279,12 +279,16 @@ regression:
 # synth = explicit register/mux reference (memory_map), synth-bb = blackbox arrays.
 # Artifacts go to build/synth/<CFG>[/_bb]/: yosys.log (verbose run log for the
 # progress window), synth.log, stat_after_abc.log, cpu_core_synth.v.
-synth:
+asap7-maplib:
+	@python tools/filter_asap7_lib.py
+	@python tools/liberty2genlib.py
+
+synth: asap7-maplib
 	@if not exist "build\synth\$(CFG)" mkdir "build\synth\$(CFG)"
 	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG) $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL)" > "build\synth\$(CFG)\yosys.log" 2>&1
 	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)/synth.log" --memory-dump "build/synth/$(CFG)/memory_manifest.il" --output "build/synth/$(CFG)/area_audit.json" --profile ff-reference --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL)
 
-synth-bb:
+synth-bb: asap7-maplib
 	@if not exist "build\synth\$(CFG)_bb" mkdir "build\synth\$(CFG)_bb"
 	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL)" > "build\synth\$(CFG)_bb\yosys.log" 2>&1
 	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)_bb/synth.log" --memory-dump "build/synth/$(CFG)_bb/memory_manifest.il" --output "build/synth/$(CFG)_bb/area_audit.json" --profile logic-blackbox --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL)

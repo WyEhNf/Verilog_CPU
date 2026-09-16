@@ -31,7 +31,7 @@ if {$rs_entries eq ""}  { set rs_entries 8 }
 if {$lsq_entries eq ""} { set lsq_entries 8 }
 if {$cache_stats eq ""} { set cache_stats 0 }
 if {$mul_impl eq ""}    { set mul_impl 0 }
-set libdir      "third_party/asap7/lib"
+set libdir      "_asap7_lib_filtered"
 
 file mkdir $outdir
 
@@ -62,10 +62,12 @@ techmap
 opt
 # ABC's bundled liberty->genlib conversion cannot ingest ASAP7 NLDM libs
 # (&nf crashes).  Map combinational logic via a generated SIS genlib + classic
-# `map`, then map the flops with dfflibmap (see synth_bb.tcl / tools/liberty2genlib.py).
+# `map` (see synth_bb.tcl / tools/liberty2genlib.py).  Legalize flops before
+# ABC so the polarity logic introduced by dfflibmap is also technology mapped.
+dfflibmap -liberty $libdir/asap7sc7p5t_SEQ_RVT_TT_nldm_201020.lib
+opt
 abc -genlib _asap7_lib_filtered/asap7_comb.genlib \
     -script "+strash;scorr;dc2;dretime;strash;map"
-dfflibmap -liberty $libdir/asap7sc7p5t_SEQ_RVT_TT_nldm_201020.lib
 opt
 
 tee -o $outdir/synth.log stat -liberty $libdir/asap7sc7p5t_INVBUF_RVT_TT_nldm_201020.lib \

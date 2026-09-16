@@ -5,7 +5,8 @@ conversion.
 
 Inputs : _asap7_lib_filtered/*.lib (pg_pin stripped, FA/HA removed)
 Output : _asap7_lib_filtered/asap7_comb.genlib
-Area scaled x10000 into integer genlib cost; divide reports by 10000.
+Area is scaled x10000 only to form ABC's integer optimization cost.  Physical
+area reports come from ``stat -liberty`` and must not be divided by 10000.
 Only single-output combinational cells are emitted.
 """
 import os
@@ -41,8 +42,10 @@ def find_matching_brace(text, open_idx):
     return len(text)
 
 
-# Clock-tree / non-logic / tie cells that must not be emitted as normal gates.
-EXCLUDE_PREFIX = ("CKINVDC", "HB", "TIEHI", "TIELO")
+# Clock-tree / non-logic cells that must not be emitted as normal gates.
+# TIEHI/TIELO are intentionally retained so constants are mapped to priced,
+# real ASAP7 cells instead of synthetic ZERO/ONE black boxes.
+EXCLUDE_PREFIX = ("CKINVDC", "HB")
 
 
 def parse_cells(text):
@@ -79,23 +82,17 @@ for lib in COMB_LIBS:
             if dir_re.search(pbody) and dir_re.search(pbody).group(1) == "output":
                 fm = func_re.search(pbody)
                 if fm:
-                    outputs.append(fm.group(1))
+                    outputs.append((pm.group(1), fm.group(1)))
         if len(outputs) != 1:
             continue
-        expr = outputs[0]
+        output_pin, expr = outputs[0]
         area_i = max(1, int(round(area * 10000)))
         phase = "NONINV" if not expr.lstrip().startswith("!") else "INV"
-        gates.append(f"GATE {name} {area_i} Y={expr}; PIN * {phase} 1 999 1 0 1 0")
-
-# Guarantee a buffer and inverter for the mapper, with realistic ASAP7 areas
-# (INVx1 = 0.69984 -> 6998, BUFx2 = 1.1664 -> 11664) so they are never the
-# pathological cheapest choice.
-gates.insert(0, "GATE BUF 11664 Y=A; PIN * NONINV 1 999 1 0 1 0")
-gates.insert(0, "GATE NOT 6998 Y=!A; PIN * INV 1 999 1 0 1 0")
-# Constant gates (ASAP7 TIEHIx1/TIELOx1, area 0.04374 -> 437) required by `map`.
-# Note: zero-input gates have no PIN line.
-gates.insert(0, "GATE ONE 437 Y=CONST1;")
-gates.insert(0, "GATE ZERO 437 Y=CONST0;")
+        genlib_expr = {"0": "CONST0", "1": "CONST1"}.get(expr, expr)
+        gate = f"GATE {name} {area_i} {output_pin}={genlib_expr};"
+        if expr not in ("0", "1"):
+            gate += f" PIN * {phase} 1 999 1 0 1 0"
+        gates.append(gate)
 
 with open(OUT, "w", encoding="utf-8", newline="\n") as f:
     f.write("\n".join(gates) + "\n")
