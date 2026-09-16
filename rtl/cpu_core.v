@@ -12,6 +12,7 @@ module cpu_core #(
     parameter integer LSQ_ENTRIES = 8,
     parameter integer ENABLE_CACHE_STATS = 0,
     parameter integer ENABLE_CACHES = 1,
+    parameter integer ENABLE_PREDICTOR = 1,
     parameter integer MUL_IMPL = 0,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16)
@@ -115,6 +116,7 @@ module cpu_core #(
             wire [31:0] query_inst =
                 if_resp_line_data >> (query_word_index * 32);
 
+            if (ENABLE_PREDICTOR != 0) begin : g_enabled
             rv32_branch_predictor predictor (
                 .clk_i(clk), .reset_i(reset), .query_valid_i(query_valid),
                 .query_pc_i(query_pc), .query_inst_i(query_inst),
@@ -135,6 +137,17 @@ module cpu_core #(
                 .prediction_count_o(pred_count_bus[predictor_lane*32 +: 32]),
                 .correct_count_o(pred_correct_bus[predictor_lane*32 +: 32])
             );
+            end else begin : g_disabled
+                assign pred_taken_bus[predictor_lane] = 1'b0;
+                assign pred_target_bus[predictor_lane*32 +: 32] = 32'b0;
+                assign pred_kind_bus[predictor_lane*2 +: 2] = `RV32IM_PRED_NONE;
+                assign pred_btb_hit_bus[predictor_lane] = 1'b0;
+                assign pred_bht_index_bus[predictor_lane*6 +: 6] = 6'b0;
+                assign pred_btb_index_bus[predictor_lane*4 +: 4] = 4'b0;
+                assign pred_counter_bus[predictor_lane*2 +: 2] = 2'b0;
+                assign pred_count_bus[predictor_lane*32 +: 32] = 32'b0;
+                assign pred_correct_bus[predictor_lane*32 +: 32] = 32'b0;
+            end
         end
     endgenerate
 
