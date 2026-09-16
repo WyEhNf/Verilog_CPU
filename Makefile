@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build join04 join05 join06-report doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression synth synth-bb
+.PHONY: join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build join04 join05 join06-report reference-trace-build reference-trace-test doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression synth synth-bb
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -120,6 +120,12 @@ join05: join03-build
 
 join06-report:
 	@python tools/run_join06.py
+
+reference-trace-build:
+	@python tools/reference_trace.py --build
+
+reference-trace-test:
+	@python tools/test_reference_trace.py
 
 join: join01 join02
 
