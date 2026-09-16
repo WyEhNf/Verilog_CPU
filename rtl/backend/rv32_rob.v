@@ -253,15 +253,18 @@ module rv32_rob #(
         chosen_age = ROB_ENTRIES + 1;
         chosen_slot = 0;
         for (recovery_lane = 0; recovery_lane < BE_WIDTH; recovery_lane = recovery_lane + 1) begin
-            for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
-                age = slot_index - head_reg;
-                if (age < 0) age = age + ROB_ENTRIES;
-                if (recovery_valid_i[recovery_lane] && tag_matches(recovery_tag_i[(recovery_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index) &&
-                    (age < occupancy_reg) && (!recovery_found || age < chosen_age)) begin
-                    recovery_found = 1'b1;
-                    chosen_age = age;
-                    chosen_slot = slot_index;
-                end
+            // The slot is already encoded in the generation-qualified ROB
+            // tag.  Index it directly instead of comparing every recovery
+            // candidate against every ROB entry.
+            recovery_slot = recovery_tag_i[(recovery_lane*TAG_WIDTH) + SLOT_LSB +: SLOT_WIDTH];
+            age = recovery_slot - head_reg;
+            if (age < 0) age = age + ROB_ENTRIES;
+            if (recovery_valid_i[recovery_lane] &&
+                tag_matches(recovery_tag_i[(recovery_lane*TAG_WIDTH) +: TAG_WIDTH], recovery_slot) &&
+                (age < occupancy_reg) && (!recovery_found || age < chosen_age)) begin
+                recovery_found = 1'b1;
+                chosen_age = age;
+                chosen_slot = recovery_slot;
             end
         end
         recovery_accept_o = recovery_found;
@@ -409,18 +412,17 @@ module rv32_rob #(
             // ROB head after its younger suffix is removed.
             for (complete_lane = 0; complete_lane < BE_WIDTH; complete_lane = complete_lane + 1) begin
                 if (completion_valid_i[complete_lane] && completion_done_i[complete_lane]) begin
-                    for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
-                        age = slot_index - head_reg;
-                        if (age < 0) age = age + ROB_ENTRIES;
-                        if ((age <= branch_age) &&
-                            tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index)) begin
-                            ready_mem[slot_index] <= 1'b1;
-                            value_mem[slot_index] <= completion_value_i[(complete_lane*32) +: 32];
-                            if (completion_error_i[complete_lane]) error_mem[slot_index] <= 1'b1;
-                            store_addr_mem[slot_index] <= completion_store_addr_i[(complete_lane*32) +: 32];
-                            store_mask_mem[slot_index] <= completion_store_mask_i[(complete_lane*4) +: 4];
-                            store_data_mem[slot_index] <= completion_store_data_i[(complete_lane*32) +: 32];
-                        end
+                    recovery_slot = completion_tag_i[(complete_lane*TAG_WIDTH) + SLOT_LSB +: SLOT_WIDTH];
+                    age = recovery_slot - head_reg;
+                    if (age < 0) age = age + ROB_ENTRIES;
+                    if ((age <= branch_age) &&
+                        tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], recovery_slot)) begin
+                        ready_mem[recovery_slot] <= 1'b1;
+                        value_mem[recovery_slot] <= completion_value_i[(complete_lane*32) +: 32];
+                        if (completion_error_i[complete_lane]) error_mem[recovery_slot] <= 1'b1;
+                        store_addr_mem[recovery_slot] <= completion_store_addr_i[(complete_lane*32) +: 32];
+                        store_mask_mem[recovery_slot] <= completion_store_mask_i[(complete_lane*4) +: 4];
+                        store_data_mem[recovery_slot] <= completion_store_data_i[(complete_lane*32) +: 32];
                     end
                 end
             end
@@ -431,23 +433,21 @@ module rv32_rob #(
             // Tagged completion and store ack only update live generations.
             for (complete_lane = 0; complete_lane < BE_WIDTH; complete_lane = complete_lane + 1) begin
                 if (completion_valid_i[complete_lane] && completion_done_i[complete_lane]) begin
-                    for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
-                        if (tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index)) begin
-                            ready_mem[slot_index] <= 1'b1;
-                            value_mem[slot_index] <= completion_value_i[(complete_lane*32) +: 32];
-                            if (completion_error_i[complete_lane]) error_mem[slot_index] <= 1'b1;
-                            store_addr_mem[slot_index] <= completion_store_addr_i[(complete_lane*32) +: 32];
-                            store_mask_mem[slot_index] <= completion_store_mask_i[(complete_lane*4) +: 4];
-                            store_data_mem[slot_index] <= completion_store_data_i[(complete_lane*32) +: 32];
-                        end
+                    recovery_slot = completion_tag_i[(complete_lane*TAG_WIDTH) + SLOT_LSB +: SLOT_WIDTH];
+                    if (tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], recovery_slot)) begin
+                        ready_mem[recovery_slot] <= 1'b1;
+                        value_mem[recovery_slot] <= completion_value_i[(complete_lane*32) +: 32];
+                        if (completion_error_i[complete_lane]) error_mem[recovery_slot] <= 1'b1;
+                        store_addr_mem[recovery_slot] <= completion_store_addr_i[(complete_lane*32) +: 32];
+                        store_mask_mem[recovery_slot] <= completion_store_mask_i[(complete_lane*4) +: 4];
+                        store_data_mem[recovery_slot] <= completion_store_data_i[(complete_lane*32) +: 32];
                     end
                 end
             end
-            for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
-                if (store_ack_valid_i && tag_matches(store_ack_tag_i, slot_index)) begin
-                    store_wait_mem[slot_index] <= 1'b1;
-                    if (store_ack_error_i) error_mem[slot_index] <= 1'b1;
-                end
+            recovery_slot = store_ack_tag_i[SLOT_LSB +: SLOT_WIDTH];
+            if (store_ack_valid_i && tag_matches(store_ack_tag_i, recovery_slot)) begin
+                store_wait_mem[recovery_slot] <= 1'b1;
+                if (store_ack_error_i) error_mem[recovery_slot] <= 1'b1;
             end
             if (store_commit_valid_o && store_commit_ready_i) begin
                 store_sent_mem[head_reg] <= 1'b1;
