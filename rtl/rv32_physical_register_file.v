@@ -24,7 +24,6 @@ module rv32_physical_register_file #(
 );
     reg [(PHYS_REGS*32)-1:0] value;
     reg [PHYS_REGS-1:0] ready;
-    integer reset_index;
     integer alloc_lane;
     integer write_lane;
 
@@ -58,6 +57,9 @@ module rv32_physical_register_file #(
                 end else if (read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] < PHYS_REGS) begin
                     read_data_o[(read_port*32) +: 32] = value[(read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]*32) +: 32];
                     read_ready_o[read_port] = ready[read_phys_i[(read_port*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]];
+                    // When ready is low this data is architecturally don't-care;
+                    // consumers must wait for writeback rather than depend on a
+                    // reset value in the data array.
                     for (bypass_lane = 0; bypass_lane < BE_WIDTH; bypass_lane = bypass_lane + 1) begin
                         if (write_valid_i[bypass_lane] &&
                             (write_phys_i[(bypass_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] ==
@@ -73,10 +75,7 @@ module rv32_physical_register_file #(
 
     always @(posedge clk_i) begin
         if (reset_i) begin
-            for (reset_index = 0; reset_index < PHYS_REGS; reset_index = reset_index + 1) begin
-                value[(reset_index*32) +: 32] <= 32'b0;
-                ready[reset_index] <= (reset_index == 0);
-            end
+            ready <= {{(PHYS_REGS-1){1'b0}}, 1'b1};
         end else begin
             // Rename allocation makes a destination unavailable.  Writeback
             // is processed afterwards and therefore has higher priority.
@@ -97,7 +96,6 @@ module rv32_physical_register_file #(
                     ready[write_phys_i[(write_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]] <= 1'b1;
                 end
             end
-            value[31:0] <= 32'b0;
             ready[0] <= 1'b1;
         end
     end

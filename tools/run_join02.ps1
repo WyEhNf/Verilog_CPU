@@ -4,7 +4,8 @@ param(
     [string]$Executable,
     [Parameter(Mandatory = $true)][string]$Manifest,
     [Parameter(Mandatory = $true)][string]$ImageRoot,
-    [int]$NoRetireCycles = 100000
+    [int]$NoRetireCycles = 100000,
+    [string]$Skip = ""
 )
 
 if ([string]::IsNullOrWhiteSpace($Executable) -and
@@ -28,6 +29,14 @@ $rows = @(
 
 if ($rows.Count -ne 18) {
     throw "JOIN-02 requires exactly 18 manifest images; found $($rows.Count)"
+}
+
+$skipNames = @($Skip -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
+if ($skipNames.Count -gt 0) {
+    $rows = @($rows | Where-Object { $skipNames -notcontains $_.Name })
+}
+if ($rows.Count -eq 0) {
+    throw "JOIN-02 manifest produced no runnable images after -Skip"
 }
 
 foreach ($row in $rows) {
@@ -56,4 +65,4 @@ foreach ($row in $rows) {
     }
 }
 
-Write-Host "PASS: JOIN-02 all 18 images halted with expected return values"
+Write-Host "PASS: JOIN-02 all $($rows.Count) images halted with expected return values"

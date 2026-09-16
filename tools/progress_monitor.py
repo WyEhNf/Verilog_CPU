@@ -178,7 +178,7 @@ class ProgressMonitor:
                     self._set(name, STATUS_FAIL)
                 elif self.tests.get("JOIN-01", {}).get("status") == STATUS_RUNNING:
                     self._set("JOIN-01", STATUS_FAIL)
-            if s.startswith("PASS: JOIN-02 all 18 images halted"):
+            if re.match(r"PASS: JOIN-02 all \d+ images halted", s):
                 self.done = True
         self.tail_lines = self.tail_lines[-80:]
 

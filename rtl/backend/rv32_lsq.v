@@ -40,19 +40,19 @@ module rv32_lsq #(
     input  wire [BE_WIDTH-1:0]           alloc_addr_valid_i,
     input  wire [(BE_WIDTH*32)-1:0]      alloc_addr_i,
     input  wire [BE_WIDTH-1:0]           alloc_data_valid_i,
-    input  wire [(BE_WIDTH*128)-1:0]     alloc_store_data_i,
-    input  wire [(BE_WIDTH*16)-1:0]      alloc_store_mask_i,
+    input  wire [(BE_WIDTH*32)-1:0]      alloc_store_data_i,
+    input  wire [(BE_WIDTH*4)-1:0]       alloc_store_mask_i,
 
     input  wire [BE_WIDTH-1:0]           addr_update_valid_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] addr_update_tag_i,
     input  wire [(BE_WIDTH*32)-1:0]      addr_update_i,
     input  wire [BE_WIDTH-1:0]           data_update_valid_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] data_update_tag_i,
-    input  wire [(BE_WIDTH*128)-1:0]     data_update_i,
-    input  wire [(BE_WIDTH*16)-1:0]      data_mask_update_i,
+    input  wire [(BE_WIDTH*32)-1:0]      data_update_i,
+    input  wire [(BE_WIDTH*4)-1:0]       data_mask_update_i,
     input  wire [BE_WIDTH-1:0]           wakeup_valid_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] wakeup_tag_i,
-    input  wire [(BE_WIDTH*128)-1:0]     wakeup_value_i,
+    input  wire [(BE_WIDTH*32)-1:0]      wakeup_value_i,
 
     input  wire                         store_commit_valid_i,
     output reg                          store_commit_ready_o,
@@ -99,7 +99,6 @@ module rv32_lsq #(
     output wire [SLOT_WIDTH-1:0]        head_o,
     output wire [SLOT_WIDTH-1:0]        tail_o
 );
-    localparam integer BYTES_WIDTH = 3;
     localparam integer TAG_SLOT_LSB = 3;
     localparam integer TAG_GEN_LSB = TAG_SLOT_LSB + SLOT_WIDTH;
     localparam integer ROB_SLOT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES);
@@ -115,15 +114,19 @@ module rv32_lsq #(
     reg addr_ready_mem [0:LSQ_ENTRIES-1];
     reg data_ready_mem [0:LSQ_ENTRIES-1];
     reg [31:0] addr_mem [0:LSQ_ENTRIES-1];
-    reg [127:0] data_mem [0:LSQ_ENTRIES-1];
-    reg [15:0] mask_mem [0:LSQ_ENTRIES-1];
+    // Store payloads are kept in access-relative form.  The cache-facing
+    // 128-bit line representation is reconstructed only at the boundary.
+    reg [31:0] data_mem [0:LSQ_ENTRIES-1];
+    reg [3:0] mask_mem [0:LSQ_ENTRIES-1];
     reg request_sent_mem [0:LSQ_ENTRIES-1];
     reg response_wait_mem [0:LSQ_ENTRIES-1];
     reg complete_mem [0:LSQ_ENTRIES-1];
     reg [31:0] complete_value_mem [0:LSQ_ENTRIES-1];
     reg complete_error_mem [0:LSQ_ENTRIES-1];
-    reg [15:0] forward_mask_mem [0:LSQ_ENTRIES-1];
-    reg [127:0] forward_data_mem [0:LSQ_ENTRIES-1];
+    // Forwarded bytes are likewise relative to the waiting load rather than
+    // occupying a full cache line in every LSQ entry.
+    reg [3:0] forward_mask_mem [0:LSQ_ENTRIES-1];
+    reg [31:0] forward_data_mem [0:LSQ_ENTRIES-1];
     reg store_commit_mem [0:LSQ_ENTRIES-1];
     reg store_ack_mem [0:LSQ_ENTRIES-1];
     reg store_ack_error_mem [0:LSQ_ENTRIES-1];
@@ -153,37 +156,114 @@ module rv32_lsq #(
     integer recovery_keep_count;
     integer recovery_first_killed;
     integer recovery_kill_found;
-    integer byte_index;
-    integer byte_count;
-    integer byte_offset;
-    integer req_offset;
-    reg prefix_open;
     reg candidate_found;
     reg blocked;
-    reg [15:0] target_mask;
-    reg [15:0] fwd_mask;
-    reg [127:0] fwd_data;
-    reg [15:0] overlap;
-    reg [127:0] response_line;
-    reg [127:0] merged_line;
-    reg [31:0] extracted_value;
-    reg [7:0] extracted_byte;
+    reg [3:0] target_mask;
+    reg [3:0] fwd_mask;
+    reg [31:0] fwd_data;
+    reg [3:0] overlap;
+    reg [31:0] response_word;
+    reg [31:0] merged_word;
     reg request_fire;
     reg response_match;
     reg response_fire;
-    reg commit_match;
     reg commit_fire;
-    reg load_pop_fire;
-    reg store_pop_fire;
     reg [GENERATION_WIDTH-1:0] next_generation;
 
-    function [127:0] expand_bytes;
-        input [15:0] mask;
+    function [31:0] expand_word_bytes;
+        input [3:0] mask;
         begin
-            expand_bytes = {{8{mask[15]}}, {8{mask[14]}}, {8{mask[13]}}, {8{mask[12]}},
-                            {8{mask[11]}}, {8{mask[10]}}, {8{mask[9]}},  {8{mask[8]}},
-                            {8{mask[7]}},  {8{mask[6]}},  {8{mask[5]}},  {8{mask[4]}},
-                            {8{mask[3]}},  {8{mask[2]}},  {8{mask[1]}},  {8{mask[0]}}};
+            expand_word_bytes = {{8{mask[3]}}, {8{mask[2]}},
+                                 {8{mask[1]}}, {8{mask[0]}}};
+        end
+    endfunction
+
+    function [3:0] access_mask;
+        input [1:0] size;
+        begin
+            case (size)
+                2'd0: access_mask = 4'b0001;
+                2'd1: access_mask = 4'b0011;
+                default: access_mask = 4'b1111;
+            endcase
+        end
+    endfunction
+
+    function [15:0] line_mask_from_relative;
+        input [3:0] relative_mask;
+        input [31:0] address;
+        begin
+            line_mask_from_relative = {12'b0, relative_mask} << address[3:0];
+        end
+    endfunction
+
+    function [127:0] line_data_from_relative;
+        input [31:0] relative_data;
+        input [31:0] address;
+        begin
+            line_data_from_relative = {96'b0, relative_data} << (address[3:0] * 8);
+        end
+    endfunction
+
+    function [31:0] relative_data_from_line;
+        input [127:0] line_data;
+        input [31:0] address;
+        begin
+            relative_data_from_line = (line_data >> (address[3:0] * 8));
+        end
+    endfunction
+
+    // Return the bytes of one older store in coordinates relative to a load.
+    // Accesses crossing a 16-byte cache-line boundary are outside the current
+    // cache contract, matching the previous line-based implementation.
+    function [3:0] relative_overlap;
+        input [3:0] store_offset;
+        input [3:0] store_mask;
+        input [3:0] load_offset;
+        input [3:0] load_mask;
+        integer load_byte;
+        integer store_byte;
+        begin
+            relative_overlap = 4'b0;
+            for (load_byte = 0; load_byte < 4; load_byte = load_byte + 1)
+                for (store_byte = 0; store_byte < 4; store_byte = store_byte + 1)
+                    if (load_mask[load_byte] && store_mask[store_byte] &&
+                        ((load_offset + load_byte) == (store_offset + store_byte)))
+                        relative_overlap[load_byte] = 1'b1;
+        end
+    endfunction
+
+    function [31:0] store_data_relative_to_load;
+        input [31:0] store_data;
+        input [3:0] store_offset;
+        input [3:0] store_mask;
+        input [3:0] load_offset;
+        input [3:0] load_mask;
+        integer load_byte;
+        integer store_byte;
+        begin
+            store_data_relative_to_load = 32'b0;
+            for (load_byte = 0; load_byte < 4; load_byte = load_byte + 1)
+                for (store_byte = 0; store_byte < 4; store_byte = store_byte + 1)
+                    if (load_mask[load_byte] && store_mask[store_byte] &&
+                        ((load_offset + load_byte) == (store_offset + store_byte)))
+                        store_data_relative_to_load[(load_byte*8) +: 8] =
+                            store_data[(store_byte*8) +: 8];
+        end
+    endfunction
+
+    function [31:0] format_relative_value;
+        input [31:0] raw_value;
+        input [1:0] size;
+        input unsigned_load;
+        begin
+            case (size)
+                2'd0: format_relative_value = unsigned_load ?
+                    {24'b0, raw_value[7:0]} : {{24{raw_value[7]}}, raw_value[7:0]};
+                2'd1: format_relative_value = unsigned_load ?
+                    {16'b0, raw_value[15:0]} : {{16{raw_value[15]}}, raw_value[15:0]};
+                default: format_relative_value = raw_value;
+            endcase
         end
     endfunction
 
@@ -202,57 +282,6 @@ module rv32_lsq #(
             tag_matches_slot = tag[0] && valid_mem[tag_slot] &&
                 (tag[TAG_SLOT_LSB +: SLOT_WIDTH] == tag_slot[SLOT_WIDTH-1:0]) &&
                 (tag[TAG_GEN_LSB +: GENERATION_WIDTH] == generation_mem[tag_slot]);
-        end
-    endfunction
-
-    function [15:0] size_mask;
-        input [31:0] address;
-        input [1:0] size;
-        integer n;
-        integer first;
-        integer count;
-        begin
-            size_mask = 16'b0;
-            first = address[3:0];
-            case (size)
-                2'd0: count = 1;
-                2'd1: count = 2;
-                default: count = 4;
-            endcase
-            for (n = 0; n < 16; n = n + 1)
-                if ((n >= first) && (n < first + count)) size_mask[n] = 1'b1;
-        end
-    endfunction
-
-    function [31:0] extract_value;
-        input [127:0] line_data;
-        input [31:0] address;
-        input [1:0] size;
-        input unsigned_load;
-        integer n;
-        integer first;
-        integer count;
-        reg [31:0] result;
-        reg [7:0] b;
-        begin
-            first = address[3:0];
-            case (size)
-                2'd0: count = 1;
-                2'd1: count = 2;
-                default: count = 4;
-            endcase
-            result = 32'b0;
-            for (n = 0; n < 4; n = n + 1) begin
-                if (n < count) begin
-                    b = line_data[((first + n) * 8) +: 8];
-                    result[(n*8) +: 8] = b;
-                end
-            end
-            if (!unsigned_load && (count < 4) && result[(count*8)-1]) begin
-                for (n = 0; n < 4; n = n + 1)
-                    if (n >= count) result[(n*8) +: 8] = 8'hff;
-            end
-            extract_value = result;
         end
     endfunction
 
@@ -297,20 +326,22 @@ module rv32_lsq #(
         // nested conditions below, and a conditional-only write would infer
         // latches (thousands of proc_dlatch candidates in synthesis).
         blocked = 1'b0;
-        target_mask = 16'b0;
-        fwd_mask = 16'b0;
-        fwd_data = 128'b0;
-        overlap = 16'b0;
+        target_mask = 4'b0;
+        fwd_mask = 4'b0;
+        fwd_data = 32'b0;
+        overlap = 4'b0;
         alloc_slot = 0;
         older_age = 0;
         free_count_calc = LSQ_ENTRIES - occupancy_reg;
         alloc_fire_o = {BE_WIDTH{1'b0}};
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
         alloc_lsq_tag_o = {(BE_WIDTH*TAG_WIDTH){1'b0}};
-        prefix_open = 1'b1;
         alloc_count_calc = 0;
         for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
-            if (prefix_open && alloc_valid_i[lane] &&
+            // Memory operations are a sparse subset of the dispatch bundle.
+            // Compact valid memory lanes into consecutive LSQ slots while
+            // retaining each lane's ROB tag and payload.
+            if (alloc_valid_i[lane] &&
                 (alloc_is_load_i[lane] || alloc_is_store_i[lane]) &&
                 (alloc_count_calc < free_count_calc)) begin
                 alloc_fire_o[lane] = !flush_i;
@@ -320,21 +351,17 @@ module rv32_lsq #(
                     make_lsq_tag(alloc_slot, generation_next_mem[alloc_slot]);
                 alloc_count_calc = alloc_count_calc + 1;
                 alloc_count_o = alloc_count_calc[ALLOC_COUNT_WIDTH-1:0];
-            end else begin
-                prefix_open = 1'b0;
             end
         end
 
         // The ROB only presents a store at its head.  LSQ also checks that
         // the corresponding entry is its own head and operands are ready.
         store_commit_ready_o = 1'b0;
-        commit_match = 1'b0;
         if (!flush_i && occupancy_reg != 0 && valid_mem[head_reg] &&
             store_mem[head_reg] && addr_ready_mem[head_reg] &&
             data_ready_mem[head_reg] && !store_commit_mem[head_reg] &&
             (rob_tag_mem[head_reg] == store_commit_rob_tag_i)) begin
             store_commit_ready_o = 1'b1;
-            commit_match = 1'b1;
         end
 
         // Select the oldest eligible memory operation.  A younger load is
@@ -349,9 +376,7 @@ module rv32_lsq #(
             if (age < occupancy_reg && valid_mem[scan] && !candidate_found) begin
                 blocked = 1'b0;
                 if (load_mem[scan] && addr_ready_mem[scan] && !request_sent_mem[scan] && !complete_mem[scan]) begin
-                    target_mask = size_mask(addr_mem[scan], size_mem[scan]);
-                    fwd_mask = 16'b0;
-                    fwd_data = 128'b0;
+                    target_mask = access_mask(size_mem[scan]);
                     for (older_age = 0; older_age < LSQ_ENTRIES; older_age = older_age + 1) begin
                         if (older_age < age) begin
                             i = head_reg + older_age;
@@ -360,18 +385,9 @@ module rv32_lsq #(
                                 if (!addr_ready_mem[i]) begin
                                     blocked = 1'b1;
                                 end else if ((addr_mem[i][31:4] == addr_mem[scan][31:4])) begin
-                                    if (data_ready_mem[i]) begin
-                                        // Word-level merge: same youngest-wins
-                                        // per-byte result as the old byte loop,
-                                        // but every fwd bit is assigned under
-                                        // one uniform condition per store so
-                                        // synthesis proc builds one decoder
-                                        // instead of one per byte.
-                                        overlap = mask_mem[i] & target_mask;
-                                        fwd_data = (data_mem[i] & expand_bytes(overlap)) |
-                                                   (fwd_data & ~expand_bytes(overlap));
-                                        fwd_mask = fwd_mask | overlap;
-                                    end else if ((mask_mem[i] & target_mask) != 0) begin
+                                    if (!data_ready_mem[i] &&
+                                        (relative_overlap(addr_mem[i][3:0], mask_mem[i],
+                                                          addr_mem[scan][3:0], target_mask) != 0)) begin
                                         blocked = 1'b1;
                                     end
                                 end
@@ -405,18 +421,22 @@ module rv32_lsq #(
         request_fire = 1'b0;
         if (!flush_i && candidate_found && !response_wait_mem[candidate]) begin
             if (load_mem[candidate]) begin
-                target_mask = size_mask(addr_mem[candidate], size_mem[candidate]);
-                fwd_mask = 16'b0;
-                fwd_data = 128'b0;
+                target_mask = access_mask(size_mem[candidate]);
+                fwd_mask = 4'b0;
+                fwd_data = 32'b0;
                 for (older_age = 0; older_age < LSQ_ENTRIES; older_age = older_age + 1) begin
                     if (older_age < candidate_age) begin
                         i = head_reg + older_age;
                         if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
                         if (valid_mem[i] && store_mem[i] && addr_ready_mem[i] && data_ready_mem[i] &&
                             (addr_mem[i][31:4] == addr_mem[candidate][31:4])) begin
-                            overlap = mask_mem[i] & target_mask;
-                            fwd_data = (data_mem[i] & expand_bytes(overlap)) |
-                                       (fwd_data & ~expand_bytes(overlap));
+                            overlap = relative_overlap(addr_mem[i][3:0], mask_mem[i],
+                                                       addr_mem[candidate][3:0], target_mask);
+                            fwd_data = (store_data_relative_to_load(
+                                            data_mem[i], addr_mem[i][3:0], mask_mem[i],
+                                            addr_mem[candidate][3:0], target_mask) &
+                                        expand_word_bytes(overlap)) |
+                                       (fwd_data & ~expand_word_bytes(overlap));
                             fwd_mask = fwd_mask | overlap;
                         end
                     end
@@ -427,8 +447,9 @@ module rv32_lsq #(
                     dcache_req_addr_o = addr_mem[candidate];
                     dcache_req_size_o = size_mem[candidate];
                     dcache_req_unsigned_o = unsigned_mem[candidate];
-                    dcache_req_mask_o = target_mask & ~fwd_mask;
-                    dcache_req_wdata_o = fwd_data;
+                    dcache_req_mask_o = line_mask_from_relative(target_mask & ~fwd_mask,
+                                                                 addr_mem[candidate]);
+                    dcache_req_wdata_o = line_data_from_relative(fwd_data, addr_mem[candidate]);
                     dcache_req_rob_tag_o = rob_tag_mem[candidate];
                     dcache_req_lsq_tag_o = make_lsq_tag(candidate, generation_mem[candidate]);
                     request_fire = dcache_req_ready_i;
@@ -439,8 +460,8 @@ module rv32_lsq #(
                 dcache_req_addr_o = addr_mem[candidate];
                 dcache_req_size_o = size_mem[candidate];
                 dcache_req_unsigned_o = 1'b0;
-                dcache_req_mask_o = mask_mem[candidate];
-                dcache_req_wdata_o = data_mem[candidate];
+                dcache_req_mask_o = line_mask_from_relative(mask_mem[candidate], addr_mem[candidate]);
+                dcache_req_wdata_o = line_data_from_relative(data_mem[candidate], addr_mem[candidate]);
                 dcache_req_rob_tag_o = rob_tag_mem[candidate];
                 dcache_req_lsq_tag_o = make_lsq_tag(candidate, generation_mem[candidate]);
                 request_fire = dcache_req_ready_i;
@@ -449,10 +470,6 @@ module rv32_lsq #(
 
         // A fully covered load never touches the cache.  It becomes a
         // completion at the next edge, preserving the same handshake timing.
-        load_pop_fire = 1'b0;
-        store_pop_fire = 1'b0;
-        if (load_complete_valid_o && load_complete_ready_i) load_pop_fire = 1'b1;
-        if (store_ack_valid_o && store_ack_ready_i) store_pop_fire = 1'b1;
         response_match = 1'b0;
         response_slot = 0;
         for (i = 0; i < LSQ_ENTRIES; i = i + 1)
@@ -554,6 +571,34 @@ module rv32_lsq #(
                     end
                 end
             end
+            // Address generation can complete for a retained memory
+            // instruction on the same edge as a younger branch recovery.
+            // Preserve those tag-qualified updates just as the ROB preserves
+            // same-cycle completions; killed entries are invalidated below
+            // regardless of any update written on this edge.
+            for (update_slot = 0; update_slot < LSQ_ENTRIES; update_slot = update_slot + 1) begin
+                for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
+                    if (addr_update_valid_i[lane] &&
+                        tag_matches_slot(addr_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
+                        addr_ready_mem[update_slot] <= 1'b1;
+                        addr_mem[update_slot] <= addr_update_i[(lane*32) +: 32];
+                        if (mask_mem[update_slot] == 4'b0 && store_mem[update_slot])
+                            mask_mem[update_slot] <= access_mask(size_mem[update_slot]);
+                    end
+                    if (data_update_valid_i[lane] &&
+                        tag_matches_slot(data_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
+                        data_ready_mem[update_slot] <= 1'b1;
+                        data_mem[update_slot] <= data_update_i[(lane*32) +: 32];
+                        if (data_mask_update_i[(lane*4) +: 4] != 4'b0)
+                            mask_mem[update_slot] <= data_mask_update_i[(lane*4) +: 4];
+                    end
+                    if (wakeup_valid_i[lane] &&
+                        tag_matches_slot(wakeup_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
+                        data_ready_mem[update_slot] <= 1'b1;
+                        data_mem[update_slot] <= wakeup_value_i[(lane*32) +: 32];
+                    end
+                end
+            end
             // Stores are architectural before they enter the D-cache.  If an
             // acknowledgement coincides with recovery, retain it for the
             // surviving store instead of consuming and losing it.
@@ -575,16 +620,15 @@ module rv32_lsq #(
                 if (recovery_entry_age < 0) recovery_entry_age = recovery_entry_age + ROB_ENTRIES;
                 if (!((recovery_entry_age > recovery_branch_age) &&
                       (recovery_entry_age < recovery_occupancy_i))) begin
-                    response_line = dcache_resp_line_valid_i ? dcache_resp_line_data_i :
-                                    {96'b0, dcache_resp_word_data_i};
-                    merged_line = response_line;
-                    for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
-                        if (forward_mask_mem[response_slot][byte_index])
-                            merged_line[(byte_index*8) +: 8] =
-                                forward_data_mem[response_slot][(byte_index*8) +: 8];
-                    complete_value_mem[response_slot] <= extract_value(
-                        merged_line, addr_mem[response_slot], size_mem[response_slot],
-                        unsigned_mem[response_slot]);
+                    response_word = dcache_resp_line_valid_i ?
+                        relative_data_from_line(dcache_resp_line_data_i, addr_mem[response_slot]) :
+                        dcache_resp_word_data_i;
+                    merged_word = (forward_data_mem[response_slot] &
+                                   expand_word_bytes(forward_mask_mem[response_slot])) |
+                                  (response_word &
+                                   ~expand_word_bytes(forward_mask_mem[response_slot]));
+                    complete_value_mem[response_slot] <= format_relative_value(
+                        merged_word, size_mem[response_slot], unsigned_mem[response_slot]);
                     complete_error_mem[response_slot] <= dcache_resp_error_i;
                     complete_mem[response_slot] <= 1'b1;
                     response_wait_mem[response_slot] <= 1'b0;
@@ -604,44 +648,28 @@ module rv32_lsq #(
                     if (addr_update_valid_i[lane] && tag_matches_slot(addr_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
                         addr_ready_mem[update_slot] <= 1'b1;
                         addr_mem[update_slot] <= addr_update_i[(lane*32) +: 32];
-                        if (mask_mem[update_slot] == 16'b0 && store_mem[update_slot])
-                            mask_mem[update_slot] <= size_mask(addr_update_i[(lane*32) +: 32], size_mem[update_slot]);
+                        if (mask_mem[update_slot] == 4'b0 && store_mem[update_slot])
+                            mask_mem[update_slot] <= access_mask(size_mem[update_slot]);
                     end
                     if (data_update_valid_i[lane] && tag_matches_slot(data_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
                         data_ready_mem[update_slot] <= 1'b1;
-                        data_mem[update_slot] <= data_update_i[(lane*128) +: 128];
-                        if (data_mask_update_i[(lane*16) +: 16] != 16'b0)
-                            mask_mem[update_slot] <= data_mask_update_i[(lane*16) +: 16];
+                        data_mem[update_slot] <= data_update_i[(lane*32) +: 32];
+                        if (data_mask_update_i[(lane*4) +: 4] != 4'b0)
+                            mask_mem[update_slot] <= data_mask_update_i[(lane*4) +: 4];
                     end
                     if (wakeup_valid_i[lane] && tag_matches_slot(wakeup_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
                         data_ready_mem[update_slot] <= 1'b1;
-                        data_mem[update_slot] <= wakeup_value_i[(lane*128) +: 128];
+                        data_mem[update_slot] <= wakeup_value_i[(lane*32) +: 32];
                     end
                 end
             end
 
-            // A fully forwarded load is marked complete without a cache trip.
+            // The selected load's forwarding result was computed once in the
+            // request combinational block.  Reuse it here for cache bypass.
             if (candidate_found && load_mem[candidate] && !request_sent_mem[candidate] && !complete_mem[candidate]) begin
-                target_mask = size_mask(addr_mem[candidate], size_mem[candidate]);
-                fwd_mask = 16'b0;
-                fwd_data = 128'b0;
-                for (older_age = 0; older_age < LSQ_ENTRIES; older_age = older_age + 1) begin
-                    if (older_age < candidate_age) begin
-                        i = head_reg + older_age;
-                        if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
-                        if (valid_mem[i] && store_mem[i] && addr_ready_mem[i] && data_ready_mem[i] &&
-                            (addr_mem[i][31:4] == addr_mem[candidate][31:4])) begin
-                            for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
-                                if (mask_mem[i][byte_index] && target_mask[byte_index]) begin
-                                    fwd_mask[byte_index] = 1'b1;
-                                    fwd_data[(byte_index*8) +: 8] = data_mem[i][(byte_index*8) +: 8];
-                                end
-                        end
-                    end
-                end
                 if ((fwd_mask & target_mask) == target_mask) begin
-                    merged_line = fwd_data;
-                    complete_value_mem[candidate] <= extract_value(merged_line, addr_mem[candidate], size_mem[candidate], unsigned_mem[candidate]);
+                    complete_value_mem[candidate] <= format_relative_value(
+                        fwd_data, size_mem[candidate], unsigned_mem[candidate]);
                     complete_error_mem[candidate] <= 1'b0;
                     complete_mem[candidate] <= 1'b1;
                 end
@@ -659,12 +687,15 @@ module rv32_lsq #(
             end
 
             if (response_fire) begin
-                response_line = dcache_resp_line_valid_i ? dcache_resp_line_data_i : {96'b0, dcache_resp_word_data_i};
-                merged_line = response_line;
-                for (byte_index = 0; byte_index < 16; byte_index = byte_index + 1)
-                    if (forward_mask_mem[response_slot][byte_index])
-                        merged_line[(byte_index*8) +: 8] = forward_data_mem[response_slot][(byte_index*8) +: 8];
-                complete_value_mem[response_slot] <= extract_value(merged_line, addr_mem[response_slot], size_mem[response_slot], unsigned_mem[response_slot]);
+                response_word = dcache_resp_line_valid_i ?
+                    relative_data_from_line(dcache_resp_line_data_i, addr_mem[response_slot]) :
+                    dcache_resp_word_data_i;
+                merged_word = (forward_data_mem[response_slot] &
+                               expand_word_bytes(forward_mask_mem[response_slot])) |
+                              (response_word &
+                               ~expand_word_bytes(forward_mask_mem[response_slot]));
+                complete_value_mem[response_slot] <= format_relative_value(
+                    merged_word, size_mem[response_slot], unsigned_mem[response_slot]);
                 complete_error_mem[response_slot] <= dcache_resp_error_i;
                 complete_mem[response_slot] <= 1'b1;
                 response_wait_mem[response_slot] <= 1'b0;
@@ -709,18 +740,18 @@ module rv32_lsq #(
                     addr_ready_mem[alloc_slot] <= alloc_addr_valid_i[lane];
                     data_ready_mem[alloc_slot] <= alloc_data_valid_i[lane] || alloc_is_load_i[lane];
                     addr_mem[alloc_slot] <= alloc_addr_i[(lane*32) +: 32];
-                    data_mem[alloc_slot] <= alloc_store_data_i[(lane*128) +: 128];
-                    mask_mem[alloc_slot] <= (alloc_store_mask_i[(lane*16) +: 16] != 16'b0) ?
-                        alloc_store_mask_i[(lane*16) +: 16] :
+                    data_mem[alloc_slot] <= alloc_store_data_i[(lane*32) +: 32];
+                    mask_mem[alloc_slot] <= (alloc_store_mask_i[(lane*4) +: 4] != 4'b0) ?
+                        alloc_store_mask_i[(lane*4) +: 4] :
                         ((alloc_is_store_i[lane] && alloc_addr_valid_i[lane]) ?
-                         size_mask(alloc_addr_i[(lane*32) +: 32], alloc_size_i[(lane*2) +: 2]) : 16'b0);
+                         access_mask(alloc_size_i[(lane*2) +: 2]) : 4'b0);
                     request_sent_mem[alloc_slot] <= 1'b0;
                     response_wait_mem[alloc_slot] <= 1'b0;
                     complete_mem[alloc_slot] <= 1'b0;
                     complete_value_mem[alloc_slot] <= 32'b0;
                     complete_error_mem[alloc_slot] <= 1'b0;
-                    forward_mask_mem[alloc_slot] <= 16'b0;
-                    forward_data_mem[alloc_slot] <= 128'b0;
+                    forward_mask_mem[alloc_slot] <= 4'b0;
+                    forward_data_mem[alloc_slot] <= 32'b0;
                     store_commit_mem[alloc_slot] <= 1'b0;
                     store_ack_mem[alloc_slot] <= 1'b0;
                     store_ack_error_mem[alloc_slot] <= 1'b0;

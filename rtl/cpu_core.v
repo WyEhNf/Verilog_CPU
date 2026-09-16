@@ -1,14 +1,17 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// JOIN-01 top-level.  The interfaces remain scalar at the backend boundary;
-// wider frontend/backend configurations are elaborated for the parameter
-// matrix while lane zero forms the first integration path.
+// Parameterized RV32IM out-of-order top-level. Frontend bundles are decoded
+// lane-wise and a contiguous prefix is dispatched to the backend each cycle.
 module cpu_core #(
     parameter integer FE_WIDTH = `RV32IM_FE_WIDTH_DEFAULT,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
-    parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT
+    parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
+    parameter integer RS_ENTRIES = 8,
+    parameter integer LSQ_ENTRIES = 8,
+    parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
+                                         ((BE_WIDTH == 2) ? 8 : 16)
 ) (
     input  wire       clk,
     input  wire       reset,
@@ -43,6 +46,10 @@ module cpu_core #(
 );
     localparam integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH;
     localparam integer PACKET_WIDTH = `RV32IM_FETCH_PACKET_WIDTH;
+    localparam integer DISPATCH_LANES = (FE_WIDTH < BE_WIDTH) ? FE_WIDTH : BE_WIDTH;
+    localparam integer ROB_TAG_WIDTH = 1 + 2 +
+        ((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES)) +
+        `RV32IM_ROB_GENERATION_WIDTH;
 
     initial begin
         if ((FE_WIDTH != 1) && (FE_WIDTH != 2) && (FE_WIDTH != 4)) begin
@@ -81,47 +88,52 @@ module cpu_core #(
     wire [31:0] branch_feedback_pc, branch_feedback_target, branch_feedback_pred_target;
     wire [1:0] branch_feedback_kind;
 
-    wire pred_taken, pred_btb_hit;
-    wire [31:0] pred_target;
-    wire [1:0] pred_kind;
-    wire [5:0] pred_bht_index;
-    wire [3:0] pred_btb_index;
-    wire [1:0] pred_counter;
-    wire [31:0] pred_count, pred_correct;
-    reg [31:0] predictor_query_inst;
-    reg [FE_WIDTH-1:0] pred_taken_bus, pred_btb_hit_bus;
-    reg [FE_WIDTH*32-1:0] pred_target_bus;
-    reg [FE_WIDTH*2-1:0] pred_kind_bus;
+    wire [FE_WIDTH-1:0] pred_taken_bus, pred_btb_hit_bus;
+    wire [FE_WIDTH*32-1:0] pred_target_bus;
+    wire [FE_WIDTH*2-1:0] pred_kind_bus;
+    wire [FE_WIDTH*6-1:0] pred_bht_index_bus;
+    wire [FE_WIDTH*4-1:0] pred_btb_index_bus;
+    wire [FE_WIDTH*2-1:0] pred_counter_bus;
+    wire [FE_WIDTH*32-1:0] pred_count_bus, pred_correct_bus;
+    wire [31:0] pred_count = pred_count_bus[31:0];
+    wire [31:0] pred_correct = pred_correct_bus[31:0];
 
-    always @* begin
-        case (if_resp_pc[3:2])
-            2'd0: predictor_query_inst = if_resp_line_data[31:0];
-            2'd1: predictor_query_inst = if_resp_line_data[63:32];
-            2'd2: predictor_query_inst = if_resp_line_data[95:64];
-            default: predictor_query_inst = if_resp_line_data[127:96];
-        endcase
-        pred_taken_bus = {FE_WIDTH{1'b0}};
-        pred_btb_hit_bus = {FE_WIDTH{1'b0}};
-        pred_target_bus = {FE_WIDTH*32{1'b0}};
-        pred_kind_bus = {FE_WIDTH*2{1'b0}};
-        pred_taken_bus[0] = pred_taken;
-        pred_btb_hit_bus[0] = pred_btb_hit;
-        pred_target_bus[31:0] = pred_target;
-        pred_kind_bus[1:0] = pred_kind;
-    end
+    // Every fetch lane needs a predictor read.  The small predictor state is
+    // replicated, while all copies receive identical feedback and therefore
+    // remain coherent.  This avoids forcing lanes 1..N to predict not-taken.
+    genvar predictor_lane;
+    generate
+        for (predictor_lane = 0; predictor_lane < FE_WIDTH;
+             predictor_lane = predictor_lane + 1) begin : g_predictor
+            wire [2:0] query_word_index =
+                {1'b0, if_resp_pc[3:2]} + predictor_lane;
+            wire query_valid = if_resp_valid && (query_word_index < 3'd4);
+            wire [31:0] query_pc = if_resp_pc + (predictor_lane * 32'd4);
+            wire [31:0] query_inst =
+                if_resp_line_data >> (query_word_index * 32);
 
-    rv32_branch_predictor predictor (
-        .clk_i(clk), .reset_i(reset), .query_valid_i(if_resp_valid),
-        .query_pc_i(if_resp_pc), .query_inst_i(predictor_query_inst),
-        .pred_taken_o(pred_taken), .pred_target_o(pred_target),
-        .pred_kind_o(pred_kind), .pred_btb_hit_o(pred_btb_hit),
-         .pred_bht_index_o(pred_bht_index), .pred_btb_index_o(pred_btb_index),
-         .pred_counter_o(pred_counter), .feedback_valid_i(branch_feedback_valid),
-         .feedback_pc_i(branch_feedback_pc), .feedback_kind_i(branch_feedback_kind),
-         .feedback_taken_i(branch_feedback_taken), .feedback_target_i(branch_feedback_target),
-         .feedback_pred_taken_i(branch_feedback_pred_taken), .feedback_pred_target_i(branch_feedback_pred_target),
-        .prediction_count_o(pred_count), .correct_count_o(pred_correct)
-    );
+            rv32_branch_predictor predictor (
+                .clk_i(clk), .reset_i(reset), .query_valid_i(query_valid),
+                .query_pc_i(query_pc), .query_inst_i(query_inst),
+                .pred_taken_o(pred_taken_bus[predictor_lane]),
+                .pred_target_o(pred_target_bus[predictor_lane*32 +: 32]),
+                .pred_kind_o(pred_kind_bus[predictor_lane*2 +: 2]),
+                .pred_btb_hit_o(pred_btb_hit_bus[predictor_lane]),
+                .pred_bht_index_o(pred_bht_index_bus[predictor_lane*6 +: 6]),
+                .pred_btb_index_o(pred_btb_index_bus[predictor_lane*4 +: 4]),
+                .pred_counter_o(pred_counter_bus[predictor_lane*2 +: 2]),
+                .feedback_valid_i(branch_feedback_valid),
+                .feedback_pc_i(branch_feedback_pc),
+                .feedback_kind_i(branch_feedback_kind),
+                .feedback_taken_i(branch_feedback_taken),
+                .feedback_target_i(branch_feedback_target),
+                .feedback_pred_taken_i(branch_feedback_pred_taken),
+                .feedback_pred_target_i(branch_feedback_pred_target),
+                .prediction_count_o(pred_count_bus[predictor_lane*32 +: 32]),
+                .correct_count_o(pred_correct_bus[predictor_lane*32 +: 32])
+            );
+        end
+    endgenerate
 
     rv32_fetch_frontend #(.FE_WIDTH(FE_WIDTH)) frontend (
         .clk_i(clk), .reset_i(reset), .redirect_valid_i(redirect_valid),
@@ -164,21 +176,22 @@ module cpu_core #(
     wire dcache_req_valid, dcache_req_ready, dcache_req_load, dcache_req_store, dcache_req_unsigned;
     wire [31:0] dcache_req_addr;
     wire [1:0] dcache_req_size;
-    wire [15:0] dcache_req_mask, dcache_req_rob_tag, dcache_req_lsq_tag;
+    wire [15:0] dcache_req_mask;
+    wire [ROB_TAG_WIDTH-1:0] dcache_req_rob_tag, dcache_req_lsq_tag;
     wire [127:0] dcache_req_wdata;
     wire dcache_resp_valid, dcache_resp_ready, dcache_resp_line_valid, dcache_resp_error;
-    wire [15:0] dcache_resp_lsq_tag;
+    wire [ROB_TAG_WIDTH-1:0] dcache_resp_lsq_tag;
     wire [31:0] dcache_resp_addr, dcache_resp_word;
     wire [127:0] dcache_resp_line;
     wire dcache_store_ack_valid, dcache_store_ack_error;
-    wire [15:0] dcache_store_ack_lsq_tag;
+    wire [ROB_TAG_WIDTH-1:0] dcache_store_ack_lsq_tag;
     wire dc_mem_req_valid, dc_mem_req_ready, dc_mem_req_write, dc_mem_resp_valid, dc_mem_resp_ready, dc_mem_resp_error;
     wire [31:0] dc_mem_req_line_addr, dc_mem_resp_line_addr;
     wire [127:0] dc_mem_req_wdata, dc_mem_resp_data;
     wire [15:0] dc_mem_req_wmask;
     wire [7:0] dc_mem_req_id, dc_mem_resp_id;
     wire dc_event_request, dc_event_hit, dc_event_miss, dc_event_refill, dc_event_writeback, dc_event_stall;
-    rv32_dcache dcache (
+    rv32_dcache #(.TAG_WIDTH(ROB_TAG_WIDTH)) dcache (
         // LSQ generations reject wrong-path responses while retaining older
         // loads across a redirect.  The cache itself has no ROB-age context.
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(dcache_req_valid),
@@ -232,60 +245,112 @@ module cpu_core #(
         .event_d_mem_read_o(), .event_d_mem_write_o()
     );
 
-    wire trace_valid = fetch_valid[0];
-    wire trace_ready;
-    assign fetch_ready = {{(FE_WIDTH-1){1'b0}}, trace_ready};
-    wire [PACKET_WIDTH-1:0] trace_packet = fetch_packet[PACKET_WIDTH-1:0];
-    wire [31:0] trace_pc = trace_packet[31:0];
-    wire [31:0] trace_inst = trace_packet[63:32];
-    wire trace_pred_taken = trace_packet[64];
-    wire [31:0] trace_pred_target = trace_packet[96:65];
-    wire [1:0] trace_pred_kind = trace_packet[98:97];
+    wire [BE_WIDTH-1:0] trace_valid, trace_ready;
+    wire [BE_WIDTH*PACKET_WIDTH-1:0] trace_packet;
+    wire [BE_WIDTH*32-1:0] trace_pc, trace_inst;
+    wire [BE_WIDTH-1:0] trace_pred_taken;
+    wire [BE_WIDTH*32-1:0] trace_pred_target;
+    wire [BE_WIDTH*2-1:0] trace_pred_kind;
+    wire [BE_WIDTH-1:0] dec_legal, dec_rd_we, dec_rs1_used, dec_rs2_used;
+    wire [BE_WIDTH*`RV32IM_OP_WIDTH-1:0] dec_op, backend_op;
+    wire [BE_WIDTH*4-1:0] dec_class;
+    wire [BE_WIDTH*5-1:0] dec_rd, dec_rs1, dec_rs2, backend_rs1, backend_rs2;
+    wire [BE_WIDTH*32-1:0] dec_imm;
+    wire [BE_WIDTH-1:0] dec_load, dec_store, dec_branch, dec_jump, dec_serialize;
+    wire [BE_WIDTH*2-1:0] dec_mem_size;
+    wire [BE_WIDTH-1:0] dec_mem_unsigned;
+    wire [BE_WIDTH*4-1:0] dec_mem_base_mask;
+    wire [BE_WIDTH-1:0] dec_jalr_clear_lsb, is_halt_trace, backend_rs1_used;
 
-    wire dec_legal, dec_rd_we, dec_rs1_used, dec_rs2_used;
-    wire [5:0] dec_op;
-    wire [3:0] dec_class;
-    wire [4:0] dec_rd, dec_rs1, dec_rs2;
-    wire [31:0] dec_imm;
-    wire dec_load, dec_store, dec_branch, dec_jump, dec_serialize;
-    wire [1:0] dec_mem_size;
-    wire dec_mem_unsigned;
-    wire [3:0] dec_mem_base_mask;
-    wire dec_jalr_clear_lsb;
-    rv32im_decoder decoder (
-        .inst_i(trace_inst), .legal_o(dec_legal), .op_o(dec_op), .class_o(dec_class),
-        .rd_o(dec_rd), .rs1_o(dec_rs1), .rs2_o(dec_rs2), .rd_we_o(dec_rd_we),
-        .rs1_used_o(dec_rs1_used), .rs2_used_o(dec_rs2_used), .imm_o(dec_imm),
-        .is_load_o(dec_load), .is_store_o(dec_store), .is_branch_o(dec_branch),
-        .is_jump_o(dec_jump), .is_serialize_o(dec_serialize), .mem_size_o(dec_mem_size),
-        .mem_unsigned_o(dec_mem_unsigned), .mem_base_mask_o(dec_mem_base_mask),
-        .jalr_clear_lsb_o(dec_jalr_clear_lsb)
-    );
+    genvar frontend_lane;
+    generate
+        for (frontend_lane = 0; frontend_lane < FE_WIDTH; frontend_lane = frontend_lane + 1) begin : g_frontend_ready
+            if (frontend_lane < BE_WIDTH)
+                assign fetch_ready[frontend_lane] = trace_ready[frontend_lane];
+            else
+                assign fetch_ready[frontend_lane] = 1'b0;
+        end
+    endgenerate
 
-    // The HALT sentinel is a control marker, but its return value is the
-    // committed architectural a0.  Reuse the ALU path to read x10 without
-    // changing the decoder's precise sentinel classification.
-    wire is_halt_trace = (dec_op == `RV32IM_OP_HALT);
-    wire [5:0] backend_op = is_halt_trace ? `RV32IM_OP_ADD : dec_op;
-    wire [4:0] backend_rs1 = is_halt_trace ? 5'd10 : dec_rs1;
-    wire [4:0] backend_rs2 = is_halt_trace ? 5'd0 : dec_rs2;
-    wire backend_rs1_used = is_halt_trace ? 1'b1 : dec_rs1_used;
+    genvar decode_lane;
+    generate
+        for (decode_lane = 0; decode_lane < BE_WIDTH; decode_lane = decode_lane + 1) begin : g_decode
+            if (decode_lane < FE_WIDTH) begin : g_has_frontend_lane
+                assign trace_valid[decode_lane] = fetch_valid[decode_lane];
+                assign trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH] =
+                    fetch_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH];
+            end else begin : g_no_frontend_lane
+                assign trace_valid[decode_lane] = 1'b0;
+                assign trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH] =
+                    {PACKET_WIDTH{1'b0}};
+            end
+            assign trace_pc[decode_lane*32 +: 32] =
+                trace_packet[decode_lane*PACKET_WIDTH +: 32];
+            assign trace_inst[decode_lane*32 +: 32] =
+                trace_packet[decode_lane*PACKET_WIDTH + 32 +: 32];
+            assign trace_pred_taken[decode_lane] =
+                trace_packet[decode_lane*PACKET_WIDTH + 64];
+            assign trace_pred_target[decode_lane*32 +: 32] =
+                trace_packet[decode_lane*PACKET_WIDTH + 65 +: 32];
+            assign trace_pred_kind[decode_lane*2 +: 2] =
+                trace_packet[decode_lane*PACKET_WIDTH + 97 +: 2];
 
-    wire commit_valid, commit_ready, commit_rd_we, commit_is_store;
-    wire [31:0] commit_pc, commit_inst, commit_value, commit_store_addr;
-    wire [4:0] commit_rd;
-    wire [15:0] commit_store_mask, commit_tag;
-    wire [127:0] commit_store_data;
+            rv32im_decoder decoder (
+                .inst_i(trace_inst[decode_lane*32 +: 32]),
+                .legal_o(dec_legal[decode_lane]),
+                .op_o(dec_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH]),
+                .class_o(dec_class[decode_lane*4 +: 4]),
+                .rd_o(dec_rd[decode_lane*5 +: 5]),
+                .rs1_o(dec_rs1[decode_lane*5 +: 5]),
+                .rs2_o(dec_rs2[decode_lane*5 +: 5]),
+                .rd_we_o(dec_rd_we[decode_lane]),
+                .rs1_used_o(dec_rs1_used[decode_lane]),
+                .rs2_used_o(dec_rs2_used[decode_lane]),
+                .imm_o(dec_imm[decode_lane*32 +: 32]),
+                .is_load_o(dec_load[decode_lane]),
+                .is_store_o(dec_store[decode_lane]),
+                .is_branch_o(dec_branch[decode_lane]),
+                .is_jump_o(dec_jump[decode_lane]),
+                .is_serialize_o(dec_serialize[decode_lane]),
+                .mem_size_o(dec_mem_size[decode_lane*2 +: 2]),
+                .mem_unsigned_o(dec_mem_unsigned[decode_lane]),
+                .mem_base_mask_o(dec_mem_base_mask[decode_lane*4 +: 4]),
+                .jalr_clear_lsb_o(dec_jalr_clear_lsb[decode_lane])
+            );
+
+            // HALT commits the live architectural a0 value through the normal
+            // ALU/read path while retaining precise sentinel classification.
+            assign is_halt_trace[decode_lane] =
+                (dec_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_HALT);
+            assign backend_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] =
+                is_halt_trace[decode_lane] ? `RV32IM_OP_ADD :
+                dec_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH];
+            assign backend_rs1[decode_lane*5 +: 5] =
+                is_halt_trace[decode_lane] ? 5'd10 : dec_rs1[decode_lane*5 +: 5];
+            assign backend_rs2[decode_lane*5 +: 5] =
+                is_halt_trace[decode_lane] ? 5'd0 : dec_rs2[decode_lane*5 +: 5];
+            assign backend_rs1_used[decode_lane] =
+                is_halt_trace[decode_lane] ? 1'b1 : dec_rs1_used[decode_lane];
+        end
+    endgenerate
+
+    wire [BE_WIDTH-1:0] commit_valid, commit_rd_we, commit_is_store;
+    wire commit_ready;
+    wire [BE_WIDTH*32-1:0] commit_pc, commit_inst, commit_value, commit_store_addr;
+    wire [BE_WIDTH*5-1:0] commit_rd;
+    wire [BE_WIDTH*16-1:0] commit_store_mask;
+    wire [BE_WIDTH*ROB_TAG_WIDTH-1:0] commit_tag;
+    wire [BE_WIDTH*128-1:0] commit_store_data;
     assign commit_ready = 1'b1;
-    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES)) backend (
+    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),
         .trace_rs2_i(backend_rs2), .trace_rd_we_i(dec_rd_we), .trace_rs1_used_i(backend_rs1_used),
-        .trace_rs2_used_i(is_halt_trace ? 1'b0 : dec_rs2_used), .trace_is_load_i(dec_load), .trace_is_store_i(dec_store),
-        .trace_is_branch_i(dec_branch || dec_jump), .trace_is_halt_i(is_halt_trace),
-        .trace_is_error_i(trace_valid && !dec_legal), .trace_mem_size_i(dec_mem_size),
-        .trace_mem_unsigned_i(dec_mem_unsigned), .trace_store_data_i(128'd0),
+        .trace_rs2_used_i(dec_rs2_used & ~is_halt_trace), .trace_is_load_i(dec_load), .trace_is_store_i(dec_store),
+        .trace_is_branch_i(dec_branch | dec_jump), .trace_is_halt_i(is_halt_trace),
+        .trace_is_error_i(trace_valid & ~dec_legal), .trace_mem_size_i(dec_mem_size),
+        .trace_mem_unsigned_i(dec_mem_unsigned), .trace_store_data_i({BE_WIDTH*128{1'b0}}),
         .trace_pred_taken_i(trace_pred_taken), .trace_pred_target_i(trace_pred_target),
         .trace_pred_kind_i(trace_pred_kind), .dcache_req_valid_o(dcache_req_valid),
         .dcache_req_ready_i(dcache_req_ready), .dcache_req_is_load_o(dcache_req_load),
@@ -322,14 +387,24 @@ module cpu_core #(
         .d_stall_count_o(), .i_mem_request_count_o(), .d_mem_read_count_o(), .d_mem_write_count_o()
     );
 
+    function [31:0] commit_popcount;
+        input [BE_WIDTH-1:0] bits;
+        integer lane;
+        begin
+            commit_popcount = 32'd0;
+            for (lane = 0; lane < BE_WIDTH; lane = lane + 1)
+                if (bits[lane]) commit_popcount = commit_popcount + 32'd1;
+        end
+    endfunction
+
     always @(posedge clk) begin
         if (reset) begin
             cycles <= 32'd0;
             instret <= 32'd0;
         end else begin
             cycles <= cycles + 32'd1;
-            if (commit_valid && commit_ready)
-                instret <= instret + 32'd1;
+            if ((|commit_valid) && commit_ready)
+                instret <= instret + commit_popcount(commit_valid);
         end
     end
 endmodule

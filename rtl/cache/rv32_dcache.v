@@ -25,7 +25,7 @@ module rv32_dcache #(
     input  wire                     dcache_req_unsigned_i,
     input  wire [15:0]              dcache_req_mask_i,
     input  wire [127:0]             dcache_req_wdata_i,
-    input  wire [15:0]              dcache_req_rob_tag_i,
+    input  wire [TAG_WIDTH-1:0]     dcache_req_rob_tag_i,
     input  wire [TAG_WIDTH-1:0]     dcache_req_lsq_tag_i,
 
     output wire                     dcache_resp_valid_o,
@@ -72,21 +72,24 @@ module rv32_dcache #(
     reg [31:0] s0_addr;
     reg [1:0] s0_size;
     reg s0_unsigned;
-    reg [15:0] s0_mask, s0_rob;
+    reg [15:0] s0_mask;
+    reg [TAG_WIDTH-1:0] s0_rob;
     reg [127:0] s0_wdata;
     reg [TAG_WIDTH-1:0] s0_lsq;
     reg s1_valid, s1_load, s1_store, s1_hit;
     reg [31:0] s1_addr;
     reg [1:0] s1_size;
     reg s1_unsigned;
-    reg [15:0] s1_mask, s1_rob;
+    reg [15:0] s1_mask;
+    reg [TAG_WIDTH-1:0] s1_rob;
     reg [127:0] s1_wdata, s1_line;
     reg [TAG_WIDTH-1:0] s1_lsq;
     reg s2_valid, s2_load, s2_store, s2_hit;
     reg [31:0] s2_addr;
     reg [1:0] s2_size;
     reg s2_unsigned;
-    reg [15:0] s2_mask, s2_rob;
+    reg [15:0] s2_mask;
+    reg [TAG_WIDTH-1:0] s2_rob;
     reg [127:0] s2_wdata, s2_line;
     reg [TAG_WIDTH-1:0] s2_lsq;
 

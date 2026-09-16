@@ -35,6 +35,10 @@ synth/abc_map_probe_alu.ys
 synth/pre_abc_diag.tcl
 synth/synth_min.tcl
 
+# Local copies of external research papers.  Keep links and citations in
+# docs, but do not vendor third-party PDFs into the implementation history.
+/docs/*.pdf
+
 # Generated project directories and intermediates
 /build/*
 !/build/.gitkeep
