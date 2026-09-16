@@ -110,7 +110,7 @@ module rv32_uncached_memory #(
     assign mem_d_req_line_addr_o = {d_req_addr_i[31:4], 4'b0};
     assign mem_d_req_wdata_o = d_req_wdata_i;
     assign mem_d_req_wmask_o = d_req_is_store_i ? d_req_mask_i : 16'b0;
-    assign mem_d_req_id_o = d_req_lsq_tag_i[7:0];
+    assign mem_d_req_id_o = d_req_lsq_tag_i;
     assign mem_d_resp_ready_o = d_pending &&
         (d_store ? d_store_ack_ready_i : d_resp_ready_i);
 

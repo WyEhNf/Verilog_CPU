@@ -311,7 +311,7 @@ module rv32_lsq #(
             $display("ERROR: invalid LSQ BE_WIDTH=%0d; expected 1, 2, or 4", BE_WIDTH);
             $finish;
         end
-        if ((LSQ_ENTRIES < 2) || ((LSQ_ENTRIES & (LSQ_ENTRIES - 1)) != 0)) begin
+        if ((LSQ_ENTRIES < 1) || ((LSQ_ENTRIES & (LSQ_ENTRIES - 1)) != 0)) begin
             $display("ERROR: invalid LSQ_ENTRIES=%0d; expected a power of two", LSQ_ENTRIES);
             $finish;
         end
