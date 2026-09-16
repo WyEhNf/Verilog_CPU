@@ -17,9 +17,10 @@ RISCV_PREFIX ?= $(RV_ROOT)/bin/riscv-none-elf-
 OSS_ENV = set "VERILATOR_ROOT=$(OSS_CAD_ROOT_WIN)\share\verilator" && set "YOSYSHQ_ROOT=" && call "$(OSS_CAD_ROOT_WIN)\environment.bat" &&
 
 # Synthesis configuration knobs.  CFG is only the output directory name;
-# FE_WIDTH/BE_WIDTH/PHYS_REGS/ROB_ENTRIES are the real parameters.  Keep the
-# libdir path in forward-slash form: yosys treats backslashes in script
-# strings as escapes.
+# FE_WIDTH/BE_WIDTH/PHYS_REGS/ROB_ENTRIES/MUL_IMPL are the real parameters.
+# Use distinct CFG names when comparing multiplier implementations.  Keep the
+# libdir path in forward-slash form: yosys treats backslashes in script strings
+# as escapes.
 FE_WIDTH ?= 1
 BE_WIDTH ?= 1
 PHYS_REGS ?= 64
@@ -27,6 +28,7 @@ ROB_ENTRIES ?= 32
 RS_ENTRIES ?= 8
 LSQ_ENTRIES ?= 8
 ENABLE_CACHE_STATS ?= 0
+MUL_IMPL ?= 0
 CFG ?= fe$(FE_WIDTH)_be$(BE_WIDTH)_p$(PHYS_REGS)_r$(ROB_ENTRIES)
 ASAP7_LIB_DIR ?= $(ROOT)/third_party/asap7/lib
 RTL_FILELIST = rtl/filelist.f
@@ -85,7 +87,7 @@ join01:
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_join01_tb.vvp | findstr /C:"PASS: JOIN-01"
 
 join02:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Vvp "$(VVP)" -Simulation build/cpu_core_image_tb.vvp -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
 
 # Fast full-system regression: Verilator-compiled cpu_core_image_tb.
@@ -107,15 +109,15 @@ join03-build:
 	@python tools/run_join03.py --build-only --report build/join03/build_report.json --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe"
 
 join03:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb.vvp --config fe1_be1_p64_r32
 
 # JOIN-04 proves that the same full-system path executes with real two- and
 # four-wide decode/rename/dispatch/issue/commit configurations.
 join04: join03-build
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=2 -P cpu_core_image_tb.BE_WIDTH=2 -P cpu_core_image_tb.PHYS_REGS=64 -P cpu_core_image_tb.ROB_ENTRIES=32 -P cpu_core_image_tb.RS_ENTRIES=8 -P cpu_core_image_tb.LSQ_ENTRIES=8 -s cpu_core_image_tb -o build/cpu_core_image_tb_w2.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=2 -P cpu_core_image_tb.BE_WIDTH=2 -P cpu_core_image_tb.PHYS_REGS=64 -P cpu_core_image_tb.ROB_ENTRIES=32 -P cpu_core_image_tb.RS_ENTRIES=8 -P cpu_core_image_tb.LSQ_ENTRIES=8 -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb_w2.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb_w2.vvp --report build/join03/report_w2.json --config fe2_be2_p64_r32
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=4 -P cpu_core_image_tb.BE_WIDTH=4 -P cpu_core_image_tb.PHYS_REGS=96 -P cpu_core_image_tb.ROB_ENTRIES=64 -P cpu_core_image_tb.RS_ENTRIES=16 -P cpu_core_image_tb.LSQ_ENTRIES=16 -s cpu_core_image_tb -o build/cpu_core_image_tb_w4.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=4 -P cpu_core_image_tb.BE_WIDTH=4 -P cpu_core_image_tb.PHYS_REGS=96 -P cpu_core_image_tb.ROB_ENTRIES=64 -P cpu_core_image_tb.RS_ENTRIES=16 -P cpu_core_image_tb.LSQ_ENTRIES=16 -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb_w4.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb_w4.vvp --report build/join03/report_w4.json --config fe4_be4_p96_r64
 
 join05: join03-build
@@ -246,8 +248,12 @@ b05:
 b06:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32m_units_tb -o build/b06.vvp -c $(RTL_FILELIST) tb/unit/rv32m_units_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b06.vvp | findstr /C:"PASS: B-06 multiplier/divider"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32m_units_tb.MUL_IMPL=1 -s rv32m_units_tb -o build/b06_radix4.vvp -c $(RTL_FILELIST) tb/unit/rv32m_units_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b06_radix4.vvp | findstr /C:"PASS: B-06 multiplier/divider"
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32m_mdu_reservation_station_tb -o build/b06_mdu.vvp -c $(RTL_FILELIST) tb/unit/rv32m_mdu_reservation_station_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu.vvp | findstr /C:"PASS: B-06 MDU RS"
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32m_mdu_reservation_station_tb.MUL_IMPL=1 -s rv32m_mdu_reservation_station_tb -o build/b06_mdu_radix4.vvp -c $(RTL_FILELIST) tb/unit/rv32m_mdu_reservation_station_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu_radix4.vvp | findstr /C:"PASS: B-06 MDU RS"
 
 b07:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_completion_network_tb.BE_WIDTH=1 -s rv32_completion_network_tb -o build/b07_be1.vvp -c $(RTL_FILELIST) tb/unit/rv32_completion_network_tb.v
@@ -275,10 +281,10 @@ regression:
 # progress window), synth.log, stat_after_abc.log, cpu_core_synth.v.
 synth:
 	@if not exist "build\synth\$(CFG)" mkdir "build\synth\$(CFG)"
-	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG) $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS)" > "build\synth\$(CFG)\yosys.log" 2>&1
-	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)/synth.log" --memory-dump "build/synth/$(CFG)/memory_manifest.il" --output "build/synth/$(CFG)/area_audit.json" --profile ff-reference --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES)
+	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG) $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL)" > "build\synth\$(CFG)\yosys.log" 2>&1
+	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)/synth.log" --memory-dump "build/synth/$(CFG)/memory_manifest.il" --output "build/synth/$(CFG)/area_audit.json" --profile ff-reference --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL)
 
 synth-bb:
 	@if not exist "build\synth\$(CFG)_bb" mkdir "build\synth\$(CFG)_bb"
-	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS)" > "build\synth\$(CFG)_bb\yosys.log" 2>&1
-	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)_bb/synth.log" --memory-dump "build/synth/$(CFG)_bb/memory_manifest.il" --output "build/synth/$(CFG)_bb/area_audit.json" --profile logic-blackbox --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES)
+	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL)" > "build\synth\$(CFG)_bb\yosys.log" 2>&1
+	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)_bb/synth.log" --memory-dump "build/synth/$(CFG)_bb/memory_manifest.il" --output "build/synth/$(CFG)_bb/area_audit.json" --profile logic-blackbox --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL)
