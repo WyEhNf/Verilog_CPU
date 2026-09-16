@@ -138,6 +138,7 @@ def build_report(args):
             "fetch_queue_depth": args.fetch_queue_depth,
             "completion_depth": args.completion_depth,
             "mul_impl": args.mul_impl,
+            "shift_impl": args.shift_impl,
         },
         "area": {
             "known_standard_cell_um2": synthesis["top_area_um2_known_cells_only"],
@@ -173,6 +174,7 @@ def main(argv=None):
     parser.add_argument("--fetch-queue-depth", type=int, default=16)
     parser.add_argument("--completion-depth", type=int, default=4)
     parser.add_argument("--mul-impl", type=int, choices=(0, 1, 2), default=0)
+    parser.add_argument("--shift-impl", type=int, choices=(0, 1), default=0)
     parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args(argv)
 
