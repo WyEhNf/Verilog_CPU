@@ -13,6 +13,7 @@ module cpu_core #(
     parameter integer ENABLE_CACHE_STATS = 0,
     parameter integer ENABLE_CACHES = 1,
     parameter integer ENABLE_PREDICTOR = 1,
+    parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16)
@@ -151,7 +152,7 @@ module cpu_core #(
         end
     endgenerate
 
-    rv32_fetch_frontend #(.FE_WIDTH(FE_WIDTH)) frontend (
+    rv32_fetch_frontend #(.FE_WIDTH(FE_WIDTH), .FQ_DEPTH(FETCH_QUEUE_DEPTH)) frontend (
         .clk_i(clk), .reset_i(reset), .redirect_valid_i(redirect_valid),
         .redirect_pc_i(redirect_pc), .redirect_epoch_i(redirect_epoch),
         .stop_i(halted), .error_i(error), .if_req_valid_o(if_req_valid),
