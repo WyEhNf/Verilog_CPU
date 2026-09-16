@@ -91,6 +91,11 @@ module rv32i_alu #(
     reg actual_control;
     reg [31:0] actual_next_pc;
     reg live_match;
+    reg [31:0] adder_lhs;
+    reg [31:0] adder_rhs;
+    reg adder_subtract;
+    reg [31:0] shared_sum;
+    reg [31:0] pc_plus_four;
 
     wire result_visible = result_valid_reg &&
         (!live_tag_valid_i || (result_rob_tag_reg == live_tag_i));
@@ -121,22 +126,59 @@ module rv32i_alu #(
     // The resulting fields are latched below, making completion visible one
     // cycle after issue and stable while the consumer applies backpressure.
     always @* begin
+        // Only one operation is accepted per cycle.  Select the operands up
+        // front so address generation, branch targets and integer add/sub all
+        // share one 32-bit adder instead of inferring parallel adders.
+        adder_lhs = issue_src1_value_i;
+        adder_rhs = issue_src2_value_i;
+        adder_subtract = (issue_op_i == `RV32IM_OP_SUB);
+        case (issue_op_i)
+            `RV32IM_OP_AUIPC,
+            `RV32IM_OP_JAL,
+            `RV32IM_OP_BEQ,
+            `RV32IM_OP_BNE,
+            `RV32IM_OP_BLT,
+            `RV32IM_OP_BGE,
+            `RV32IM_OP_BLTU,
+            `RV32IM_OP_BGEU: begin
+                adder_lhs = issue_pc_i;
+                adder_rhs = issue_imm_i;
+            end
+            `RV32IM_OP_JALR,
+            `RV32IM_OP_LB,
+            `RV32IM_OP_LH,
+            `RV32IM_OP_LW,
+            `RV32IM_OP_LBU,
+            `RV32IM_OP_LHU,
+            `RV32IM_OP_SB,
+            `RV32IM_OP_SH,
+            `RV32IM_OP_SW,
+            `RV32IM_OP_ADDI: begin
+                adder_lhs = issue_src1_value_i;
+                adder_rhs = issue_imm_i;
+            end
+            default: begin end
+        endcase
+        shared_sum = adder_lhs + (adder_subtract ? ~adder_rhs : adder_rhs) +
+            {{31{1'b0}}, adder_subtract};
+        pc_plus_four = issue_pc_i + 32'd4;
+
         calc_value = 32'b0;
         calc_rd_we = 1'b0;
         calc_is_branch = 1'b0;
         calc_branch_taken = 1'b0;
-        calc_branch_target = issue_pc_i + issue_imm_i;
+        calc_branch_target = 32'b0;
         calc_redirect_valid = 1'b0;
-        calc_redirect_pc = issue_pc_i + 32'd4;
+        calc_redirect_pc = 32'b0;
         calc_is_memory = 1'b0;
         calc_is_load = 1'b0;
         calc_is_store = 1'b0;
-        calc_mem_addr = issue_src1_value_i + issue_imm_i;
+        calc_mem_addr = 32'b0;
         calc_mem_size = issue_mem_size_i;
         calc_mem_unsigned = issue_mem_unsigned_i;
         calc_store_data = issue_store_data_i;
         actual_control = 1'b0;
-        actual_next_pc = issue_pc_i + 32'd4;
+        actual_next_pc = 32'b0;
 
         case (issue_op_i)
             `RV32IM_OP_LUI: begin
@@ -144,25 +186,25 @@ module rv32i_alu #(
                 calc_rd_we = 1'b1;
             end
             `RV32IM_OP_AUIPC: begin
-                calc_value = issue_pc_i + issue_imm_i;
+                calc_value = shared_sum;
                 calc_rd_we = 1'b1;
             end
             `RV32IM_OP_JAL: begin
-                calc_value = issue_pc_i + 32'd4;
+                calc_value = pc_plus_four;
                 calc_rd_we = 1'b1;
                 calc_is_branch = 1'b1;
                 calc_branch_taken = 1'b1;
                 actual_control = 1'b1;
-                actual_next_pc = issue_pc_i + issue_imm_i;
+                actual_next_pc = shared_sum;
                 calc_branch_target = actual_next_pc;
             end
             `RV32IM_OP_JALR: begin
-                calc_value = issue_pc_i + 32'd4;
+                calc_value = pc_plus_four;
                 calc_rd_we = 1'b1;
                 calc_is_branch = 1'b1;
                 calc_branch_taken = 1'b1;
                 actual_control = 1'b1;
-                actual_next_pc = (issue_src1_value_i + issue_imm_i) & 32'hfffffffe;
+                actual_next_pc = shared_sum & 32'hfffffffe;
                 calc_branch_target = actual_next_pc;
             end
             `RV32IM_OP_BEQ: begin calc_is_branch = 1'b1; calc_branch_taken = (issue_src1_value_i == issue_src2_value_i); end
@@ -179,12 +221,14 @@ module rv32i_alu #(
                 calc_is_memory = 1'b1;
                 calc_is_load = 1'b1;
                 calc_rd_we = 1'b1;
+                calc_mem_addr = shared_sum;
             end
             `RV32IM_OP_SB,
             `RV32IM_OP_SH,
             `RV32IM_OP_SW: begin
                 calc_is_memory = 1'b1;
                 calc_is_store = 1'b1;
+                calc_mem_addr = shared_sum;
                 // Store data remains access-relative inside the backend.
                 // A zero predecoded payload selects the live rs2 value; the
                 // LSQ expands it to cache-line coordinates at its boundary.
@@ -192,7 +236,7 @@ module rv32i_alu #(
                     calc_store_data = issue_src2_value_i;
             end
             `RV32IM_OP_ADDI,
-            `RV32IM_OP_ADD: begin calc_value = issue_src1_value_i + ((issue_op_i == `RV32IM_OP_ADDI) ? issue_imm_i : issue_src2_value_i); calc_rd_we = 1'b1; end
+            `RV32IM_OP_ADD: begin calc_value = shared_sum; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLTI: begin calc_value = ($signed(issue_src1_value_i) < $signed(issue_imm_i)) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLTIU: begin calc_value = (issue_src1_value_i < issue_imm_i) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
             `RV32IM_OP_XORI: begin calc_value = issue_src1_value_i ^ issue_imm_i; calc_rd_we = 1'b1; end
@@ -201,7 +245,7 @@ module rv32i_alu #(
             `RV32IM_OP_SLLI: begin calc_value = issue_src1_value_i << issue_imm_i[4:0]; calc_rd_we = 1'b1; end
             `RV32IM_OP_SRLI: begin calc_value = issue_src1_value_i >> issue_imm_i[4:0]; calc_rd_we = 1'b1; end
             `RV32IM_OP_SRAI: begin calc_value = $signed(issue_src1_value_i) >>> issue_imm_i[4:0]; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SUB: begin calc_value = issue_src1_value_i - issue_src2_value_i; calc_rd_we = 1'b1; end
+            `RV32IM_OP_SUB: begin calc_value = shared_sum; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLL: begin calc_value = issue_src1_value_i << issue_src2_value_i[4:0]; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLT: begin calc_value = ($signed(issue_src1_value_i) < $signed(issue_src2_value_i)) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLTU: begin calc_value = (issue_src1_value_i < issue_src2_value_i) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
@@ -217,7 +261,8 @@ module rv32i_alu #(
             (issue_op_i == `RV32IM_OP_BLT) || (issue_op_i == `RV32IM_OP_BGE) ||
             (issue_op_i == `RV32IM_OP_BLTU) || (issue_op_i == `RV32IM_OP_BGEU)) begin
             actual_control = 1'b1;
-            actual_next_pc = calc_branch_taken ? (issue_pc_i + issue_imm_i) : (issue_pc_i + 32'd4);
+            calc_branch_target = shared_sum;
+            actual_next_pc = calc_branch_taken ? shared_sum : pc_plus_four;
         end
         if (actual_control) begin
             calc_redirect_pc = actual_next_pc;
