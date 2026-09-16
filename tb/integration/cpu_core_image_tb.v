@@ -17,6 +17,7 @@ module cpu_core_image_tb #(
     parameter integer SHIFT_IMPL = 0,
     parameter integer PHYS_TAG_IMPL = 0,
     parameter integer CHECKPOINT_IMPL = 0,
+    parameter integer COMPLETION_BYPASS = 0,
     parameter integer GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16)
@@ -81,6 +82,7 @@ module cpu_core_image_tb #(
         .SHIFT_IMPL(SHIFT_IMPL),
         .PHYS_TAG_IMPL(PHYS_TAG_IMPL),
         .CHECKPOINT_IMPL(CHECKPOINT_IMPL),
+        .COMPLETION_BYPASS(COMPLETION_BYPASS),
         .GENERATION_WIDTH(GENERATION_WIDTH),
         .COMPLETION_DEPTH(COMPLETION_DEPTH)
     ) dut (
