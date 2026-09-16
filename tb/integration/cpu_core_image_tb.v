@@ -14,6 +14,7 @@ module cpu_core_image_tb #(
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
     parameter integer SHIFT_IMPL = 0,
+    parameter integer PHYS_TAG_IMPL = 0,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16)
 );
@@ -75,6 +76,7 @@ module cpu_core_image_tb #(
         .FETCH_QUEUE_DEPTH(FETCH_QUEUE_DEPTH),
         .MUL_IMPL(MUL_IMPL),
         .SHIFT_IMPL(SHIFT_IMPL),
+        .PHYS_TAG_IMPL(PHYS_TAG_IMPL),
         .COMPLETION_DEPTH(COMPLETION_DEPTH)
     ) dut (
         .clk(clk), .reset(reset), .halted(halted), .error(error),
