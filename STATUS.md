@@ -21,8 +21,9 @@
   ALU，bundle 内 RAW rename 旁路，多分配 ROB/RS/LSQ，多路 completion/writeback，
   连续 ROB 多提交；MUL/DIV 共享一个 MDU，并按年龄选择。
 - 2026-09-16 在当前多发射 RTL 上运行了排除 `pi` 的 JOIN-02 Verilator 回归，17/17
-  镜像均以期望返回值停止；`pi` 因上述冻结未运行。C++ reference 逐条 CommitRecord
-  差分仍在补齐，因此 JOIN-02 只能记为“17 项返回值门通过、完整对拍未闭环”。
+  镜像均以期望返回值停止；`pi` 因上述冻结未运行。C++ reference 已提供逐条
+  CommitRecord 输出与 JSONL 比较工具，`naive` 在 FE_WIDTH=1/2/4 下各 18 条提交均完全
+  一致；其余 16 个非 pi 镜像尚未逐条对拍，因此发布级完整差分仍未闭环。
 - 目前处于 JOIN-05 功能收口完成、JOIN-06 PPA/性能分析进行中的状态。不能宣称
   整个项目最终完成：完整面积、真实时序和 performance/area 门尚未完成。
 - 已按 `docs/area_optimization_strategy_2026-09-08.md` 开始单发射面积优化。当前已完成
@@ -196,9 +197,8 @@ accumulate 在 FE4 下不再退化，但需要进一步采集 free-list stall、
 
 ## 工作树注意事项
 
-- 2026-09-16 正在把此前未提交的多发射、面积优化、回归工具和文档整理为可审计提交；
-  完成前不要 reset、checkout 或覆盖共享工作树。外部研究论文 PDF 只保留本地副本并由
-  `.gitignore` 排除，不作为项目源码提交。
+- 2026-09-16 已把此前未提交的多发射、面积优化、回归工具和文档整理为同一个可审计
+  检查点。外部研究论文 PDF 只保留本地副本并由 `.gitignore` 排除，不作为项目源码提交。
 - 本轮主要相关文件：`Makefile`、`rtl/cpu_core.v`、`rtl/rv32m_multiplier.v`、
   `rtl/backend/{rv32_backend_joint,rv32_rob,rv32_lsq,rv32_completion_network}.v`、
   `tb/integration/cpu_core_image_tb.v`、`tb/unit/rv32m_units_tb.v`、
@@ -209,9 +209,10 @@ accumulate 在 FE4 下不再退化，但需要进一步采集 free-list stall、
 
 ## 下一步执行顺序
 
-1. 保持 `pi` 冻结，使用 17 项快速门和 JOIN-03/04/05 做当前迭代验证；修复标准
-   `make join02-vlt-fast` 的 Windows/Verilator 子 Make 构建，不再依赖手工归档。
-2. 补齐 C++ reference 的逐条 CommitRecord 差分、发布级日志/哈希索引；参考仓库保持只读。
+1. 保持 `pi` 冻结，使用 17 项快速门和 JOIN-03/04/05 做当前迭代验证；Windows 下标准
+   `make join02-vlt-build` / `make join02-vlt-fast` 已可直接构建运行，不再依赖手工归档。
+2. 将现有 C++ reference CommitRecord 差分从 `naive` 扩展到其余 16 个非 pi 镜像，并补
+   发布级日志/哈希索引；参考仓库保持只读。
 3. 重新用最新 P8 源码对 1/1、2/2、4/4 生成同版本性能与综合报告。当前旧 JOIN-06
    面积不得与最新周期数据混用；完整结论仍需 SRAM 计价与真实 STA。
 4. 面积优化近期优先级：先让综合面积账本完整并去除生产核中悬空的 cache stats，随后
