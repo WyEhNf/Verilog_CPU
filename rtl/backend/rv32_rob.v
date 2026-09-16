@@ -316,7 +316,7 @@ module rv32_rob #(
         pop_count = 0;
         commit_slot = 0;
         commit_break = 1'b0;
-        if (!recovery_found) begin
+        if (!recovery_found && !halted_o && !error_o) begin
             for (commit_lane = 0; commit_lane < BE_WIDTH; commit_lane = commit_lane + 1) begin
                 if (!commit_break) begin
                     commit_slot = head_reg + pop_count;
@@ -356,8 +356,14 @@ module rv32_rob #(
                             store_commit_data_o = line_data_from_relative(
                                 store_data_mem[commit_slot], store_addr_mem[commit_slot]);
                         end
-                        if (commit_valid_o[commit_lane]) pop_count = pop_count + 1;
-                        else commit_break = 1'b1;
+                        if (commit_valid_o[commit_lane]) begin
+                            pop_count = pop_count + 1;
+                            // HALT/error are precise terminal events.  A wide
+                            // commit bundle must not expose younger lanes after
+                            // either reaches the architectural head.
+                            if (halt_mem[commit_slot] || error_mem[commit_slot])
+                                commit_break = 1'b1;
+                        end else commit_break = 1'b1;
                     end else begin
                         commit_break = 1'b1;
                     end
