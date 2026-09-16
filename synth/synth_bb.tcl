@@ -29,6 +29,7 @@ set shift_impl [lindex $argv 13]
 set phys_tag_impl [lindex $argv 14]
 set generation_width [lindex $argv 15]
 set checkpoint_impl [lindex $argv 16]
+set completion_bypass [lindex $argv 17]
 if {$rs_entries eq ""}  { set rs_entries 8 }
 if {$lsq_entries eq ""} { set lsq_entries 8 }
 if {$cache_stats eq ""} { set cache_stats 0 }
@@ -41,6 +42,7 @@ if {$shift_impl eq ""} { set shift_impl 0 }
 if {$phys_tag_impl eq ""} { set phys_tag_impl 0 }
 if {$generation_width eq ""} { set generation_width 8 }
 if {$checkpoint_impl eq ""} { set checkpoint_impl 0 }
+if {$completion_bypass eq ""} { set completion_bypass 0 }
 set libdir      "_asap7_lib_filtered"
 
 file mkdir $outdir
@@ -65,6 +67,7 @@ chparam -set FE_WIDTH $fe_width -set BE_WIDTH $be_width \
         -set PHYS_TAG_IMPL $phys_tag_impl \
         -set GENERATION_WIDTH $generation_width \
         -set CHECKPOINT_IMPL $checkpoint_impl cpu_core
+chparam -set COMPLETION_BYPASS $completion_bypass cpu_core
 hierarchy -check -top cpu_core
 procs
 opt
