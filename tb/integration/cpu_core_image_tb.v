@@ -10,6 +10,7 @@ module cpu_core_image_tb #(
     parameter integer RS_ENTRIES = 4,
     parameter integer LSQ_ENTRIES = 4,
     parameter integer ENABLE_CACHES = 1,
+    parameter integer ENABLE_PREDICTOR = 1,
     parameter integer MUL_IMPL = 0
 );
     reg clk;
@@ -66,6 +67,7 @@ module cpu_core_image_tb #(
         .RS_ENTRIES(RS_ENTRIES),
         .LSQ_ENTRIES(LSQ_ENTRIES),
         .ENABLE_CACHES(ENABLE_CACHES),
+        .ENABLE_PREDICTOR(ENABLE_PREDICTOR),
         .MUL_IMPL(MUL_IMPL)
     ) dut (
         .clk(clk), .reset(reset), .halted(halted), .error(error),
