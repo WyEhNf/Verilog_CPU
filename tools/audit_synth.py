@@ -119,7 +119,13 @@ def build_report(args):
     unknown_count = sum(
         entry["count"] for entry in synthesis["unknown_area_cells"]
         if entry["count"] is not None)
-    complete = not synthesis["unknown_area_cells"] and not memories
+    # In the ff-reference flow memory_manifest.il records the source array
+    # shapes before memory_map; those arrays are subsequently implemented by
+    # standard cells and are already included in the final hierarchy area.
+    # They are unpriced black boxes only in the logic-blackbox profile.
+    complete = not synthesis["unknown_area_cells"] and (
+        args.profile == "ff-reference" or not memories)
+    known_area = synthesis["top_area_um2_known_cells_only"]
 
     return {
         "format": "synth-area-audit-v1",
@@ -144,9 +150,13 @@ def build_report(args):
             "checkpoint_impl": args.checkpoint_impl,
         },
         "area": {
-            "known_standard_cell_um2": synthesis["top_area_um2_known_cells_only"],
-            "total_um2": None,
-            "note": "Known-area cells only; total remains null until every generic cell and memory has an implementation.",
+            "known_standard_cell_um2": known_area,
+            "total_um2": known_area if complete else None,
+            "note": (
+                "Complete standard-cell total; source memories were expanded by memory_map."
+                if complete and args.profile == "ff-reference" else
+                "Known-area cells only; total remains null until every generic cell and memory has an implementation."
+            ),
         },
         "unknown_area_cells": synthesis["unknown_area_cells"],
         "unknown_area_cell_instances": unknown_count,
