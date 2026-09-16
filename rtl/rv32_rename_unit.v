@@ -50,7 +50,6 @@ module rv32_rename_unit #(
     localparam integer FREE_SLOTS = PHYS_REGS - 1;
 
     reg [PHYS_ADDR_WIDTH-1:0] rat [0:31];
-    reg [PHYS_ADDR_WIDTH-1:0] rrat [0:31];
     reg [PHYS_REGS-1:0] free_bitmap;
     reg [COUNT_WIDTH-1:0] free_count;
 
@@ -94,7 +93,8 @@ module rv32_rename_unit #(
     generate
         for (state_index = 0; state_index < 32; state_index = state_index + 1) begin : g_state
             assign rat_state_o[(state_index*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = rat[state_index];
-            assign rrat_state_o[(state_index*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = rrat[state_index];
+            assign rrat_state_o[(state_index*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] =
+                {PHYS_ADDR_WIDTH{1'b0}};
         end
     endgenerate
 
@@ -168,7 +168,6 @@ module rv32_rename_unit #(
             free_bitmap[0] <= 1'b0;
             for (reset_index = 0; reset_index < 32; reset_index = reset_index + 1) begin
                 rat[reset_index] <= 0;
-                rrat[reset_index] <= 0;
             end
         end else if (restore_valid_i) begin
             free_count <= restore_free_count_i;
@@ -189,7 +188,6 @@ module rv32_rename_unit #(
             for (commit_lane = 0; commit_lane < BE_WIDTH; commit_lane = commit_lane + 1) begin
                 if (commit_valid_i && commit_rd_we_i[commit_lane] &&
                     (commit_rd_i[(commit_lane*5) +: 5] != 0)) begin
-                    rrat[commit_rd_i[(commit_lane*5) +: 5]] <= commit_new_phys_i[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
                     if (commit_old_phys_i[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] != 0) begin
                         free_bitmap[commit_old_phys_i[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]] <= 1'b1;
                         release_used = release_used + 1;
@@ -199,7 +197,6 @@ module rv32_rename_unit #(
             free_count <= free_count - alloc_count_comb + release_used;
             free_bitmap[0] <= 1'b0;
             rat[0] <= 0;
-            rrat[0] <= 0;
         end
     end
 endmodule
