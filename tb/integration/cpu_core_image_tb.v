@@ -11,7 +11,10 @@ module cpu_core_image_tb #(
     parameter integer LSQ_ENTRIES = 4,
     parameter integer ENABLE_CACHES = 1,
     parameter integer ENABLE_PREDICTOR = 1,
-    parameter integer MUL_IMPL = 0
+    parameter integer FETCH_QUEUE_DEPTH = 16,
+    parameter integer MUL_IMPL = 0,
+    parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
+                                         ((BE_WIDTH == 2) ? 8 : 16)
 );
     reg clk;
     reg reset;
@@ -68,7 +71,9 @@ module cpu_core_image_tb #(
         .LSQ_ENTRIES(LSQ_ENTRIES),
         .ENABLE_CACHES(ENABLE_CACHES),
         .ENABLE_PREDICTOR(ENABLE_PREDICTOR),
-        .MUL_IMPL(MUL_IMPL)
+        .FETCH_QUEUE_DEPTH(FETCH_QUEUE_DEPTH),
+        .MUL_IMPL(MUL_IMPL),
+        .COMPLETION_DEPTH(COMPLETION_DEPTH)
     ) dut (
         .clk(clk), .reset(reset), .halted(halted), .error(error),
         .return_value(return_value), .cycles(cycles), .instret(instret),
@@ -171,8 +176,8 @@ module cpu_core_image_tb #(
                      dut.dcache_debug_ack_valid, dut.dcache_debug_resp_valid);
             $display("STATE: branch_pending=%b alu=%b mdu_pending=%b div_busy=%b div_result=%b completion=%0d/%0d/%0d prf_ready=%016x",
                      dut.backend.branch_pending, dut.backend.g_alu[0].alu.result_valid_reg,
-                     dut.backend.mdu.pending_valid, dut.backend.mdu.divider.busy_reg,
-                     dut.backend.mdu.divider.result_valid_reg,
+                     dut.backend.mdu.pending_valid, !dut.backend.mdu_issue_ready,
+                     dut.backend.mdu_completion_valid,
                      dut.backend.completion.head_reg, dut.backend.completion.tail_reg,
                      dut.backend.completion.count_reg, dut.backend.prf.ready);
             for (diag_slot = 0; diag_slot < ROB_ENTRIES; diag_slot = diag_slot + 1)
