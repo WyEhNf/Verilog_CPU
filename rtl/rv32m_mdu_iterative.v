@@ -33,6 +33,10 @@ module rv32m_mdu_iterative #(
         (req_op_i == `RV32IM_OP_MULH) ||
         (req_op_i == `RV32IM_OP_MULHSU) ||
         (req_op_i == `RV32IM_OP_MULHU);
+    wire req_is_shift = (req_op_i == `RV32IM_OP_SLLI) ||
+        (req_op_i == `RV32IM_OP_SRLI) || (req_op_i == `RV32IM_OP_SRAI) ||
+        (req_op_i == `RV32IM_OP_SLL) || (req_op_i == `RV32IM_OP_SRL) ||
+        (req_op_i == `RV32IM_OP_SRA);
     wire req_is_signed_div = (req_op_i == `RV32IM_OP_DIV) ||
         (req_op_i == `RV32IM_OP_REM);
     wire req_a_signed = req_is_signed_div ||
@@ -49,6 +53,7 @@ module rv32m_mdu_iterative #(
 
     reg busy;
     reg mode_mul;
+    reg mode_shift;
     reg [5:0] step;
     reg [64:0] shift_state;
     reg [31:0] operand;
@@ -83,7 +88,18 @@ module rv32m_mdu_iterative #(
     always @* begin
         next_state = shift_state;
         upper_sum = 33'b0;
-        if (mode_mul) begin
+        if (mode_shift) begin
+            if (step < operand[4:0]) begin
+                if ((operation == `RV32IM_OP_SRLI) ||
+                    (operation == `RV32IM_OP_SRL))
+                    next_state[31:0] = shift_state[31:0] >> 1;
+                else if ((operation == `RV32IM_OP_SRAI) ||
+                         (operation == `RV32IM_OP_SRA))
+                    next_state[31:0] = $signed(shift_state[31:0]) >>> 1;
+                else
+                    next_state[31:0] = shift_state[31:0] << 1;
+            end
+        end else if (mode_mul) begin
             upper_sum = shift_state[64:32] +
                 (shift_state[0] ? {1'b0, operand} : 33'b0);
             next_state = {upper_sum, shift_state[31:0]} >> 1;
@@ -116,7 +132,9 @@ module rv32m_mdu_iterative #(
             result_magnitude;
 
         final_value = 32'b0;
-        if (mode_mul) begin
+        if (mode_shift) begin
+            final_value = next_state[31:0];
+        end else if (mode_mul) begin
             final_value = corrected_result;
         end else if (divide_zero) begin
             if ((operation == `RV32IM_OP_REM) || (operation == `RV32IM_OP_REMU))
@@ -163,9 +181,12 @@ module rv32m_mdu_iterative #(
             if (req_valid_i && req_ready_o) begin
                 busy <= 1'b1;
                 mode_mul <= req_is_mul;
+                mode_shift <= req_is_shift;
                 step <= 6'b0;
-                shift_state <= req_is_mul ? {33'b0, req_abs_b} : {33'b0, req_abs_a};
-                operand <= req_is_mul ? req_abs_a : req_abs_b;
+                shift_state <= req_is_shift ? {33'b0, req_src1_i} :
+                    (req_is_mul ? {33'b0, req_abs_b} : {33'b0, req_abs_a});
+                operand <= req_is_shift ? req_src2_i :
+                    (req_is_mul ? req_abs_a : req_abs_b);
                 operation <= req_op_i;
                 result_negative <= req_a_negative ^ req_b_negative;
                 remainder_negative <= req_a_negative;

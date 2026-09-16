@@ -7,7 +7,8 @@
 module rv32m_mdu_reservation_station #(
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
-    parameter integer MUL_IMPL = 0
+    parameter integer MUL_IMPL = 0,
+    parameter integer SHIFT_IMPL = 0
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -39,6 +40,10 @@ module rv32m_mdu_reservation_station #(
         (issue_op_i == `RV32IM_OP_MULHSU) || (issue_op_i == `RV32IM_OP_MULHU);
     wire issue_is_div = (issue_op_i == `RV32IM_OP_DIV) || (issue_op_i == `RV32IM_OP_DIVU) ||
         (issue_op_i == `RV32IM_OP_REM) || (issue_op_i == `RV32IM_OP_REMU);
+    wire issue_is_shift = (issue_op_i == `RV32IM_OP_SLLI) ||
+        (issue_op_i == `RV32IM_OP_SRLI) || (issue_op_i == `RV32IM_OP_SRAI) ||
+        (issue_op_i == `RV32IM_OP_SLL) || (issue_op_i == `RV32IM_OP_SRL) ||
+        (issue_op_i == `RV32IM_OP_SRA);
     wire mul_req_valid = pending_valid && ((pending_op == `RV32IM_OP_MUL) || (pending_op == `RV32IM_OP_MULH) ||
         (pending_op == `RV32IM_OP_MULHSU) || (pending_op == `RV32IM_OP_MULHU));
     wire div_req_valid = pending_valid && ((pending_op == `RV32IM_OP_DIV) || (pending_op == `RV32IM_OP_DIVU) ||
@@ -52,7 +57,9 @@ module rv32m_mdu_reservation_station #(
     wire mul_resp_ready = completion_ready_i;
     wire div_resp_ready = completion_ready_i && !mul_resp_valid;
 
-    assign issue_ready_o = !flush_i && !pending_valid && (issue_is_mul || issue_is_div);
+    assign issue_ready_o = !flush_i && !pending_valid &&
+        (issue_is_mul || issue_is_div ||
+         ((MUL_IMPL >= 2) && (SHIFT_IMPL == 2) && issue_is_shift));
     assign completion_valid_o = mul_resp_valid || div_resp_valid;
     assign completion_value_o = mul_resp_valid ? mul_resp_value : div_resp_value;
     assign completion_rob_tag_o = mul_resp_valid ? mul_resp_tag : div_resp_tag;
@@ -112,7 +119,9 @@ module rv32m_mdu_reservation_station #(
             pending_phys <= 0;
             pending_live <= 0;
         end else begin
-            if (pending_valid && ((mul_req_valid && mul_req_ready) || (div_req_valid && div_req_ready)))
+            if (pending_valid && (((MUL_IMPL >= 2) && mul_req_ready) ||
+                                  (mul_req_valid && mul_req_ready) ||
+                                  (div_req_valid && div_req_ready)))
                 pending_valid <= 1'b0;
             if (issue_valid_i && issue_ready_o) begin
                 pending_valid <= 1'b1;

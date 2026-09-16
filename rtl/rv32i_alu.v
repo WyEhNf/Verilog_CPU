@@ -345,7 +345,7 @@ module rv32i_alu #(
             result_valid_reg <= 1'b0;
         end else if (issue_ready_o) begin
             if (issue_valid_i) begin
-                if ((SHIFT_IMPL != 0) && issue_is_shift &&
+                if ((SHIFT_IMPL == 1) && issue_is_shift &&
                     issue_target_live_i && issue_rob_tag_i[0]) begin
                     result_valid_reg <= (issue_shift_amount == 0);
                     shift_busy <= (issue_shift_amount != 0);

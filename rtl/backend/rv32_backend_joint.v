@@ -397,7 +397,14 @@ module rv32_backend_joint #(
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_DIV) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_DIVU) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REM) ||
-                (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REMU);
+                (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REMU) ||
+                ((SHIFT_IMPL == 2) &&
+                 ((rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_SLLI) ||
+                  (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_SRLI) ||
+                  (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_SRAI) ||
+                  (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_SLL) ||
+                  (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_SRL) ||
+                  (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_SRA)));
             assign rs_issue_ready[io_lane] = rs_issue_is_mdu[io_lane] ?
                 (mdu_select[io_lane] && mdu_issue_ready) : alu_issue_ready[io_lane];
             assign lsq_addr_update_valid[io_lane] =
@@ -479,7 +486,13 @@ module rv32_backend_joint #(
                 mdu_select[issue_lane] = 1'b1;
                 mdu_issue_op = rs_issue_op[issue_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH];
                 mdu_issue_src1 = rs_issue_src1[issue_lane*32 +: 32];
-                mdu_issue_src2 = rs_issue_src2[issue_lane*32 +: 32];
+                if ((SHIFT_IMPL == 2) &&
+                    ((rs_issue_op[issue_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_SLLI) ||
+                     (rs_issue_op[issue_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_SRLI) ||
+                     (rs_issue_op[issue_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_SRAI)))
+                    mdu_issue_src2 = rs_issue_imm[issue_lane*32 +: 32];
+                else
+                    mdu_issue_src2 = rs_issue_src2[issue_lane*32 +: 32];
                 mdu_issue_tag = rs_issue_tag[issue_lane*TAG_WIDTH +: TAG_WIDTH];
                 mdu_issue_phys = rs_issue_phys[issue_lane*PAW +: PAW];
                 mdu_taken = 1;
@@ -725,7 +738,7 @@ module rv32_backend_joint #(
         end
     endgenerate
 
-    rv32m_mdu_reservation_station #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .MUL_IMPL(MUL_IMPL)) mdu (
+    rv32m_mdu_reservation_station #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL)) mdu (
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
