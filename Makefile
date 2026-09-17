@@ -1,7 +1,7 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
 
-.PHONY: join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build join04 join05 join06-report reference-trace-build reference-trace-test doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression asap7-maplib synth synth-bb
+.PHONY: gui join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build join04 join05 join06-report reference-trace-build reference-trace-test doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression asap7-maplib synth synth-bb
 
 ROOT := $(CURDIR)
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
@@ -15,6 +15,9 @@ GTKWAVE ?= $(OSS_CAD_ROOT)/bin/gtkwave.exe
 RISCV_PREFIX ?= $(RV_ROOT)/bin/riscv-none-elf-
 
 OSS_ENV = set "VERILATOR_ROOT=$(OSS_CAD_ROOT_WIN)\share\verilator" && set "YOSYSHQ_ROOT=" && call "$(OSS_CAD_ROOT_WIN)\environment.bat" &&
+
+gui:
+	@python tools/cpu_gui.py
 
 # Synthesis configuration knobs.  CFG is only the output directory name;
 # FE_WIDTH/BE_WIDTH/PHYS_REGS/ROB_ENTRIES/MUL_IMPL are the real parameters.
