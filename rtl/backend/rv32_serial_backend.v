@@ -98,6 +98,7 @@ module rv32_serial_backend #(
 
     reg [2:0] state;
     reg [31:0] registers [1:31];
+    reg [31:1] register_valid;
     reg [4:0] rs1_reg, rs2_reg, rd_reg;
     reg [31:0] src1_reg, src2_reg;
     reg [31:0] pc_reg, inst_reg, imm_reg;
@@ -118,7 +119,8 @@ module rv32_serial_backend #(
     reg [127:0] result_store_data_reg;
 
     wire [4:0] read_index = (state == S_READ_RS1) ? rs1_reg : rs2_reg;
-    wire [31:0] read_value = (read_index == 0) ? 32'b0 : registers[read_index];
+    wire [31:0] read_value = (read_index == 0) ? 32'b0 :
+        (register_valid[read_index] ? registers[read_index] : 32'b0);
     wire input_fire = trace_valid_i[0] && trace_ready_o[0];
     wire op_is_mdu = (op_reg >= `RV32IM_OP_MUL) && (op_reg <= `RV32IM_OP_REMU);
     wire [TAG_WIDTH-1:0] serial_tag = {{(TAG_WIDTH-1){1'b0}}, 1'b1};
@@ -229,7 +231,6 @@ module rv32_serial_backend #(
     assign branch_feedback_pred_taken_o = pred_taken_reg;
     assign branch_feedback_pred_target_o = pred_target_reg;
 
-    integer reset_index;
     always @(posedge clk_i) begin
         if (reset_i || flush_i) begin
             state <= S_IDLE;
@@ -237,6 +238,7 @@ module rv32_serial_backend #(
             error_o <= 1'b0;
             return_value_o <= 8'b0;
             epoch_reg <= 4'b0;
+            register_valid <= {31{1'b0}};
         end else begin
             case (state)
                 S_IDLE: if (input_fire) begin
@@ -307,6 +309,9 @@ module rv32_serial_backend #(
                     if (rd_we_reg && (rd_reg != 0) && !result_is_store_reg &&
                         !result_error_reg)
                         registers[rd_reg] <= result_reg;
+                    if (rd_we_reg && (rd_reg != 0) && !result_is_store_reg &&
+                        !result_error_reg)
+                        register_valid[rd_reg] <= 1'b1;
                     if (halt_reg) begin
                         halted_o <= 1'b1;
                         return_value_o <= result_reg[7:0];
