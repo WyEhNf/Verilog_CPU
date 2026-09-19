@@ -8,6 +8,7 @@
 module rv32_dcache_nonblocking #(
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer MSHR_ENTRIES = 4,
+    parameter integer WAITER_ENTRIES = 8,
     parameter integer PREFETCH = 1
 ) (
     input  wire                     clk_i,
@@ -75,6 +76,19 @@ module rv32_dcache_nonblocking #(
     reg [31:0] mshr_victim_addr [0:MSHR_ENTRIES-1];
     reg [127:0] mshr_victim_data [0:MSHR_ENTRIES-1];
 
+    // Secondary misses to an already outstanding demand line are accepted
+    // here.  Keeping the returned line with each waiter lets refills retire
+    // independently even if the direct-mapped cache slot is replaced later.
+    reg waiter_valid [0:WAITER_ENTRIES-1];
+    reg waiter_ready [0:WAITER_ENTRIES-1];
+    reg [2:0] waiter_mshr [0:WAITER_ENTRIES-1];
+    reg [31:0] waiter_addr [0:WAITER_ENTRIES-1];
+    reg [1:0] waiter_size [0:WAITER_ENTRIES-1];
+    reg waiter_unsigned [0:WAITER_ENTRIES-1];
+    reg [TAG_WIDTH-1:0] waiter_lsq [0:WAITER_ENTRIES-1];
+    reg [127:0] waiter_line [0:WAITER_ENTRIES-1];
+    reg waiter_error [0:WAITER_ENTRIES-1];
+
     reg resp_valid_reg;
     reg [TAG_WIDTH-1:0] resp_lsq_reg;
     reg [31:0] resp_addr_reg;
@@ -99,6 +113,8 @@ module rv32_dcache_nonblocking #(
     integer send_index;
     integer response_index;
     integer matching_index;
+    integer waiter_free_index;
+    integer waiter_ready_index;
     reg free_found;
     reg second_free_found;
     reg send_found;
@@ -109,6 +125,8 @@ module rv32_dcache_nonblocking #(
     reg matching_prefetch;
     reg prefetch_line_present;
     reg request_index_conflict;
+    reg waiter_free_found;
+    reg waiter_ready_found;
     wire [31:0] request_line_addr = {dcache_req_addr_i[31:4], 4'b0};
     wire [31:0] prefetch_line_addr = request_line_addr + 32'd16;
     wire [7:0] prefetch_index = prefetch_line_addr[11:4];
@@ -129,6 +147,10 @@ module rv32_dcache_nonblocking #(
         matching_prefetch = 1'b0;
         prefetch_line_present = 1'b0;
         request_index_conflict = 1'b0;
+        waiter_free_found = 1'b0;
+        waiter_free_index = 0;
+        waiter_ready_found = 1'b0;
+        waiter_ready_index = 0;
         for (k = 0; k < MSHR_ENTRIES; k = k + 1) begin
             if (mshr_valid[k])
                 any_mshr = 1'b1;
@@ -161,6 +183,16 @@ module rv32_dcache_nonblocking #(
                 (mshr_addr[k][11:4] == request_index))
                 request_index_conflict = 1'b1;
         end
+        for (k = 0; k < WAITER_ENTRIES; k = k + 1) begin
+            if (!waiter_free_found && !waiter_valid[k]) begin
+                waiter_free_found = 1'b1;
+                waiter_free_index = k;
+            end
+            if (!waiter_ready_found && waiter_valid[k] && waiter_ready[k]) begin
+                waiter_ready_found = 1'b1;
+                waiter_ready_index = k;
+            end
+        end
         response_index = mem_resp_id_i;
         response_found = (response_index >= 0) &&
                          (response_index < MSHR_ENTRIES) &&
@@ -173,7 +205,8 @@ module rv32_dcache_nonblocking #(
     wire load_can_accept = !store_mshr_present &&
                            (request_hit ? resp_slot_free :
                             (matching_found ?
-                             (matching_prefetch &&
+                             (!mshr_store[matching_index] &&
+                              (matching_prefetch || waiter_free_found) &&
                               !(mem_resp_valid_i && response_found &&
                                 (response_index == matching_index))) :
                              free_found));
@@ -190,6 +223,11 @@ module rv32_dcache_nonblocking #(
                              (mshr_writeback[response_index] ?
                               mshr_victim_addr[response_index] :
                               {mshr_addr[response_index][31:4], 4'b0}));
+    wire demand_response_fire = mem_resp_valid_i && mem_resp_ready_o &&
+                                response_found &&
+                                !mshr_writeback[response_index] &&
+                                !mshr_store[response_index] &&
+                                !mshr_prefetch[response_index];
 
     assign dcache_req_ready_o = !reset_i && !flush_i &&
                                 ((request_is_load && load_can_accept) ||
@@ -255,6 +293,7 @@ module rv32_dcache_nonblocking #(
 
     integer reset_index;
     integer line_index;
+    integer waiter_index;
     reg [127:0] updated_line;
     always @(posedge clk_i) begin
         if (reset_i) begin
@@ -286,6 +325,17 @@ module rv32_dcache_nonblocking #(
                 mshr_lsq[reset_index] <= {TAG_WIDTH{1'b0}};
                 mshr_victim_addr[reset_index] <= 32'd0;
                 mshr_victim_data[reset_index] <= 128'd0;
+            end
+            for (reset_index = 0; reset_index < WAITER_ENTRIES; reset_index = reset_index + 1) begin
+                waiter_valid[reset_index] <= 1'b0;
+                waiter_ready[reset_index] <= 1'b0;
+                waiter_mshr[reset_index] <= 3'd0;
+                waiter_addr[reset_index] <= 32'd0;
+                waiter_size[reset_index] <= 2'd0;
+                waiter_unsigned[reset_index] <= 1'b0;
+                waiter_lsq[reset_index] <= {TAG_WIDTH{1'b0}};
+                waiter_line[reset_index] <= 128'd0;
+                waiter_error[reset_index] <= 1'b0;
             end
         end else begin
             event_request_o <= request_fire;
@@ -331,6 +381,18 @@ module rv32_dcache_nonblocking #(
                     mshr_size[matching_index] <= dcache_req_size_i;
                     mshr_unsigned[matching_index] <= dcache_req_unsigned_i;
                     mshr_lsq[matching_index] <= dcache_req_lsq_tag_i;
+                end else if (request_is_load && matching_found) begin
+                    // Merge a secondary demand behind the line fill instead
+                    // of stalling the LSQ's oldest-request selector.
+                    event_miss_o <= 1'b1;
+                    waiter_valid[waiter_free_index] <= 1'b1;
+                    waiter_ready[waiter_free_index] <= 1'b0;
+                    waiter_mshr[waiter_free_index] <= matching_index[2:0];
+                    waiter_addr[waiter_free_index] <= dcache_req_addr_i;
+                    waiter_size[waiter_free_index] <= dcache_req_size_i;
+                    waiter_unsigned[waiter_free_index] <= dcache_req_unsigned_i;
+                    waiter_lsq[waiter_free_index] <= dcache_req_lsq_tag_i;
+                    waiter_error[waiter_free_index] <= 1'b0;
                 end else begin
                     event_miss_o <= 1'b1;
                     mshr_valid[free_index] <= 1'b1;
@@ -376,6 +438,22 @@ module rv32_dcache_nonblocking #(
 
             if (mem_req_valid_o && mem_req_ready_i)
                 mshr_sent[send_index] <= 1'b1;
+
+            if (resp_slot_free && waiter_ready_found &&
+                !demand_response_fire) begin
+                resp_valid_reg <= 1'b1;
+                resp_lsq_reg <= waiter_lsq[waiter_ready_index];
+                resp_addr_reg <= waiter_addr[waiter_ready_index];
+                resp_line_reg <= waiter_line[waiter_ready_index];
+                resp_word_reg <= extract_value(waiter_line[waiter_ready_index],
+                                               waiter_addr[waiter_ready_index],
+                                               waiter_size[waiter_ready_index],
+                                               waiter_unsigned[waiter_ready_index]);
+                resp_line_valid_reg <= !waiter_error[waiter_ready_index];
+                resp_error_reg <= waiter_error[waiter_ready_index];
+                waiter_valid[waiter_ready_index] <= 1'b0;
+                waiter_ready[waiter_ready_index] <= 1'b0;
+            end
 
             if (mem_resp_valid_i && mem_resp_ready_o) begin
                 mshr_sent[response_index] <= 1'b0;
@@ -426,6 +504,16 @@ module rv32_dcache_nonblocking #(
                     end
                 end else begin
                     mshr_valid[response_index] <= 1'b0;
+                    for (waiter_index = 0; waiter_index < WAITER_ENTRIES;
+                         waiter_index = waiter_index + 1) begin
+                        if (waiter_valid[waiter_index] &&
+                            (waiter_mshr[waiter_index] == response_index[2:0])) begin
+                            waiter_ready[waiter_index] <= 1'b1;
+                            waiter_line[waiter_index] <= mem_resp_data_i;
+                            waiter_error[waiter_index] <= mem_resp_error_i ||
+                                                          !response_matches;
+                        end
+                    end
                     if (!mem_resp_error_i && response_matches) begin
                         line_index = mshr_addr[response_index][11:4];
                         valid_mem[line_index] <= 1'b1;
@@ -451,6 +539,7 @@ module rv32_dcache_nonblocking #(
 
     initial begin
         if (TAG_WIDTH < 8 || MSHR_ENTRIES < 2 || MSHR_ENTRIES > 8 ||
+            WAITER_ENTRIES < 1 || WAITER_ENTRIES > 16 ||
             (PREFETCH != 0 && PREFETCH != 1)) begin
             $display("ERROR: invalid rv32_dcache_nonblocking parameter");
             $finish;
