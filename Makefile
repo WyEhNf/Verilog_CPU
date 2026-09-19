@@ -30,12 +30,14 @@ PHYS_REGS ?= 64
 ROB_ENTRIES ?= 32
 RS_ENTRIES ?= 8
 LSQ_ENTRIES ?= 8
+INT_ISSUE_WIDTH ?= $(if $(filter 1,$(BE_WIDTH)),1,2)
+CDB_WIDTH ?= $(if $(filter 1,$(BE_WIDTH)),1,2)
 ENABLE_CACHE_STATS ?= 0
 ENABLE_CACHES ?= 1
 ICACHE_FAST_HIT ?= 1
 ICACHE_COMBINATIONAL_HIT ?= 0
 ICACHE_PREFETCH ?= 1
-ICACHE_MSHRS ?= 4
+ICACHE_MSHRS ?= 8
 DCACHE_MSHRS ?= 4
 ENABLE_PREDICTOR ?= 1
 FETCH_QUEUE_DEPTH ?= 16
@@ -52,6 +54,7 @@ CFG ?= fe$(FE_WIDTH)_be$(BE_WIDTH)_p$(PHYS_REGS)_r$(ROB_ENTRIES)
 ASAP7_LIB_DIR ?= $(ROOT)/third_party/asap7/lib
 RTL_FILELIST = rtl/filelist.f
 RTL_FILES := $(strip $(file <$(RTL_FILELIST)))
+CPU_TB_PARAMS = -P cpu_core_image_tb.FE_WIDTH=$(FE_WIDTH) -P cpu_core_image_tb.BE_WIDTH=$(BE_WIDTH) -P cpu_core_image_tb.INT_ISSUE_WIDTH=$(INT_ISSUE_WIDTH) -P cpu_core_image_tb.CDB_WIDTH=$(CDB_WIDTH) -P cpu_core_image_tb.PHYS_REGS=$(PHYS_REGS) -P cpu_core_image_tb.ROB_ENTRIES=$(ROB_ENTRIES) -P cpu_core_image_tb.RS_ENTRIES=$(RS_ENTRIES) -P cpu_core_image_tb.LSQ_ENTRIES=$(LSQ_ENTRIES) -P cpu_core_image_tb.ENABLE_CACHE_STATS=$(ENABLE_CACHE_STATS) -P cpu_core_image_tb.ENABLE_CACHES=$(ENABLE_CACHES) -P cpu_core_image_tb.ICACHE_FAST_HIT=$(ICACHE_FAST_HIT) -P cpu_core_image_tb.ICACHE_COMBINATIONAL_HIT=$(ICACHE_COMBINATIONAL_HIT) -P cpu_core_image_tb.ICACHE_PREFETCH=$(ICACHE_PREFETCH) -P cpu_core_image_tb.ICACHE_MSHRS=$(ICACHE_MSHRS) -P cpu_core_image_tb.DCACHE_MSHRS=$(DCACHE_MSHRS) -P cpu_core_image_tb.ENABLE_PREDICTOR=$(ENABLE_PREDICTOR) -P cpu_core_image_tb.FETCH_QUEUE_DEPTH=$(FETCH_QUEUE_DEPTH) -P cpu_core_image_tb.COMPLETION_DEPTH=$(COMPLETION_DEPTH) -P cpu_core_image_tb.COMPLETION_BYPASS=$(COMPLETION_BYPASS) -P cpu_core_image_tb.STORE_BUFFERED_RETIRE=$(STORE_BUFFERED_RETIRE) -P cpu_core_image_tb.SERIAL_BACKEND=$(SERIAL_BACKEND) -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -P cpu_core_image_tb.SHIFT_IMPL=$(SHIFT_IMPL) -P cpu_core_image_tb.PHYS_TAG_IMPL=$(PHYS_TAG_IMPL) -P cpu_core_image_tb.GENERATION_WIDTH=$(GENERATION_WIDTH) -P cpu_core_image_tb.CHECKPOINT_IMPL=$(CHECKPOINT_IMPL)
 
 doctor:
 	@$(OSS_ENV) "$(ICARUS)" -V
@@ -106,7 +109,7 @@ join01:
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_join01_tb.vvp | findstr /C:"PASS: JOIN-01"
 
 join02:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=$(FE_WIDTH) -P cpu_core_image_tb.BE_WIDTH=$(BE_WIDTH) -P cpu_core_image_tb.PHYS_REGS=$(PHYS_REGS) -P cpu_core_image_tb.ROB_ENTRIES=$(ROB_ENTRIES) -P cpu_core_image_tb.RS_ENTRIES=$(RS_ENTRIES) -P cpu_core_image_tb.LSQ_ENTRIES=$(LSQ_ENTRIES) -P cpu_core_image_tb.ENABLE_CACHE_STATS=$(ENABLE_CACHE_STATS) -P cpu_core_image_tb.ENABLE_CACHES=$(ENABLE_CACHES) -P cpu_core_image_tb.ICACHE_FAST_HIT=$(ICACHE_FAST_HIT) -P cpu_core_image_tb.ICACHE_COMBINATIONAL_HIT=$(ICACHE_COMBINATIONAL_HIT) -P cpu_core_image_tb.ICACHE_PREFETCH=$(ICACHE_PREFETCH) -P cpu_core_image_tb.ICACHE_MSHRS=$(ICACHE_MSHRS) -P cpu_core_image_tb.ENABLE_PREDICTOR=$(ENABLE_PREDICTOR) -P cpu_core_image_tb.FETCH_QUEUE_DEPTH=$(FETCH_QUEUE_DEPTH) -P cpu_core_image_tb.COMPLETION_DEPTH=$(COMPLETION_DEPTH) -P cpu_core_image_tb.COMPLETION_BYPASS=$(COMPLETION_BYPASS) -P cpu_core_image_tb.STORE_BUFFERED_RETIRE=$(STORE_BUFFERED_RETIRE) -P cpu_core_image_tb.SERIAL_BACKEND=$(SERIAL_BACKEND) -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -P cpu_core_image_tb.SHIFT_IMPL=$(SHIFT_IMPL) -P cpu_core_image_tb.PHYS_TAG_IMPL=$(PHYS_TAG_IMPL) -P cpu_core_image_tb.GENERATION_WIDTH=$(GENERATION_WIDTH) -P cpu_core_image_tb.CHECKPOINT_IMPL=$(CHECKPOINT_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl $(CPU_TB_PARAMS) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Vvp "$(VVP)" -Simulation build/cpu_core_image_tb.vvp -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
 
 # Fast full-system regression: Verilator-compiled cpu_core_image_tb.
@@ -128,7 +131,7 @@ join03-build:
 	@python tools/run_join03.py --build-only --report build/join03/build_report.json --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe"
 
 join03:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=$(FE_WIDTH) -P cpu_core_image_tb.BE_WIDTH=$(BE_WIDTH) -P cpu_core_image_tb.PHYS_REGS=$(PHYS_REGS) -P cpu_core_image_tb.ROB_ENTRIES=$(ROB_ENTRIES) -P cpu_core_image_tb.RS_ENTRIES=$(RS_ENTRIES) -P cpu_core_image_tb.LSQ_ENTRIES=$(LSQ_ENTRIES) -P cpu_core_image_tb.ENABLE_CACHE_STATS=$(ENABLE_CACHE_STATS) -P cpu_core_image_tb.ENABLE_CACHES=$(ENABLE_CACHES) -P cpu_core_image_tb.ICACHE_FAST_HIT=$(ICACHE_FAST_HIT) -P cpu_core_image_tb.ICACHE_COMBINATIONAL_HIT=$(ICACHE_COMBINATIONAL_HIT) -P cpu_core_image_tb.ICACHE_PREFETCH=$(ICACHE_PREFETCH) -P cpu_core_image_tb.ICACHE_MSHRS=$(ICACHE_MSHRS) -P cpu_core_image_tb.ENABLE_PREDICTOR=$(ENABLE_PREDICTOR) -P cpu_core_image_tb.FETCH_QUEUE_DEPTH=$(FETCH_QUEUE_DEPTH) -P cpu_core_image_tb.COMPLETION_DEPTH=$(COMPLETION_DEPTH) -P cpu_core_image_tb.COMPLETION_BYPASS=$(COMPLETION_BYPASS) -P cpu_core_image_tb.STORE_BUFFERED_RETIRE=$(STORE_BUFFERED_RETIRE) -P cpu_core_image_tb.SERIAL_BACKEND=$(SERIAL_BACKEND) -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -P cpu_core_image_tb.SHIFT_IMPL=$(SHIFT_IMPL) -P cpu_core_image_tb.PHYS_TAG_IMPL=$(PHYS_TAG_IMPL) -P cpu_core_image_tb.GENERATION_WIDTH=$(GENERATION_WIDTH) -P cpu_core_image_tb.CHECKPOINT_IMPL=$(CHECKPOINT_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl $(CPU_TB_PARAMS) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb.vvp --config fe1_be1_p64_r32
 
 # JOIN-04 proves that the same full-system path executes with real two- and
@@ -310,10 +313,10 @@ asap7-maplib:
 
 synth: asap7-maplib
 	@if not exist "build\synth\$(CFG)" mkdir "build\synth\$(CFG)"
-	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG) $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL) $(ENABLE_CACHES) $(ENABLE_PREDICTOR) $(FETCH_QUEUE_DEPTH) $(COMPLETION_DEPTH) $(SHIFT_IMPL) $(PHYS_TAG_IMPL) $(GENERATION_WIDTH) $(CHECKPOINT_IMPL) $(COMPLETION_BYPASS) $(SERIAL_BACKEND)" > "build\synth\$(CFG)\yosys.log" 2>&1
+	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG) $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL) $(ENABLE_CACHES) $(ENABLE_PREDICTOR) $(FETCH_QUEUE_DEPTH) $(COMPLETION_DEPTH) $(SHIFT_IMPL) $(PHYS_TAG_IMPL) $(GENERATION_WIDTH) $(CHECKPOINT_IMPL) $(COMPLETION_BYPASS) $(SERIAL_BACKEND) $(INT_ISSUE_WIDTH) $(CDB_WIDTH) $(ICACHE_MSHRS) $(DCACHE_MSHRS)" > "build\synth\$(CFG)\yosys.log" 2>&1
 	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)/synth.log" --memory-dump "build/synth/$(CFG)/memory_manifest.il" --output "build/synth/$(CFG)/area_audit.json" --profile ff-reference --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL) --shift-impl $(SHIFT_IMPL) --phys-tag-impl $(PHYS_TAG_IMPL) --generation-width $(GENERATION_WIDTH) --checkpoint-impl $(CHECKPOINT_IMPL) --caches $(ENABLE_CACHES) --predictor $(ENABLE_PREDICTOR) --fetch-queue-depth $(FETCH_QUEUE_DEPTH) --completion-depth $(COMPLETION_DEPTH) --completion-bypass $(COMPLETION_BYPASS) --serial-backend $(SERIAL_BACKEND)
 
 synth-bb: asap7-maplib
 	@if not exist "build\synth\$(CFG)_bb" mkdir "build\synth\$(CFG)_bb"
-	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL) $(ENABLE_CACHES) $(ENABLE_PREDICTOR) $(FETCH_QUEUE_DEPTH) $(COMPLETION_DEPTH) $(SHIFT_IMPL) $(PHYS_TAG_IMPL) $(GENERATION_WIDTH) $(CHECKPOINT_IMPL) $(COMPLETION_BYPASS) $(SERIAL_BACKEND)" > "build\synth\$(CFG)_bb\yosys.log" 2>&1
+	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL) $(ENABLE_CACHES) $(ENABLE_PREDICTOR) $(FETCH_QUEUE_DEPTH) $(COMPLETION_DEPTH) $(SHIFT_IMPL) $(PHYS_TAG_IMPL) $(GENERATION_WIDTH) $(CHECKPOINT_IMPL) $(COMPLETION_BYPASS) $(SERIAL_BACKEND) $(INT_ISSUE_WIDTH) $(CDB_WIDTH) $(ICACHE_MSHRS) $(DCACHE_MSHRS)" > "build\synth\$(CFG)_bb\yosys.log" 2>&1
 	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)_bb/synth.log" --memory-dump "build/synth/$(CFG)_bb/memory_manifest.il" --output "build/synth/$(CFG)_bb/area_audit.json" --profile logic-blackbox --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL) --shift-impl $(SHIFT_IMPL) --phys-tag-impl $(PHYS_TAG_IMPL) --generation-width $(GENERATION_WIDTH) --checkpoint-impl $(CHECKPOINT_IMPL) --caches $(ENABLE_CACHES) --predictor $(ENABLE_PREDICTOR) --fetch-queue-depth $(FETCH_QUEUE_DEPTH) --completion-depth $(COMPLETION_DEPTH) --completion-bypass $(COMPLETION_BYPASS) --serial-backend $(SERIAL_BACKEND)
