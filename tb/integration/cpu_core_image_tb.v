@@ -213,6 +213,9 @@ module cpu_core_image_tb #(
                      dut.perf_d_writebacks, dut.perf_d_stalls,
                      dut.perf_i_mem_requests, dut.perf_d_mem_reads,
                      dut.perf_d_mem_writes);
+            $display("PERF_PRED: resolved=%0d correct=%0d mispredict=%0d",
+                     dut.pred_count, dut.pred_correct,
+                     dut.pred_count - dut.pred_correct);
         end
         if (trace_file != 0)
             $fclose(trace_file);

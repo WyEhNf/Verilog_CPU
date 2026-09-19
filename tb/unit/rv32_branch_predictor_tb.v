@@ -99,11 +99,12 @@ module rv32_branch_predictor_tb;
         query(32'h100, 32'h00208463);
         if (pred_counter != 2'b00) begin $display("FAIL: strongly-not-taken saturation"); $finish(1); end
 
-        // BHT aliases at +0x100, while BTB aliases at +0x40 and must reject old tags.
+        // The enlarged BHT aliases at +0x400, while the 64-entry BTB aliases
+        // at +0x100 and must reject old tags.
         train(32'h204, `RV32IM_PRED_BRANCH, 1'b1, 32'h280, 1'b0, 32'h208);
-        query(32'h304, 32'h00208463);
+        query(32'h604, 32'h00208463);
         if (pred_counter != 2'b11 || pred_btb_hit) begin $display("FAIL: BHT/BTB alias behavior counter=%b hit=%b", pred_counter, pred_btb_hit); $finish(1); end
-        train(32'h244, `RV32IM_PRED_BRANCH, 1'b1, 32'h2c0, 1'b0, 32'h248);
+        train(32'h304, `RV32IM_PRED_BRANCH, 1'b1, 32'h380, 1'b0, 32'h308);
         query(32'h204, 32'h00208463);
         if (pred_btb_hit) begin $display("FAIL: direct-mapped BTB tag replacement"); $finish(1); end
 
