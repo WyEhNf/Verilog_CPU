@@ -62,7 +62,7 @@ module rv32_rob_tb #(
     reg [TAG_W-1:0] saved_tag0, saved_tag1, saved_store_tag, saved_branch_tag, stale_tag;
     reg [TAG_W-1:0] reused_tag, current_tag;
 
-    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(1<<PHYS_AW), .PHYS_ADDR_WIDTH(PHYS_AW), .CHECKPOINT_WIDTH(CP_W)) dut (
+    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(1<<PHYS_AW), .PHYS_ADDR_WIDTH(PHYS_AW), .CHECKPOINT_WIDTH(CP_W), .STORE_BUFFERED_RETIRE(0)) dut (
         .clk_i(clk), .reset_i(reset), .alloc_valid_i(alloc_valid), .alloc_pc_i(alloc_pc), .alloc_inst_i(alloc_inst), .alloc_rd_i(alloc_rd), .alloc_rd_we_i(alloc_rd_we),
         .alloc_old_phys_i(alloc_old), .alloc_new_phys_i(alloc_new), .alloc_is_store_i(alloc_store), .alloc_is_branch_i(alloc_branch), .alloc_is_halt_i(alloc_halt), .alloc_is_error_i(alloc_error), .alloc_checkpoint_i(alloc_cp),
         .alloc_ready_o(alloc_ready), .alloc_fire_o(alloc_fire), .alloc_tag_o(alloc_tag), .alloc_count_o(alloc_count),
