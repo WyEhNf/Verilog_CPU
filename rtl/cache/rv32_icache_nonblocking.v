@@ -296,7 +296,8 @@ module rv32_icache_nonblocking #(
             if (mem_req_valid_o && mem_req_ready_i)
                 mshr_sent[send_index] <= 1'b1;
 
-            if (mem_resp_valid_i && mem_resp_ready_o) begin
+            if (mem_resp_valid_i && mem_resp_ready_o &&
+                response_target_found) begin
                 mshr_valid[response_index] <= 1'b0;
                 mshr_sent[response_index] <= 1'b0;
                 event_refill_o <= !mem_resp_error_i && response_matches;
