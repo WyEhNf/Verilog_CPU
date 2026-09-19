@@ -10,13 +10,16 @@ module cpu_core_image_tb #(
     parameter integer ROB_ENTRIES = 16,
     parameter integer RS_ENTRIES = 4,
     parameter integer LSQ_ENTRIES = 4,
+    parameter integer ENABLE_CACHE_STATS = 0,
     parameter integer ENABLE_CACHES = 1,
+    parameter integer ICACHE_FAST_HIT = 1,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
     parameter integer SHIFT_IMPL = 0,
     parameter integer PHYS_TAG_IMPL = 0,
     parameter integer CHECKPOINT_IMPL = 0,
+    parameter integer STORE_BUFFERED_RETIRE = 1,
     parameter integer COMPLETION_BYPASS = 0,
     parameter integer SERIAL_BACKEND = 0,
     parameter integer GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH,
@@ -76,13 +79,16 @@ module cpu_core_image_tb #(
         .ROB_ENTRIES(ROB_ENTRIES),
         .RS_ENTRIES(RS_ENTRIES),
         .LSQ_ENTRIES(LSQ_ENTRIES),
+        .ENABLE_CACHE_STATS(ENABLE_CACHE_STATS),
         .ENABLE_CACHES(ENABLE_CACHES),
+        .ICACHE_FAST_HIT(ICACHE_FAST_HIT),
         .ENABLE_PREDICTOR(ENABLE_PREDICTOR),
         .FETCH_QUEUE_DEPTH(FETCH_QUEUE_DEPTH),
         .MUL_IMPL(MUL_IMPL),
         .SHIFT_IMPL(SHIFT_IMPL),
         .PHYS_TAG_IMPL(PHYS_TAG_IMPL),
         .CHECKPOINT_IMPL(CHECKPOINT_IMPL),
+        .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE),
         .COMPLETION_BYPASS(COMPLETION_BYPASS),
         .SERIAL_BACKEND(SERIAL_BACKEND),
         .GENERATION_WIDTH(GENERATION_WIDTH),
@@ -184,6 +190,21 @@ module cpu_core_image_tb #(
             finish_code = 1;
         end else begin
             $display("PASS: JOIN-02 image=%0s return=%0d cycles=%0d instret=%0d", test_name, return_value, cycles, instret);
+        end
+        if (ENABLE_CACHE_STATS != 0) begin
+            $display("PERF: fe_empty=%0d be_stall=%0d no_commit=%0d commit_active=%0d issue=%0d rob_full=%0d rs_full=%0d lsq_full=%0d branch_pending=%0d mdu_busy=%0d",
+                     dut.perf_frontend_empty_cycles, dut.perf_backend_stall_cycles,
+                     dut.perf_no_commit_cycles, dut.perf_commit_active_cycles,
+                     dut.perf_issue_count, dut.perf_rob_full_cycles,
+                     dut.perf_rs_full_cycles, dut.perf_lsq_full_cycles,
+                     dut.perf_branch_pending_cycles, dut.perf_mdu_busy_cycles);
+            $display("PERF_CACHE: i_req=%0d i_hit=%0d i_miss=%0d i_refill=%0d i_stall=%0d d_req=%0d d_hit=%0d d_miss=%0d d_refill=%0d d_wb=%0d d_stall=%0d i_mem=%0d d_mem_read=%0d d_mem_write=%0d",
+                     dut.perf_i_requests, dut.perf_i_hits, dut.perf_i_misses,
+                     dut.perf_i_refills, dut.perf_i_stalls, dut.perf_d_requests,
+                     dut.perf_d_hits, dut.perf_d_misses, dut.perf_d_refills,
+                     dut.perf_d_writebacks, dut.perf_d_stalls,
+                     dut.perf_i_mem_requests, dut.perf_d_mem_reads,
+                     dut.perf_d_mem_writes);
         end
         if (trace_file != 0)
             $fclose(trace_file);
