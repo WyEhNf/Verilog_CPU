@@ -314,7 +314,7 @@ module rv32_backend_joint #(
     reg [31:0] branch_feedback_target_r;
     reg branch_feedback_pred_taken_r;
     reg [31:0] branch_feedback_pred_target_r;
-    assign cdb_ready = {BE_WIDTH{!branch_pending}};
+    reg [BE_WIDTH-1:0] cdb_ready_r;
     integer map_index;
     integer map_lane;
     integer branch_lane;
@@ -339,6 +339,8 @@ module rv32_backend_joint #(
     integer map_phys_slot;
     integer producer_index;
     integer completion_lane;
+    integer completion_source;
+    integer cdb_ready_lane;
     integer completion_slot;
     integer recovery_rs_index;
     integer recovery_rs_rob_slot;
@@ -396,6 +398,20 @@ module rv32_backend_joint #(
     reg [BE_WIDTH*32-1:0] completion_value_r, completion_store_addr_r;
     reg [BE_WIDTH*4-1:0] completion_store_mask_r;
     reg [BE_WIDTH*32-1:0] completion_store_data_r;
+
+    // Recovery consumes one ROB completion lane. Keep the remaining CDB
+    // bandwidth live as a contiguous prefix instead of freezing the whole
+    // completion network until the redirect is accepted.
+    always @* begin
+        cdb_ready_r = {BE_WIDTH{1'b1}};
+        if (branch_pending) begin
+            for (cdb_ready_lane = 0; cdb_ready_lane < BE_WIDTH;
+                 cdb_ready_lane = cdb_ready_lane + 1)
+                cdb_ready_r[cdb_ready_lane] =
+                    (cdb_ready_lane < (CDB_WIDTH - 1));
+        end
+    end
+    assign cdb_ready = cdb_ready_r;
 
     genvar io_lane;
     generate
@@ -985,7 +1001,7 @@ module rv32_backend_joint #(
     assign rs_wake_value = wake_wb_value;
 
     always @* begin
-        completion_valid_r = rob_wb_valid;
+        completion_valid_r = rob_wb_valid & cdb_ready;
         completion_tag_r = rob_wb_tag;
         completion_value_r = rob_wb_value;
         completion_done_r = rob_wb_valid;
@@ -1012,6 +1028,43 @@ module rv32_backend_joint #(
             completion_value_r = {{(BE_WIDTH-1)*32{1'b0}}, branch_pending_value};
             completion_done_r = {{(BE_WIDTH-1){1'b0}}, 1'b1};
             completion_error_r = {BE_WIDTH{1'b0}};
+            completion_store_addr_r = {BE_WIDTH*32{1'b0}};
+            completion_store_mask_r = {BE_WIDTH*4{1'b0}};
+            completion_store_data_r = {BE_WIDTH*32{1'b0}};
+            for (completion_lane = 1; completion_lane < BE_WIDTH;
+                 completion_lane = completion_lane + 1) begin
+                completion_source = completion_lane - 1;
+                if ((completion_source < (CDB_WIDTH - 1)) &&
+                    rob_wb_valid[completion_source] &&
+                    cdb_ready[completion_source]) begin
+                    completion_valid_r[completion_lane] = 1'b1;
+                    completion_tag_r[completion_lane*TAG_WIDTH +: TAG_WIDTH] =
+                        rob_wb_tag[completion_source*TAG_WIDTH +: TAG_WIDTH];
+                    completion_value_r[completion_lane*32 +: 32] =
+                        rob_wb_value[completion_source*32 +: 32];
+                    completion_done_r[completion_lane] = 1'b1;
+                    completion_slot =
+                        rob_wb_tag[completion_source*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH];
+                    if (completion_slot < ROB_ENTRIES) begin
+                        completion_error_r[completion_lane] =
+                            load_error_mem[completion_slot];
+                        completion_store_addr_r[completion_lane*32 +: 32] =
+                            cdb_addr[completion_source*32 +: 32];
+                        completion_store_data_r[completion_lane*32 +: 32] =
+                            cdb_store_data[completion_source*32 +: 32];
+                        if (cdb_is_store[completion_source]) begin
+                            case (rob_mem_size_mem[completion_slot])
+                                `RV32IM_MEM_BYTE:
+                                    completion_store_mask_r[completion_lane*4 +: 4] = 4'b0001;
+                                `RV32IM_MEM_HALF:
+                                    completion_store_mask_r[completion_lane*4 +: 4] = 4'b0011;
+                                default:
+                                    completion_store_mask_r[completion_lane*4 +: 4] = 4'b1111;
+                            endcase
+                        end
+                    end
+                end
+            end
         end
     end
 

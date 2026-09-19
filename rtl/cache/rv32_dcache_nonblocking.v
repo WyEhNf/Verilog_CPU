@@ -1,13 +1,14 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// Non-blocking, write-through data cache for the performance profiles.
-// Loads use independent MSHRs and may hit under outstanding misses. Committed
-// stores remain exclusive and receive an acknowledgement only after backing
-// memory completes the masked write.
+// Non-blocking, write-back data cache for the performance profiles. Loads use
+// independent MSHRs, merge behind an outstanding line, and trigger a clean
+// next-line prefetch. A demand that reaches an in-flight prefetch promotes it
+// in place so the returned line completes the original LSQ entry.
 module rv32_dcache_nonblocking #(
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
-    parameter integer MSHR_ENTRIES = 4
+    parameter integer MSHR_ENTRIES = 4,
+    parameter integer PREFETCH = 1
 ) (
     input  wire                     clk_i,
     input  wire                     reset_i,
@@ -63,8 +64,8 @@ module rv32_dcache_nonblocking #(
     reg mshr_valid [0:MSHR_ENTRIES-1];
     reg mshr_sent [0:MSHR_ENTRIES-1];
     reg mshr_store [0:MSHR_ENTRIES-1];
+    reg mshr_prefetch [0:MSHR_ENTRIES-1];
     reg mshr_writeback [0:MSHR_ENTRIES-1];
-    reg mshr_cache_hit [0:MSHR_ENTRIES-1];
     reg [31:0] mshr_addr [0:MSHR_ENTRIES-1];
     reg [1:0] mshr_size [0:MSHR_ENTRIES-1];
     reg mshr_unsigned [0:MSHR_ENTRIES-1];
@@ -94,20 +95,38 @@ module rv32_dcache_nonblocking #(
 
     integer k;
     integer free_index;
+    integer second_free_index;
     integer send_index;
     integer response_index;
+    integer matching_index;
     reg free_found;
+    reg second_free_found;
     reg send_found;
     reg any_mshr;
     reg store_mshr_present;
     reg response_found;
+    reg matching_found;
+    reg matching_prefetch;
+    reg prefetch_line_present;
+    wire [31:0] request_line_addr = {dcache_req_addr_i[31:4], 4'b0};
+    wire [31:0] prefetch_line_addr = request_line_addr + 32'd16;
+    wire [7:0] prefetch_index = prefetch_line_addr[11:4];
+    wire [19:0] prefetch_tag = prefetch_line_addr[31:12];
+    wire prefetch_cache_hit = valid_mem[prefetch_index] &&
+                              (tag_mem[prefetch_index] == prefetch_tag);
     always @* begin
         free_found = 1'b0;
         free_index = 0;
+        second_free_found = 1'b0;
+        second_free_index = 0;
         send_found = 1'b0;
         send_index = 0;
         any_mshr = 1'b0;
         store_mshr_present = 1'b0;
+        matching_found = 1'b0;
+        matching_index = 0;
+        matching_prefetch = 1'b0;
+        prefetch_line_present = 1'b0;
         for (k = 0; k < MSHR_ENTRIES; k = k + 1) begin
             if (mshr_valid[k])
                 any_mshr = 1'b1;
@@ -116,11 +135,23 @@ module rv32_dcache_nonblocking #(
             if (!free_found && !mshr_valid[k]) begin
                 free_found = 1'b1;
                 free_index = k;
+            end else if (!second_free_found && !mshr_valid[k]) begin
+                second_free_found = 1'b1;
+                second_free_index = k;
             end
             if (!send_found && mshr_valid[k] && !mshr_sent[k]) begin
                 send_found = 1'b1;
                 send_index = k;
             end
+            if (!matching_found && mshr_valid[k] && !mshr_writeback[k] &&
+                ({mshr_addr[k][31:4], 4'b0} == request_line_addr)) begin
+                matching_found = 1'b1;
+                matching_index = k;
+                matching_prefetch = mshr_prefetch[k];
+            end
+            if (mshr_valid[k] && !mshr_writeback[k] &&
+                ({mshr_addr[k][31:4], 4'b0} == prefetch_line_addr))
+                prefetch_line_present = 1'b1;
         end
         response_index = mem_resp_id_i;
         response_found = (response_index >= 0) &&
@@ -132,12 +163,19 @@ module rv32_dcache_nonblocking #(
     wire request_is_store = dcache_req_is_store_i && !dcache_req_is_load_i;
     wire request_is_load = dcache_req_is_load_i && !dcache_req_is_store_i;
     wire load_can_accept = !store_mshr_present &&
-                           (request_hit ? resp_slot_free : free_found);
+                           (request_hit ? resp_slot_free :
+                            (matching_found ?
+                             (matching_prefetch &&
+                              !(mem_resp_valid_i && response_found &&
+                                (response_index == matching_index))) :
+                             free_found));
     wire store_can_accept = !any_mshr && ack_slot_free &&
                             (request_hit || free_found);
     wire request_fire = dcache_req_valid_i && dcache_req_ready_o;
     wire response_needs_output = response_found &&
-                                 (mshr_store[response_index] ? !ack_slot_free : !resp_slot_free);
+                                 (mshr_store[response_index] ? !ack_slot_free :
+                                  (mshr_prefetch[response_index] ? 1'b0 :
+                                   !resp_slot_free));
     wire response_matches = response_found &&
                             (mem_resp_line_addr_i ==
                              (mshr_writeback[response_index] ?
@@ -229,8 +267,8 @@ module rv32_dcache_nonblocking #(
                 mshr_valid[reset_index] <= 1'b0;
                 mshr_sent[reset_index] <= 1'b0;
                 mshr_store[reset_index] <= 1'b0;
+                mshr_prefetch[reset_index] <= 1'b0;
                 mshr_writeback[reset_index] <= 1'b0;
-                mshr_cache_hit[reset_index] <= 1'b0;
                 mshr_addr[reset_index] <= 32'd0;
                 mshr_size[reset_index] <= 2'd0;
                 mshr_unsigned[reset_index] <= 1'b0;
@@ -275,17 +313,23 @@ module rv32_dcache_nonblocking #(
                     ack_valid_reg <= 1'b1;
                     ack_lsq_reg <= dcache_req_lsq_tag_i;
                     ack_error_reg <= 1'b0;
+                end else if (request_is_load && matching_found && matching_prefetch) begin
+                    // Turn the speculative line into the demand transaction;
+                    // its memory request and ID remain unchanged.
+                    event_miss_o <= 1'b1;
+                    mshr_prefetch[matching_index] <= 1'b0;
+                    mshr_addr[matching_index] <= dcache_req_addr_i;
+                    mshr_size[matching_index] <= dcache_req_size_i;
+                    mshr_unsigned[matching_index] <= dcache_req_unsigned_i;
+                    mshr_lsq[matching_index] <= dcache_req_lsq_tag_i;
                 end else begin
-                    if (request_is_load)
-                        event_miss_o <= 1'b1;
-                    else
-                        event_miss_o <= 1'b1;
+                    event_miss_o <= 1'b1;
                     mshr_valid[free_index] <= 1'b1;
                     mshr_sent[free_index] <= 1'b0;
                     mshr_store[free_index] <= request_is_store;
+                    mshr_prefetch[free_index] <= 1'b0;
                     mshr_writeback[free_index] <= valid_mem[request_index] &&
                                                   dirty_mem[request_index];
-                    mshr_cache_hit[free_index] <= request_hit;
                     mshr_addr[free_index] <= dcache_req_addr_i;
                     mshr_size[free_index] <= dcache_req_size_i;
                     mshr_unsigned[free_index] <= dcache_req_unsigned_i;
@@ -297,6 +341,27 @@ module rv32_dcache_nonblocking #(
                     mshr_victim_data[free_index] <= data_mem[request_index];
                     valid_mem[request_index] <= 1'b0;
                     dirty_mem[request_index] <= 1'b0;
+
+                    if ((PREFETCH != 0) && (request_is_load || request_is_store) &&
+                        second_free_found && !prefetch_cache_hit &&
+                        !prefetch_line_present &&
+                        !(valid_mem[prefetch_index] && dirty_mem[prefetch_index])) begin
+                        mshr_valid[second_free_index] <= 1'b1;
+                        mshr_sent[second_free_index] <= 1'b0;
+                        mshr_store[second_free_index] <= 1'b0;
+                        mshr_prefetch[second_free_index] <= 1'b1;
+                        mshr_writeback[second_free_index] <= 1'b0;
+                        mshr_addr[second_free_index] <= prefetch_line_addr;
+                        mshr_size[second_free_index] <= `RV32IM_MEM_WORD;
+                        mshr_unsigned[second_free_index] <= 1'b1;
+                        mshr_mask[second_free_index] <= 16'd0;
+                        mshr_wdata[second_free_index] <= 128'd0;
+                        mshr_lsq[second_free_index] <= {TAG_WIDTH{1'b0}};
+                        mshr_victim_addr[second_free_index] <= 32'd0;
+                        mshr_victim_data[second_free_index] <= 128'd0;
+                        valid_mem[prefetch_index] <= 1'b0;
+                        dirty_mem[prefetch_index] <= 1'b0;
+                    end
                 end
             end
 
@@ -340,6 +405,16 @@ module rv32_dcache_nonblocking #(
                     ack_valid_reg <= 1'b1;
                     ack_lsq_reg <= mshr_lsq[response_index];
                     ack_error_reg <= mem_resp_error_i || !response_matches;
+                end else if (mshr_prefetch[response_index]) begin
+                    mshr_valid[response_index] <= 1'b0;
+                    if (!mem_resp_error_i && response_matches) begin
+                        line_index = mshr_addr[response_index][11:4];
+                        valid_mem[line_index] <= 1'b1;
+                        tag_mem[line_index] <= mshr_addr[response_index][31:12];
+                        data_mem[line_index] <= mem_resp_data_i;
+                        dirty_mem[line_index] <= 1'b0;
+                        event_refill_o <= 1'b1;
+                    end
                 end else begin
                     mshr_valid[response_index] <= 1'b0;
                     if (!mem_resp_error_i && response_matches) begin
@@ -366,7 +441,8 @@ module rv32_dcache_nonblocking #(
     end
 
     initial begin
-        if (TAG_WIDTH < 8 || MSHR_ENTRIES < 2 || MSHR_ENTRIES > 8) begin
+        if (TAG_WIDTH < 8 || MSHR_ENTRIES < 2 || MSHR_ENTRIES > 8 ||
+            (PREFETCH != 0 && PREFETCH != 1)) begin
             $display("ERROR: invalid rv32_dcache_nonblocking parameter");
             $finish;
         end
