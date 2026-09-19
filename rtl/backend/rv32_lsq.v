@@ -3,8 +3,9 @@
 
 // Ordered load/store queue.  Addresses and store data may arrive after
 // allocation; loads inspect older stores before issuing a cache request.
-// Store requests are gated by the ROB commit handshake and are only emitted
-// for the LSQ head, so memory visibility remains precise.
+// Store requests are gated by the ROB commit handshake.  Committed stores may
+// accumulate in the queue and drain in program order, allowing the ROB to
+// retire past cache latency while the LSQ doubles as a store buffer.
 module rv32_lsq #(
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
@@ -149,6 +150,7 @@ module rv32_lsq #(
     integer alloc_slot;
     integer update_slot;
     integer response_slot;
+    integer commit_slot_select;
     integer entry_rob_slot;
     integer recovery_branch_slot;
     integer recovery_branch_age;
@@ -168,6 +170,7 @@ module rv32_lsq #(
     reg response_match;
     reg response_fire;
     reg commit_fire;
+    reg commit_slot_found;
     reg [GENERATION_WIDTH-1:0] next_generation;
 
     function [31:0] expand_word_bytes;
@@ -354,14 +357,23 @@ module rv32_lsq #(
             end
         end
 
-        // The ROB only presents a store at its head.  LSQ also checks that
-        // the corresponding entry is its own head and operands are ready.
+        // ROB presents stores in architectural order.  Match by ROB tag
+        // instead of requiring the LSQ entry itself to be at the queue head:
+        // older committed stores may still be waiting for the cache.
         store_commit_ready_o = 1'b0;
-        if (!flush_i && occupancy_reg != 0 && valid_mem[head_reg] &&
-            store_mem[head_reg] && addr_ready_mem[head_reg] &&
-            data_ready_mem[head_reg] && !store_commit_mem[head_reg] &&
-            (rob_tag_mem[head_reg] == store_commit_rob_tag_i)) begin
-            store_commit_ready_o = 1'b1;
+        commit_slot_select = 0;
+        commit_slot_found = 1'b0;
+        if (!flush_i && occupancy_reg != 0) begin
+            for (scan = 0; scan < LSQ_ENTRIES; scan = scan + 1) begin
+                if (!commit_slot_found && valid_mem[scan] && store_mem[scan] &&
+                    addr_ready_mem[scan] && data_ready_mem[scan] &&
+                    !store_commit_mem[scan] &&
+                    (rob_tag_mem[scan] == store_commit_rob_tag_i)) begin
+                    store_commit_ready_o = 1'b1;
+                    commit_slot_select = scan;
+                    commit_slot_found = 1'b1;
+                end
+            end
         end
 
         // Select the oldest eligible memory operation.  A younger load is
@@ -399,7 +411,7 @@ module rv32_lsq #(
                         candidate = scan;
                         candidate_age = age;
                     end
-                end else if (store_mem[scan] && scan == head_reg && addr_ready_mem[scan] &&
+                end else if (store_mem[scan] && addr_ready_mem[scan] &&
                              data_ready_mem[scan] && store_commit_mem[scan] && !request_sent_mem[scan]) begin
                     candidate_found = 1'b1;
                     candidate = scan;
@@ -639,7 +651,7 @@ module rv32_lsq #(
             occupancy_reg <= recovery_keep_count;
         end else begin
             commit_fire = store_commit_valid_i && store_commit_ready_o;
-            if (commit_fire) store_commit_mem[head_reg] <= 1'b1;
+            if (commit_fire) store_commit_mem[commit_slot_select] <= 1'b1;
 
             // Independent address/data wakeups are tag-qualified.  An old
             // response cannot update a reused LSQ slot after wrap/flush.

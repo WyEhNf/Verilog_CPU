@@ -12,7 +12,10 @@ module rv32_rob #(
     parameter integer GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH,
     parameter integer TAG_WIDTH = 1 + 2 + SLOT_WIDTH + GENERATION_WIDTH,
     parameter integer CHECKPOINT_WIDTH = 1024,
-    parameter integer CHECKPOINT_IMPL = 0
+    parameter integer CHECKPOINT_IMPL = 0,
+    // 1 retires a store after admission into the committed LSQ/store buffer;
+    // 0 preserves the precise legacy behavior of waiting for cache ack.
+    parameter integer STORE_BUFFERED_RETIRE = 1
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -351,17 +354,26 @@ module rv32_rob #(
                         commit_tag_o[(commit_lane*TAG_WIDTH) +: TAG_WIDTH] = make_tag(commit_slot, generation_mem[commit_slot]);
                         commit_old_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = old_phys_mem[commit_slot];
                         commit_new_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = new_phys_mem[commit_slot];
-                        // Stores must become the actual ROB head before the
-                        // cache side effect is issued/acknowledged. If a store
-                        // appears behind another commit in this bundle, stop
-                        // here and retry it as lane zero next cycle.
+                        // Stores must become the actual ROB head before they
+                        // enter the committed portion of the LSQ.  Admission
+                        // to that queue is the retirement point; the LSQ then
+                        // retains and drains the store like a store buffer.
+                        // A store behind another lane is retried as lane zero
+                        // because there is one store-admission port.
                         if (store_mem[commit_slot]) begin
-                            if (commit_lane == 0)
-                                commit_valid_o[commit_lane] = store_wait_mem[commit_slot];
+                            if (commit_lane == 0) begin
+                                if (STORE_BUFFERED_RETIRE != 0)
+                                    commit_valid_o[commit_lane] = !store_sent_mem[commit_slot] &&
+                                                                  store_commit_ready_i;
+                                else
+                                    commit_valid_o[commit_lane] = store_wait_mem[commit_slot];
+                            end
                             else
                                 commit_valid_o[commit_lane] = 1'b0;
                         end
-                        if (commit_lane == 0 && store_mem[commit_slot] && !store_wait_mem[commit_slot] && !store_sent_mem[commit_slot]) begin
+                        if (commit_lane == 0 && store_mem[commit_slot] &&
+                            !store_sent_mem[commit_slot] &&
+                            ((STORE_BUFFERED_RETIRE != 0) || !store_wait_mem[commit_slot])) begin
                             store_commit_valid_o = 1'b1;
                             store_commit_tag_o = make_tag(commit_slot, generation_mem[commit_slot]);
                             store_commit_addr_o = store_addr_mem[commit_slot];

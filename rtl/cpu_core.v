@@ -18,6 +18,7 @@ module cpu_core #(
     parameter integer SHIFT_IMPL = 0,
     parameter integer PHYS_TAG_IMPL = 0,
     parameter integer CHECKPOINT_IMPL = 0,
+    parameter integer STORE_BUFFERED_RETIRE = 1,
     parameter integer COMPLETION_BYPASS = 0,
     parameter integer SERIAL_BACKEND = 0,
     parameter integer GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH,
@@ -489,7 +490,7 @@ module cpu_core #(
         .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target)
     );
     end else begin : g_ooo_backend
-    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
+    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),

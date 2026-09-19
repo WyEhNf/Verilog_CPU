@@ -110,7 +110,16 @@ module rv32_dcache #(
     reg [TAG_WIDTH-1:0] mshr_lsq;
 
     wire pipeline_empty = !s0_valid && !s1_valid && !s2_valid;
-    wire outputs_free = !resp_valid_reg && !store_ack_valid_reg;
+    // Loads may occupy all three hit-pipeline stages concurrently.  Stores
+    // remain exclusive because the stage-one SRAM read precedes the stage-two
+    // merge/write; admitting a younger request beside a store would otherwise
+    // need an explicit cache-line bypass network.
+    wire store_in_pipeline = (s0_valid && s0_store) ||
+                             (s1_valid && s1_store) ||
+                             (s2_valid && s2_store);
+    wire pipeline_output_blocked =
+        (s2_valid && s2_load && resp_valid_reg && !dcache_resp_ready_i) ||
+        (s2_valid && s2_store && store_ack_valid_reg && !dcache_store_ack_ready_i);
     wire request_fire = dcache_req_valid_i && dcache_req_ready_o;
     wire mem_req_fire = mem_req_valid_o && mem_req_ready_i;
     wire mem_resp_match = mshr_valid && mshr_wait_resp &&
@@ -118,7 +127,9 @@ module rv32_dcache #(
                           (mem_resp_id_i == mshr_lsq[7:0]);
     wire mem_resp_fire = mem_resp_valid_i && mem_resp_ready_o;
 
-    assign dcache_req_ready_o = !reset_i && !flush_i && !mshr_valid && pipeline_empty && outputs_free;
+    assign dcache_req_ready_o = !reset_i && !flush_i && !mshr_valid &&
+                                !pipeline_output_blocked && !store_in_pipeline &&
+                                (!dcache_req_is_store_i || pipeline_empty);
     assign dcache_resp_valid_o = resp_valid_reg;
     assign dcache_resp_lsq_tag_o = resp_lsq_reg;
     assign dcache_resp_addr_o = resp_addr_reg;
@@ -253,11 +264,18 @@ module rv32_dcache #(
                         s2_valid <= 1'b0;
                     end
                 end
-            end else if (mshr_valid && s2_valid && s2_store) begin
-                // Do not let an older miss erase a committed store waiting
-                // behind it.  The store is retried after the MSHR response.
-                s0_valid <= 1'b0;
-                s1_valid <= 1'b0;
+            end else if (mshr_valid) begin
+                // A miss owns the sole refill port.  Preserve every younger
+                // hit-pipeline stage and resume it after refill; dropping the
+                // stages here loses requests when load hits are pipelined.
+                s0_valid <= s0_valid;
+                s1_valid <= s1_valid;
+                s2_valid <= s2_valid;
+            end else if (pipeline_output_blocked) begin
+                // The response registers are elastic.  Freeze the pipeline
+                // only when the relevant output cannot be replaced this edge.
+                s0_valid <= s0_valid;
+                s1_valid <= s1_valid;
                 s2_valid <= s2_valid;
             end else begin
                 s2_valid <= s1_valid;
