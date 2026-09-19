@@ -363,8 +363,11 @@ module rv32_rob #(
                         if (store_mem[commit_slot]) begin
                             if (commit_lane == 0) begin
                                 if (STORE_BUFFERED_RETIRE != 0)
-                                    commit_valid_o[commit_lane] = !store_sent_mem[commit_slot] &&
-                                                                  store_commit_ready_i;
+                                    // Admission is recorded in store_sent_mem
+                                    // on the preceding edge.  Retire from that
+                                    // registered state to avoid a ROB<->LSQ
+                                    // combinational ready/tag loop.
+                                    commit_valid_o[commit_lane] = store_sent_mem[commit_slot];
                                 else
                                     commit_valid_o[commit_lane] = store_wait_mem[commit_slot];
                             end
