@@ -202,8 +202,7 @@ module rv32_dcache_nonblocking #(
 
     wire request_is_store = dcache_req_is_store_i && !dcache_req_is_load_i;
     wire request_is_load = dcache_req_is_load_i && !dcache_req_is_store_i;
-    wire load_can_accept = !store_mshr_present &&
-                           (request_hit ? resp_slot_free :
+    wire load_can_accept = (request_hit ? resp_slot_free :
                             (matching_found ?
                              (!mshr_store[matching_index] &&
                               (matching_prefetch || waiter_free_found) &&
