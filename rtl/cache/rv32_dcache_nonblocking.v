@@ -222,8 +222,9 @@ module rv32_dcache_nonblocking #(
                              free_found));
     wire store_can_accept = request_hit ?
                             (ack_slot_free && !request_index_conflict) :
-                            (matching_found && mshr_store[matching_index] ?
-                             (waiter_free_found &&
+                            (matching_found ?
+                             ((matching_prefetch ||
+                               (mshr_store[matching_index] && waiter_free_found)) &&
                               !(mem_resp_valid_i && response_found &&
                                 (response_index == matching_index))) :
                              (!any_mshr && free_found));
@@ -413,6 +414,20 @@ module rv32_dcache_nonblocking #(
                     waiter_unsigned[waiter_free_index] <= dcache_req_unsigned_i;
                     waiter_lsq[waiter_free_index] <= dcache_req_lsq_tag_i;
                     waiter_error[waiter_free_index] <= 1'b0;
+                end else if (request_is_store && matching_found &&
+                             matching_prefetch) begin
+                    // A committed store owns the prefetched line from now on;
+                    // retain the transaction ID and turn its refill into the
+                    // store miss completion.
+                    event_miss_o <= 1'b1;
+                    mshr_store[matching_index] <= 1'b1;
+                    mshr_prefetch[matching_index] <= 1'b0;
+                    mshr_addr[matching_index] <= dcache_req_addr_i;
+                    mshr_size[matching_index] <= dcache_req_size_i;
+                    mshr_unsigned[matching_index] <= 1'b0;
+                    mshr_mask[matching_index] <= dcache_req_mask_i;
+                    mshr_wdata[matching_index] <= dcache_req_wdata_i;
+                    mshr_lsq[matching_index] <= dcache_req_lsq_tag_i;
                 end else if (request_is_store && matching_found &&
                              mshr_store[matching_index]) begin
                     // Consecutive committed stores to one missing line share
