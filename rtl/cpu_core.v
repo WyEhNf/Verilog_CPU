@@ -16,6 +16,7 @@ module cpu_core #(
     parameter integer ICACHE_COMBINATIONAL_HIT = 0,
     parameter integer ICACHE_PREFETCH = 1,
     parameter integer ICACHE_MSHRS = 4,
+    parameter integer DCACHE_MSHRS = 4,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
@@ -251,7 +252,10 @@ module cpu_core #(
     );
     end
 
-    rv32_dcache #(.TAG_WIDTH(ROB_TAG_WIDTH)) dcache (
+    if (DCACHE_MSHRS > 1) begin : g_nonblocking_dcache
+    rv32_dcache_nonblocking #(
+        .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS)
+    ) dcache (
         // LSQ generations reject wrong-path responses while retaining older
         // loads across a redirect.  The cache itself has no ROB-age context.
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(dcache_req_valid),
@@ -276,6 +280,31 @@ module cpu_core #(
         .event_hit_o(dc_event_hit), .event_miss_o(dc_event_miss), .event_refill_o(dc_event_refill),
         .event_writeback_o(dc_event_writeback), .event_stall_o(dc_event_stall)
     );
+    end else begin : g_blocking_dcache
+    rv32_dcache #(.TAG_WIDTH(ROB_TAG_WIDTH)) dcache (
+        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(dcache_req_valid),
+        .dcache_req_ready_o(dcache_req_ready), .dcache_req_is_load_i(dcache_req_load),
+        .dcache_req_is_store_i(dcache_req_store), .dcache_req_addr_i(dcache_req_addr),
+        .dcache_req_size_i(dcache_req_size), .dcache_req_unsigned_i(dcache_req_unsigned),
+        .dcache_req_mask_i(dcache_req_mask), .dcache_req_wdata_i(dcache_req_wdata),
+        .dcache_req_rob_tag_i(dcache_req_rob_tag), .dcache_req_lsq_tag_i(dcache_req_lsq_tag),
+        .dcache_resp_valid_o(dcache_resp_valid), .dcache_resp_ready_i(dcache_resp_ready),
+        .dcache_resp_lsq_tag_o(dcache_resp_lsq_tag), .dcache_resp_addr_o(dcache_resp_addr),
+        .dcache_resp_line_data_o(dcache_resp_line), .dcache_resp_word_data_o(dcache_resp_word),
+        .dcache_resp_line_valid_o(dcache_resp_line_valid), .dcache_resp_error_o(dcache_resp_error),
+        .dcache_store_ack_valid_o(dcache_store_ack_valid), .dcache_store_ack_ready_i(1'b1),
+        .dcache_store_ack_lsq_tag_o(dcache_store_ack_lsq_tag), .dcache_store_ack_error_o(dcache_store_ack_error),
+        .mem_req_valid_o(dc_mem_req_valid), .mem_req_ready_i(dc_mem_req_ready),
+        .mem_req_write_o(dc_mem_req_write), .mem_req_line_addr_o(dc_mem_req_line_addr),
+        .mem_req_wdata_o(dc_mem_req_wdata), .mem_req_wmask_o(dc_mem_req_wmask),
+        .mem_req_id_o(dc_mem_req_id), .mem_resp_valid_i(dc_mem_resp_valid),
+        .mem_resp_ready_o(dc_mem_resp_ready), .mem_resp_line_addr_i(dc_mem_resp_line_addr),
+        .mem_resp_data_i(dc_mem_resp_data), .mem_resp_id_i(dc_mem_resp_id),
+        .mem_resp_error_i(dc_mem_resp_error), .event_request_o(dc_event_request),
+        .event_hit_o(dc_event_hit), .event_miss_o(dc_event_miss), .event_refill_o(dc_event_refill),
+        .event_writeback_o(dc_event_writeback), .event_stall_o(dc_event_stall)
+    );
+    end
 
     rv32_memory_bridge memory_bridge (
         .clk_i(clk), .reset_i(reset), .cache_i_req_valid_i(ic_mem_req_valid),
