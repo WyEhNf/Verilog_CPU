@@ -10,7 +10,8 @@ module rv32_icache #(
     // a hit is registered directly from the request edge and a miss allocates
     // the MSHR immediately.  Set to zero for the original three-stage SRAM
     // timing model.
-    parameter integer FAST_HIT = 0
+    parameter integer FAST_HIT = 0,
+    parameter integer NEXT_LINE_PREFETCH = 0
 ) (
     input  wire                       clk_i,
     input  wire                       reset_i,
@@ -77,6 +78,7 @@ module rv32_icache #(
     reg [31:0] mshr_pc;
     reg [31:0] mshr_line_addr;
     reg [EPOCH_WIDTH-1:0] mshr_epoch;
+    reg mshr_prefetch;
 
     wire [5:0] req_index = if_req_pc_i[9:4];
     wire [21:0] req_tag = if_req_pc_i[31:10];
@@ -93,9 +95,17 @@ module rv32_icache #(
     wire refill_output_free = resp_slot_free || !refill_live;
     wire mem_resp_match = (mem_resp_line_addr_i == mshr_line_addr) &&
                           (mem_resp_id_i[EPOCH_WIDTH-1:0] == mshr_epoch);
+    wire [31:0] prefetch_line_addr = mshr_line_addr + 32'd16;
+    wire [5:0] prefetch_index = prefetch_line_addr[9:4];
+    wire [21:0] prefetch_tag = prefetch_line_addr[31:10];
+    wire prefetch_resident = valid_mem[prefetch_index] &&
+                             (tag_mem[prefetch_index] == prefetch_tag);
+    wire request_matches_prefetch = mshr_valid && mshr_prefetch &&
+                                    ({if_req_pc_i[31:4], 4'b0000} == mshr_line_addr);
 
     assign if_req_ready_o = (FAST_HIT != 0) ?
-                            (!reset_i && !miss_reserved && resp_slot_free) :
+                            (!reset_i && !miss_reserved && resp_slot_free &&
+                             (req_lookup_hit || !mshr_valid || request_matches_prefetch)) :
                             (!reset_i && !miss_reserved && pipeline_advance &&
                              (!if_req_valid_i || request_admissible));
     assign if_resp_valid_o = resp_live;
@@ -108,7 +118,8 @@ module rv32_icache #(
     assign mem_req_valid_o = mshr_valid && !mshr_req_sent;
     assign mem_req_line_addr_o = mshr_line_addr;
     assign mem_req_id_o = {{(8-EPOCH_WIDTH){1'b0}}, mshr_epoch};
-    assign mem_resp_ready_o = mshr_valid && mshr_req_sent && refill_output_free;
+    assign mem_resp_ready_o = mshr_valid && mshr_req_sent &&
+                              (mshr_prefetch || refill_output_free);
 
     integer i;
     always @(posedge clk_i) begin
@@ -128,6 +139,7 @@ module rv32_icache #(
             mshr_pc <= 32'd0;
             mshr_line_addr <= 32'd0;
             mshr_epoch <= {EPOCH_WIDTH{1'b0}};
+            mshr_prefetch <= 1'b0;
             event_request_o <= 1'b0;
             event_hit_o <= 1'b0;
             event_miss_o <= 1'b0;
@@ -157,7 +169,16 @@ module rv32_icache #(
                 // edge, or reserve the single miss slot without spending the
                 // three legacy lookup stages.
                 if (request_fire) begin
-                    if (req_lookup_hit) begin
+                    if (request_matches_prefetch) begin
+                        // Promote an already-issued next-line prefetch into
+                        // the demand miss instead of waiting for it to fill
+                        // and then performing a redundant lookup.
+                        event_miss_o <= 1'b1;
+                        miss_reserved <= 1'b1;
+                        mshr_prefetch <= 1'b0;
+                        mshr_pc <= if_req_pc_i;
+                        mshr_epoch <= if_req_epoch_i;
+                    end else if (req_lookup_hit) begin
                         event_hit_o <= 1'b1;
                         if (if_req_epoch_i == current_epoch_i) begin
                             resp_valid_reg <= 1'b1;
@@ -175,6 +196,7 @@ module rv32_icache #(
                         mshr_pc <= if_req_pc_i;
                         mshr_line_addr <= {if_req_pc_i[31:4], 4'b0000};
                         mshr_epoch <= if_req_epoch_i;
+                        mshr_prefetch <= 1'b0;
                     end
                 end
             end else if (pipeline_advance) begin
@@ -196,6 +218,7 @@ module rv32_icache #(
                         mshr_pc <= s2_pc;
                         mshr_line_addr <= {s2_pc[31:4], 4'b0000};
                         mshr_epoch <= s2_epoch;
+                        mshr_prefetch <= 1'b0;
                     end
                 end
 
@@ -223,20 +246,36 @@ module rv32_icache #(
             if (mem_resp_valid_i && mem_resp_ready_o) begin
                 mshr_valid <= 1'b0;
                 mshr_req_sent <= 1'b0;
-                miss_reserved <= 1'b0;
+                if (!mshr_prefetch)
+                    miss_reserved <= 1'b0;
                 event_refill_o <= !mem_resp_error_i && mem_resp_match;
                 if (!mem_resp_error_i && mem_resp_match) begin
                     valid_mem[mshr_line_addr[9:4]] <= 1'b1;
                     tag_mem[mshr_line_addr[9:4]] <= mshr_line_addr[31:10];
                     data_mem[mshr_line_addr[9:4]] <= mem_resp_data_i;
                 end
-                if (refill_live) begin
+                if (!mshr_prefetch && refill_live) begin
                     resp_valid_reg <= 1'b1;
                     resp_pc_reg <= mshr_pc;
                     resp_line_addr_reg <= mshr_line_addr;
                     resp_data_reg <= mem_resp_data_i;
                     resp_epoch_reg <= mshr_epoch;
                     resp_error_reg <= mem_resp_error_i || !mem_resp_match;
+                end
+                // After satisfying a demand miss, immediately stream the
+                // following line when it is not already resident.  Demand
+                // hits continue while this prefetch is outstanding; a second
+                // demand miss waits rather than overwriting the MSHR.
+                if ((NEXT_LINE_PREFETCH != 0) && !mshr_prefetch &&
+                    !mem_resp_error_i && mem_resp_match &&
+                    !prefetch_resident) begin
+                    mshr_valid <= 1'b1;
+                    mshr_req_sent <= 1'b0;
+                    mshr_pc <= prefetch_line_addr;
+                    mshr_line_addr <= prefetch_line_addr;
+                    mshr_prefetch <= 1'b1;
+                end else begin
+                    mshr_prefetch <= 1'b0;
                 end
             end
         end

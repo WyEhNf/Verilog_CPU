@@ -13,6 +13,7 @@ module cpu_core #(
     parameter integer ENABLE_CACHE_STATS = 0,
     parameter integer ENABLE_CACHES = 1,
     parameter integer ICACHE_FAST_HIT = 1,
+    parameter integer ICACHE_PREFETCH = 1,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
@@ -206,7 +207,7 @@ module cpu_core #(
     wire dcache_debug_mshr_valid, dcache_debug_ack_valid, dcache_debug_resp_valid;
     generate
     if (ENABLE_CACHES != 0) begin : g_cached_memory
-    rv32_icache #(.FAST_HIT(ICACHE_FAST_HIT)) icache (
+    rv32_icache #(.FAST_HIT(ICACHE_FAST_HIT), .NEXT_LINE_PREFETCH(ICACHE_PREFETCH)) icache (
         .clk_i(clk), .reset_i(reset), .current_epoch_i(frontend_epoch),
         .if_req_valid_i(if_req_valid), .if_req_ready_o(if_req_ready), .if_req_pc_i(if_req_pc),
         .if_req_epoch_i(if_req_epoch), .if_resp_valid_o(if_resp_valid),
