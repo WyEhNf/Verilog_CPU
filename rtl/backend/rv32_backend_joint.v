@@ -234,6 +234,7 @@ module rv32_backend_joint #(
     reg [PAW-1:0] mdu_issue_phys;
 
     wire mdu_issue_valid, mdu_issue_ready, mdu_completion_valid, mdu_completion_ready, mdu_completion_rd_we;
+    wire mdu_busy;
     wire [31:0] mdu_completion_value;
     wire [TAG_WIDTH-1:0] mdu_completion_tag;
     wire [PAW-1:0] mdu_completion_phys;
@@ -466,7 +467,7 @@ module rv32_backend_joint #(
     assign perf_lsq_occupancy_o = lsq_occupancy;
     assign perf_issue_valid_o = rs_issue_valid & rs_issue_ready;
     assign perf_branch_pending_o = branch_pending;
-    assign perf_mdu_busy_o = !mdu_issue_ready;
+    assign perf_mdu_busy_o = mdu_busy;
     assign commit_pc_o = rob_commit_pc;
     assign commit_inst_o = rob_commit_inst;
     assign commit_rd_o = rob_commit_rd;
@@ -793,7 +794,7 @@ module rv32_backend_joint #(
     endgenerate
 
     rv32m_mdu_reservation_station #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .MUL_IMPL(MUL_IMPL)) mdu (
-        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
+        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
     rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES)) lsq (
