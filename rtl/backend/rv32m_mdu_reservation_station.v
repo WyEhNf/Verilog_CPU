@@ -57,7 +57,12 @@ module rv32m_mdu_reservation_station #(
                          (div_req_valid && div_req_ready);
     wire completion_fire = completion_valid_o && completion_ready_i;
 
-    assign issue_ready_o = !flush_i && !pending_valid && (issue_is_mul || issue_is_div);
+    // Refill the one-entry launch buffer on the same edge that the current
+    // request enters its execution unit.  The pipelined Wallace multiplier
+    // can therefore sustain one request per cycle instead of one every two.
+    assign issue_ready_o = !flush_i &&
+                           (!pending_valid || unit_req_fire) &&
+                           (issue_is_mul || issue_is_div);
     assign completion_valid_o = mul_resp_valid || div_resp_valid;
     assign completion_value_o = mul_resp_valid ? mul_resp_value : div_resp_value;
     assign completion_rob_tag_o = mul_resp_valid ? mul_resp_tag : div_resp_tag;
