@@ -1,6 +1,7 @@
 rtl/rv32im_decoder.v
 rtl/predictor/rv32_branch_predictor.v
 rtl/cache/rv32_icache.v
+rtl/cache/rv32_icache_nonblocking.v
 rtl/cache/rv32_dcache.v
 rtl/cache/rv32_cache_stats.v
 rtl/memory/rv32_memory_bridge.v

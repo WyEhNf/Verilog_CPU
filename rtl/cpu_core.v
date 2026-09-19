@@ -15,6 +15,7 @@ module cpu_core #(
     parameter integer ICACHE_FAST_HIT = 1,
     parameter integer ICACHE_COMBINATIONAL_HIT = 0,
     parameter integer ICACHE_PREFETCH = 1,
+    parameter integer ICACHE_MSHRS = 4,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
@@ -208,7 +209,12 @@ module cpu_core #(
     wire dcache_debug_mshr_valid, dcache_debug_ack_valid, dcache_debug_resp_valid;
     generate
     if (ENABLE_CACHES != 0) begin : g_cached_memory
-    rv32_icache #(.FAST_HIT(ICACHE_FAST_HIT), .COMBINATIONAL_HIT(ICACHE_COMBINATIONAL_HIT), .NEXT_LINE_PREFETCH(ICACHE_PREFETCH)) icache (
+    if (ICACHE_MSHRS > 1) begin : g_nonblocking_icache
+    rv32_icache_nonblocking #(
+        .MSHR_ENTRIES(ICACHE_MSHRS),
+        .NEXT_LINE_PREFETCH(ICACHE_PREFETCH),
+        .PREFETCH_DISTANCE(ICACHE_MSHRS-1)
+    ) icache (
         .clk_i(clk), .reset_i(reset), .current_epoch_i(frontend_epoch),
         .if_req_valid_i(if_req_valid), .if_req_ready_o(if_req_ready), .if_req_pc_i(if_req_pc),
         .if_req_epoch_i(if_req_epoch), .if_resp_valid_o(if_resp_valid),
@@ -223,6 +229,27 @@ module cpu_core #(
         .event_request_o(ic_event_request), .event_hit_o(ic_event_hit),
         .event_miss_o(ic_event_miss), .event_refill_o(ic_event_refill), .event_stall_o(ic_event_stall)
     );
+    end else begin : g_blocking_icache
+    rv32_icache #(
+        .FAST_HIT(ICACHE_FAST_HIT),
+        .COMBINATIONAL_HIT(ICACHE_COMBINATIONAL_HIT),
+        .NEXT_LINE_PREFETCH(ICACHE_PREFETCH)
+    ) icache (
+        .clk_i(clk), .reset_i(reset), .current_epoch_i(frontend_epoch),
+        .if_req_valid_i(if_req_valid), .if_req_ready_o(if_req_ready), .if_req_pc_i(if_req_pc),
+        .if_req_epoch_i(if_req_epoch), .if_resp_valid_o(if_resp_valid),
+        .if_resp_ready_i(if_resp_ready), .if_resp_pc_o(if_resp_pc),
+        .if_resp_line_addr_o(if_resp_line_addr), .if_resp_line_data_o(if_resp_line_data),
+        .if_resp_epoch_o(if_resp_epoch), .if_resp_error_o(if_resp_error),
+        .mem_req_valid_o(ic_mem_req_valid), .mem_req_ready_i(ic_mem_req_ready),
+        .mem_req_line_addr_o(ic_mem_req_line_addr), .mem_req_id_o(ic_mem_req_id),
+        .mem_resp_valid_i(ic_mem_resp_valid), .mem_resp_ready_o(ic_mem_resp_ready),
+        .mem_resp_line_addr_i(ic_mem_resp_line_addr), .mem_resp_data_i(ic_mem_resp_data),
+        .mem_resp_id_i(ic_mem_resp_id), .mem_resp_error_i(ic_mem_resp_error),
+        .event_request_o(ic_event_request), .event_hit_o(ic_event_hit),
+        .event_miss_o(ic_event_miss), .event_refill_o(ic_event_refill), .event_stall_o(ic_event_stall)
+    );
+    end
 
     rv32_dcache #(.TAG_WIDTH(ROB_TAG_WIDTH)) dcache (
         // LSQ generations reject wrong-path responses while retaining older
