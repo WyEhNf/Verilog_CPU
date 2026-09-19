@@ -11,6 +11,7 @@ module rv32_icache #(
     // the MSHR immediately.  Set to zero for the original three-stage SRAM
     // timing model.
     parameter integer FAST_HIT = 0,
+    parameter integer COMBINATIONAL_HIT = 0,
     parameter integer NEXT_LINE_PREFETCH = 0
 ) (
     input  wire                       clk_i,
@@ -102,18 +103,21 @@ module rv32_icache #(
                              (tag_mem[prefetch_index] == prefetch_tag);
     wire request_matches_prefetch = mshr_valid && mshr_prefetch &&
                                     ({if_req_pc_i[31:4], 4'b0000} == mshr_line_addr);
+    wire bypass_hit = (COMBINATIONAL_HIT != 0) && if_req_valid_i &&
+                      req_lookup_hit && !resp_live;
 
-    assign if_req_ready_o = (FAST_HIT != 0) ?
+    assign if_req_ready_o = bypass_hit ? if_resp_ready_i :
+                            ((FAST_HIT != 0) ?
                             (!reset_i && !miss_reserved && resp_slot_free &&
                              (req_lookup_hit || !mshr_valid || request_matches_prefetch)) :
                             (!reset_i && !miss_reserved && pipeline_advance &&
-                             (!if_req_valid_i || request_admissible));
-    assign if_resp_valid_o = resp_live;
-    assign if_resp_pc_o = resp_pc_reg;
-    assign if_resp_line_addr_o = resp_line_addr_reg;
-    assign if_resp_line_data_o = resp_data_reg;
-    assign if_resp_epoch_o = resp_epoch_reg;
-    assign if_resp_error_o = resp_error_reg;
+                             (!if_req_valid_i || request_admissible)));
+    assign if_resp_valid_o = bypass_hit ? (if_req_epoch_i == current_epoch_i) : resp_live;
+    assign if_resp_pc_o = bypass_hit ? if_req_pc_i : resp_pc_reg;
+    assign if_resp_line_addr_o = bypass_hit ? {if_req_pc_i[31:4], 4'b0000} : resp_line_addr_reg;
+    assign if_resp_line_data_o = bypass_hit ? data_mem[req_index] : resp_data_reg;
+    assign if_resp_epoch_o = bypass_hit ? if_req_epoch_i : resp_epoch_reg;
+    assign if_resp_error_o = bypass_hit ? 1'b0 : resp_error_reg;
 
     assign mem_req_valid_o = mshr_valid && !mshr_req_sent;
     assign mem_req_line_addr_o = mshr_line_addr;
@@ -180,7 +184,8 @@ module rv32_icache #(
                         mshr_epoch <= if_req_epoch_i;
                     end else if (req_lookup_hit) begin
                         event_hit_o <= 1'b1;
-                        if (if_req_epoch_i == current_epoch_i) begin
+                        if ((COMBINATIONAL_HIT == 0) &&
+                            (if_req_epoch_i == current_epoch_i)) begin
                             resp_valid_reg <= 1'b1;
                             resp_pc_reg <= if_req_pc_i;
                             resp_line_addr_reg <= {if_req_pc_i[31:4], 4'b0000};
