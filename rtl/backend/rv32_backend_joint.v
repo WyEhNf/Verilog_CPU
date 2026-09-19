@@ -305,11 +305,21 @@ module rv32_backend_joint #(
     reg [31:0] branch_pending_target;
     reg branch_pending_pred_taken;
     reg [31:0] branch_pending_pred_target;
+    reg branch_feedback_valid_r;
+    reg [31:0] branch_feedback_pc_r;
+    reg [1:0] branch_feedback_kind_r;
+    reg branch_feedback_taken_r;
+    reg [31:0] branch_feedback_target_r;
+    reg branch_feedback_pred_taken_r;
+    reg [31:0] branch_feedback_pred_target_r;
     assign cdb_ready = {BE_WIDTH{!branch_pending}};
     integer map_index;
     integer map_lane;
     integer branch_lane;
     integer branch_capture_found;
+    integer branch_feedback_lane;
+    integer branch_feedback_found;
+    integer branch_feedback_slot;
     integer ready_lane;
     integer source_lane;
     integer source_rob_slot;
@@ -481,13 +491,47 @@ module rv32_backend_joint #(
     assign redirect_valid_o = rob_redirect_valid;
     assign redirect_pc_o = rob_redirect_pc;
     assign redirect_epoch_o = rob_redirect_epoch;
-    assign branch_feedback_valid_o = branch_pending && rob_recovery_accept;
-    assign branch_feedback_pc_o = branch_pending_source_pc;
-    assign branch_feedback_kind_o = branch_pending_kind;
-    assign branch_feedback_taken_o = branch_pending_taken;
-    assign branch_feedback_target_o = branch_pending_target;
-    assign branch_feedback_pred_taken_o = branch_pending_pred_taken;
-    assign branch_feedback_pred_target_o = branch_pending_pred_target;
+    assign branch_feedback_valid_o = branch_feedback_valid_r;
+    assign branch_feedback_pc_o = branch_feedback_pc_r;
+    assign branch_feedback_kind_o = branch_feedback_kind_r;
+    assign branch_feedback_taken_o = branch_feedback_taken_r;
+    assign branch_feedback_target_o = branch_feedback_target_r;
+    assign branch_feedback_pred_taken_o = branch_feedback_pred_taken_r;
+    assign branch_feedback_pred_target_o = branch_feedback_pred_target_r;
+
+    // Train on every resolved control-flow instruction, not only on the
+    // mispredictions that enter branch_pending.  The previous policy left
+    // loop counters and BTB entries almost untrained once a prediction became
+    // correct.  One feedback port selects the oldest/lowest issue lane.
+    always @* begin
+        branch_feedback_valid_r = 1'b0;
+        branch_feedback_pc_r = 32'd0;
+        branch_feedback_kind_r = `RV32IM_PRED_NONE;
+        branch_feedback_taken_r = 1'b0;
+        branch_feedback_target_r = 32'd0;
+        branch_feedback_pred_taken_r = 1'b0;
+        branch_feedback_pred_target_r = 32'd0;
+        branch_feedback_found = 0;
+        branch_feedback_slot = 0;
+        for (branch_feedback_lane = 0; branch_feedback_lane < BE_WIDTH;
+             branch_feedback_lane = branch_feedback_lane + 1) begin
+            if (!branch_feedback_found && alu_exec_valid[branch_feedback_lane] &&
+                alu_exec_ready[branch_feedback_lane] &&
+                alu_exec_is_branch[branch_feedback_lane]) begin
+                branch_feedback_slot =
+                    alu_exec_tag[branch_feedback_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH];
+                branch_feedback_valid_r = 1'b1;
+                branch_feedback_pc_r = rob_pc_mem[branch_feedback_slot];
+                branch_feedback_kind_r = rob_pred_kind_mem[branch_feedback_slot];
+                branch_feedback_taken_r = alu_exec_branch_taken[branch_feedback_lane];
+                branch_feedback_target_r =
+                    alu_exec_branch_target[branch_feedback_lane*32 +: 32];
+                branch_feedback_pred_taken_r = rob_pred_taken_mem[branch_feedback_slot];
+                branch_feedback_pred_target_r = rob_pred_target_mem[branch_feedback_slot];
+                branch_feedback_found = 1;
+            end
+        end
+    end
 
     // One shared MDU accepts the oldest M-class selection while independent
     // ALUs may accept all other selected instructions in the same cycle.

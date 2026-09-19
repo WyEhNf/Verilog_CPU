@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// 64-entry bimodal predictor plus a 16-entry direct-mapped BTB.
+// 256-entry bimodal predictor plus a 64-entry direct-mapped BTB.
 // Predictor state changes only from committed branch feedback.
 /* verilator lint_off UNUSEDSIGNAL */
 module rv32_branch_predictor (
@@ -30,26 +30,26 @@ module rv32_branch_predictor (
     output reg  [31:0] prediction_count_o,
     output reg  [31:0] correct_count_o
 );
-    reg [1:0] bht [0:63];
-    reg       btb_valid [0:15];
-    reg [25:0] btb_tag [0:15];
-    reg [31:0] btb_target [0:15];
-    reg [1:0] btb_kind [0:15];
+    reg [1:0] bht [0:255];
+    reg       btb_valid [0:63];
+    reg [23:0] btb_tag [0:63];
+    reg [31:0] btb_target [0:63];
+    reg [1:0] btb_kind [0:63];
 
     wire [6:0] query_opcode = query_inst_i[6:0];
-    wire [5:0] query_bht_index = query_pc_i[7:2];
-    wire [3:0] query_btb_index = query_pc_i[5:2];
+    wire [7:0] query_bht_index = query_pc_i[9:2];
+    wire [5:0] query_btb_index = query_pc_i[7:2];
     wire query_btb_match = btb_valid[query_btb_index] &&
-                           (btb_tag[query_btb_index] == query_pc_i[31:6]);
+                           (btb_tag[query_btb_index] == query_pc_i[31:8]);
     wire [31:0] jal_imm = {{11{query_inst_i[31]}}, query_inst_i[31],
                            query_inst_i[19:12], query_inst_i[20],
                            query_inst_i[30:21], 1'b0};
-    wire [5:0] feedback_bht_index = feedback_pc_i[7:2];
-    wire [3:0] feedback_btb_index = feedback_pc_i[5:2];
+    wire [7:0] feedback_bht_index = feedback_pc_i[9:2];
+    wire [5:0] feedback_btb_index = feedback_pc_i[7:2];
     integer i;
 
-    assign pred_bht_index_o = query_bht_index;
-    assign pred_btb_index_o = query_btb_index;
+    assign pred_bht_index_o = query_bht_index[5:0];
+    assign pred_btb_index_o = query_btb_index[3:0];
     assign pred_counter_o = bht[query_bht_index];
 
     always @* begin
@@ -94,11 +94,11 @@ module rv32_branch_predictor (
         if (reset_i) begin
             prediction_count_o <= 32'd0;
             correct_count_o <= 32'd0;
-            for (i = 0; i < 64; i = i + 1)
+            for (i = 0; i < 256; i = i + 1)
                 bht[i] <= 2'b10; // weakly taken
-            for (i = 0; i < 16; i = i + 1) begin
+            for (i = 0; i < 64; i = i + 1) begin
                 btb_valid[i] <= 1'b0;
-                btb_tag[i] <= 26'd0;
+                btb_tag[i] <= 24'd0;
                 btb_target[i] <= 32'd0;
                 btb_kind[i] <= `RV32IM_PRED_NONE;
             end
@@ -113,7 +113,7 @@ module rv32_branch_predictor (
                     if (bht[feedback_bht_index] != 2'b11)
                         bht[feedback_bht_index] <= bht[feedback_bht_index] + 2'b01;
                     btb_valid[feedback_btb_index] <= 1'b1;
-                    btb_tag[feedback_btb_index] <= feedback_pc_i[31:6];
+                    btb_tag[feedback_btb_index] <= feedback_pc_i[31:8];
                     btb_target[feedback_btb_index] <= feedback_target_i;
                     btb_kind[feedback_btb_index] <= `RV32IM_PRED_BRANCH;
                 end else if (bht[feedback_bht_index] != 2'b00) begin
@@ -122,7 +122,7 @@ module rv32_branch_predictor (
             end else if (feedback_kind_i == `RV32IM_PRED_JALR) begin
                 if (feedback_taken_i) begin
                     btb_valid[feedback_btb_index] <= 1'b1;
-                    btb_tag[feedback_btb_index] <= feedback_pc_i[31:6];
+                    btb_tag[feedback_btb_index] <= feedback_pc_i[31:8];
                     btb_target[feedback_btb_index] <= {feedback_target_i[31:1], 1'b0};
                     btb_kind[feedback_btb_index] <= `RV32IM_PRED_JALR;
                 end
