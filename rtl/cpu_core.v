@@ -12,6 +12,7 @@ module cpu_core #(
     parameter integer LSQ_ENTRIES = 8,
     parameter integer ENABLE_CACHE_STATS = 0,
     parameter integer ENABLE_CACHES = 1,
+    parameter integer ICACHE_FAST_HIT = 1,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
@@ -205,7 +206,7 @@ module cpu_core #(
     wire dcache_debug_mshr_valid, dcache_debug_ack_valid, dcache_debug_resp_valid;
     generate
     if (ENABLE_CACHES != 0) begin : g_cached_memory
-    rv32_icache icache (
+    rv32_icache #(.FAST_HIT(ICACHE_FAST_HIT)) icache (
         .clk_i(clk), .reset_i(reset), .current_epoch_i(frontend_epoch),
         .if_req_valid_i(if_req_valid), .if_req_ready_o(if_req_ready), .if_req_pc_i(if_req_pc),
         .if_req_epoch_i(if_req_epoch), .if_resp_valid_o(if_resp_valid),
@@ -453,6 +454,9 @@ module cpu_core #(
     wire [BE_WIDTH*16-1:0] commit_store_mask;
     wire [BE_WIDTH*ROB_TAG_WIDTH-1:0] commit_tag;
     wire [BE_WIDTH*128-1:0] commit_store_data;
+    wire [15:0] perf_rob_occupancy, perf_rs_occupancy, perf_lsq_occupancy;
+    wire [BE_WIDTH-1:0] perf_issue_valid;
+    wire perf_branch_pending, perf_mdu_busy;
     assign commit_ready = 1'b1;
     generate if (SERIAL_BACKEND != 0) begin : g_serial_backend
     rv32_serial_backend #(.BE_WIDTH(BE_WIDTH), .SHIFT_IMPL(SHIFT_IMPL),
@@ -489,6 +493,12 @@ module cpu_core #(
         .branch_feedback_taken_o(branch_feedback_taken), .branch_feedback_target_o(branch_feedback_target),
         .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target)
     );
+    assign perf_rob_occupancy = 16'd0;
+    assign perf_rs_occupancy = 16'd0;
+    assign perf_lsq_occupancy = 16'd0;
+    assign perf_issue_valid = {BE_WIDTH{1'b0}};
+    assign perf_branch_pending = 1'b0;
+    assign perf_mdu_busy = 1'b0;
     end else begin : g_ooo_backend
     rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
@@ -521,10 +531,17 @@ module cpu_core #(
          .return_value_o(return_value), .branch_feedback_valid_o(branch_feedback_valid),
          .branch_feedback_pc_o(branch_feedback_pc), .branch_feedback_kind_o(branch_feedback_kind),
          .branch_feedback_taken_o(branch_feedback_taken), .branch_feedback_target_o(branch_feedback_target),
-         .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target)
+         .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target),
+         .perf_rob_occupancy_o(perf_rob_occupancy), .perf_rs_occupancy_o(perf_rs_occupancy),
+         .perf_lsq_occupancy_o(perf_lsq_occupancy), .perf_issue_valid_o(perf_issue_valid),
+         .perf_branch_pending_o(perf_branch_pending), .perf_mdu_busy_o(perf_mdu_busy)
     );
     end endgenerate
 
+    wire [63:0] perf_i_requests, perf_i_hits, perf_i_misses, perf_i_refills, perf_i_stalls;
+    wire [63:0] perf_d_requests, perf_d_hits, perf_d_misses, perf_d_refills;
+    wire [63:0] perf_d_writebacks, perf_d_stalls, perf_i_mem_requests;
+    wire [63:0] perf_d_mem_reads, perf_d_mem_writes;
     generate
         if (ENABLE_CACHE_STATS != 0) begin : gen_cache_stats
             rv32_cache_stats stats (
@@ -532,13 +549,38 @@ module cpu_core #(
                 .i_event_miss_i(ic_event_miss), .i_event_refill_i(ic_event_refill), .i_event_stall_i(ic_event_stall),
                 .d_event_request_i(dc_event_request), .d_event_hit_i(dc_event_hit), .d_event_miss_i(dc_event_miss),
                 .d_event_refill_i(dc_event_refill), .d_event_writeback_i(dc_event_writeback), .d_event_stall_i(dc_event_stall),
-                .i_mem_request_fire_i(1'b0), .d_mem_read_fire_i(1'b0), .d_mem_write_fire_i(1'b0),
-                .i_request_count_o(), .i_hit_count_o(), .i_miss_count_o(), .i_refill_count_o(), .i_stall_count_o(),
-                .d_request_count_o(), .d_hit_count_o(), .d_miss_count_o(), .d_refill_count_o(), .d_writeback_count_o(),
-                .d_stall_count_o(), .i_mem_request_count_o(), .d_mem_read_count_o(), .d_mem_write_count_o()
+                .i_mem_request_fire_i(mem_i_req_valid && mem_i_req_ready),
+                .d_mem_read_fire_i(mem_d_req_valid && mem_d_req_ready && !mem_d_req_write),
+                .d_mem_write_fire_i(mem_d_req_valid && mem_d_req_ready && mem_d_req_write),
+                .i_request_count_o(perf_i_requests), .i_hit_count_o(perf_i_hits),
+                .i_miss_count_o(perf_i_misses), .i_refill_count_o(perf_i_refills),
+                .i_stall_count_o(perf_i_stalls), .d_request_count_o(perf_d_requests),
+                .d_hit_count_o(perf_d_hits), .d_miss_count_o(perf_d_misses),
+                .d_refill_count_o(perf_d_refills), .d_writeback_count_o(perf_d_writebacks),
+                .d_stall_count_o(perf_d_stalls), .i_mem_request_count_o(perf_i_mem_requests),
+                .d_mem_read_count_o(perf_d_mem_reads), .d_mem_write_count_o(perf_d_mem_writes)
             );
+        end else begin : gen_no_cache_stats
+            assign perf_i_requests = 64'd0; assign perf_i_hits = 64'd0;
+            assign perf_i_misses = 64'd0; assign perf_i_refills = 64'd0;
+            assign perf_i_stalls = 64'd0; assign perf_d_requests = 64'd0;
+            assign perf_d_hits = 64'd0; assign perf_d_misses = 64'd0;
+            assign perf_d_refills = 64'd0; assign perf_d_writebacks = 64'd0;
+            assign perf_d_stalls = 64'd0; assign perf_i_mem_requests = 64'd0;
+            assign perf_d_mem_reads = 64'd0; assign perf_d_mem_writes = 64'd0;
         end
     endgenerate
+
+    reg [63:0] perf_frontend_empty_cycles;
+    reg [63:0] perf_backend_stall_cycles;
+    reg [63:0] perf_no_commit_cycles;
+    reg [63:0] perf_commit_active_cycles;
+    reg [63:0] perf_issue_count;
+    reg [63:0] perf_rob_full_cycles;
+    reg [63:0] perf_rs_full_cycles;
+    reg [63:0] perf_lsq_full_cycles;
+    reg [63:0] perf_branch_pending_cycles;
+    reg [63:0] perf_mdu_busy_cycles;
 
     function [31:0] commit_popcount;
         input [BE_WIDTH-1:0] bits;
@@ -554,10 +596,32 @@ module cpu_core #(
         if (reset) begin
             cycles <= 32'd0;
             instret <= 32'd0;
+            perf_frontend_empty_cycles <= 64'd0;
+            perf_backend_stall_cycles <= 64'd0;
+            perf_no_commit_cycles <= 64'd0;
+            perf_commit_active_cycles <= 64'd0;
+            perf_issue_count <= 64'd0;
+            perf_rob_full_cycles <= 64'd0;
+            perf_rs_full_cycles <= 64'd0;
+            perf_lsq_full_cycles <= 64'd0;
+            perf_branch_pending_cycles <= 64'd0;
+            perf_mdu_busy_cycles <= 64'd0;
         end else begin
             cycles <= cycles + 32'd1;
             if ((|commit_valid) && commit_ready)
                 instret <= instret + commit_popcount(commit_valid);
+            if (ENABLE_CACHE_STATS != 0) begin
+                if (!(|fetch_valid)) perf_frontend_empty_cycles <= perf_frontend_empty_cycles + 1'b1;
+                if ((|trace_valid) && !(|trace_ready)) perf_backend_stall_cycles <= perf_backend_stall_cycles + 1'b1;
+                if (!(|commit_valid)) perf_no_commit_cycles <= perf_no_commit_cycles + 1'b1;
+                else perf_commit_active_cycles <= perf_commit_active_cycles + 1'b1;
+                perf_issue_count <= perf_issue_count + commit_popcount(perf_issue_valid);
+                if (perf_rob_occupancy >= ROB_ENTRIES) perf_rob_full_cycles <= perf_rob_full_cycles + 1'b1;
+                if (perf_rs_occupancy >= RS_ENTRIES) perf_rs_full_cycles <= perf_rs_full_cycles + 1'b1;
+                if (perf_lsq_occupancy >= LSQ_ENTRIES) perf_lsq_full_cycles <= perf_lsq_full_cycles + 1'b1;
+                if (perf_branch_pending) perf_branch_pending_cycles <= perf_branch_pending_cycles + 1'b1;
+                if (perf_mdu_busy) perf_mdu_busy_cycles <= perf_mdu_busy_cycles + 1'b1;
+            end
         end
     end
 endmodule

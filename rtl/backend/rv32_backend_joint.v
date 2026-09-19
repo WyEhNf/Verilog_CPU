@@ -98,7 +98,13 @@ module rv32_backend_joint #(
     output wire                         branch_feedback_taken_o,
     output wire [31:0]                  branch_feedback_target_o,
     output wire                         branch_feedback_pred_taken_o,
-    output wire [31:0]                  branch_feedback_pred_target_o
+    output wire [31:0]                  branch_feedback_pred_target_o,
+    output wire [15:0]                  perf_rob_occupancy_o,
+    output wire [15:0]                  perf_rs_occupancy_o,
+    output wire [15:0]                  perf_lsq_occupancy_o,
+    output wire [BE_WIDTH-1:0]          perf_issue_valid_o,
+    output wire                         perf_branch_pending_o,
+    output wire                         perf_mdu_busy_o
 );
     localparam integer PAW = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS);
     localparam integer ROB_SLOT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES);
@@ -455,6 +461,12 @@ module rv32_backend_joint #(
     assign rs_alloc_valid = rob_alloc_valid;
     assign lsq_alloc_valid = dispatch_valid & (trace_is_load_i | trace_is_store_i);
     assign commit_valid_o = rob_commit_valid;
+    assign perf_rob_occupancy_o = {{(16-ROB_COUNT_WIDTH){1'b0}}, rob_occupancy};
+    assign perf_rs_occupancy_o = rs_occupancy;
+    assign perf_lsq_occupancy_o = lsq_occupancy;
+    assign perf_issue_valid_o = rs_issue_valid & rs_issue_ready;
+    assign perf_branch_pending_o = branch_pending;
+    assign perf_mdu_busy_o = !mdu_issue_ready;
     assign commit_pc_o = rob_commit_pc;
     assign commit_inst_o = rob_commit_inst;
     assign commit_rd_o = rob_commit_rd;

@@ -5,7 +5,12 @@
 // exactly three rising edges after request acceptance when not backpressured.
 /* verilator lint_off UNUSEDSIGNAL */
 module rv32_icache #(
-    parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH
+    parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH,
+    // Distributed/tag-first implementation used by the performance profile:
+    // a hit is registered directly from the request edge and a miss allocates
+    // the MSHR immediately.  Set to zero for the original three-stage SRAM
+    // timing model.
+    parameter integer FAST_HIT = 0
 ) (
     input  wire                       clk_i,
     input  wire                       reset_i,
@@ -89,8 +94,10 @@ module rv32_icache #(
     wire mem_resp_match = (mem_resp_line_addr_i == mshr_line_addr) &&
                           (mem_resp_id_i[EPOCH_WIDTH-1:0] == mshr_epoch);
 
-    assign if_req_ready_o = !reset_i && !miss_reserved && pipeline_advance &&
-                            (!if_req_valid_i || request_admissible);
+    assign if_req_ready_o = (FAST_HIT != 0) ?
+                            (!reset_i && !miss_reserved && resp_slot_free) :
+                            (!reset_i && !miss_reserved && pipeline_advance &&
+                             (!if_req_valid_i || request_admissible));
     assign if_resp_valid_o = resp_live;
     assign if_resp_pc_o = resp_pc_reg;
     assign if_resp_line_addr_o = resp_line_addr_reg;
@@ -141,10 +148,36 @@ module rv32_icache #(
             if (resp_slot_free)
                 resp_valid_reg <= 1'b0;
 
-            if (request_is_miss)
+            if ((FAST_HIT == 0) && request_is_miss)
                 miss_reserved <= 1'b1;
 
-            if (pipeline_advance) begin
+            if (FAST_HIT != 0) begin
+                // The small 1 KiB array is implemented as a tag-first
+                // distributed lookup in this profile.  Register a hit in one
+                // edge, or reserve the single miss slot without spending the
+                // three legacy lookup stages.
+                if (request_fire) begin
+                    if (req_lookup_hit) begin
+                        event_hit_o <= 1'b1;
+                        if (if_req_epoch_i == current_epoch_i) begin
+                            resp_valid_reg <= 1'b1;
+                            resp_pc_reg <= if_req_pc_i;
+                            resp_line_addr_reg <= {if_req_pc_i[31:4], 4'b0000};
+                            resp_data_reg <= data_mem[req_index];
+                            resp_epoch_reg <= if_req_epoch_i;
+                            resp_error_reg <= 1'b0;
+                        end
+                    end else begin
+                        event_miss_o <= 1'b1;
+                        miss_reserved <= 1'b1;
+                        mshr_valid <= 1'b1;
+                        mshr_req_sent <= 1'b0;
+                        mshr_pc <= if_req_pc_i;
+                        mshr_line_addr <= {if_req_pc_i[31:4], 4'b0000};
+                        mshr_epoch <= if_req_epoch_i;
+                    end
+                end
+            end else if (pipeline_advance) begin
                 if (s2_valid) begin
                     if (s2_hit) begin
                         event_hit_o <= 1'b1;
