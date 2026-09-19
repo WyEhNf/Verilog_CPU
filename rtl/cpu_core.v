@@ -13,7 +13,7 @@ module cpu_core #(
     parameter integer ENABLE_CACHE_STATS = 0,
     parameter integer ENABLE_CACHES = 1,
     parameter integer ICACHE_FAST_HIT = 1,
-    parameter integer ICACHE_COMBINATIONAL_HIT = 1,
+    parameter integer ICACHE_COMBINATIONAL_HIT = 0,
     parameter integer ICACHE_PREFETCH = 1,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,

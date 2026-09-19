@@ -811,6 +811,12 @@ module rv32_backend_joint #(
         producer_recovery_index = 0;
         for (producer_index = 0; producer_index < BE_WIDTH; producer_index = producer_index + 1) begin
             if (alu_exec_valid[producer_index] &&
+                // A redirecting branch is captured into branch_pending and
+                // completed together with ROB recovery on the next edge.  Do
+                // not also enqueue it into the ordinary completion network:
+                // at high frontend throughput that copy can reach commit
+                // before recovery and leave a permanently stale pending tag.
+                !alu_exec_redirect_valid[producer_index] &&
                 (!alu_exec_is_load[producer_index] || alu_exec_is_store[producer_index])) begin
                 producer_valid_r[producer_index] = 1'b1;
                 producer_target_live_r[producer_index] = 1'b1;
@@ -914,7 +920,7 @@ module rv32_backend_joint #(
     always @* begin
         alu_exec_ready_r = {BE_WIDTH{1'b0}};
         for (alu_ready_lane = 0; alu_ready_lane < BE_WIDTH; alu_ready_lane = alu_ready_lane + 1) begin
-            if (alu_exec_is_load[alu_ready_lane])
+            if (alu_exec_is_load[alu_ready_lane] || alu_exec_redirect_valid[alu_ready_lane])
                 alu_exec_ready_r[alu_ready_lane] = 1'b1;
             else
                 alu_exec_ready_r[alu_ready_lane] = producer_ready[alu_ready_lane];
