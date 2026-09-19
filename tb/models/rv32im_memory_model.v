@@ -3,7 +3,7 @@
 module rv32im_memory_model #(
     parameter integer MEMORY_SIZE = 1048576,
     parameter integer LATENCY = 50,
-    parameter integer I_OUTSTANDING = 4,
+    parameter integer I_OUTSTANDING = 8,
     parameter integer D_OUTSTANDING = 4
 ) (
     input  wire         clk_i,
