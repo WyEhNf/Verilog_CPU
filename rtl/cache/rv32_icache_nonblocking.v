@@ -107,7 +107,11 @@ module rv32_icache_nonblocking #(
                 free_found = 1'b1;
                 free_index = k;
             end
-            if (!send_found && mshr_valid[k] && !mshr_sent[k]) begin
+            if (mshr_valid[k] && !mshr_sent[k] &&
+                (!send_found ||
+                 (mshr_prefetch[send_index] && !mshr_prefetch[k]))) begin
+                // A demand miss must not wait behind speculative stream
+                // traffic.  This matters most immediately after a redirect.
                 send_found = 1'b1;
                 send_index = k;
             end
@@ -163,7 +167,9 @@ module rv32_icache_nonblocking #(
     assign mem_req_line_addr_o = send_found ? mshr_line[send_index] : 32'd0;
     assign mem_req_id_o = send_found ?
         ((send_index << EPOCH_WIDTH) | mshr_txn_epoch[send_index]) : 8'd0;
-    assign mem_resp_ready_o = response_target_found &&
+    // Responses from a cancelled epoch have no live MSHR.  Consume and drop
+    // them so a stale transaction cannot block the memory response channel.
+    assign mem_resp_ready_o = !response_target_found ||
                               (!response_needs_slot || response_slot_free);
 
     integer reset_index;
@@ -208,6 +214,21 @@ module rv32_icache_nonblocking #(
 
             if (response_slot_free)
                 resp_valid_reg <= 1'b0;
+
+            // Redirects advance current_epoch_i.  Wrong-path demand and
+            // prefetch MSHRs are immediately reusable; the transaction ID
+            // carries the old epoch so any late response is rejected above.
+            for (k = 0; k < MSHR_ENTRIES; k = k + 1) begin
+                if (mshr_valid[k] &&
+                    (mshr_txn_epoch[k] != current_epoch_i)) begin
+                    mshr_valid[k] <= 1'b0;
+                    mshr_sent[k] <= 1'b0;
+                end
+            end
+            if (prefetch_active && (prefetch_epoch != current_epoch_i)) begin
+                prefetch_active <= 1'b0;
+                prefetch_remaining <= 0;
+            end
 
             if (request_fire) begin
                 if (request_hit) begin
