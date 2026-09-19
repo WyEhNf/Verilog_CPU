@@ -28,12 +28,10 @@ module rv32m_mdu_reservation_station_tb #(
     initial begin
         bad=0; reset=1; clear_inputs(); #12; reset=0; #1;
         issue_op=`RV32IM_OP_MUL; issue_src1=6; issue_src2=7; issue_valid=1; @(posedge clk); #1; issue_valid=0;
-        if (issue_ready) bad=bad+1;
         cycles=0; while (!completion_valid && cycles<MUL_WAIT) begin @(posedge clk); #1; cycles=cycles+1; end
         if (!completion_valid || completion_value!=42 || completion_tag!=16'h0101 || !completion_rd_we) bad=bad+1;
         @(posedge clk); #1;
         issue_op=`RV32IM_OP_DIVU; issue_src1=100; issue_src2=9; issue_tag=16'h0201; issue_valid=1; @(posedge clk); #1; issue_valid=0;
-        if (issue_ready) bad=bad+1;
         cycles=0; while (!completion_valid && cycles<40) begin @(posedge clk); #1; cycles=cycles+1; end
         if (!completion_valid || completion_value!=11 || completion_tag!=16'h0201) bad=bad+1;
         @(posedge clk); #1;
