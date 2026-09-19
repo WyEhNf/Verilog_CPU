@@ -56,12 +56,14 @@ module rv32_dcache_nonblocking #(
     output reg                      event_stall_o
 );
     reg valid_mem [0:255];
+    reg dirty_mem [0:255];
     reg [19:0] tag_mem [0:255];
     reg [127:0] data_mem [0:255];
 
     reg mshr_valid [0:MSHR_ENTRIES-1];
     reg mshr_sent [0:MSHR_ENTRIES-1];
     reg mshr_store [0:MSHR_ENTRIES-1];
+    reg mshr_writeback [0:MSHR_ENTRIES-1];
     reg mshr_cache_hit [0:MSHR_ENTRIES-1];
     reg [31:0] mshr_addr [0:MSHR_ENTRIES-1];
     reg [1:0] mshr_size [0:MSHR_ENTRIES-1];
@@ -69,6 +71,8 @@ module rv32_dcache_nonblocking #(
     reg [15:0] mshr_mask [0:MSHR_ENTRIES-1];
     reg [127:0] mshr_wdata [0:MSHR_ENTRIES-1];
     reg [TAG_WIDTH-1:0] mshr_lsq [0:MSHR_ENTRIES-1];
+    reg [31:0] mshr_victim_addr [0:MSHR_ENTRIES-1];
+    reg [127:0] mshr_victim_data [0:MSHR_ENTRIES-1];
 
     reg resp_valid_reg;
     reg [TAG_WIDTH-1:0] resp_lsq_reg;
@@ -95,6 +99,7 @@ module rv32_dcache_nonblocking #(
     reg free_found;
     reg send_found;
     reg any_mshr;
+    reg store_mshr_present;
     reg response_found;
     always @* begin
         free_found = 1'b0;
@@ -102,9 +107,12 @@ module rv32_dcache_nonblocking #(
         send_found = 1'b0;
         send_index = 0;
         any_mshr = 1'b0;
+        store_mshr_present = 1'b0;
         for (k = 0; k < MSHR_ENTRIES; k = k + 1) begin
             if (mshr_valid[k])
                 any_mshr = 1'b1;
+            if (mshr_valid[k] && mshr_store[k])
+                store_mshr_present = 1'b1;
             if (!free_found && !mshr_valid[k]) begin
                 free_found = 1'b1;
                 free_index = k;
@@ -123,13 +131,18 @@ module rv32_dcache_nonblocking #(
 
     wire request_is_store = dcache_req_is_store_i && !dcache_req_is_load_i;
     wire request_is_load = dcache_req_is_load_i && !dcache_req_is_store_i;
-    wire load_can_accept = request_hit ? resp_slot_free : free_found;
-    wire store_can_accept = !any_mshr && free_found && resp_slot_free && ack_slot_free;
+    wire load_can_accept = !store_mshr_present &&
+                           (request_hit ? resp_slot_free : free_found);
+    wire store_can_accept = !any_mshr && ack_slot_free &&
+                            (request_hit || free_found);
     wire request_fire = dcache_req_valid_i && dcache_req_ready_o;
     wire response_needs_output = response_found &&
                                  (mshr_store[response_index] ? !ack_slot_free : !resp_slot_free);
     wire response_matches = response_found &&
-                            (mem_resp_line_addr_i == {mshr_addr[response_index][31:4], 4'b0});
+                            (mem_resp_line_addr_i ==
+                             (mshr_writeback[response_index] ?
+                              mshr_victim_addr[response_index] :
+                              {mshr_addr[response_index][31:4], 4'b0}));
 
     assign dcache_req_ready_o = !reset_i && !flush_i &&
                                 ((request_is_load && load_can_accept) ||
@@ -146,11 +159,15 @@ module rv32_dcache_nonblocking #(
     assign dcache_store_ack_error_o = ack_error_reg;
 
     assign mem_req_valid_o = send_found;
-    assign mem_req_write_o = send_found && mshr_store[send_index];
+    assign mem_req_write_o = send_found && mshr_writeback[send_index];
     assign mem_req_line_addr_o = send_found ?
-                                  {mshr_addr[send_index][31:4], 4'b0} : 32'd0;
-    assign mem_req_wdata_o = send_found ? mshr_wdata[send_index] : 128'd0;
-    assign mem_req_wmask_o = send_found ? mshr_mask[send_index] : 16'd0;
+                                  (mshr_writeback[send_index] ?
+                                   mshr_victim_addr[send_index] :
+                                   {mshr_addr[send_index][31:4], 4'b0}) : 32'd0;
+    assign mem_req_wdata_o = send_found && mshr_writeback[send_index] ?
+                             mshr_victim_data[send_index] : 128'd0;
+    assign mem_req_wmask_o = send_found && mshr_writeback[send_index] ?
+                             16'hffff : 16'd0;
     assign mem_req_id_o = send_found ? send_index : 8'd0;
     assign mem_resp_ready_o = response_found && !response_needs_output;
 
@@ -204,6 +221,7 @@ module rv32_dcache_nonblocking #(
             event_stall_o <= 1'b0;
             for (reset_index = 0; reset_index < 256; reset_index = reset_index + 1) begin
                 valid_mem[reset_index] <= 1'b0;
+                dirty_mem[reset_index] <= 1'b0;
                 tag_mem[reset_index] <= 20'd0;
                 data_mem[reset_index] <= 128'd0;
             end
@@ -211,6 +229,7 @@ module rv32_dcache_nonblocking #(
                 mshr_valid[reset_index] <= 1'b0;
                 mshr_sent[reset_index] <= 1'b0;
                 mshr_store[reset_index] <= 1'b0;
+                mshr_writeback[reset_index] <= 1'b0;
                 mshr_cache_hit[reset_index] <= 1'b0;
                 mshr_addr[reset_index] <= 32'd0;
                 mshr_size[reset_index] <= 2'd0;
@@ -218,6 +237,8 @@ module rv32_dcache_nonblocking #(
                 mshr_mask[reset_index] <= 16'd0;
                 mshr_wdata[reset_index] <= 128'd0;
                 mshr_lsq[reset_index] <= {TAG_WIDTH{1'b0}};
+                mshr_victim_addr[reset_index] <= 32'd0;
+                mshr_victim_data[reset_index] <= 128'd0;
             end
         end else begin
             event_request_o <= request_fire;
@@ -244,16 +265,26 @@ module rv32_dcache_nonblocking #(
                                                    dcache_req_unsigned_i);
                     resp_line_valid_reg <= 1'b1;
                     resp_error_reg <= 1'b0;
+                end else if (request_is_store && request_hit) begin
+                    event_hit_o <= 1'b1;
+                    updated_line = merge_store(data_mem[request_index],
+                                               dcache_req_wdata_i,
+                                               dcache_req_mask_i);
+                    data_mem[request_index] <= updated_line;
+                    dirty_mem[request_index] <= 1'b1;
+                    ack_valid_reg <= 1'b1;
+                    ack_lsq_reg <= dcache_req_lsq_tag_i;
+                    ack_error_reg <= 1'b0;
                 end else begin
                     if (request_is_load)
                         event_miss_o <= 1'b1;
-                    else if (request_hit)
-                        event_hit_o <= 1'b1;
                     else
                         event_miss_o <= 1'b1;
                     mshr_valid[free_index] <= 1'b1;
                     mshr_sent[free_index] <= 1'b0;
                     mshr_store[free_index] <= request_is_store;
+                    mshr_writeback[free_index] <= valid_mem[request_index] &&
+                                                  dirty_mem[request_index];
                     mshr_cache_hit[free_index] <= request_hit;
                     mshr_addr[free_index] <= dcache_req_addr_i;
                     mshr_size[free_index] <= dcache_req_size_i;
@@ -261,6 +292,11 @@ module rv32_dcache_nonblocking #(
                     mshr_mask[free_index] <= request_is_store ? dcache_req_mask_i : 16'd0;
                     mshr_wdata[free_index] <= dcache_req_wdata_i;
                     mshr_lsq[free_index] <= dcache_req_lsq_tag_i;
+                    mshr_victim_addr[free_index] <=
+                        {tag_mem[request_index], request_index, 4'b0};
+                    mshr_victim_data[free_index] <= data_mem[request_index];
+                    valid_mem[request_index] <= 1'b0;
+                    dirty_mem[request_index] <= 1'b0;
                 end
             end
 
@@ -268,26 +304,50 @@ module rv32_dcache_nonblocking #(
                 mshr_sent[send_index] <= 1'b1;
 
             if (mem_resp_valid_i && mem_resp_ready_o) begin
-                mshr_valid[response_index] <= 1'b0;
                 mshr_sent[response_index] <= 1'b0;
-                if (mshr_store[response_index]) begin
-                    if (!mem_resp_error_i && response_matches &&
-                        mshr_cache_hit[response_index]) begin
+                if (mshr_writeback[response_index] &&
+                    !mem_resp_error_i && response_matches) begin
+                    mshr_writeback[response_index] <= 1'b0;
+                    event_writeback_o <= 1'b1;
+                end else if (mshr_writeback[response_index]) begin
+                    mshr_valid[response_index] <= 1'b0;
+                    if (mshr_store[response_index]) begin
+                        ack_valid_reg <= 1'b1;
+                        ack_lsq_reg <= mshr_lsq[response_index];
+                        ack_error_reg <= 1'b1;
+                    end else begin
+                        resp_valid_reg <= 1'b1;
+                        resp_lsq_reg <= mshr_lsq[response_index];
+                        resp_addr_reg <= mshr_addr[response_index];
+                        resp_line_reg <= 128'd0;
+                        resp_word_reg <= 32'd0;
+                        resp_line_valid_reg <= 1'b0;
+                        resp_error_reg <= 1'b1;
+                    end
+                end else if (mshr_store[response_index]) begin
+                    mshr_valid[response_index] <= 1'b0;
+                    if (!mem_resp_error_i && response_matches) begin
                         line_index = mshr_addr[response_index][11:4];
-                        updated_line = merge_store(data_mem[line_index],
+                        updated_line = merge_store(mem_resp_data_i,
                                                    mshr_wdata[response_index],
                                                    mshr_mask[response_index]);
+                        valid_mem[line_index] <= 1'b1;
+                        dirty_mem[line_index] <= 1'b1;
+                        tag_mem[line_index] <= mshr_addr[response_index][31:12];
                         data_mem[line_index] <= updated_line;
+                        event_refill_o <= 1'b1;
                     end
                     ack_valid_reg <= 1'b1;
                     ack_lsq_reg <= mshr_lsq[response_index];
                     ack_error_reg <= mem_resp_error_i || !response_matches;
                 end else begin
+                    mshr_valid[response_index] <= 1'b0;
                     if (!mem_resp_error_i && response_matches) begin
                         line_index = mshr_addr[response_index][11:4];
                         valid_mem[line_index] <= 1'b1;
                         tag_mem[line_index] <= mshr_addr[response_index][31:12];
                         data_mem[line_index] <= mem_resp_data_i;
+                        dirty_mem[line_index] <= 1'b0;
                         event_refill_o <= 1'b1;
                     end
                     resp_valid_reg <= 1'b1;
