@@ -108,6 +108,7 @@ module rv32_dcache_nonblocking #(
     reg matching_found;
     reg matching_prefetch;
     reg prefetch_line_present;
+    reg request_index_conflict;
     wire [31:0] request_line_addr = {dcache_req_addr_i[31:4], 4'b0};
     wire [31:0] prefetch_line_addr = request_line_addr + 32'd16;
     wire [7:0] prefetch_index = prefetch_line_addr[11:4];
@@ -127,6 +128,7 @@ module rv32_dcache_nonblocking #(
         matching_index = 0;
         matching_prefetch = 1'b0;
         prefetch_line_present = 1'b0;
+        request_index_conflict = 1'b0;
         for (k = 0; k < MSHR_ENTRIES; k = k + 1) begin
             if (mshr_valid[k])
                 any_mshr = 1'b1;
@@ -152,6 +154,12 @@ module rv32_dcache_nonblocking #(
             if (mshr_valid[k] && !mshr_writeback[k] &&
                 ({mshr_addr[k][31:4], 4'b0} == prefetch_line_addr))
                 prefetch_line_present = 1'b1;
+            // A refill into the same direct-mapped slot could overwrite a
+            // store hit accepted now.  Other in-flight lines are independent
+            // and must not serialize a cache-resident committed store.
+            if (mshr_valid[k] &&
+                (mshr_addr[k][11:4] == request_index))
+                request_index_conflict = 1'b1;
         end
         response_index = mem_resp_id_i;
         response_found = (response_index >= 0) &&
@@ -169,8 +177,9 @@ module rv32_dcache_nonblocking #(
                               !(mem_resp_valid_i && response_found &&
                                 (response_index == matching_index))) :
                              free_found));
-    wire store_can_accept = !any_mshr && ack_slot_free &&
-                            (request_hit || free_found);
+    wire store_can_accept = ack_slot_free &&
+                            (request_hit ? !request_index_conflict :
+                             (!any_mshr && free_found));
     wire request_fire = dcache_req_valid_i && dcache_req_ready_o;
     wire response_needs_output = response_found &&
                                  (mshr_store[response_index] ? !ack_slot_free :
