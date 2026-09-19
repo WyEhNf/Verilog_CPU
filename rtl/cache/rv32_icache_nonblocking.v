@@ -309,8 +309,8 @@ module rv32_icache_nonblocking #(
     end
 
     initial begin
-        if (MSHR_ENTRIES < 2 || MSHR_ENTRIES > 4) begin
-            $display("ERROR: rv32_icache_nonblocking MSHR_ENTRIES must be 2..4");
+        if (MSHR_ENTRIES < 2 || MSHR_ENTRIES > 16) begin
+            $display("ERROR: rv32_icache_nonblocking MSHR_ENTRIES must be 2..16");
             $finish;
         end
         if (EPOCH_WIDTH > 4) begin

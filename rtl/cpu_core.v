@@ -10,12 +10,14 @@ module cpu_core #(
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer RS_ENTRIES = 8,
     parameter integer LSQ_ENTRIES = 8,
+    parameter integer INT_ISSUE_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
+    parameter integer CDB_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer ENABLE_CACHE_STATS = 0,
     parameter integer ENABLE_CACHES = 1,
     parameter integer ICACHE_FAST_HIT = 1,
     parameter integer ICACHE_COMBINATIONAL_HIT = 0,
     parameter integer ICACHE_PREFETCH = 1,
-    parameter integer ICACHE_MSHRS = 4,
+    parameter integer ICACHE_MSHRS = 8,
     parameter integer DCACHE_MSHRS = 4,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
@@ -214,7 +216,8 @@ module cpu_core #(
     rv32_icache_nonblocking #(
         .MSHR_ENTRIES(ICACHE_MSHRS),
         .NEXT_LINE_PREFETCH(ICACHE_PREFETCH),
-        .PREFETCH_DISTANCE(ICACHE_MSHRS-1)
+        .PREFETCH_DISTANCE((ICACHE_MSHRS > 4) ?
+                           (ICACHE_MSHRS-4) : (ICACHE_MSHRS-1))
     ) icache (
         .clk_i(clk), .reset_i(reset), .current_epoch_i(frontend_epoch),
         .if_req_valid_i(if_req_valid), .if_req_ready_o(if_req_ready), .if_req_pc_i(if_req_pc),
@@ -558,7 +561,7 @@ module cpu_core #(
     assign perf_branch_pending = 1'b0;
     assign perf_mdu_busy = 1'b0;
     end else begin : g_ooo_backend
-    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
+    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),

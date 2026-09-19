@@ -7,6 +7,7 @@
 // overwritten by a later producer.
 module rv32_completion_network #(
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
+    parameter integer CDB_WIDTH = BE_WIDTH,
     parameter integer SOURCES = 5,
     parameter integer FIFO_DEPTH = 16,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -158,7 +159,7 @@ module rv32_completion_network #(
         pop_count = 0;
         pop_slot = 0;
         pop_break = 1'b0;
-        for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
+        for (lane = 0; lane < CDB_WIDTH; lane = lane + 1) begin
             if (!pop_break) begin
                 pop_slot = head_reg + pop_count;
                 if (pop_slot >= FIFO_DEPTH) pop_slot = pop_slot - FIFO_DEPTH;
@@ -315,6 +316,13 @@ module rv32_completion_network #(
                 for (slot = 0; slot < FIFO_DEPTH; slot = slot + 1)
                     if (kill_mask_i[slot]) live_mem[slot] <= 1'b0;
             end
+        end
+    end
+
+    initial begin
+        if (CDB_WIDTH < 1 || CDB_WIDTH > BE_WIDTH) begin
+            $display("ERROR: CDB_WIDTH must be in 1..BE_WIDTH");
+            $finish;
         end
     end
 endmodule

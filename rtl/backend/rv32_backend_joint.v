@@ -11,6 +11,8 @@ module rv32_backend_joint #(
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer RS_ENTRIES = 8,
     parameter integer LSQ_ENTRIES = 8,
+    parameter integer INT_ISSUE_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
+    parameter integer CDB_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer MUL_IMPL = 0,
     parameter integer SHIFT_IMPL = 0,
     parameter integer PHYS_TAG_IMPL = 0,
@@ -428,7 +430,8 @@ module rv32_backend_joint #(
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REM) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REMU);
             assign rs_issue_ready[io_lane] = rs_issue_is_mdu[io_lane] ?
-                (mdu_select[io_lane] && mdu_issue_ready) : alu_issue_ready[io_lane];
+                (mdu_select[io_lane] && mdu_issue_ready) :
+                ((io_lane < INT_ISSUE_WIDTH) ? alu_issue_ready[io_lane] : 1'b0);
             assign lsq_addr_update_valid[io_lane] =
                 alu_exec_valid[io_lane] && alu_exec_is_memory[io_lane];
             assign lsq_addr_update_tag[io_lane*TAG_WIDTH +: TAG_WIDTH] =
@@ -798,7 +801,9 @@ module rv32_backend_joint #(
         for (alu_lane = 0; alu_lane < BE_WIDTH; alu_lane = alu_lane + 1) begin : g_alu
             rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL)) alu (
                 .clk_i(clk_i), .reset_i(reset_i), .flush_i(alu_flush_r[alu_lane]),
-                .issue_valid_i(rs_issue_valid[alu_lane] && !rs_issue_is_mdu[alu_lane]),
+                .issue_valid_i((alu_lane < INT_ISSUE_WIDTH) &&
+                               rs_issue_valid[alu_lane] &&
+                               !rs_issue_is_mdu[alu_lane]),
                 .issue_ready_o(alu_issue_ready[alu_lane]),
                 .issue_op_i(rs_issue_op[alu_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH]),
                 .issue_pc_i(rs_issue_pc[alu_lane*32 +: 32]),
@@ -972,7 +977,7 @@ module rv32_backend_joint #(
     end
     assign alu_exec_ready = alu_exec_ready_r;
 
-    rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .SOURCES(PRODUCERS), .FIFO_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .BYPASS(COMPLETION_BYPASS)) completion (
+    rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .SOURCES(PRODUCERS), .FIFO_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .BYPASS(COMPLETION_BYPASS)) completion (
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .kill_valid_i(rob_recovery_accept), .kill_mask_i(completion_kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready_r), .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live_r), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}}), .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect_valid), .cdb_is_memory_o(cdb_is_memory), .cdb_is_load_o(cdb_is_load), .prf_write_valid_o(prf_write_valid), .prf_write_tag_o(prf_wb_tag), .prf_write_phys_rd_o(prf_write_phys), .prf_write_value_o(prf_write_data), .rob_ready_valid_o(rob_wb_valid), .rob_ready_tag_o(rob_wb_tag), .rob_ready_value_o(rob_wb_value), .wakeup_valid_o(wake_wb_valid), .wakeup_tag_o(wake_wb_tag), .wakeup_value_o(wake_wb_value), .entry_valid_o(completion_entry_valid), .entry_tag_o(completion_entry_tag), .occupancy_o()
     );
     assign rs_wake_valid = wake_wb_valid;
