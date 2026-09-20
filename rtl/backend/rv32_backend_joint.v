@@ -330,6 +330,7 @@ module rv32_backend_joint #(
     integer dependency_lane;
     integer issue_lane;
     integer alu_ready_lane;
+    integer redirect_ready_found;
     integer ready_rob_used;
     integer ready_rs_used;
     integer ready_lsq_used;
@@ -985,11 +986,22 @@ module rv32_backend_joint #(
     end
     always @* begin
         alu_exec_ready_r = {BE_WIDTH{1'b0}};
+        redirect_ready_found = 0;
         for (alu_ready_lane = 0; alu_ready_lane < BE_WIDTH; alu_ready_lane = alu_ready_lane + 1) begin
-            if (alu_exec_is_load[alu_ready_lane] || alu_exec_redirect_valid[alu_ready_lane])
+            if (alu_exec_is_load[alu_ready_lane]) begin
                 alu_exec_ready_r[alu_ready_lane] = 1'b1;
-            else
+            end else if (alu_exec_redirect_valid[alu_ready_lane]) begin
+                // branch_pending is a one-entry recovery queue.  Consume only
+                // the redirect that can actually claim it; any other redirect
+                // must remain stable in its ALU until the pending recovery
+                // completes or explicitly flushes that younger result.
+                if (!branch_pending && !redirect_ready_found) begin
+                    alu_exec_ready_r[alu_ready_lane] = 1'b1;
+                    redirect_ready_found = 1;
+                end
+            end else begin
                 alu_exec_ready_r[alu_ready_lane] = producer_ready[alu_ready_lane];
+            end
         end
     end
     assign alu_exec_ready = alu_exec_ready_r;
