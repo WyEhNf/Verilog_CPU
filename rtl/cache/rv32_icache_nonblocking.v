@@ -44,9 +44,13 @@ module rv32_icache_nonblocking #(
     output reg                        event_refill_o,
     output reg                        event_stall_o
 );
+    // 1 KiB total, two ways x 32 sets.  The two-way organization keeps the
+    // startup return line resident when linked code at 0x1000 maps to the
+    // same set, without increasing the 64-line data capacity.
     reg valid_mem [0:63];
-    reg [21:0] tag_mem [0:63];
+    reg [22:0] tag_mem [0:63];
     reg [127:0] data_mem [0:63];
+    reg lru_mem [0:31];
 
     reg mshr_valid [0:MSHR_ENTRIES-1];
     reg mshr_sent [0:MSHR_ENTRIES-1];
@@ -69,10 +73,16 @@ module rv32_icache_nonblocking #(
     integer prefetch_remaining;
 
     wire [31:0] request_line = {if_req_pc_i[31:4], 4'b0000};
-    wire [5:0] request_index = if_req_pc_i[9:4];
-    wire [21:0] request_tag = if_req_pc_i[31:10];
-    wire request_hit = valid_mem[request_index] &&
-                       (tag_mem[request_index] == request_tag);
+    wire [4:0] request_set = if_req_pc_i[8:4];
+    wire [22:0] request_tag = if_req_pc_i[31:9];
+    wire [5:0] request_way0 = {request_set, 1'b0};
+    wire [5:0] request_way1 = {request_set, 1'b1};
+    wire request_hit_way0 = valid_mem[request_way0] &&
+                            (tag_mem[request_way0] == request_tag);
+    wire request_hit_way1 = valid_mem[request_way1] &&
+                            (tag_mem[request_way1] == request_tag);
+    wire request_hit = request_hit_way0 || request_hit_way1;
+    wire [5:0] request_entry = request_hit_way1 ? request_way1 : request_way0;
     wire response_live = resp_valid_reg && (resp_epoch_reg == current_epoch_i);
     wire response_slot_free = !resp_valid_reg || !response_live || if_resp_ready_i;
 
@@ -161,9 +171,26 @@ module rv32_icache_nonblocking #(
                                  (request_match_index == response_index))) &&
                                ((mshr_demand_epoch[response_index] == current_epoch_i) ||
                                 (request_fire && (if_req_epoch_i == current_epoch_i)));
-    wire prefetch_line_resident = valid_mem[prefetch_next_line[9:4]] &&
-                                  (tag_mem[prefetch_next_line[9:4]] ==
-                                   prefetch_next_line[31:10]);
+    wire [4:0] prefetch_set = prefetch_next_line[8:4];
+    wire [22:0] prefetch_tag = prefetch_next_line[31:9];
+    wire [5:0] prefetch_way0 = {prefetch_set, 1'b0};
+    wire [5:0] prefetch_way1 = {prefetch_set, 1'b1};
+    wire prefetch_line_resident =
+        (valid_mem[prefetch_way0] &&
+         (tag_mem[prefetch_way0] == prefetch_tag)) ||
+        (valid_mem[prefetch_way1] &&
+         (tag_mem[prefetch_way1] == prefetch_tag));
+
+    wire [4:0] refill_set = mem_resp_line_addr_i[8:4];
+    wire [5:0] refill_way0 = {refill_set, 1'b0};
+    wire [5:0] refill_way1 = {refill_set, 1'b1};
+    wire refill_conflicts_with_hit = request_fire && request_hit &&
+                                     (request_set == refill_set);
+    wire [5:0] refill_entry = !valid_mem[refill_way0] ? refill_way0 :
+                              (!valid_mem[refill_way1] ? refill_way1 :
+                               (refill_conflicts_with_hit ?
+                                {refill_set, ~request_entry[0]} :
+                                {refill_set, lru_mem[refill_set]}));
 
     assign if_req_ready_o = !reset_i && response_slot_free &&
                             !request_would_conflict &&
@@ -205,9 +232,11 @@ module rv32_icache_nonblocking #(
             event_stall_o <= 1'b0;
             for (reset_index = 0; reset_index < 64; reset_index = reset_index + 1) begin
                 valid_mem[reset_index] <= 1'b0;
-                tag_mem[reset_index] <= 22'd0;
+                tag_mem[reset_index] <= 23'd0;
                 data_mem[reset_index] <= 128'd0;
             end
+            for (reset_index = 0; reset_index < 32; reset_index = reset_index + 1)
+                lru_mem[reset_index] <= 1'b0;
             for (reset_index = 0; reset_index < MSHR_ENTRIES; reset_index = reset_index + 1) begin
                 mshr_valid[reset_index] <= 1'b0;
                 mshr_sent[reset_index] <= 1'b0;
@@ -249,9 +278,10 @@ module rv32_icache_nonblocking #(
                         resp_valid_reg <= 1'b1;
                         resp_pc_reg <= if_req_pc_i;
                         resp_line_reg <= request_line;
-                        resp_data_reg <= data_mem[request_index];
+                        resp_data_reg <= data_mem[request_entry];
                         resp_epoch_reg <= if_req_epoch_i;
                         resp_error_reg <= 1'b0;
+                        lru_mem[request_set] <= ~request_entry[0];
                     end
                 end else begin
                     event_miss_o <= 1'b1;
@@ -314,9 +344,10 @@ module rv32_icache_nonblocking #(
                 mshr_sent[response_index] <= 1'b0;
                 event_refill_o <= !mem_resp_error_i && response_matches;
                 if (!mem_resp_error_i && response_matches) begin
-                    valid_mem[mem_resp_line_addr_i[9:4]] <= 1'b1;
-                    tag_mem[mem_resp_line_addr_i[9:4]] <= mem_resp_line_addr_i[31:10];
-                    data_mem[mem_resp_line_addr_i[9:4]] <= mem_resp_data_i;
+                    valid_mem[refill_entry] <= 1'b1;
+                    tag_mem[refill_entry] <= mem_resp_line_addr_i[31:9];
+                    data_mem[refill_entry] <= mem_resp_data_i;
+                    lru_mem[refill_set] <= ~refill_entry[0];
                 end
 
                 if (request_fire && request_match_found &&
