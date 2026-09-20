@@ -139,6 +139,12 @@ def digest(path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source")
+    parser.add_argument("--extra-source", action="append", default=[],
+                        help="additional C or assembly source (repeatable)")
+    parser.add_argument("--include", action="append", default=[],
+                        help="additional include directory (repeatable)")
+    parser.add_argument("--define", action="append", default=[],
+                        help="preprocessor definition (repeatable)")
     parser.add_argument("--arch", choices=("rv32i", "rv32im"), default="rv32i")
     parser.add_argument("--abi", default="ilp32")
     parser.add_argument("--out-dir", default=None)
@@ -149,9 +155,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.abi != "ilp32":
         raise BuildError("only ilp32 is supported")
-    source = os.path.abspath(args.source)
-    if not os.path.isfile(source):
-        raise BuildError("source does not exist: {}".format(source))
+    sources = [os.path.abspath(args.source)] + [os.path.abspath(item) for item in args.extra_source]
+    for source in sources:
+        if not os.path.isfile(source):
+            raise BuildError("source does not exist: {}".format(source))
+    source = sources[0]
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     stem = os.path.splitext(os.path.basename(source))[0]
     out_dir = os.path.abspath(args.out_dir or os.path.join(root, "build", "images", stem + "-" + args.arch))
@@ -162,7 +170,7 @@ def main(argv=None):
     objdump = args.objdump or os.environ.get("RISCV_OBJDUMP", prefix + "objdump")
     objcopy = args.objcopy or os.environ.get("RISCV_OBJCOPY", prefix + "objcopy")
     readelf = args.readelf or os.environ.get("RISCV_READELF", prefix + "readelf")
-    c_object = os.path.join(out_dir, stem + ".o")
+    source_objects = []
     startup_object = os.path.join(out_dir, "startup.o")
     runtime_object = os.path.join(out_dir, "runtime.o")
     elf = os.path.join(out_dir, stem + ".elf")
@@ -175,12 +183,19 @@ def main(argv=None):
     common = ["-march=" + args.arch, "-mabi=" + args.abi, "-mno-relax", "-ffreestanding", "-fno-builtin",
               "-fno-stack-protector", "-fno-pic", "-fno-pie", "-fno-asynchronous-unwind-tables",
               "-fno-unwind-tables", "-ffunction-sections", "-fdata-sections"]
-    run([cc] + common + ["-O2", "-c", source, "-o", c_object])
+    common += ["-I" + os.path.abspath(item) for item in args.include]
+    common += ["-D" + item for item in args.define]
+    for index, item in enumerate(sources):
+        object_stem = os.path.splitext(os.path.basename(item))[0]
+        object_path = os.path.join(out_dir, "source-{:02d}-{}.o".format(index, object_stem))
+        run([cc] + common + ["-O2", "-c", item, "-o", object_path])
+        source_objects.append(object_path)
     run([cc] + common + ["-c", os.path.join(script_dir, "startup.S"), "-o", startup_object])
     run([cc] + common + ["-O2", "-c", os.path.join(script_dir, "runtime.c"), "-o", runtime_object])
     run([cc] + common + ["-nostdlib", "-nostartfiles", "-nodefaultlibs", "-Wl,-T," + os.path.join(script_dir, "link.ld"),
                         "-Wl,-Map," + map_file, "-Wl,--gc-sections", "-Wl,--build-id=none",
-                        "-Wl,--no-warn-rwx-segments", startup_object, c_object, runtime_object, "-lgcc", "-o", elf])
+                        "-Wl,--no-warn-rwx-segments", startup_object] + source_objects +
+        [runtime_object, "-lgcc", "-o", elf])
     run([objcopy, "-O", "binary", "--gap-fill", "0", elf, binary])
     with open(dump, "w", encoding="utf-8") as stream:
         run([objdump, "-d", elf], output=stream)
@@ -196,8 +211,10 @@ def main(argv=None):
     image_bytes = parse_image(image)
     if image_bytes.get(halt) != HALT_BYTES[0]:
         raise BuildError("generated image failed HALT round-trip")
-    files = {"source": source, "object": c_object, "startup_object": startup_object, "runtime_object": runtime_object,
+    files = {"source": source, "startup_object": startup_object, "runtime_object": runtime_object,
              "elf": elf, "binary": binary, "dump": dump, "readelf": readelf_file, "map": map_file, "image": image}
+    for index, object_path in enumerate(source_objects):
+        files["source_object_{}".format(index)] = object_path
     manifest_data = {
         "format": "verilog-cpu-image-v1", "arch": args.arch, "abi": args.abi,
         "memory_size": MEMORY_SIZE, "entry": "0x{:08x}".format(info["entry"]),

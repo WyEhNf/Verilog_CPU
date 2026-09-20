@@ -1,7 +1,32 @@
 param(
     [Parameter(Mandatory = $true)][string]$Verilator,
     [Parameter(Mandatory = $true)][string]$VerilatorRoot,
-    [Parameter(Mandatory = $true)][string]$CompilerBin
+    [Parameter(Mandatory = $true)][string]$CompilerBin,
+    [string]$Mdir = "build/vlt/obj_dir",
+    [string]$Output = "cpu_core_image_vlt",
+    [int]$FeWidth = 1,
+    [int]$BeWidth = 1,
+    [int]$PhysRegs = 48,
+    [int]$RobEntries = 16,
+    [int]$RsEntries = 4,
+    [int]$LsqEntries = 4,
+    [int]$IntIssueWidth = 1,
+    [int]$CdbWidth = 1,
+    [int]$EnableCacheStats = 0,
+    [int]$IcacheMshrs = 8,
+    [int]$DcacheMshrs = 4,
+    [int]$IMemoryOutstanding = 8,
+    [int]$DMemoryOutstanding = 4,
+    [int]$FetchQueueDepth = 16,
+    [int]$CompletionDepth = 4,
+    [int]$MulImpl = 0,
+    [int]$ShiftImpl = 0,
+    [int]$PhysTagImpl = 0,
+    [int]$GenerationWidth = 8,
+    [int]$CheckpointImpl = 0,
+    [int]$StoreBufferedRetire = 1,
+    [int]$CompletionBypass = 0,
+    [int]$SerialBackend = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -92,8 +117,31 @@ try {
         "--language", "1364-2005",
         "-Irtl",
         "--top-module", "cpu_core_image_tb",
-        "--Mdir", "build/vlt/obj_dir",
-        "-o", "cpu_core_image_vlt"
+        "--Mdir", $Mdir,
+        "-o", $Output,
+        "-GFE_WIDTH=$FeWidth",
+        "-GBE_WIDTH=$BeWidth",
+        "-GPHYS_REGS=$PhysRegs",
+        "-GROB_ENTRIES=$RobEntries",
+        "-GRS_ENTRIES=$RsEntries",
+        "-GLSQ_ENTRIES=$LsqEntries",
+        "-GINT_ISSUE_WIDTH=$IntIssueWidth",
+        "-GCDB_WIDTH=$CdbWidth",
+        "-GENABLE_CACHE_STATS=$EnableCacheStats",
+        "-GICACHE_MSHRS=$IcacheMshrs",
+        "-GDCACHE_MSHRS=$DcacheMshrs",
+        "-GI_MEMORY_OUTSTANDING=$IMemoryOutstanding",
+        "-GD_MEMORY_OUTSTANDING=$DMemoryOutstanding",
+        "-GFETCH_QUEUE_DEPTH=$FetchQueueDepth",
+        "-GCOMPLETION_DEPTH=$CompletionDepth",
+        "-GMUL_IMPL=$MulImpl",
+        "-GSHIFT_IMPL=$ShiftImpl",
+        "-GPHYS_TAG_IMPL=$PhysTagImpl",
+        "-GGENERATION_WIDTH=$GenerationWidth",
+        "-GCHECKPOINT_IMPL=$CheckpointImpl",
+        "-GSTORE_BUFFERED_RETIRE=$StoreBufferedRetire",
+        "-GCOMPLETION_BYPASS=$CompletionBypass",
+        "-GSERIAL_BACKEND=$SerialBackend"
     ) + $sources
 
     & $verilatorPath @arguments
