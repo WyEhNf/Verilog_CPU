@@ -71,6 +71,8 @@ module rv32_icache_nonblocking #(
     reg [31:0] prefetch_next_line;
     reg [EPOCH_WIDTH-1:0] prefetch_epoch;
     integer prefetch_remaining;
+    reg last_demand_valid;
+    reg [31:0] last_demand_line;
 
     wire [31:0] request_line = {if_req_pc_i[31:4], 4'b0000};
     wire [4:0] request_set = if_req_pc_i[8:4];
@@ -163,6 +165,16 @@ module rv32_icache_nonblocking #(
                                   !request_promotes_incoming;
     wire request_fire = if_req_valid_i && if_req_ready_o;
     wire request_allocates = request_fire && !request_hit && !request_match_found;
+    wire prefetch_enabled = (NEXT_LINE_PREFETCH != 0) &&
+                            (PREFETCH_DISTANCE > 0) &&
+                            (MSHR_ENTRIES > 1);
+    wire stream_request = request_fire && prefetch_enabled &&
+                          (if_req_epoch_i == current_epoch_i);
+    wire stream_sequential = stream_request && prefetch_active &&
+                             last_demand_valid &&
+                             (prefetch_epoch == if_req_epoch_i) &&
+                             (request_line == (last_demand_line + 32'd16));
+    wire stream_reset = stream_request && !stream_sequential;
     wire response_matches = response_target_found &&
                             (mshr_line[response_index] == mem_resp_line_addr_i);
     wire response_needs_slot = response_target_found &&
@@ -180,6 +192,13 @@ module rv32_icache_nonblocking #(
          (tag_mem[prefetch_way0] == prefetch_tag)) ||
         (valid_mem[prefetch_way1] &&
          (tag_mem[prefetch_way1] == prefetch_tag));
+    wire prefetch_step = prefetch_active && (prefetch_remaining > 0) &&
+                         !request_allocates && !stream_reset &&
+                         (prefetch_line_resident || prefetch_match_found ||
+                          free_found);
+    wire prefetch_step_allocates = prefetch_step &&
+                                    !prefetch_line_resident &&
+                                    !prefetch_match_found;
 
     wire [4:0] refill_set = mem_resp_line_addr_i[8:4];
     wire [5:0] refill_way0 = {refill_set, 1'b0};
@@ -225,6 +244,8 @@ module rv32_icache_nonblocking #(
             prefetch_next_line <= 32'd0;
             prefetch_epoch <= {EPOCH_WIDTH{1'b0}};
             prefetch_remaining <= 0;
+            last_demand_valid <= 1'b0;
+            last_demand_line <= 32'd0;
             event_request_o <= 1'b0;
             event_hit_o <= 1'b0;
             event_miss_o <= 1'b0;
@@ -269,6 +290,7 @@ module rv32_icache_nonblocking #(
             if (prefetch_active && (prefetch_epoch != current_epoch_i)) begin
                 prefetch_active <= 1'b0;
                 prefetch_remaining <= 0;
+                last_demand_valid <= 1'b0;
             end
 
             if (request_fire) begin
@@ -298,40 +320,45 @@ module rv32_icache_nonblocking #(
                         mshr_demand_epoch[free_index] <= if_req_epoch_i;
                         mshr_txn_epoch[free_index] <= if_req_epoch_i;
                     end
-                    if ((NEXT_LINE_PREFETCH != 0) && (PREFETCH_DISTANCE > 0) &&
-                        (MSHR_ENTRIES > 1)) begin
-                        prefetch_active <= 1'b1;
-                        prefetch_next_line <= request_line + 32'd16;
-                        prefetch_epoch <= if_req_epoch_i;
-                        prefetch_count = PREFETCH_DISTANCE;
-                        if (prefetch_count > MSHR_ENTRIES-1)
-                            prefetch_count = MSHR_ENTRIES-1;
-                        prefetch_remaining <= prefetch_count;
-                    end
                 end
             end
 
-            // Allocate at most one background stream line per cycle so the
-            // request port can issue the MSHRs on consecutive cycles.
-            if (prefetch_active && (prefetch_remaining > 0) &&
-                !request_allocates) begin
-                if (prefetch_line_resident || prefetch_match_found) begin
-                    prefetch_next_line <= prefetch_next_line + 32'd16;
+            // Keep a bounded sliding window in front of the most recent
+            // demand line.  Advancing sequentially earns exactly one new
+            // prefetch credit; a non-sequential request (taken branch/jump)
+            // discards the old direction and seeds a fresh bounded window.
+            // This preserves memory-level parallelism on long straight-line
+            // regions without issuing an unbounded wrong-path stream.
+            if (prefetch_step) begin
+                prefetch_next_line <= prefetch_next_line + 32'd16;
+                if (!stream_sequential)
                     prefetch_remaining <= prefetch_remaining - 1;
-                    if (prefetch_remaining == 1)
-                        prefetch_active <= 1'b0;
-                end else if (free_found) begin
-                    mshr_valid[free_index] <= 1'b1;
-                    mshr_sent[free_index] <= 1'b0;
-                    mshr_prefetch[free_index] <= 1'b1;
-                    mshr_pc[free_index] <= prefetch_next_line;
-                    mshr_line[free_index] <= prefetch_next_line;
-                    mshr_demand_epoch[free_index] <= prefetch_epoch;
-                    mshr_txn_epoch[free_index] <= prefetch_epoch;
-                    prefetch_next_line <= prefetch_next_line + 32'd16;
-                    prefetch_remaining <= prefetch_remaining - 1;
-                    if (prefetch_remaining == 1)
-                        prefetch_active <= 1'b0;
+            end
+            if (prefetch_step_allocates) begin
+                mshr_valid[free_index] <= 1'b1;
+                mshr_sent[free_index] <= 1'b0;
+                mshr_prefetch[free_index] <= 1'b1;
+                mshr_pc[free_index] <= prefetch_next_line;
+                mshr_line[free_index] <= prefetch_next_line;
+                mshr_demand_epoch[free_index] <= prefetch_epoch;
+                mshr_txn_epoch[free_index] <= prefetch_epoch;
+            end
+
+            if (stream_request) begin
+                last_demand_valid <= 1'b1;
+                last_demand_line <= request_line;
+                if (stream_reset) begin
+                    prefetch_active <= 1'b1;
+                    prefetch_next_line <= request_line + 32'd16;
+                    prefetch_epoch <= if_req_epoch_i;
+                    prefetch_count = PREFETCH_DISTANCE;
+                    if (prefetch_count > MSHR_ENTRIES-1)
+                        prefetch_count = MSHR_ENTRIES-1;
+                    prefetch_remaining <= prefetch_count;
+                end else if (!prefetch_step &&
+                             (prefetch_remaining < PREFETCH_DISTANCE) &&
+                             (prefetch_remaining < MSHR_ENTRIES-1)) begin
+                    prefetch_remaining <= prefetch_remaining + 1;
                 end
             end
 
