@@ -152,6 +152,8 @@ def main(argv=None):
     parser.add_argument("--objdump", default=None)
     parser.add_argument("--objcopy", default=None)
     parser.add_argument("--readelf", default=None)
+    parser.add_argument("--linker-script", default=None,
+                        help="linker script (defaults to tools/link.ld)")
     args = parser.parse_args(argv)
     if args.abi != "ilp32":
         raise BuildError("only ilp32 is supported")
@@ -165,6 +167,9 @@ def main(argv=None):
     out_dir = os.path.abspath(args.out_dir or os.path.join(root, "build", "images", stem + "-" + args.arch))
     os.makedirs(out_dir, exist_ok=True)
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    linker_script = os.path.abspath(args.linker_script or os.path.join(script_dir, "link.ld"))
+    if not os.path.isfile(linker_script):
+        raise BuildError("linker script does not exist: {}".format(linker_script))
     prefix = os.environ.get("RISCV_PREFIX", "riscv-none-elf-")
     cc = args.cc or os.environ.get("RISCV_GCC", prefix + "gcc")
     objdump = args.objdump or os.environ.get("RISCV_OBJDUMP", prefix + "objdump")
@@ -192,7 +197,7 @@ def main(argv=None):
         source_objects.append(object_path)
     run([cc] + common + ["-c", os.path.join(script_dir, "startup.S"), "-o", startup_object])
     run([cc] + common + ["-O2", "-c", os.path.join(script_dir, "runtime.c"), "-o", runtime_object])
-    run([cc] + common + ["-nostdlib", "-nostartfiles", "-nodefaultlibs", "-Wl,-T," + os.path.join(script_dir, "link.ld"),
+    run([cc] + common + ["-nostdlib", "-nostartfiles", "-nodefaultlibs", "-Wl,-T," + linker_script,
                         "-Wl,-Map," + map_file, "-Wl,--gc-sections", "-Wl,--build-id=none",
                         "-Wl,--no-warn-rwx-segments", startup_object] + source_objects +
         [runtime_object, "-lgcc", "-o", elf])
@@ -211,7 +216,8 @@ def main(argv=None):
     image_bytes = parse_image(image)
     if image_bytes.get(halt) != HALT_BYTES[0]:
         raise BuildError("generated image failed HALT round-trip")
-    files = {"source": source, "startup_object": startup_object, "runtime_object": runtime_object,
+    files = {"source": source, "linker_script": linker_script,
+             "startup_object": startup_object, "runtime_object": runtime_object,
              "elf": elf, "binary": binary, "dump": dump, "readelf": readelf_file, "map": map_file, "image": image}
     for index, object_path in enumerate(source_objects):
         files["source_object_{}".format(index)] = object_path
