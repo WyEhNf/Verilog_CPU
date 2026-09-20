@@ -113,7 +113,6 @@ try {
         "--binary",
         "--timing",
         "-Wno-fatal",
-        "--debug",
         "--language", "1364-2005",
         "-Irtl",
         "--top-module", "cpu_core_image_tb",
