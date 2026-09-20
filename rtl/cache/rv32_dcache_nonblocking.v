@@ -254,7 +254,7 @@ module rv32_dcache_nonblocking #(
                                (mshr_store[matching_index] && waiter_free_found)) &&
                               !(mem_resp_valid_i && response_found &&
                                 (response_index == matching_index))) :
-                             (!any_mshr && free_found));
+                             (free_found && !request_index_conflict));
     wire request_fire = dcache_req_valid_i && dcache_req_ready_o;
     wire response_needs_output = response_found &&
                                  (mshr_store[response_index] ? !ack_slot_free :
@@ -491,7 +491,12 @@ module rv32_dcache_nonblocking #(
                     valid_mem[request_index] <= 1'b0;
                     dirty_mem[request_index] <= 1'b0;
 
-                    if ((PREFETCH != 0) && (request_is_load || request_is_store) &&
+                    // Store streams already expose every committed address
+                    // to the cache.  Prefetching after a store miss wastes a
+                    // scarce external read slot (notably during BSS clear)
+                    // and can delay the first real load stream.  Independent
+                    // store lines may occupy separate MSHRs instead.
+                    if ((PREFETCH != 0) && request_is_load &&
                         second_free_found && !prefetch_cache_hit &&
                         !prefetch_line_present &&
                         !(valid_mem[prefetch_index] && dirty_mem[prefetch_index])) begin
