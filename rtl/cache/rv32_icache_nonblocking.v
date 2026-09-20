@@ -145,7 +145,8 @@ module rv32_icache_nonblocking #(
                 free_index = k;
             end
             if (mshr_valid[k] &&
-                (mshr_txn_epoch[k] == current_epoch_i) &&
+                ((mshr_txn_epoch[k] == current_epoch_i) ||
+                 mshr_control_prefetch[k]) &&
                 !mshr_sent[k] &&
                 (!send_found ||
                  (mshr_prefetch[send_index] && !mshr_prefetch[k]))) begin
