@@ -209,6 +209,35 @@ module cpu_core_image_tb #(
                              dut.g_ooo_backend.backend.rob.pc_mem[diag_slot],
                              dut.g_ooo_backend.backend.rob.inst_mem[diag_slot],
                              dut.g_ooo_backend.backend.rob.generation_mem[diag_slot]);
+            $display("STATE_LSQ: head=%0d tail=%0d",
+                     dut.g_ooo_backend.backend.lsq.head_reg,
+                     dut.g_ooo_backend.backend.lsq.tail_reg);
+            for (diag_slot = 0; diag_slot < LSQ_ENTRIES; diag_slot = diag_slot + 1)
+                if (dut.g_ooo_backend.backend.lsq.valid_mem[diag_slot])
+                    $display("STATE_LSQ_ENTRY: slot=%0d load=%b store=%b addr_ready=%b data_ready=%b sent=%b wait=%b complete=%b committed=%b ack=%b addr=%08x rob_tag=%04x gen=%0d",
+                             diag_slot,
+                             dut.g_ooo_backend.backend.lsq.load_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.store_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.addr_ready_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.data_ready_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.request_sent_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.response_wait_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.complete_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.store_commit_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.store_ack_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.addr_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.rob_tag_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.generation_mem[diag_slot]);
+            for (diag_slot = 0; diag_slot < RS_ENTRIES; diag_slot = diag_slot + 1)
+                if (dut.g_ooo_backend.backend.rs.valid_mem[diag_slot])
+                    $display("STATE_RS_ENTRY: slot=%0d op=%0d src1_ready=%b src2_ready=%b tag=%04x src1_tag=%04x src2_tag=%04x",
+                             diag_slot,
+                             dut.g_ooo_backend.backend.rs.op_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rs.src1_ready_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rs.src2_ready_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rs.rob_tag_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rs.src1_tag_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rs.src2_tag_mem[diag_slot]);
             finish_code = 1;
         end else if (error) begin
             $display("FAIL: JOIN-02 image=%0s architectural error cycles=%0d instret=%0d", test_name, cycles, instret);
