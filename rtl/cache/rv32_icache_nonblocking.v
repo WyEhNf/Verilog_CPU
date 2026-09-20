@@ -107,6 +107,8 @@ module rv32_icache_nonblocking #(
     reg [31:0] control_inst;
     reg [31:0] control_pc;
     reg [31:0] control_target;
+    reg [31:0] control_candidate;
+    reg control_target_forward;
 
     function [31:0] jal_immediate;
         input [31:0] inst;
@@ -208,15 +210,23 @@ module rv32_icache_nonblocking #(
         control_inst = 32'd0;
         control_pc = mem_resp_line_addr_i;
         control_target = 32'd0;
+        control_candidate = 32'd0;
+        control_target_forward = 1'b0;
         for (control_word = 0; control_word < 4;
              control_word = control_word + 1) begin
             control_inst = mem_resp_data_i >> (control_word * 32);
             control_pc = mem_resp_line_addr_i + (control_word * 32'd4);
-            if (!control_target_valid &&
-                (control_inst[6:0] == 7'b1101111)) begin
-                control_target = control_pc + jal_immediate(control_inst);
-                if (control_target[31:4] != mem_resp_line_addr_i[31:4])
+            if (control_inst[6:0] == 7'b1101111) begin
+                control_candidate = control_pc + jal_immediate(control_inst);
+                if ((control_candidate[31:4] !=
+                     mem_resp_line_addr_i[31:4]) &&
+                    (!control_target_valid ||
+                     (!control_target_forward &&
+                      (control_candidate > control_pc)))) begin
+                    control_target = control_candidate;
                     control_target_valid = 1'b1;
+                    control_target_forward = control_candidate > control_pc;
+                end
             end
         end
         if (control_target_valid) begin
