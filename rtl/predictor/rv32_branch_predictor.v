@@ -70,11 +70,6 @@ module rv32_branch_predictor (
                     if (bht[query_bht_index][1] && pred_btb_hit_o) begin
                         pred_taken_o = 1'b1;
                         pred_target_o = btb_target[query_btb_index];
-                    end else if (!pred_btb_hit_o && branch_imm[31]) begin
-                        // Backward-taken/forward-not-taken gives a cold loop a
-                        // useful target before its first BTB allocation.
-                        pred_taken_o = 1'b1;
-                        pred_target_o = query_pc_i + branch_imm;
                     end
                 end
                 7'b1101111: begin
