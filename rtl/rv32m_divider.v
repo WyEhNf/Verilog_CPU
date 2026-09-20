@@ -1,9 +1,10 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// Iterative 32-step restoring divider.  A request holds the unit busy until
-// the quotient/remainder is complete; the response register then applies
-// normal valid/ready backpressure and live-tag/flush cancellation.
+// Radix-4 restoring divider.  Two quotient bits are generated per cycle, so
+// the worst case is 16 iterations rather than 32.  A request holds the unit
+// busy until the quotient/remainder is complete; the response register then
+// applies normal valid/ready backpressure and live-tag/flush cancellation.
 module rv32m_divider #(
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -43,6 +44,11 @@ module rv32m_divider #(
     reg [32:0] remainder_shift;
     reg [32:0] remainder_after;
     reg [31:0] quotient_after;
+    reg [32:0] remainder_shift_second;
+    reg [32:0] remainder_after_second;
+    reg [31:0] quotient_after_second;
+    reg [32:0] selected_remainder_after;
+    reg [31:0] selected_quotient_after;
     reg [31:0] quotient_final, remainder_final;
 
     // A quotient/remainder pair is computed together by the restoring
@@ -128,14 +134,32 @@ module rv32m_divider #(
             remainder_after = remainder_shift;
             quotient_after = {quotient_reg[30:0], 1'b0};
         end
+        remainder_shift_second = {remainder_after[31:0], dividend_reg[30]};
+        if (remainder_shift_second >= {1'b0, divisor_reg}) begin
+            remainder_after_second = remainder_shift_second -
+                                     {1'b0, divisor_reg};
+            quotient_after_second = {quotient_after[30:0], 1'b1};
+        end else begin
+            remainder_after_second = remainder_shift_second;
+            quotient_after_second = {quotient_after[30:0], 1'b0};
+        end
+        // An odd number of significant dividend bits leaves a final
+        // one-bit iteration at step 31; all other cycles consume two bits.
+        if (step_reg == 31) begin
+            selected_remainder_after = remainder_after;
+            selected_quotient_after = quotient_after;
+        end else begin
+            selected_remainder_after = remainder_after_second;
+            selected_quotient_after = quotient_after_second;
+        end
         if (sign_a_reg ^ sign_b_reg)
-            quotient_final = ~quotient_after + 32'd1;
+            quotient_final = ~selected_quotient_after + 32'd1;
         else
-            quotient_final = quotient_after;
+            quotient_final = selected_quotient_after;
         if (sign_a_reg)
-            remainder_final = ~remainder_after[31:0] + 32'd1;
+            remainder_final = ~selected_remainder_after[31:0] + 32'd1;
         else
-            remainder_final = remainder_after[31:0];
+            remainder_final = selected_remainder_after[31:0];
     end
 
     always @(posedge clk_i) begin
@@ -200,10 +224,12 @@ module rv32m_divider #(
                     end
                 end
             end else begin
-                dividend_reg <= {dividend_reg[30:0], 1'b0};
-                remainder_reg <= remainder_after;
-                quotient_reg <= quotient_after;
-                if (step_reg == 31) begin
+                dividend_reg <= (step_reg == 31) ?
+                                {dividend_reg[30:0], 1'b0} :
+                                {dividend_reg[29:0], 2'b0};
+                remainder_reg <= selected_remainder_after;
+                quotient_reg <= selected_quotient_after;
+                if (step_reg >= 30) begin
                     busy_reg <= 1'b0;
                     result_valid_reg <= 1'b1;
                     if (divide_zero_reg) begin
@@ -230,7 +256,7 @@ module rv32m_divider #(
                         end
                     end
                 end else begin
-                    step_reg <= step_reg + 1'b1;
+                    step_reg <= step_reg + 2'd2;
                 end
             end
         end
