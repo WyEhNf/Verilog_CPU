@@ -39,6 +39,9 @@ ICACHE_COMBINATIONAL_HIT ?= 0
 ICACHE_PREFETCH ?= 1
 ICACHE_MSHRS ?= 8
 DCACHE_MSHRS ?= 4
+MEMORY_LATENCY ?= 50
+I_MEMORY_OUTSTANDING ?= 8
+D_MEMORY_OUTSTANDING ?= 4
 ENABLE_PREDICTOR ?= 1
 FETCH_QUEUE_DEPTH ?= 16
 COMPLETION_DEPTH ?= $(if $(filter 1,$(BE_WIDTH)),4,$(if $(filter 2,$(BE_WIDTH)),8,16))
@@ -54,7 +57,7 @@ CFG ?= fe$(FE_WIDTH)_be$(BE_WIDTH)_p$(PHYS_REGS)_r$(ROB_ENTRIES)
 ASAP7_LIB_DIR ?= $(ROOT)/third_party/asap7/lib
 RTL_FILELIST = rtl/filelist.f
 RTL_FILES := $(strip $(file <$(RTL_FILELIST)))
-CPU_TB_PARAMS = -P cpu_core_image_tb.FE_WIDTH=$(FE_WIDTH) -P cpu_core_image_tb.BE_WIDTH=$(BE_WIDTH) -P cpu_core_image_tb.INT_ISSUE_WIDTH=$(INT_ISSUE_WIDTH) -P cpu_core_image_tb.CDB_WIDTH=$(CDB_WIDTH) -P cpu_core_image_tb.PHYS_REGS=$(PHYS_REGS) -P cpu_core_image_tb.ROB_ENTRIES=$(ROB_ENTRIES) -P cpu_core_image_tb.RS_ENTRIES=$(RS_ENTRIES) -P cpu_core_image_tb.LSQ_ENTRIES=$(LSQ_ENTRIES) -P cpu_core_image_tb.ENABLE_CACHE_STATS=$(ENABLE_CACHE_STATS) -P cpu_core_image_tb.ENABLE_CACHES=$(ENABLE_CACHES) -P cpu_core_image_tb.ICACHE_FAST_HIT=$(ICACHE_FAST_HIT) -P cpu_core_image_tb.ICACHE_COMBINATIONAL_HIT=$(ICACHE_COMBINATIONAL_HIT) -P cpu_core_image_tb.ICACHE_PREFETCH=$(ICACHE_PREFETCH) -P cpu_core_image_tb.ICACHE_MSHRS=$(ICACHE_MSHRS) -P cpu_core_image_tb.DCACHE_MSHRS=$(DCACHE_MSHRS) -P cpu_core_image_tb.ENABLE_PREDICTOR=$(ENABLE_PREDICTOR) -P cpu_core_image_tb.FETCH_QUEUE_DEPTH=$(FETCH_QUEUE_DEPTH) -P cpu_core_image_tb.COMPLETION_DEPTH=$(COMPLETION_DEPTH) -P cpu_core_image_tb.COMPLETION_BYPASS=$(COMPLETION_BYPASS) -P cpu_core_image_tb.STORE_BUFFERED_RETIRE=$(STORE_BUFFERED_RETIRE) -P cpu_core_image_tb.SERIAL_BACKEND=$(SERIAL_BACKEND) -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -P cpu_core_image_tb.SHIFT_IMPL=$(SHIFT_IMPL) -P cpu_core_image_tb.PHYS_TAG_IMPL=$(PHYS_TAG_IMPL) -P cpu_core_image_tb.GENERATION_WIDTH=$(GENERATION_WIDTH) -P cpu_core_image_tb.CHECKPOINT_IMPL=$(CHECKPOINT_IMPL)
+CPU_TB_PARAMS = -P cpu_core_image_tb.FE_WIDTH=$(FE_WIDTH) -P cpu_core_image_tb.BE_WIDTH=$(BE_WIDTH) -P cpu_core_image_tb.INT_ISSUE_WIDTH=$(INT_ISSUE_WIDTH) -P cpu_core_image_tb.CDB_WIDTH=$(CDB_WIDTH) -P cpu_core_image_tb.PHYS_REGS=$(PHYS_REGS) -P cpu_core_image_tb.ROB_ENTRIES=$(ROB_ENTRIES) -P cpu_core_image_tb.RS_ENTRIES=$(RS_ENTRIES) -P cpu_core_image_tb.LSQ_ENTRIES=$(LSQ_ENTRIES) -P cpu_core_image_tb.ENABLE_CACHE_STATS=$(ENABLE_CACHE_STATS) -P cpu_core_image_tb.ENABLE_CACHES=$(ENABLE_CACHES) -P cpu_core_image_tb.ICACHE_FAST_HIT=$(ICACHE_FAST_HIT) -P cpu_core_image_tb.ICACHE_COMBINATIONAL_HIT=$(ICACHE_COMBINATIONAL_HIT) -P cpu_core_image_tb.ICACHE_PREFETCH=$(ICACHE_PREFETCH) -P cpu_core_image_tb.ICACHE_MSHRS=$(ICACHE_MSHRS) -P cpu_core_image_tb.DCACHE_MSHRS=$(DCACHE_MSHRS) -P cpu_core_image_tb.MEMORY_LATENCY=$(MEMORY_LATENCY) -P cpu_core_image_tb.I_MEMORY_OUTSTANDING=$(I_MEMORY_OUTSTANDING) -P cpu_core_image_tb.D_MEMORY_OUTSTANDING=$(D_MEMORY_OUTSTANDING) -P cpu_core_image_tb.ENABLE_PREDICTOR=$(ENABLE_PREDICTOR) -P cpu_core_image_tb.FETCH_QUEUE_DEPTH=$(FETCH_QUEUE_DEPTH) -P cpu_core_image_tb.COMPLETION_DEPTH=$(COMPLETION_DEPTH) -P cpu_core_image_tb.COMPLETION_BYPASS=$(COMPLETION_BYPASS) -P cpu_core_image_tb.STORE_BUFFERED_RETIRE=$(STORE_BUFFERED_RETIRE) -P cpu_core_image_tb.SERIAL_BACKEND=$(SERIAL_BACKEND) -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -P cpu_core_image_tb.SHIFT_IMPL=$(SHIFT_IMPL) -P cpu_core_image_tb.PHYS_TAG_IMPL=$(PHYS_TAG_IMPL) -P cpu_core_image_tb.GENERATION_WIDTH=$(GENERATION_WIDTH) -P cpu_core_image_tb.CHECKPOINT_IMPL=$(CHECKPOINT_IMPL)
 
 doctor:
 	@$(OSS_ENV) "$(ICARUS)" -V
