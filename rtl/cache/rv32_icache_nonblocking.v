@@ -55,6 +55,7 @@ module rv32_icache_nonblocking #(
     reg mshr_valid [0:MSHR_ENTRIES-1];
     reg mshr_sent [0:MSHR_ENTRIES-1];
     reg mshr_prefetch [0:MSHR_ENTRIES-1];
+    reg mshr_control_prefetch [0:MSHR_ENTRIES-1];
     reg [31:0] mshr_pc [0:MSHR_ENTRIES-1];
     reg [31:0] mshr_line [0:MSHR_ENTRIES-1];
     reg [EPOCH_WIDTH-1:0] mshr_demand_epoch [0:MSHR_ENTRIES-1];
@@ -94,11 +95,26 @@ module rv32_icache_nonblocking #(
     integer send_index;
     integer response_index;
     integer prefetch_match_index;
+    integer control_word;
+    integer control_check;
     reg request_match_found;
     reg free_found;
     reg send_found;
     reg response_target_found;
     reg prefetch_match_found;
+    reg control_target_valid;
+    reg control_target_present;
+    reg [31:0] control_inst;
+    reg [31:0] control_pc;
+    reg [31:0] control_target;
+
+    function [31:0] jal_immediate;
+        input [31:0] inst;
+        begin
+            jal_immediate = {{11{inst[31]}}, inst[31], inst[19:12],
+                             inst[20], inst[30:21], 1'b0};
+        end
+    endfunction
 
     always @* begin
         request_match_found = 1'b0;
@@ -111,7 +127,8 @@ module rv32_icache_nonblocking #(
         prefetch_match_index = 0;
         for (k = 0; k < MSHR_ENTRIES; k = k + 1) begin
             if (!request_match_found && mshr_valid[k] &&
-                (mshr_txn_epoch[k] == current_epoch_i) &&
+                ((mshr_txn_epoch[k] == current_epoch_i) ||
+                 mshr_control_prefetch[k]) &&
                 (mshr_line[k] == request_line)) begin
                 request_match_found = 1'b1;
                 request_match_index = k;
@@ -122,7 +139,8 @@ module rv32_icache_nonblocking #(
             // sequential cleanup clears on the same edge.
             if (!free_found &&
                 (!mshr_valid[k] ||
-                 (mshr_txn_epoch[k] != current_epoch_i))) begin
+                 ((mshr_txn_epoch[k] != current_epoch_i) &&
+                  !mshr_control_prefetch[k]))) begin
                 free_found = 1'b1;
                 free_index = k;
             end
@@ -149,8 +167,9 @@ module rv32_icache_nonblocking #(
                                 (response_index < MSHR_ENTRIES) &&
                                 mshr_valid[response_index] &&
                                 mshr_sent[response_index] &&
-                                (mshr_txn_epoch[response_index] ==
-                                 current_epoch_i) &&
+                                ((mshr_txn_epoch[response_index] ==
+                                  current_epoch_i) ||
+                                 mshr_control_prefetch[response_index]) &&
                                 (mshr_txn_epoch[response_index] ==
                                  mem_resp_id_i[EPOCH_WIDTH-1:0]);
     end
@@ -177,6 +196,50 @@ module rv32_icache_nonblocking #(
     wire stream_reset = stream_request && !stream_sequential;
     wire response_matches = response_target_found &&
                             (mshr_line[response_index] == mem_resp_line_addr_i);
+
+    // Inspect every returned line, including ordinary sequential prefetches,
+    // for a direct jump whose target is outside that line.  Reusing the
+    // completing MSHR starts fetching a cold call target before the jump is
+    // reached by demand fetch (e.g. startup code entering main).
+    always @* begin
+        control_target_valid = 1'b0;
+        control_target_present = 1'b0;
+        control_inst = 32'd0;
+        control_pc = mem_resp_line_addr_i;
+        control_target = 32'd0;
+        for (control_word = 0; control_word < 4;
+             control_word = control_word + 1) begin
+            control_inst = mem_resp_data_i >> (control_word * 32);
+            control_pc = mem_resp_line_addr_i + (control_word * 32'd4);
+            if (!control_target_valid &&
+                (control_inst[6:0] == 7'b1101111)) begin
+                control_target = control_pc + jal_immediate(control_inst);
+                if (control_target[31:4] != mem_resp_line_addr_i[31:4])
+                    control_target_valid = 1'b1;
+            end
+        end
+        if (control_target_valid) begin
+            control_target_present =
+                (valid_mem[{control_target[8:4], 1'b0}] &&
+                 (tag_mem[{control_target[8:4], 1'b0}] ==
+                  control_target[31:9])) ||
+                (valid_mem[{control_target[8:4], 1'b1}] &&
+                 (tag_mem[{control_target[8:4], 1'b1}] ==
+                  control_target[31:9])) ||
+                (request_fire &&
+                 (request_line == {control_target[31:4], 4'b0}));
+            for (control_check = 0; control_check < MSHR_ENTRIES;
+                 control_check = control_check + 1)
+                if (mshr_valid[control_check] &&
+                    (mshr_line[control_check] ==
+                     {control_target[31:4], 4'b0}))
+                    control_target_present = 1'b1;
+        end
+    end
+    wire control_target_allocate = mem_resp_valid_i && mem_resp_ready_o &&
+                                   response_target_found && response_matches &&
+                                   !mem_resp_error_i && control_target_valid &&
+                                   !control_target_present;
     wire response_needs_slot = response_target_found &&
                                (!mshr_prefetch[response_index] ||
                                 (request_fire && request_match_found &&
@@ -262,6 +325,7 @@ module rv32_icache_nonblocking #(
                 mshr_valid[reset_index] <= 1'b0;
                 mshr_sent[reset_index] <= 1'b0;
                 mshr_prefetch[reset_index] <= 1'b0;
+                mshr_control_prefetch[reset_index] <= 1'b0;
                 mshr_pc[reset_index] <= 32'd0;
                 mshr_line[reset_index] <= 32'd0;
                 mshr_demand_epoch[reset_index] <= {EPOCH_WIDTH{1'b0}};
@@ -282,9 +346,11 @@ module rv32_icache_nonblocking #(
             // carries the old epoch so any late response is rejected above.
             for (k = 0; k < MSHR_ENTRIES; k = k + 1) begin
                 if (mshr_valid[k] &&
-                    (mshr_txn_epoch[k] != current_epoch_i)) begin
+                    (mshr_txn_epoch[k] != current_epoch_i) &&
+                    !mshr_control_prefetch[k]) begin
                     mshr_valid[k] <= 1'b0;
                     mshr_sent[k] <= 1'b0;
+                    mshr_control_prefetch[k] <= 1'b0;
                 end
             end
             if (prefetch_active && (prefetch_epoch != current_epoch_i)) begin
@@ -315,6 +381,7 @@ module rv32_icache_nonblocking #(
                         mshr_valid[free_index] <= 1'b1;
                         mshr_sent[free_index] <= 1'b0;
                         mshr_prefetch[free_index] <= 1'b0;
+                        mshr_control_prefetch[free_index] <= 1'b0;
                         mshr_pc[free_index] <= if_req_pc_i;
                         mshr_line[free_index] <= request_line;
                         mshr_demand_epoch[free_index] <= if_req_epoch_i;
@@ -338,6 +405,7 @@ module rv32_icache_nonblocking #(
                 mshr_valid[free_index] <= 1'b1;
                 mshr_sent[free_index] <= 1'b0;
                 mshr_prefetch[free_index] <= 1'b1;
+                mshr_control_prefetch[free_index] <= 1'b0;
                 mshr_pc[free_index] <= prefetch_next_line;
                 mshr_line[free_index] <= prefetch_next_line;
                 mshr_demand_epoch[free_index] <= prefetch_epoch;
@@ -369,6 +437,7 @@ module rv32_icache_nonblocking #(
                 response_target_found) begin
                 mshr_valid[response_index] <= 1'b0;
                 mshr_sent[response_index] <= 1'b0;
+                mshr_control_prefetch[response_index] <= 1'b0;
                 event_refill_o <= !mem_resp_error_i && response_matches;
                 if (!mem_resp_error_i && response_matches) begin
                     valid_mem[refill_entry] <= 1'b1;
@@ -396,6 +465,18 @@ module rv32_icache_nonblocking #(
                     resp_epoch_reg <= mshr_demand_epoch[response_index];
                     resp_error_reg <= mem_resp_error_i || !response_matches;
                 end
+            end
+
+            if (control_target_allocate) begin
+                mshr_valid[response_index] <= 1'b1;
+                mshr_sent[response_index] <= 1'b0;
+                mshr_prefetch[response_index] <= 1'b1;
+                mshr_control_prefetch[response_index] <= 1'b1;
+                mshr_pc[response_index] <= control_target;
+                mshr_line[response_index] <=
+                    {control_target[31:4], 4'b0};
+                mshr_demand_epoch[response_index] <= current_epoch_i;
+                mshr_txn_epoch[response_index] <= current_epoch_i;
             end
         end
     end
