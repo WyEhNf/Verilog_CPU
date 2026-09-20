@@ -213,7 +213,32 @@ module rv32_dcache_nonblocking #(
 
     wire request_is_store = dcache_req_is_store_i && !dcache_req_is_load_i;
     wire request_is_load = dcache_req_is_load_i && !dcache_req_is_store_i;
-    wire load_can_accept = (request_hit ? resp_slot_free :
+    wire response_matches = response_found &&
+                            (mem_resp_line_addr_i ==
+                             (mshr_writeback[response_index] ?
+                              mshr_victim_addr[response_index] :
+                              {mshr_addr[response_index][31:4], 4'b0}));
+    wire response_writeback_failed = response_found &&
+                                     mshr_writeback[response_index] &&
+                                     (mem_resp_error_i || !response_matches);
+    // The hit path, a completed waiter, and a returning MSHR all share one
+    // registered output slot.  Admit a hit only when neither of the other
+    // producers can claim that slot this cycle; otherwise the later
+    // nonblocking assignment would silently overwrite the hit response.
+    wire response_emits_load = mem_resp_valid_i && response_found &&
+                               ((!mshr_writeback[response_index] &&
+                                 !mshr_store[response_index] &&
+                                 !mshr_prefetch[response_index]) ||
+                                (response_writeback_failed &&
+                                 !mshr_store[response_index]));
+    wire response_emits_store = mem_resp_valid_i && response_found &&
+                                ((!mshr_writeback[response_index] &&
+                                  mshr_store[response_index]) ||
+                                 (response_writeback_failed &&
+                                  mshr_store[response_index]));
+    wire load_can_accept = (request_hit ?
+                            (resp_slot_free && !waiter_load_ready_found &&
+                             !response_emits_load) :
                             (matching_found ?
                              (!mshr_store[matching_index] &&
                               (matching_prefetch || waiter_free_found) &&
@@ -221,7 +246,9 @@ module rv32_dcache_nonblocking #(
                                 (response_index == matching_index))) :
                              free_found));
     wire store_can_accept = request_hit ?
-                            (ack_slot_free && !request_index_conflict) :
+                            (ack_slot_free && !request_index_conflict &&
+                             !waiter_store_ready_found &&
+                             !response_emits_store) :
                             (matching_found ?
                              ((matching_prefetch ||
                                (mshr_store[matching_index] && waiter_free_found)) &&
@@ -233,11 +260,6 @@ module rv32_dcache_nonblocking #(
                                  (mshr_store[response_index] ? !ack_slot_free :
                                   (mshr_prefetch[response_index] ? 1'b0 :
                                    !resp_slot_free));
-    wire response_matches = response_found &&
-                            (mem_resp_line_addr_i ==
-                             (mshr_writeback[response_index] ?
-                              mshr_victim_addr[response_index] :
-                              {mshr_addr[response_index][31:4], 4'b0}));
     wire demand_response_fire = mem_resp_valid_i && mem_resp_ready_o &&
                                 response_found &&
                                 !mshr_writeback[response_index] &&
