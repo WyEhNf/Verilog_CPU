@@ -190,6 +190,25 @@ module cpu_core_image_tb #(
                      dut.frontend.fetch_ready_i, dut.trace_ready,
                      dut.dcache_req_valid, dut.dcache_resp_valid,
                      dut.dcache_store_ack_valid);
+            $display("STATE_BACKEND: rob=%0d rs=%0d lsq=%0d issue=%b branch_pending=%b mdu_busy=%b commit=%b redirect=%b",
+                     dut.perf_rob_occupancy, dut.perf_rs_occupancy,
+                     dut.perf_lsq_occupancy, dut.perf_issue_valid,
+                     dut.perf_branch_pending, dut.perf_mdu_busy,
+                     dut.commit_valid, dut.redirect_valid);
+            $display("STATE_ROB: head=%0d tail=%0d completion_head=%0d completion_tail=%0d completion_count=%0d",
+                     dut.g_ooo_backend.backend.rob.head_reg,
+                     dut.g_ooo_backend.backend.rob.tail_reg,
+                     dut.g_ooo_backend.backend.completion.head_reg,
+                     dut.g_ooo_backend.backend.completion.tail_reg,
+                     dut.g_ooo_backend.backend.completion.count_reg);
+            for (diag_slot = 0; diag_slot < ROB_ENTRIES; diag_slot = diag_slot + 1)
+                if (dut.g_ooo_backend.backend.rob.valid_mem[diag_slot])
+                    $display("STATE_ROB_ENTRY: slot=%0d ready=%b pc=%08x inst=%08x gen=%0d",
+                             diag_slot,
+                             dut.g_ooo_backend.backend.rob.ready_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rob.pc_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rob.inst_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rob.generation_mem[diag_slot]);
             finish_code = 1;
         end else if (error) begin
             $display("FAIL: JOIN-02 image=%0s architectural error cycles=%0d instret=%0d", test_name, cycles, instret);
