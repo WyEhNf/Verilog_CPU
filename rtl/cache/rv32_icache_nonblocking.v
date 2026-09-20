@@ -333,8 +333,6 @@ module rv32_icache_nonblocking #(
             event_stall_o <= 1'b0;
             for (reset_index = 0; reset_index < 64; reset_index = reset_index + 1) begin
                 valid_mem[reset_index] <= 1'b0;
-                tag_mem[reset_index] <= 23'd0;
-                data_mem[reset_index] <= 128'd0;
             end
             for (reset_index = 0; reset_index < 32; reset_index = reset_index + 1)
                 lru_mem[reset_index] <= 1'b0;

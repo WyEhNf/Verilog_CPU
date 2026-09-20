@@ -368,9 +368,6 @@ module rv32_dcache_nonblocking #(
             event_stall_o <= 1'b0;
             for (reset_index = 0; reset_index < CACHE_LINES; reset_index = reset_index + 1) begin
                 valid_mem[reset_index] <= 1'b0;
-                dirty_mem[reset_index] <= 1'b0;
-                tag_mem[reset_index] <= 20'd0;
-                data_mem[reset_index] <= 128'd0;
             end
             for (reset_index = 0; reset_index < MSHR_ENTRIES; reset_index = reset_index + 1) begin
                 mshr_valid[reset_index] <= 1'b0;
