@@ -336,6 +336,14 @@ module cpu_core_image_tb #(
             $display("TRACE: cycle=%0d dreq load=%b store=%b addr=%08x mask=%04x data=%08x ready=%b", cycles, dut.dcache_req_load,
                      dut.dcache_req_store, dut.dcache_req_addr, dut.dcache_req_mask,
                      dut.dcache_req_wdata[31:0], dut.dcache_req_ready);
+        if (trace_enable && dut.mem_i_req_valid)
+            $display("TRACE: cycle=%0d mem-i line=%08x id=%02x ready=%b", cycles,
+                     dut.mem_i_req_line_addr, dut.mem_i_req_id,
+                     dut.mem_i_req_ready);
+        if (trace_enable && dut.mem_i_resp_valid)
+            $display("TRACE: cycle=%0d mem-i response line=%08x id=%02x error=%b ready=%b", cycles,
+                     dut.mem_i_resp_line_addr, dut.mem_i_resp_id,
+                     dut.mem_i_resp_error, dut.mem_i_resp_ready);
         if (trace_enable && dut.mem_d_req_valid)
             $display("TRACE: cycle=%0d mem-d write=%b line=%08x id=%02x ready=%b", cycles, dut.mem_d_req_write,
                      dut.mem_d_req_line_addr, dut.mem_d_req_id, dut.mem_d_req_ready);
