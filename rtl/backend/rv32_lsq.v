@@ -566,7 +566,13 @@ module rv32_lsq #(
                     entry_rob_slot = rob_tag_mem[scan][3 +: ROB_SLOT_WIDTH];
                     recovery_entry_age = entry_rob_slot - recovery_head_i;
                     if (recovery_entry_age < 0) recovery_entry_age = recovery_entry_age + ROB_ENTRIES;
-                    if ((recovery_entry_age > recovery_branch_age) &&
+                    // A buffered store becomes architectural when the ROB
+                    // admits it here, even though the D-cache may still be
+                    // applying backpressure.  Its ROB slot can be recycled
+                    // before the LSQ drains it, so slot-age recovery must not
+                    // mistake that committed store for a younger instruction.
+                    if (!(store_mem[scan] && store_commit_mem[scan]) &&
+                        (recovery_entry_age > recovery_branch_age) &&
                         (recovery_entry_age < recovery_occupancy_i)) begin
                         if (!recovery_kill_found) begin
                             recovery_first_killed = scan;
