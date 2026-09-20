@@ -19,6 +19,7 @@ module cpu_core #(
     parameter integer ICACHE_PREFETCH = 1,
     parameter integer ICACHE_MSHRS = 8,
     parameter integer DCACHE_MSHRS = 4,
+    parameter integer DCACHE_LINES = 256,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
@@ -357,7 +358,8 @@ module cpu_core #(
 
     if (DCACHE_MSHRS > 1) begin : g_nonblocking_dcache
     rv32_dcache_nonblocking #(
-        .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS)
+        .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS),
+        .CACHE_LINES(DCACHE_LINES)
     ) dcache (
         // LSQ generations reject wrong-path responses while retaining older
         // loads across a redirect.  The cache itself has no ROB-age context.
