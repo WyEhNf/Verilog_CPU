@@ -35,6 +35,7 @@ set int_issue_width [lindex $argv 19]
 set cdb_width [lindex $argv 20]
 set icache_mshrs [lindex $argv 21]
 set dcache_mshrs [lindex $argv 22]
+set dcache_lines [lindex $argv 23]
 if {$rs_entries eq ""}  { set rs_entries 8 }
 if {$lsq_entries eq ""} { set lsq_entries 8 }
 if {$cache_stats eq ""} { set cache_stats 0 }
@@ -53,6 +54,7 @@ if {$int_issue_width eq ""} { set int_issue_width [expr {$be_width < 2 ? $be_wid
 if {$cdb_width eq ""} { set cdb_width [expr {$be_width < 2 ? $be_width : 2}] }
 if {$icache_mshrs eq ""} { set icache_mshrs 8 }
 if {$dcache_mshrs eq ""} { set dcache_mshrs 4 }
+if {$dcache_lines eq ""} { set dcache_lines 256 }
 set libdir      "_asap7_lib_filtered"
 
 file mkdir $outdir
@@ -80,7 +82,8 @@ chparam -set FE_WIDTH $fe_width -set BE_WIDTH $be_width \
 chparam -set COMPLETION_BYPASS $completion_bypass cpu_core
 chparam -set SERIAL_BACKEND $serial_backend cpu_core
 chparam -set INT_ISSUE_WIDTH $int_issue_width -set CDB_WIDTH $cdb_width cpu_core
-chparam -set ICACHE_MSHRS $icache_mshrs -set DCACHE_MSHRS $dcache_mshrs cpu_core
+chparam -set ICACHE_MSHRS $icache_mshrs -set DCACHE_MSHRS $dcache_mshrs \
+        -set DCACHE_LINES $dcache_lines cpu_core
 hierarchy -check -top cpu_core
 procs
 opt
