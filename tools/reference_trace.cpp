@@ -21,12 +21,13 @@ struct Options {
   const char *input = nullptr;
   const char *output = nullptr;
   std::uint64_t max_cycles = kDefaultMaxCycles;
+  std::uint64_t max_records = 0;
 };
 
 void usage(const char *program) {
   std::fprintf(stderr,
                "usage: %s --input IMAGE --output TRACE.jsonl "
-               "[--max-cycles N]\n",
+               "[--max-cycles N] [--max-records N]\n",
                program);
 }
 
@@ -49,6 +50,11 @@ bool parse_options(int argc, char **argv, Options &options) {
     } else if (std::strcmp(argv[index], "--max-cycles") == 0 &&
                index + 1 < argc) {
       if (!parse_u64(argv[++index], options.max_cycles))
+        return false;
+    } else if (std::strcmp(argv[index], "--max-records") == 0 &&
+               index + 1 < argc) {
+      if (!parse_u64(argv[++index], options.max_records) ||
+          options.max_records == 0)
         return false;
     } else {
       return false;
@@ -167,7 +173,8 @@ int main(int argc, char **argv) {
   std::fclose(input);
 
   std::uint64_t records = 0;
-  while (!cpu.done() && cpu.clk < options.max_cycles) {
+  while (!cpu.done() && cpu.clk < options.max_cycles &&
+         (options.max_records == 0 || records < options.max_records)) {
     sim::u8 order[sim::Simulator::MODULE_COUNT];
     const sim::u8 rotation =
         static_cast<sim::u8>(cpu.clk % sim::Simulator::MODULE_COUNT);
@@ -193,6 +200,14 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "reference_trace: failed while writing %s\n",
                  options.output);
     return 2;
+  }
+  if (!cpu.done() && options.max_records != 0 &&
+      records >= options.max_records) {
+    std::fprintf(stderr,
+                 "reference_trace: PARTIAL records=%llu cycles=%llu\n",
+                 static_cast<unsigned long long>(records),
+                 static_cast<unsigned long long>(cpu.clk));
+    return 0;
   }
   if (!cpu.done()) {
     std::fprintf(stderr, "reference_trace: exceeded %llu cycles\n",
