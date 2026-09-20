@@ -190,6 +190,27 @@ module cpu_core_image_tb #(
                      dut.frontend.fetch_ready_i, dut.trace_ready,
                      dut.dcache_req_valid, dut.dcache_resp_valid,
                      dut.dcache_store_ack_valid);
+            $display("STATE_ICACHE: epoch=%0d req_valid=%b req_ready=%b req_pc=%08x resp_valid=%b mem_req_valid=%b mem_req_ready=%b mem_req_addr=%08x mem_req_id=%02x mem_resp_valid=%b mem_resp_ready=%b mem_resp_addr=%08x mem_resp_id=%02x resp_slot=%b prefetch_active=%b remaining=%0d",
+                     dut.frontend_epoch,
+                     dut.if_req_valid, dut.if_req_ready, dut.if_req_pc,
+                     dut.if_resp_valid,
+                     dut.ic_mem_req_valid, dut.ic_mem_req_ready,
+                     dut.ic_mem_req_line_addr, dut.ic_mem_req_id,
+                     dut.ic_mem_resp_valid, dut.ic_mem_resp_ready,
+                     dut.ic_mem_resp_line_addr, dut.ic_mem_resp_id,
+                     dut.g_cached_memory.g_nonblocking_icache.icache.resp_valid_reg,
+                     dut.g_cached_memory.g_nonblocking_icache.icache.prefetch_active,
+                     dut.g_cached_memory.g_nonblocking_icache.icache.prefetch_remaining);
+            for (diag_slot = 0; diag_slot < ICACHE_MSHRS; diag_slot = diag_slot + 1)
+                if (dut.g_cached_memory.g_nonblocking_icache.icache.mshr_valid[diag_slot])
+                    $display("STATE_ICACHE_MSHR: slot=%0d sent=%b prefetch=%b pc=%08x line=%08x demand_epoch=%0d txn_epoch=%0d",
+                             diag_slot,
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_sent[diag_slot],
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_prefetch[diag_slot],
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_pc[diag_slot],
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_line[diag_slot],
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_demand_epoch[diag_slot],
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_txn_epoch[diag_slot]);
             $display("STATE_BACKEND: rob=%0d rs=%0d lsq=%0d issue=%b branch_pending=%b mdu_busy=%b commit=%b redirect=%b",
                      dut.perf_rob_occupancy, dut.perf_rs_occupancy,
                      dut.perf_lsq_occupancy, dut.perf_issue_valid,
