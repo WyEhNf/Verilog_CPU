@@ -99,15 +99,24 @@ module rv32_icache_nonblocking #(
         prefetch_match_index = 0;
         for (k = 0; k < MSHR_ENTRIES; k = k + 1) begin
             if (!request_match_found && mshr_valid[k] &&
+                (mshr_txn_epoch[k] == current_epoch_i) &&
                 (mshr_line[k] == request_line)) begin
                 request_match_found = 1'b1;
                 request_match_index = k;
             end
-            if (!free_found && !mshr_valid[k]) begin
+            // A redirect makes the previous epoch's slots immediately
+            // reusable.  Treating them as live for one extra cycle can make
+            // the first redirected request merge into a slot that the
+            // sequential cleanup clears on the same edge.
+            if (!free_found &&
+                (!mshr_valid[k] ||
+                 (mshr_txn_epoch[k] != current_epoch_i))) begin
                 free_found = 1'b1;
                 free_index = k;
             end
-            if (mshr_valid[k] && !mshr_sent[k] &&
+            if (mshr_valid[k] &&
+                (mshr_txn_epoch[k] == current_epoch_i) &&
+                !mshr_sent[k] &&
                 (!send_found ||
                  (mshr_prefetch[send_index] && !mshr_prefetch[k]))) begin
                 // A demand miss must not wait behind speculative stream
@@ -116,6 +125,7 @@ module rv32_icache_nonblocking #(
                 send_index = k;
             end
             if (!prefetch_match_found && mshr_valid[k] &&
+                (mshr_txn_epoch[k] == current_epoch_i) &&
                 (mshr_line[k] == prefetch_next_line)) begin
                 prefetch_match_found = 1'b1;
                 prefetch_match_index = k;
@@ -127,6 +137,8 @@ module rv32_icache_nonblocking #(
                                 (response_index < MSHR_ENTRIES) &&
                                 mshr_valid[response_index] &&
                                 mshr_sent[response_index] &&
+                                (mshr_txn_epoch[response_index] ==
+                                 current_epoch_i) &&
                                 (mshr_txn_epoch[response_index] ==
                                  mem_resp_id_i[EPOCH_WIDTH-1:0]);
     end
