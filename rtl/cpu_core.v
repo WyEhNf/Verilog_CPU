@@ -110,12 +110,34 @@ module cpu_core #(
     wire [FE_WIDTH-1:0] pred_taken_bus, pred_btb_hit_bus;
     wire [FE_WIDTH*32-1:0] pred_target_bus;
     wire [FE_WIDTH*2-1:0] pred_kind_bus;
+    wire [FE_WIDTH-1:0] pred_taken_raw_bus, pred_btb_hit_raw_bus;
+    wire [FE_WIDTH*32-1:0] pred_target_raw_bus;
+    wire [FE_WIDTH*2-1:0] pred_kind_raw_bus;
     wire [FE_WIDTH*6-1:0] pred_bht_index_bus;
     wire [FE_WIDTH*4-1:0] pred_btb_index_bus;
     wire [FE_WIDTH*2-1:0] pred_counter_bus;
     wire [FE_WIDTH*32-1:0] pred_count_bus, pred_correct_bus;
     wire [31:0] pred_count = pred_count_bus[31:0];
     wire [31:0] pred_correct = pred_correct_bus[31:0];
+
+    // Small speculative return-address stack shared by all fetch lanes.  The
+    // replicated bimodal/BTB predictors cannot each maintain a coherent RAS
+    // because a call and its return may appear in different bundle lanes.
+    // Updating here, after the frontend accepts a bundle, keeps one ordered
+    // stack for the whole fetch stream at very small area cost.
+    reg [31:0] ras_stack [0:3];
+    reg [1:0] ras_sp;
+    reg [2:0] ras_count;
+    reg ras_push;
+    reg ras_pop;
+    reg [31:0] ras_push_address;
+    integer ras_lane;
+    integer ras_word_index;
+    integer ras_event_found;
+    reg [31:0] ras_inst;
+    reg [31:0] ras_pc;
+    wire [1:0] ras_top_index = ras_sp - 1'b1;
+    wire [31:0] ras_target = ras_stack[ras_top_index];
 
     // Every fetch lane needs a predictor read.  The small predictor state is
     // replicated, while all copies receive identical feedback and therefore
@@ -130,15 +152,23 @@ module cpu_core #(
             wire [31:0] query_pc = if_resp_pc + (predictor_lane * 32'd4);
             wire [31:0] query_inst =
                 if_resp_line_data >> (query_word_index * 32);
+            wire query_is_return = (query_inst[6:0] == 7'b1100111) &&
+                                   (query_inst[14:12] == 3'b000) &&
+                                   (query_inst[11:7] == 5'd0) &&
+                                   ((query_inst[19:15] == 5'd1) ||
+                                    (query_inst[19:15] == 5'd5)) &&
+                                   (query_inst[31:20] == 12'd0);
+            wire ras_return_hit = (ENABLE_PREDICTOR != 0) && query_valid &&
+                                  query_is_return && (ras_count != 0);
 
             if (ENABLE_PREDICTOR != 0) begin : g_enabled
             rv32_branch_predictor predictor (
                 .clk_i(clk), .reset_i(reset), .query_valid_i(query_valid),
                 .query_pc_i(query_pc), .query_inst_i(query_inst),
-                .pred_taken_o(pred_taken_bus[predictor_lane]),
-                .pred_target_o(pred_target_bus[predictor_lane*32 +: 32]),
-                .pred_kind_o(pred_kind_bus[predictor_lane*2 +: 2]),
-                .pred_btb_hit_o(pred_btb_hit_bus[predictor_lane]),
+                .pred_taken_o(pred_taken_raw_bus[predictor_lane]),
+                .pred_target_o(pred_target_raw_bus[predictor_lane*32 +: 32]),
+                .pred_kind_o(pred_kind_raw_bus[predictor_lane*2 +: 2]),
+                .pred_btb_hit_o(pred_btb_hit_raw_bus[predictor_lane]),
                 .pred_bht_index_o(pred_bht_index_bus[predictor_lane*6 +: 6]),
                 .pred_btb_index_o(pred_btb_index_bus[predictor_lane*4 +: 4]),
                 .pred_counter_o(pred_counter_bus[predictor_lane*2 +: 2]),
@@ -153,18 +183,86 @@ module cpu_core #(
                 .correct_count_o(pred_correct_bus[predictor_lane*32 +: 32])
             );
             end else begin : g_disabled
-                assign pred_taken_bus[predictor_lane] = 1'b0;
-                assign pred_target_bus[predictor_lane*32 +: 32] = 32'b0;
-                assign pred_kind_bus[predictor_lane*2 +: 2] = `RV32IM_PRED_NONE;
-                assign pred_btb_hit_bus[predictor_lane] = 1'b0;
+                assign pred_taken_raw_bus[predictor_lane] = 1'b0;
+                assign pred_target_raw_bus[predictor_lane*32 +: 32] = 32'b0;
+                assign pred_kind_raw_bus[predictor_lane*2 +: 2] = `RV32IM_PRED_NONE;
+                assign pred_btb_hit_raw_bus[predictor_lane] = 1'b0;
                 assign pred_bht_index_bus[predictor_lane*6 +: 6] = 6'b0;
                 assign pred_btb_index_bus[predictor_lane*4 +: 4] = 4'b0;
                 assign pred_counter_bus[predictor_lane*2 +: 2] = 2'b0;
                 assign pred_count_bus[predictor_lane*32 +: 32] = 32'b0;
                 assign pred_correct_bus[predictor_lane*32 +: 32] = 32'b0;
             end
+            assign pred_taken_bus[predictor_lane] = ras_return_hit ? 1'b1 :
+                                                     pred_taken_raw_bus[predictor_lane];
+            assign pred_target_bus[predictor_lane*32 +: 32] = ras_return_hit ?
+                ras_target : pred_target_raw_bus[predictor_lane*32 +: 32];
+            assign pred_kind_bus[predictor_lane*2 +: 2] = ras_return_hit ?
+                `RV32IM_PRED_JALR : pred_kind_raw_bus[predictor_lane*2 +: 2];
+            assign pred_btb_hit_bus[predictor_lane] = ras_return_hit ? 1'b1 :
+                                                       pred_btb_hit_raw_bus[predictor_lane];
         end
     endgenerate
+
+    always @* begin
+        ras_push = 1'b0;
+        ras_pop = 1'b0;
+        ras_push_address = 32'd0;
+        ras_event_found = 0;
+        ras_word_index = 0;
+        ras_inst = 32'd0;
+        ras_pc = 32'd0;
+        if ((ENABLE_PREDICTOR != 0) && if_resp_valid && if_resp_ready) begin
+            for (ras_lane = 0; ras_lane < FE_WIDTH; ras_lane = ras_lane + 1) begin
+                ras_word_index = if_resp_pc[3:2] + ras_lane;
+                if (!ras_event_found && (ras_word_index < 4)) begin
+                    ras_inst = if_resp_line_data >> (ras_word_index * 32);
+                    ras_pc = if_resp_pc + (ras_lane * 32'd4);
+                    if (((ras_inst[6:0] == 7'b1101111) ||
+                         ((ras_inst[6:0] == 7'b1100111) &&
+                          (ras_inst[14:12] == 3'b000))) &&
+                        ((ras_inst[11:7] == 5'd1) ||
+                         (ras_inst[11:7] == 5'd5))) begin
+                        ras_push = 1'b1;
+                        ras_push_address = ras_pc + 32'd4;
+                        ras_event_found = 1;
+                    end else if ((ras_inst[6:0] == 7'b1100111) &&
+                                 (ras_inst[14:12] == 3'b000) &&
+                                 (ras_inst[11:7] == 5'd0) &&
+                                 ((ras_inst[19:15] == 5'd1) ||
+                                  (ras_inst[19:15] == 5'd5)) &&
+                                 (ras_inst[31:20] == 12'd0)) begin
+                        if (ras_count != 0)
+                            ras_pop = 1'b1;
+                        ras_event_found = 1;
+                    end else if (pred_taken_bus[ras_lane]) begin
+                        // The frontend stops the accepted bundle at the first
+                        // predicted-taken control transfer.
+                        ras_event_found = 1;
+                    end
+                end
+            end
+        end
+    end
+
+    integer ras_reset_index;
+    always @(posedge clk) begin
+        if (reset) begin
+            ras_sp <= 2'd0;
+            ras_count <= 3'd0;
+            for (ras_reset_index = 0; ras_reset_index < 4;
+                 ras_reset_index = ras_reset_index + 1)
+                ras_stack[ras_reset_index] <= 32'd0;
+        end else if (ras_push) begin
+            ras_stack[ras_sp] <= ras_push_address;
+            ras_sp <= ras_sp + 1'b1;
+            if (ras_count < 4)
+                ras_count <= ras_count + 1'b1;
+        end else if (ras_pop) begin
+            ras_sp <= ras_sp - 1'b1;
+            ras_count <= ras_count - 1'b1;
+        end
+    end
 
     rv32_fetch_frontend #(.FE_WIDTH(FE_WIDTH), .FQ_DEPTH(FETCH_QUEUE_DEPTH)) frontend (
         .clk_i(clk), .reset_i(reset), .redirect_valid_i(redirect_valid),
