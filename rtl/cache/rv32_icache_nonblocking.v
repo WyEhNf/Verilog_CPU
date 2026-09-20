@@ -84,6 +84,7 @@ module rv32_icache_nonblocking #(
     integer prefetch_match_index;
     reg request_match_found;
     reg free_found;
+    reg second_free_found;
     reg send_found;
     reg response_target_found;
     reg prefetch_match_found;
@@ -92,6 +93,7 @@ module rv32_icache_nonblocking #(
         request_match_found = 1'b0;
         request_match_index = 0;
         free_found = 1'b0;
+        second_free_found = 1'b0;
         free_index = 0;
         send_found = 1'b0;
         send_index = 0;
@@ -113,6 +115,10 @@ module rv32_icache_nonblocking #(
                  (mshr_txn_epoch[k] != current_epoch_i))) begin
                 free_found = 1'b1;
                 free_index = k;
+            end else if (!second_free_found &&
+                         (!mshr_valid[k] ||
+                          (mshr_txn_epoch[k] != current_epoch_i))) begin
+                second_free_found = 1'b1;
             end
             if (mshr_valid[k] &&
                 (mshr_txn_epoch[k] == current_epoch_i) &&
@@ -185,7 +191,6 @@ module rv32_icache_nonblocking #(
                               (!response_needs_slot || response_slot_free);
 
     integer reset_index;
-    integer prefetch_count;
     always @(posedge clk_i) begin
         if (reset_i) begin
             resp_valid_reg <= 1'b0;
@@ -273,10 +278,7 @@ module rv32_icache_nonblocking #(
                         prefetch_active <= 1'b1;
                         prefetch_next_line <= request_line + 32'd16;
                         prefetch_epoch <= if_req_epoch_i;
-                        prefetch_count = PREFETCH_DISTANCE;
-                        if (prefetch_count > MSHR_ENTRIES-1)
-                            prefetch_count = MSHR_ENTRIES-1;
-                        prefetch_remaining <= prefetch_count;
+                        prefetch_remaining <= PREFETCH_DISTANCE;
                     end
                 end
             end
@@ -290,7 +292,10 @@ module rv32_icache_nonblocking #(
                     prefetch_remaining <= prefetch_remaining - 1;
                     if (prefetch_remaining == 1)
                         prefetch_active <= 1'b0;
-                end else if (free_found) begin
+                // Preserve one immediately reusable slot for a demand jump
+                // while keeping a long sequential stream in flight as older
+                // prefetches complete.
+                end else if (second_free_found) begin
                     mshr_valid[free_index] <= 1'b1;
                     mshr_sent[free_index] <= 1'b0;
                     mshr_prefetch[free_index] <= 1'b1;

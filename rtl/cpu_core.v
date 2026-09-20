@@ -216,10 +216,10 @@ module cpu_core #(
     rv32_icache_nonblocking #(
         .MSHR_ENTRIES(ICACHE_MSHRS),
         .NEXT_LINE_PREFETCH(ICACHE_PREFETCH),
-        // Fill the remaining MSHRs with sequential lines.  Redirected
-        // demands can immediately recycle old-epoch entries, so speculative
-        // traffic no longer reserves or starves the demand path.
-        .PREFETCH_DISTANCE((ICACHE_MSHRS > 1) ? (ICACHE_MSHRS-1) : 1)
+        // Keep a rolling stream far enough ahead to cover cold direct-branch
+        // targets.  The cache reserves one MSHR for demand traffic, so this
+        // longer stream does not increase demand allocation latency.
+        .PREFETCH_DISTANCE((ICACHE_MSHRS > 1) ? (ICACHE_MSHRS*4-1) : 1)
     ) icache (
         .clk_i(clk), .reset_i(reset), .current_epoch_i(frontend_epoch),
         .if_req_valid_i(if_req_valid), .if_req_ready_o(if_req_ready), .if_req_pc_i(if_req_pc),
