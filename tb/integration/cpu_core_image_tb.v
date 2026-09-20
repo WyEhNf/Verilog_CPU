@@ -218,10 +218,13 @@ module cpu_core_image_tb #(
                              dut.g_cached_memory.g_nonblocking_icache.icache.mshr_line[diag_slot],
                              dut.g_cached_memory.g_nonblocking_icache.icache.mshr_demand_epoch[diag_slot],
                              dut.g_cached_memory.g_nonblocking_icache.icache.mshr_txn_epoch[diag_slot]);
-            $display("STATE_BACKEND: rob=%0d rs=%0d lsq=%0d issue=%b branch_pending=%b mdu_busy=%b commit=%b redirect=%b",
+            $display("STATE_BACKEND: rob=%0d rs=%0d lsq=%0d issue=%b branch_pending=%b branch_tag=%04x recovery_accept=%b mdu_busy=%b commit=%b redirect=%b",
                      dut.perf_rob_occupancy, dut.perf_rs_occupancy,
                      dut.perf_lsq_occupancy, dut.perf_issue_valid,
-                     dut.perf_branch_pending, dut.perf_mdu_busy,
+                     dut.perf_branch_pending,
+                     dut.g_ooo_backend.backend.branch_pending_tag,
+                     dut.g_ooo_backend.backend.rob_recovery_accept,
+                     dut.perf_mdu_busy,
                      dut.commit_valid, dut.redirect_valid);
             $display("STATE_ROB: head=%0d tail=%0d completion_head=%0d completion_tail=%0d completion_count=%0d",
                      dut.g_ooo_backend.backend.rob.head_reg,
