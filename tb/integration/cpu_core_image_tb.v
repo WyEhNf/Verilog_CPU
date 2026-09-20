@@ -19,6 +19,9 @@ module cpu_core_image_tb #(
     parameter integer ICACHE_PREFETCH = 1,
     parameter integer ICACHE_MSHRS = 8,
     parameter integer DCACHE_MSHRS = 4,
+    parameter integer MEMORY_LATENCY = 50,
+    parameter integer I_MEMORY_OUTSTANDING = 8,
+    parameter integer D_MEMORY_OUTSTANDING = 4,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
@@ -122,7 +125,11 @@ module cpu_core_image_tb #(
         .mem_d_resp_error(mem_d_resp_error)
     );
 
-    rv32im_memory_model memory (
+    rv32im_memory_model #(
+        .LATENCY(MEMORY_LATENCY),
+        .I_OUTSTANDING(I_MEMORY_OUTSTANDING),
+        .D_OUTSTANDING(D_MEMORY_OUTSTANDING)
+    ) memory (
         .clk_i(clk), .reset_i(reset),
         .i_req_valid_i(mem_i_req_valid), .i_req_ready_o(mem_i_req_ready),
         .i_req_line_addr_i(mem_i_req_line_addr), .i_req_id_i(mem_i_req_id),
