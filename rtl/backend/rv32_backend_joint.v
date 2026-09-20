@@ -447,9 +447,16 @@ module rv32_backend_joint #(
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_DIVU) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REM) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REMU);
-            assign rs_issue_ready[io_lane] = rs_issue_is_mdu[io_lane] ?
-                (mdu_select[io_lane] && mdu_issue_ready) :
-                ((io_lane < INT_ISSUE_WIDTH) ? alu_issue_ready[io_lane] : 1'b0);
+            // Do not launch a new operation on the edge that accepts branch
+            // recovery.  The RS is flushed on that edge, so a simultaneously
+            // accepted younger operation would otherwise survive in an empty
+            // ALU/MDU output slot after its ROB generation had been killed.
+            // Existing strict-older execution results remain independently
+            // drainable through alu_exec_ready/producers below.
+            assign rs_issue_ready[io_lane] = !rob_recovery_accept &&
+                (rs_issue_is_mdu[io_lane] ?
+                 (mdu_select[io_lane] && mdu_issue_ready) :
+                 ((io_lane < INT_ISSUE_WIDTH) ? alu_issue_ready[io_lane] : 1'b0));
             assign lsq_addr_update_valid[io_lane] =
                 alu_exec_valid[io_lane] && alu_exec_is_memory[io_lane];
             assign lsq_addr_update_tag[io_lane*TAG_WIDTH +: TAG_WIDTH] =
@@ -576,7 +583,7 @@ module rv32_backend_joint #(
             end
         end
     end
-    assign mdu_issue_valid = |mdu_select;
+    assign mdu_issue_valid = (|mdu_select) && !rob_recovery_accept;
     // Issue acceptance is independent from completion/CDB backpressure.  The
     // previous wiring reused alu_exec_ready for both directions, creating a
     // combinational loop through the reservation station's issue_valid path.
@@ -819,7 +826,8 @@ module rv32_backend_joint #(
         for (alu_lane = 0; alu_lane < BE_WIDTH; alu_lane = alu_lane + 1) begin : g_alu
             rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL)) alu (
                 .clk_i(clk_i), .reset_i(reset_i), .flush_i(alu_flush_r[alu_lane]),
-                .issue_valid_i((alu_lane < INT_ISSUE_WIDTH) &&
+                .issue_valid_i(!rob_recovery_accept &&
+                               (alu_lane < INT_ISSUE_WIDTH) &&
                                rs_issue_valid[alu_lane] &&
                                !rs_issue_is_mdu[alu_lane]),
                 .issue_ready_o(alu_issue_ready[alu_lane]),
