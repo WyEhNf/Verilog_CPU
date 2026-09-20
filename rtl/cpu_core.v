@@ -314,10 +314,13 @@ module cpu_core #(
     rv32_icache_nonblocking #(
         .MSHR_ENTRIES(ICACHE_MSHRS),
         .NEXT_LINE_PREFETCH(ICACHE_PREFETCH),
-        // Fill the remaining MSHRs with sequential lines.  Redirected
-        // demands can immediately recycle old-epoch entries, so speculative
-        // traffic no longer reserves or starves the demand path.
-        .PREFETCH_DISTANCE((ICACHE_MSHRS > 1) ? (ICACHE_MSHRS-1) : 1)
+        // Keep the initial stream conservative.  Filling every MSHR before
+        // the first line has exposed its control flow leaves the external
+        // queue full of uncancellable wrong-path requests at a taken jump.
+        // The I-cache's sliding window replenishes this credit as sequential
+        // demand advances, so long straight-line regions still stream.
+        .PREFETCH_DISTANCE((ICACHE_MSHRS > 4) ? 3 :
+                           ((ICACHE_MSHRS > 1) ? (ICACHE_MSHRS-1) : 1))
     ) icache (
         .clk_i(clk), .reset_i(reset), .current_epoch_i(frontend_epoch),
         .if_req_valid_i(if_req_valid), .if_req_ready_o(if_req_ready), .if_req_pc_i(if_req_pc),
