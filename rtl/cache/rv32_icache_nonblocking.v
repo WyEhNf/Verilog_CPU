@@ -72,6 +72,7 @@ module rv32_icache_nonblocking #(
     reg [31:0] prefetch_next_line;
     reg [EPOCH_WIDTH-1:0] prefetch_epoch;
     integer prefetch_remaining;
+    reg prefetch_control_stream;
     reg last_demand_valid;
     reg [31:0] last_demand_line;
 
@@ -318,6 +319,7 @@ module rv32_icache_nonblocking #(
             prefetch_next_line <= 32'd0;
             prefetch_epoch <= {EPOCH_WIDTH{1'b0}};
             prefetch_remaining <= 0;
+            prefetch_control_stream <= 1'b0;
             last_demand_valid <= 1'b0;
             last_demand_line <= 32'd0;
             event_request_o <= 1'b0;
@@ -364,7 +366,8 @@ module rv32_icache_nonblocking #(
                     mshr_control_prefetch[k] <= 1'b0;
                 end
             end
-            if (prefetch_active && (prefetch_epoch != current_epoch_i)) begin
+            if (prefetch_active && (prefetch_epoch != current_epoch_i) &&
+                !prefetch_control_stream) begin
                 prefetch_active <= 1'b0;
                 prefetch_remaining <= 0;
                 last_demand_valid <= 1'b0;
@@ -416,7 +419,7 @@ module rv32_icache_nonblocking #(
                 mshr_valid[free_index] <= 1'b1;
                 mshr_sent[free_index] <= 1'b0;
                 mshr_prefetch[free_index] <= 1'b1;
-                mshr_control_prefetch[free_index] <= 1'b0;
+                mshr_control_prefetch[free_index] <= prefetch_control_stream;
                 mshr_pc[free_index] <= prefetch_next_line;
                 mshr_line[free_index] <= prefetch_next_line;
                 mshr_demand_epoch[free_index] <= prefetch_epoch;
@@ -430,6 +433,7 @@ module rv32_icache_nonblocking #(
                     prefetch_active <= 1'b1;
                     prefetch_next_line <= request_line + 32'd16;
                     prefetch_epoch <= if_req_epoch_i;
+                    prefetch_control_stream <= 1'b0;
                     prefetch_count = PREFETCH_DISTANCE;
                     if (prefetch_count > MSHR_ENTRIES-1)
                         prefetch_count = MSHR_ENTRIES-1;
@@ -488,6 +492,15 @@ module rv32_icache_nonblocking #(
                     {control_target[31:4], 4'b0};
                 mshr_demand_epoch[response_index] <= current_epoch_i;
                 mshr_txn_epoch[response_index] <= current_epoch_i;
+                prefetch_active <= 1'b1;
+                prefetch_next_line <=
+                    {control_target[31:4], 4'b0} + 32'd16;
+                prefetch_epoch <= current_epoch_i;
+                prefetch_control_stream <= 1'b1;
+                prefetch_count = PREFETCH_DISTANCE;
+                if (prefetch_count > MSHR_ENTRIES-1)
+                    prefetch_count = MSHR_ENTRIES-1;
+                prefetch_remaining <= prefetch_count;
             end
         end
     end
