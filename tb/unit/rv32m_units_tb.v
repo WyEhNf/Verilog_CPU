@@ -120,7 +120,11 @@ module rv32m_units_tb #(
         begin
             cycle=0; found=mul_resp_valid;
             while (!found && cycle < MUL_WAIT) begin @(posedge clk); #1; cycle=cycle+1; if (mul_resp_valid) found=1; end
-            if (!found || mul_value !== expected || mul_resp_tag !== mul_tag || !mul_rd_we) bad=bad+1;
+            if (!found || mul_value !== expected || mul_resp_tag !== mul_tag || !mul_rd_we) begin
+                $display("FAIL_DETAIL: mul op=%0d a=%08x b=%08x found=%b got=%08x expected=%08x",
+                         mul_op, mul_a, mul_b, found, mul_value, expected);
+                bad=bad+1;
+            end
             if (found) begin @(posedge clk); #1; end
         end
     endtask
@@ -130,7 +134,11 @@ module rv32m_units_tb #(
         begin
             cycle=0; found=div_resp_valid;
             while (!found && cycle < 40) begin @(posedge clk); #1; cycle=cycle+1; if (div_resp_valid) found=1; end
-            if (!found || div_value !== expected || div_resp_tag !== div_tag || !div_rd_we) bad=bad+1;
+            if (!found || div_value !== expected || div_resp_tag !== div_tag || !div_rd_we) begin
+                $display("FAIL_DETAIL: div op=%0d a=%08x b=%08x found=%b got=%08x expected=%08x",
+                         div_op, div_a, div_b, found, div_value, expected);
+                bad=bad+1;
+            end
             if (found) begin @(posedge clk); #1; end
         end
     endtask
@@ -143,16 +151,38 @@ module rv32m_units_tb #(
         // Back-to-back operations must preserve opcode/product alignment.
         if (MUL_IMPL == 0) begin
             mul_ready=1; mul_op=`RV32IM_OP_MUL; mul_a=2; mul_b=3; mul_valid=1; @(posedge clk); #1;
-            mul_op=`RV32IM_OP_MULHU; mul_a=32'hffffffff; mul_b=2; @(posedge clk); #1; mul_valid=0; wait_mul(6); wait_mul(1);
+            // The low-latency Wallace result is legitimately consumed on
+            // the next ready edge, so sample each response while launching
+            // the following request rather than waiting until both launches
+            // have completed.
+            if (!mul_resp_valid || mul_value !== 32'd6) begin
+                $display("FAIL_DETAIL: back-to-back first valid=%b value=%08x", mul_resp_valid, mul_value);
+                bad=bad+1;
+            end
+            mul_op=`RV32IM_OP_MULHU; mul_a=32'hffffffff; mul_b=2; @(posedge clk); #1;
+            if (!mul_resp_valid || mul_value !== 32'd1) begin
+                $display("FAIL_DETAIL: back-to-back second valid=%b value=%08x", mul_resp_valid, mul_value);
+                bad=bad+1;
+            end
+            mul_valid=0;
+            // Retire the second ready response before beginning the
+            // independent backpressure scenario below.
+            @(posedge clk); #1;
         end else begin
             issue_mul(`RV32IM_OP_MUL, 2, 3); wait_mul(6);
             issue_mul(`RV32IM_OP_MULHU, 32'hffffffff, 2); wait_mul(1);
         end
         // Output backpressure retains a completed product.
-        mul_ready=0; issue_mul(`RV32IM_OP_MUL, 11, 12);
+        mul_ready=0; #1; issue_mul(`RV32IM_OP_MUL, 11, 12);
         cycle=0; while (!mul_resp_valid && cycle<MUL_WAIT) begin @(posedge clk); #1; cycle=cycle+1; end
-        if (!mul_resp_valid || mul_value != 132) bad=bad+1;
-        repeat (4) begin @(posedge clk); #1; if (!mul_resp_valid || mul_value != 132) bad=bad+1; end
+        if (!mul_resp_valid || mul_value != 132) begin
+            $display("FAIL_DETAIL: mul backpressure initial valid=%b value=%08x", mul_resp_valid, mul_value);
+            bad=bad+1;
+        end
+        repeat (4) begin @(posedge clk); #1; if (!mul_resp_valid || mul_value != 132) begin
+            $display("FAIL_DETAIL: mul backpressure hold valid=%b value=%08x", mul_resp_valid, mul_value);
+            bad=bad+1;
+        end end
         mul_ready=1; @(posedge clk); #1;
         // Flush kills all younger multiplier pipeline stages.
         mul_ready=0; issue_mul(`RV32IM_OP_MUL, 3, 5); flush=1; @(posedge clk); #1; flush=0; mul_ready=1; repeat (20) @(posedge clk); if (mul_resp_valid) bad=bad+1;
