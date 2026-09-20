@@ -216,11 +216,10 @@ module cpu_core #(
     rv32_icache_nonblocking #(
         .MSHR_ENTRIES(ICACHE_MSHRS),
         .NEXT_LINE_PREFETCH(ICACHE_PREFETCH),
-        // Fill every otherwise-idle MSHR behind a cold demand.  Demand
-        // requests retain send priority and redirects cancel the stream, so
-        // reserving half the entries only reduced useful memory-level
-        // parallelism on straight-line code.
-        .PREFETCH_DISTANCE(ICACHE_MSHRS-1)
+        // Keep half of the MSHRs available for demand fetches and redirect
+        // recovery.  Filling every slot with speculative next-line requests
+        // can otherwise starve a redirected demand behind stale responses.
+        .PREFETCH_DISTANCE((ICACHE_MSHRS > 2) ? (ICACHE_MSHRS/2) : 1)
     ) icache (
         .clk_i(clk), .reset_i(reset), .current_epoch_i(frontend_epoch),
         .if_req_valid_i(if_req_valid), .if_req_ready_o(if_req_ready), .if_req_pc_i(if_req_pc),
