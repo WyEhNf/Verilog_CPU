@@ -127,6 +127,7 @@ module rv32_dcache_nonblocking #(
     reg matching_prefetch;
     reg prefetch_line_present;
     reg request_index_conflict;
+    reg prefetch_index_conflict;
     reg waiter_free_found;
     reg waiter_load_ready_found;
     reg waiter_store_ready_found;
@@ -150,6 +151,7 @@ module rv32_dcache_nonblocking #(
         matching_prefetch = 1'b0;
         prefetch_line_present = 1'b0;
         request_index_conflict = 1'b0;
+        prefetch_index_conflict = 1'b0;
         waiter_free_found = 1'b0;
         waiter_free_index = 0;
         waiter_load_ready_found = 1'b0;
@@ -187,6 +189,9 @@ module rv32_dcache_nonblocking #(
             if (mshr_valid[k] &&
                 (mshr_addr[k][11:4] == request_index))
                 request_index_conflict = 1'b1;
+            if (mshr_valid[k] &&
+                (mshr_addr[k][11:4] == prefetch_index))
+                prefetch_index_conflict = 1'b1;
         end
         for (k = 0; k < WAITER_ENTRIES; k = k + 1) begin
             if (!waiter_free_found && !waiter_valid[k]) begin
@@ -252,7 +257,7 @@ module rv32_dcache_nonblocking #(
                                 waiter_free_found)) &&
                               !(mem_resp_valid_i && response_found &&
                                 (response_index == matching_index))) :
-                             free_found));
+                             (free_found && !request_index_conflict)));
     wire store_can_accept = ack_slot_free &&
                             !waiter_store_ready_found &&
                             !response_emits_store &&
@@ -515,6 +520,7 @@ module rv32_dcache_nonblocking #(
                     if ((PREFETCH != 0) && request_is_load &&
                         second_free_found && !prefetch_cache_hit &&
                         !prefetch_line_present &&
+                        !prefetch_index_conflict &&
                         !(valid_mem[prefetch_index] && dirty_mem[prefetch_index])) begin
                         mshr_valid[second_free_index] <= 1'b1;
                         mshr_sent[second_free_index] <= 1'b0;
