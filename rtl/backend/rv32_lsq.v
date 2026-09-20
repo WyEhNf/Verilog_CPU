@@ -122,6 +122,11 @@ module rv32_lsq #(
     reg request_sent_mem [0:LSQ_ENTRIES-1];
     reg response_wait_mem [0:LSQ_ENTRIES-1];
     reg complete_mem [0:LSQ_ENTRIES-1];
+    // Completion may bypass an older committed store that is waiting for a
+    // cache refill.  Entries still leave the circular queue in order; this
+    // bit prevents the already-reported load from being sent to the ROB a
+    // second time while it waits to reach the LSQ head.
+    reg load_reported_mem [0:LSQ_ENTRIES-1];
     reg [31:0] complete_value_mem [0:LSQ_ENTRIES-1];
     reg complete_error_mem [0:LSQ_ENTRIES-1];
     // Forwarded bytes are likewise relative to the waiting load rather than
@@ -150,6 +155,7 @@ module rv32_lsq #(
     integer alloc_slot;
     integer update_slot;
     integer response_slot;
+    integer complete_slot_select;
     integer commit_slot_select;
     integer entry_rob_slot;
     integer recovery_branch_slot;
@@ -169,6 +175,7 @@ module rv32_lsq #(
     reg request_fire;
     reg response_match;
     reg response_fire;
+    reg complete_slot_found;
     reg commit_fire;
     reg commit_slot_found;
     reg [GENERATION_WIDTH-1:0] next_generation;
@@ -505,14 +512,31 @@ module rv32_lsq #(
         store_ack_rob_tag_o = {ROB_TAG_WIDTH{1'b0}};
         store_ack_lsq_tag_o = {TAG_WIDTH{1'b0}};
         store_ack_error_o = 1'b0;
+        complete_slot_found = 1'b0;
+        complete_slot_select = head_reg;
+        // Loads already obeyed all older-store hazards when they issued.
+        // Report the oldest completed, not-yet-reported load even when an
+        // older committed store is still occupying the LSQ head.
+        for (scan = 0; scan < LSQ_ENTRIES; scan = scan + 1) begin
+            i = head_reg + scan;
+            if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
+            if (!complete_slot_found && (scan < occupancy_reg) &&
+                valid_mem[i] && load_mem[i] && complete_mem[i] &&
+                !load_reported_mem[i]) begin
+                complete_slot_found = 1'b1;
+                complete_slot_select = i;
+            end
+        end
+        if (complete_slot_found) begin
+            load_complete_valid_o = 1'b1;
+            load_complete_rob_tag_o = rob_tag_mem[complete_slot_select];
+            load_complete_lsq_tag_o = make_lsq_tag(
+                complete_slot_select, generation_mem[complete_slot_select]);
+            load_complete_value_o = complete_value_mem[complete_slot_select];
+            load_complete_error_o = complete_error_mem[complete_slot_select];
+        end
         if (occupancy_reg != 0 && valid_mem[head_reg]) begin
-            if (load_mem[head_reg] && complete_mem[head_reg]) begin
-                load_complete_valid_o = 1'b1;
-                load_complete_rob_tag_o = rob_tag_mem[head_reg];
-                load_complete_lsq_tag_o = make_lsq_tag(head_reg, generation_mem[head_reg]);
-                load_complete_value_o = complete_value_mem[head_reg];
-                load_complete_error_o = complete_error_mem[head_reg];
-            end else if (store_mem[head_reg] && store_ack_mem[head_reg]) begin
+            if (store_mem[head_reg] && store_ack_mem[head_reg]) begin
                 store_ack_valid_o = 1'b1;
                 store_ack_rob_tag_o = rob_tag_mem[head_reg];
                 store_ack_lsq_tag_o = make_lsq_tag(head_reg, generation_mem[head_reg]);
@@ -533,6 +557,7 @@ module rv32_lsq #(
                 request_sent_mem[slot] <= 1'b0;
                 response_wait_mem[slot] <= 1'b0;
                 complete_mem[slot] <= 1'b0;
+                load_reported_mem[slot] <= 1'b0;
                 store_commit_mem[slot] <= 1'b0;
                 store_ack_mem[slot] <= 1'b0;
             end
@@ -545,6 +570,7 @@ module rv32_lsq #(
                 request_sent_mem[slot] <= 1'b0;
                 response_wait_mem[slot] <= 1'b0;
                 complete_mem[slot] <= 1'b0;
+                load_reported_mem[slot] <= 1'b0;
                 store_commit_mem[slot] <= 1'b0;
                 store_ack_mem[slot] <= 1'b0;
             end
@@ -582,6 +608,7 @@ module rv32_lsq #(
                         request_sent_mem[scan] <= 1'b0;
                         response_wait_mem[scan] <= 1'b0;
                         complete_mem[scan] <= 1'b0;
+                        load_reported_mem[scan] <= 1'b0;
                         store_commit_mem[scan] <= 1'b0;
                         store_ack_mem[scan] <= 1'b0;
                     end else begin
@@ -719,6 +746,9 @@ module rv32_lsq #(
                 response_wait_mem[response_slot] <= 1'b0;
             end
 
+            if (load_complete_valid_o && load_complete_ready_i)
+                load_reported_mem[complete_slot_select] <= 1'b1;
+
             for (slot = 0; slot < LSQ_ENTRIES; slot = slot + 1) begin
                 if (dcache_store_ack_valid_i && tag_matches_slot(dcache_store_ack_lsq_tag_i, slot) &&
                     request_sent_mem[slot] && response_wait_mem[slot]) begin
@@ -729,12 +759,16 @@ module rv32_lsq #(
             end
 
             if ((occupancy_reg != 0) && valid_mem[head_reg] &&
-                ((load_mem[head_reg] && complete_mem[head_reg] && load_complete_ready_i) ||
+                ((load_mem[head_reg] && complete_mem[head_reg] &&
+                  (load_reported_mem[head_reg] ||
+                   (load_complete_valid_o && load_complete_ready_i &&
+                    (complete_slot_select == head_reg)))) ||
                  (store_mem[head_reg] && store_ack_mem[head_reg] && store_ack_ready_i))) begin
                 valid_mem[head_reg] <= 1'b0;
                 request_sent_mem[head_reg] <= 1'b0;
                 response_wait_mem[head_reg] <= 1'b0;
                 complete_mem[head_reg] <= 1'b0;
+                load_reported_mem[head_reg] <= 1'b0;
                 store_ack_mem[head_reg] <= 1'b0;
             end
 
@@ -766,6 +800,7 @@ module rv32_lsq #(
                     request_sent_mem[alloc_slot] <= 1'b0;
                     response_wait_mem[alloc_slot] <= 1'b0;
                     complete_mem[alloc_slot] <= 1'b0;
+                    load_reported_mem[alloc_slot] <= 1'b0;
                     complete_value_mem[alloc_slot] <= 32'b0;
                     complete_error_mem[alloc_slot] <= 1'b0;
                     forward_mask_mem[alloc_slot] <= 4'b0;
@@ -778,7 +813,10 @@ module rv32_lsq #(
 
             alloc_count_calc = alloc_count_o;
             pop_count_calc = ((occupancy_reg != 0) && valid_mem[head_reg] &&
-                              ((load_mem[head_reg] && complete_mem[head_reg] && load_complete_ready_i) ||
+                              ((load_mem[head_reg] && complete_mem[head_reg] &&
+                                (load_reported_mem[head_reg] ||
+                                 (load_complete_valid_o && load_complete_ready_i &&
+                                  (complete_slot_select == head_reg)))) ||
                                (store_mem[head_reg] && store_ack_mem[head_reg] && store_ack_ready_i))) ? 1 : 0;
             head_reg <= advance_slot(head_reg, pop_count_calc);
             tail_reg <= advance_slot(tail_reg, alloc_count_calc);
