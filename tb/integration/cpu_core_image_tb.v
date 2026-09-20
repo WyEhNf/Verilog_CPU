@@ -232,6 +232,15 @@ module cpu_core_image_tb #(
                      dut.g_ooo_backend.backend.completion.head_reg,
                      dut.g_ooo_backend.backend.completion.tail_reg,
                      dut.g_ooo_backend.backend.completion.count_reg);
+            $display("STATE_RENAME: rat_x1=%0d free=%b ready=%b producer_tag=%04x free_count=%0d",
+                     dut.g_ooo_backend.backend.rename.rat[1],
+                     dut.g_ooo_backend.backend.rename.free_bitmap[
+                         dut.g_ooo_backend.backend.rename.rat[1]],
+                     dut.g_ooo_backend.backend.prf.ready[
+                         dut.g_ooo_backend.backend.rename.rat[1]],
+                     dut.g_ooo_backend.backend.phys_tag_mem[
+                         dut.g_ooo_backend.backend.rename.rat[1]],
+                     dut.g_ooo_backend.backend.free_count);
             for (diag_slot = 0; diag_slot < ROB_ENTRIES; diag_slot = diag_slot + 1)
                 if (dut.g_ooo_backend.backend.rob.valid_mem[diag_slot])
                     $display("STATE_ROB_ENTRY: slot=%0d ready=%b pc=%08x inst=%08x gen=%0d",
@@ -367,9 +376,27 @@ module cpu_core_image_tb #(
                      dut.dcache_debug_s2_hit, dut.dcache_debug_mshr_valid,
                      dut.dcache_debug_ack_valid, dut.dcache_debug_resp_valid);
         if (trace_enable && dut.redirect_valid)
-            $display("TRACE: control redirect=%b pc=%08x epoch=%0d frontend_pc=%08x frontend_epoch=%0d",
+            $display("TRACE: control redirect=%b pc=%08x epoch=%0d frontend_pc=%08x frontend_epoch=%0d alu_tags=%h alu_valid=%b alu_flush=%b branch_tag=%h rob_head=%0d rat1=%0d free1=%b reclaim1=%b",
                      dut.redirect_valid, dut.redirect_pc, dut.redirect_epoch,
-                     dut.frontend.pc_reg, dut.frontend.epoch_reg);
+                     dut.frontend.pc_reg, dut.frontend.epoch_reg,
+                     dut.g_ooo_backend.backend.alu_exec_tag,
+                     dut.g_ooo_backend.backend.alu_exec_valid,
+                     dut.g_ooo_backend.backend.alu_flush_r,
+                     dut.g_ooo_backend.backend.branch_pending_tag,
+                     dut.g_ooo_backend.backend.rob_head,
+                     dut.g_ooo_backend.backend.rename.rat[1],
+                     dut.g_ooo_backend.backend.rename.free_bitmap[
+                         dut.g_ooo_backend.backend.rename.rat[1]],
+                     dut.g_ooo_backend.backend.rob_recovery_reclaim_bitmap[
+                         dut.g_ooo_backend.backend.rename.rat[1]]);
+        if (trace_enable && !dut.g_ooo_backend.backend.branch_pending &&
+            (|(dut.g_ooo_backend.backend.alu_exec_valid &
+               dut.g_ooo_backend.backend.alu_exec_redirect_valid)))
+            $display("TRACE: branch capture tags=%h valid=%b redirect=%b rob_head=%0d",
+                     dut.g_ooo_backend.backend.alu_exec_tag,
+                     dut.g_ooo_backend.backend.alu_exec_valid,
+                     dut.g_ooo_backend.backend.alu_exec_redirect_valid,
+                     dut.g_ooo_backend.backend.rob_head);
     end
 
 endmodule
