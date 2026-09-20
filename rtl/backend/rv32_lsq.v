@@ -156,6 +156,8 @@ module rv32_lsq #(
     integer update_slot;
     integer response_slot;
     integer complete_slot_select;
+    integer complete_scan;
+    integer complete_index;
     integer commit_slot_select;
     integer entry_rob_slot;
     integer recovery_branch_slot;
@@ -517,14 +519,17 @@ module rv32_lsq #(
         // Loads already obeyed all older-store hazards when they issued.
         // Report the oldest completed, not-yet-reported load even when an
         // older committed store is still occupying the LSQ head.
-        for (scan = 0; scan < LSQ_ENTRIES; scan = scan + 1) begin
-            i = head_reg + scan;
-            if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
-            if (!complete_slot_found && (scan < occupancy_reg) &&
-                valid_mem[i] && load_mem[i] && complete_mem[i] &&
-                !load_reported_mem[i]) begin
+        for (complete_scan = 0; complete_scan < LSQ_ENTRIES;
+             complete_scan = complete_scan + 1) begin
+            complete_index = head_reg + complete_scan;
+            if (complete_index >= LSQ_ENTRIES)
+                complete_index = complete_index - LSQ_ENTRIES;
+            if (!complete_slot_found && (complete_scan < occupancy_reg) &&
+                valid_mem[complete_index] && load_mem[complete_index] &&
+                complete_mem[complete_index] &&
+                !load_reported_mem[complete_index]) begin
                 complete_slot_found = 1'b1;
-                complete_slot_select = i;
+                complete_slot_select = complete_index;
             end
         end
         if (complete_slot_found) begin
