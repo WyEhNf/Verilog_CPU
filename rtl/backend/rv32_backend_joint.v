@@ -196,6 +196,9 @@ module rv32_backend_joint #(
     wire [(BE_WIDTH*PAW)-1:0] prf_write_phys;
     wire [(BE_WIDTH*32)-1:0] prf_write_data;
     wire [BE_WIDTH-1:0] prf_write_valid;
+    wire [(BE_WIDTH*PAW)-1:0] completion_prf_write_phys;
+    wire [(BE_WIDTH*32)-1:0] completion_prf_write_data;
+    wire [BE_WIDTH-1:0] completion_prf_write_valid;
 
     wire [BE_WIDTH-1:0] rs_alloc_valid;
     wire rs_alloc_ready;
@@ -301,6 +304,8 @@ module rv32_backend_joint #(
     reg branch_pending;
     reg [TAG_WIDTH-1:0] branch_pending_tag;
     reg [31:0] branch_pending_value;
+    reg [PAW-1:0] branch_pending_phys;
+    reg branch_pending_rd_we;
     reg [31:0] branch_pending_pc;
     reg [31:0] branch_pending_source_pc;
     reg [1:0] branch_pending_kind;
@@ -467,6 +472,22 @@ module rv32_backend_joint #(
                 alu_exec_valid[io_lane] && alu_exec_is_store[io_lane];
             assign lsq_data_update_tag[io_lane*TAG_WIDTH +: TAG_WIDTH] =
                 rob_to_lsq_mem[alu_exec_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+            // Recovery reserves CDB slot CDB_WIDTH-1 for its direct ROB
+            // completion.  Reuse the corresponding idle PRF write slot so a
+            // redirecting JAL/JALR also publishes its link value.  An ordinary
+            // completion in this lane remains queued by cdb_ready.
+            assign prf_write_valid[io_lane] =
+                (branch_pending && branch_pending_rd_we &&
+                 (io_lane == (CDB_WIDTH - 1))) ? 1'b1 :
+                completion_prf_write_valid[io_lane];
+            assign prf_write_phys[io_lane*PAW +: PAW] =
+                (branch_pending && branch_pending_rd_we &&
+                 (io_lane == (CDB_WIDTH - 1))) ? branch_pending_phys :
+                completion_prf_write_phys[io_lane*PAW +: PAW];
+            assign prf_write_data[io_lane*32 +: 32] =
+                (branch_pending && branch_pending_rd_we &&
+                 (io_lane == (CDB_WIDTH - 1))) ? branch_pending_value :
+                completion_prf_write_data[io_lane*32 +: 32];
         end
     endgenerate
 
@@ -1015,7 +1036,7 @@ module rv32_backend_joint #(
     assign alu_exec_ready = alu_exec_ready_r;
 
     rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .SOURCES(PRODUCERS), .FIFO_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .BYPASS(COMPLETION_BYPASS)) completion (
-        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .kill_valid_i(rob_recovery_accept), .kill_mask_i(completion_kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready_r), .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live_r), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}}), .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect_valid), .cdb_is_memory_o(cdb_is_memory), .cdb_is_load_o(cdb_is_load), .prf_write_valid_o(prf_write_valid), .prf_write_tag_o(prf_wb_tag), .prf_write_phys_rd_o(prf_write_phys), .prf_write_value_o(prf_write_data), .rob_ready_valid_o(rob_wb_valid), .rob_ready_tag_o(rob_wb_tag), .rob_ready_value_o(rob_wb_value), .wakeup_valid_o(wake_wb_valid), .wakeup_tag_o(wake_wb_tag), .wakeup_value_o(wake_wb_value), .entry_valid_o(completion_entry_valid), .entry_tag_o(completion_entry_tag), .occupancy_o()
+        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .kill_valid_i(rob_recovery_accept), .kill_mask_i(completion_kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready_r), .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live_r), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}}), .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect_valid), .cdb_is_memory_o(cdb_is_memory), .cdb_is_load_o(cdb_is_load), .prf_write_valid_o(completion_prf_write_valid), .prf_write_tag_o(prf_wb_tag), .prf_write_phys_rd_o(completion_prf_write_phys), .prf_write_value_o(completion_prf_write_data), .rob_ready_valid_o(rob_wb_valid), .rob_ready_tag_o(rob_wb_tag), .rob_ready_value_o(rob_wb_value), .wakeup_valid_o(wake_wb_valid), .wakeup_tag_o(wake_wb_tag), .wakeup_value_o(wake_wb_value), .entry_valid_o(completion_entry_valid), .entry_tag_o(completion_entry_tag), .occupancy_o()
     );
     // Wake dependants as soon as an execution result is accepted into the
     // completion network.  Keep the ordinary CDB lanes in the same wake bus
@@ -1103,6 +1124,8 @@ module rv32_backend_joint #(
             branch_pending <= 1'b0;
             branch_pending_tag <= 0;
             branch_pending_value <= 0;
+            branch_pending_phys <= 0;
+            branch_pending_rd_we <= 1'b0;
             branch_pending_pc <= 0;
             branch_pending_source_pc <= 0;
             branch_pending_kind <= `RV32IM_PRED_NONE;
@@ -1142,6 +1165,8 @@ module rv32_backend_joint #(
                         branch_pending <= 1'b1;
                         branch_pending_tag <= alu_exec_tag[branch_lane*TAG_WIDTH +: TAG_WIDTH];
                         branch_pending_value <= alu_exec_value[branch_lane*32 +: 32];
+                        branch_pending_phys <= alu_exec_phys[branch_lane*PAW +: PAW];
+                        branch_pending_rd_we <= alu_exec_rd_we[branch_lane];
                         branch_pending_pc <= alu_exec_redirect_pc[branch_lane*32 +: 32];
                         branch_pending_source_pc <= rob_pc_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
                         branch_pending_kind <= rob_pred_kind_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
