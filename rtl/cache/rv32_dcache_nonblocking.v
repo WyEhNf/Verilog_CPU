@@ -231,33 +231,41 @@ module rv32_dcache_nonblocking #(
                                  !mshr_prefetch[response_index]) ||
                                 (response_writeback_failed &&
                                  !mshr_store[response_index]));
-    wire response_emits_store = mem_resp_valid_i && response_found &&
-                                ((!mshr_writeback[response_index] &&
-                                  mshr_store[response_index]) ||
-                                 (response_writeback_failed &&
-                                  mshr_store[response_index]));
+    // A committed store is acknowledged when its bytes are absorbed into an
+    // MSHR.  The MSHR is the durable store buffer, so its later refill does
+    // not produce a second LSQ acknowledgement.
+    wire response_emits_store = 1'b0;
+    wire matching_store_covers_load = matching_found &&
+        mshr_store[matching_index] &&
+        ((mshr_mask[matching_index] & dcache_req_mask_i) ==
+         dcache_req_mask_i);
     wire load_can_accept = (request_hit ?
                             (resp_slot_free && !waiter_load_ready_found &&
                              !response_emits_load) :
                             (matching_found ?
-                             (!mshr_store[matching_index] &&
-                              (matching_prefetch || waiter_free_found) &&
+                             ((matching_prefetch ||
+                               (mshr_store[matching_index] ?
+                                (matching_store_covers_load ?
+                                 (resp_slot_free &&
+                                  !waiter_load_ready_found &&
+                                  !response_emits_load) : waiter_free_found) :
+                                waiter_free_found)) &&
                               !(mem_resp_valid_i && response_found &&
                                 (response_index == matching_index))) :
                              free_found));
-    wire store_can_accept = request_hit ?
-                            (ack_slot_free && !request_index_conflict &&
-                             !waiter_store_ready_found &&
-                             !response_emits_store) :
-                            (matching_found ?
-                             ((matching_prefetch ||
-                               (mshr_store[matching_index] && waiter_free_found)) &&
-                              !(mem_resp_valid_i && response_found &&
-                                (response_index == matching_index))) :
-                             (free_found && !request_index_conflict));
+    wire store_can_accept = ack_slot_free &&
+                            !waiter_store_ready_found &&
+                            !response_emits_store &&
+                            (request_hit ? !request_index_conflict :
+                             (matching_found ?
+                              ((matching_prefetch ||
+                                mshr_store[matching_index]) &&
+                               !(mem_resp_valid_i && response_found &&
+                                 (response_index == matching_index))) :
+                              (free_found && !request_index_conflict)));
     wire request_fire = dcache_req_valid_i && dcache_req_ready_o;
     wire response_needs_output = response_found &&
-                                 (mshr_store[response_index] ? !ack_slot_free :
+                                 (mshr_store[response_index] ? 1'b0 :
                                   (mshr_prefetch[response_index] ? 1'b0 :
                                    !resp_slot_free));
     wire demand_response_fire = mem_resp_valid_i && mem_resp_ready_o &&
@@ -414,6 +422,23 @@ module rv32_dcache_nonblocking #(
                     ack_valid_reg <= 1'b1;
                     ack_lsq_reg <= dcache_req_lsq_tag_i;
                     ack_error_reg <= 1'b0;
+                end else if (request_is_load && matching_found &&
+                             mshr_store[matching_index] &&
+                             matching_store_covers_load) begin
+                    // The older committed store has already supplied every
+                    // byte this load still needs.  Forward directly from the
+                    // store-buffer MSHR without waiting for read-for-ownership.
+                    event_hit_o <= 1'b1;
+                    resp_valid_reg <= 1'b1;
+                    resp_lsq_reg <= dcache_req_lsq_tag_i;
+                    resp_addr_reg <= dcache_req_addr_i;
+                    resp_line_reg <= mshr_wdata[matching_index];
+                    resp_word_reg <= extract_value(mshr_wdata[matching_index],
+                                                   dcache_req_addr_i,
+                                                   dcache_req_size_i,
+                                                   dcache_req_unsigned_i);
+                    resp_line_valid_reg <= 1'b1;
+                    resp_error_reg <= 1'b0;
                 end else if (request_is_load && matching_found && matching_prefetch) begin
                     // Turn the speculative line into the demand transaction;
                     // its memory request and ID remain unchanged.
@@ -462,15 +487,6 @@ module rv32_dcache_nonblocking #(
                                     dcache_req_mask_i);
                     mshr_mask[matching_index] <= mshr_mask[matching_index] |
                                                  dcache_req_mask_i;
-                    waiter_valid[waiter_free_index] <= 1'b1;
-                    waiter_ready[waiter_free_index] <= 1'b0;
-                    waiter_store[waiter_free_index] <= 1'b1;
-                    waiter_mshr[waiter_free_index] <= matching_index[2:0];
-                    waiter_addr[waiter_free_index] <= dcache_req_addr_i;
-                    waiter_size[waiter_free_index] <= dcache_req_size_i;
-                    waiter_unsigned[waiter_free_index] <= 1'b0;
-                    waiter_lsq[waiter_free_index] <= dcache_req_lsq_tag_i;
-                    waiter_error[waiter_free_index] <= 1'b0;
                 end else begin
                     event_miss_o <= 1'b1;
                     mshr_valid[free_index] <= 1'b1;
@@ -516,6 +532,13 @@ module rv32_dcache_nonblocking #(
                         valid_mem[prefetch_index] <= 1'b0;
                         dirty_mem[prefetch_index] <= 1'b0;
                     end
+                end
+                if (request_is_store) begin
+                    // Ownership has transferred to the cache/store buffer;
+                    // the LSQ no longer needs to retain the committed entry.
+                    ack_valid_reg <= 1'b1;
+                    ack_lsq_reg <= dcache_req_lsq_tag_i;
+                    ack_error_reg <= 1'b0;
                 end
             end
 
@@ -570,30 +593,28 @@ module rv32_dcache_nonblocking #(
                     end
                 end else if (mshr_store[response_index]) begin
                     mshr_valid[response_index] <= 1'b0;
+                    updated_line = merge_store(mem_resp_data_i,
+                                               mshr_wdata[response_index],
+                                               mshr_mask[response_index]);
                     for (waiter_index = 0; waiter_index < WAITER_ENTRIES;
                          waiter_index = waiter_index + 1) begin
                         if (waiter_valid[waiter_index] &&
-                            waiter_store[waiter_index] &&
                             (waiter_mshr[waiter_index] == response_index[2:0])) begin
                             waiter_ready[waiter_index] <= 1'b1;
                             waiter_error[waiter_index] <= mem_resp_error_i ||
                                                           !response_matches;
+                            if (!waiter_store[waiter_index])
+                                waiter_line[waiter_index] <= updated_line;
                         end
                     end
                     if (!mem_resp_error_i && response_matches) begin
                         line_index = mshr_addr[response_index][11:4];
-                        updated_line = merge_store(mem_resp_data_i,
-                                                   mshr_wdata[response_index],
-                                                   mshr_mask[response_index]);
                         valid_mem[line_index] <= 1'b1;
                         dirty_mem[line_index] <= 1'b1;
                         tag_mem[line_index] <= mshr_addr[response_index][31:12];
                         data_mem[line_index] <= updated_line;
                         event_refill_o <= 1'b1;
                     end
-                    ack_valid_reg <= 1'b1;
-                    ack_lsq_reg <= mshr_lsq[response_index];
-                    ack_error_reg <= mem_resp_error_i || !response_matches;
                 end else if (mshr_prefetch[response_index]) begin
                     mshr_valid[response_index] <= 1'b0;
                     if (!mem_resp_error_i && response_matches) begin
