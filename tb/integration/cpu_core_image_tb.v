@@ -333,19 +333,19 @@ module cpu_core_image_tb #(
                      dut.commit_inst, dut.commit_rd, dut.commit_rd_we,
                      dut.commit_value, dut.commit_is_store);
         if (trace_enable && dut.dcache_req_valid)
-            $display("TRACE: dreq load=%b store=%b addr=%08x mask=%04x data=%08x ready=%b", dut.dcache_req_load,
+            $display("TRACE: cycle=%0d dreq load=%b store=%b addr=%08x mask=%04x data=%08x ready=%b", cycles, dut.dcache_req_load,
                      dut.dcache_req_store, dut.dcache_req_addr, dut.dcache_req_mask,
                      dut.dcache_req_wdata[31:0], dut.dcache_req_ready);
         if (trace_enable && dut.mem_d_req_valid)
-            $display("TRACE: mem-d write=%b line=%08x id=%02x ready=%b", dut.mem_d_req_write,
+            $display("TRACE: cycle=%0d mem-d write=%b line=%08x id=%02x ready=%b", cycles, dut.mem_d_req_write,
                      dut.mem_d_req_line_addr, dut.mem_d_req_id, dut.mem_d_req_ready);
         if (trace_enable && dut.mem_d_resp_valid)
-            $display("TRACE: mem-d response line=%08x id=%02x error=%b ready=%b", dut.mem_d_resp_line_addr,
+            $display("TRACE: cycle=%0d mem-d response line=%08x id=%02x error=%b ready=%b", cycles, dut.mem_d_resp_line_addr,
                      dut.mem_d_resp_id, dut.mem_d_resp_error, dut.mem_d_resp_ready);
         if (trace_enable && dut.dcache_store_ack_valid)
-            $display("TRACE: dcache store-ack lsq=%04x error=%b", dut.dcache_store_ack_lsq_tag, dut.dcache_store_ack_error);
+            $display("TRACE: cycle=%0d dcache store-ack lsq=%04x error=%b", cycles, dut.dcache_store_ack_lsq_tag, dut.dcache_store_ack_error);
         if (trace_enable && dut.dcache_resp_valid)
-            $display("TRACE: dcache load-resp lsq=%04x addr=%08x value=%08x error=%b", dut.dcache_resp_lsq_tag,
+            $display("TRACE: cycle=%0d dcache load-resp lsq=%04x addr=%08x value=%08x error=%b", cycles, dut.dcache_resp_lsq_tag,
                      dut.dcache_resp_addr, dut.dcache_resp_word, dut.dcache_resp_error);
         if (trace_enable && (dut.dcache_debug_s0_valid || dut.dcache_debug_s1_valid ||
             dut.dcache_debug_s2_valid || dut.dcache_debug_mshr_valid || dut.dcache_debug_ack_valid))
