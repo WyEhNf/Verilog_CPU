@@ -212,9 +212,10 @@ module rv32_backend_joint #(
     wire [((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES + 1))-1:0] rs_occupancy;
     wire [15:0] rs_free_count = (rs_occupancy < RS_ENTRIES) ? RS_ENTRIES - rs_occupancy : 16'd0;
     wire [BE_WIDTH-1:0] rs_issue_ready;
-    wire [BE_WIDTH-1:0] rs_wake_valid;
-    wire [BE_WIDTH*TAG_WIDTH-1:0] rs_wake_tag;
-    wire [BE_WIDTH*32-1:0] rs_wake_value;
+    localparam integer RS_WAKE_WIDTH = BE_WIDTH + PRODUCERS;
+    wire [RS_WAKE_WIDTH-1:0] rs_wake_valid;
+    wire [RS_WAKE_WIDTH*TAG_WIDTH-1:0] rs_wake_tag;
+    wire [RS_WAKE_WIDTH*32-1:0] rs_wake_value;
     wire [RS_ENTRIES-1:0] rs_entry_valid;
     wire [RS_ENTRIES*TAG_WIDTH-1:0] rs_entry_rob_tag;
     reg [RS_ENTRIES-1:0] rs_flush_kill_mask;
@@ -806,7 +807,7 @@ module rv32_backend_joint #(
         .recovery_accept_o(rob_recovery_accept), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation), .entry_new_phys_o(rob_entry_new_phys), .entry_rd_we_o(rob_entry_rd_we), .entry_rd_o(rob_entry_rd), .entry_old_phys_o(rob_entry_old_phys)
     );
 
-    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .STORE_DATA_WIDTH(32)) rs (
+    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32)) rs (
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rs_alloc_valid), .alloc_op_i(trace_op_i), .alloc_pc_i(trace_pc_i), .alloc_rob_tag_i(rob_alloc_tag), .alloc_target_live_i(rob_alloc_valid), .alloc_phys_rd_i(rename_new_phys),
         .alloc_src1_value_i(rs_src1_value), .alloc_src1_tag_i(rs_src1_tag), .alloc_src1_ready_i(rs_src1_ready), .alloc_src2_value_i(rs_src2_value), .alloc_src2_tag_i(rs_src2_tag), .alloc_src2_ready_i(rs_src2_ready), .alloc_store_data_i(trace_store_data_relative), .alloc_ready_o(rs_alloc_ready), .alloc_fire_o(rs_alloc_fire), .alloc_count_o(rs_alloc_count),
         .wake_valid_i(rs_wake_valid), .wake_tag_i(rs_wake_tag), .wake_value_i(rs_wake_value), .issue_ready_i(rs_issue_ready), .issue_valid_o(rs_issue_valid), .issue_op_o(rs_issue_op), .issue_pc_o(rs_issue_pc), .issue_rob_tag_o(rs_issue_tag), .issue_phys_rd_o(rs_issue_phys), .issue_src1_value_o(rs_issue_src1), .issue_src2_value_o(rs_issue_src2), .issue_store_data_o(rs_issue_store), .issue_slot_o(rs_issue_slot), .flush_valid_i(flush_i || rob_recovery_accept), .flush_kill_mask_i(rs_flush_kill_mask), .entry_valid_o(rs_entry_valid), .entry_rob_tag_o(rs_entry_rob_tag), .occupancy_o(rs_occupancy)
@@ -996,9 +997,15 @@ module rv32_backend_joint #(
     rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .SOURCES(PRODUCERS), .FIFO_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .BYPASS(COMPLETION_BYPASS)) completion (
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .kill_valid_i(rob_recovery_accept), .kill_mask_i(completion_kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready_r), .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live_r), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}}), .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect_valid), .cdb_is_memory_o(cdb_is_memory), .cdb_is_load_o(cdb_is_load), .prf_write_valid_o(prf_write_valid), .prf_write_tag_o(prf_wb_tag), .prf_write_phys_rd_o(prf_write_phys), .prf_write_value_o(prf_write_data), .rob_ready_valid_o(rob_wb_valid), .rob_ready_tag_o(rob_wb_tag), .rob_ready_value_o(rob_wb_value), .wakeup_valid_o(wake_wb_valid), .wakeup_tag_o(wake_wb_tag), .wakeup_value_o(wake_wb_value), .entry_valid_o(completion_entry_valid), .entry_tag_o(completion_entry_tag), .occupancy_o()
     );
-    assign rs_wake_valid = wake_wb_valid;
-    assign rs_wake_tag = wake_wb_tag;
-    assign rs_wake_value = wake_wb_value;
+    // Wake dependants as soon as an execution result is accepted into the
+    // completion network.  Keep the ordinary CDB lanes in the same wake bus
+    // because older queued results still have to be observed exactly once.
+    assign rs_wake_valid = {
+        producer_valid & producer_ready & producer_rd_we & producer_target_live_r,
+        wake_wb_valid
+    };
+    assign rs_wake_tag = {producer_tag, wake_wb_tag};
+    assign rs_wake_value = {producer_value, wake_wb_value};
 
     always @* begin
         completion_valid_r = rob_wb_valid & cdb_ready;

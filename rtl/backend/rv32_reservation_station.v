@@ -9,6 +9,7 @@ module rv32_reservation_station #(
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
+    parameter integer WAKE_WIDTH = BE_WIDTH,
     parameter integer STORE_DATA_WIDTH = 32,
     parameter integer SLOT_WIDTH = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES),
     parameter integer AGE_WIDTH = 32
@@ -32,9 +33,9 @@ module rv32_reservation_station #(
     output reg  [BE_WIDTH-1:0]           alloc_fire_o,
     output reg  [((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))-1:0] alloc_count_o,
 
-    input  wire [BE_WIDTH-1:0]           wake_valid_i,
-    input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] wake_tag_i,
-    input  wire [(BE_WIDTH*32)-1:0]      wake_value_i,
+    input  wire [WAKE_WIDTH-1:0]           wake_valid_i,
+    input  wire [(WAKE_WIDTH*TAG_WIDTH)-1:0] wake_tag_i,
+    input  wire [(WAKE_WIDTH*32)-1:0]      wake_value_i,
 
     input  wire [BE_WIDTH-1:0]           issue_ready_i,
     output reg  [BE_WIDTH-1:0]           issue_valid_o,
@@ -84,6 +85,7 @@ module rv32_reservation_station #(
     integer free_entries;
     integer reset_slot;
     integer wake_slot;
+    integer wake_lane;
     integer issue_slot;
     integer issue_fire_lane;
     integer alloc_cursor;
@@ -122,18 +124,18 @@ module rv32_reservation_station #(
             src1_value_effective[slot] = src1_value_mem[slot];
             src2_ready_effective[slot] = src2_ready_mem[slot];
             src2_value_effective[slot] = src2_value_mem[slot];
-            for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
-                if (!src1_ready_effective[slot] && wake_valid_i[lane] &&
-                    wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[slot] &&
-                    wake_tag_i[lane*TAG_WIDTH] && src1_tag_mem[slot][0]) begin
+            for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
+                if (!src1_ready_effective[slot] && wake_valid_i[wake_lane] &&
+                    wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[slot] &&
+                    wake_tag_i[wake_lane*TAG_WIDTH] && src1_tag_mem[slot][0]) begin
                     src1_ready_effective[slot] = 1'b1;
-                    src1_value_effective[slot] = wake_value_i[(lane*32) +: 32];
+                    src1_value_effective[slot] = wake_value_i[(wake_lane*32) +: 32];
                 end
-                if (!src2_ready_effective[slot] && wake_valid_i[lane] &&
-                    wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[slot] &&
-                    wake_tag_i[lane*TAG_WIDTH] && src2_tag_mem[slot][0]) begin
+                if (!src2_ready_effective[slot] && wake_valid_i[wake_lane] &&
+                    wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[slot] &&
+                    wake_tag_i[wake_lane*TAG_WIDTH] && src2_tag_mem[slot][0]) begin
                     src2_ready_effective[slot] = 1'b1;
-                    src2_value_effective[slot] = wake_value_i[(lane*32) +: 32];
+                    src2_value_effective[slot] = wake_value_i[(wake_lane*32) +: 32];
                 end
             end
         end
@@ -224,18 +226,18 @@ module rv32_reservation_station #(
                     flush_count = flush_count + 1;
                 end else if (valid_mem[reset_slot]) begin
                     remaining_count = remaining_count + 1;
-                    for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
-                        if (!src1_ready_mem[reset_slot] && wake_valid_i[lane] &&
-                            wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[reset_slot] &&
-                            wake_tag_i[(lane*TAG_WIDTH)] && src1_tag_mem[reset_slot][0]) begin
+                    for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
+                        if (!src1_ready_mem[reset_slot] && wake_valid_i[wake_lane] &&
+                            wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[reset_slot] &&
+                            wake_tag_i[(wake_lane*TAG_WIDTH)] && src1_tag_mem[reset_slot][0]) begin
                             src1_ready_mem[reset_slot] <= 1'b1;
-                            src1_value_mem[reset_slot] <= wake_value_i[(lane*32) +: 32];
+                            src1_value_mem[reset_slot] <= wake_value_i[(wake_lane*32) +: 32];
                         end
-                        if (!src2_ready_mem[reset_slot] && wake_valid_i[lane] &&
-                            wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[reset_slot] &&
-                            wake_tag_i[(lane*TAG_WIDTH)] && src2_tag_mem[reset_slot][0]) begin
+                        if (!src2_ready_mem[reset_slot] && wake_valid_i[wake_lane] &&
+                            wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[reset_slot] &&
+                            wake_tag_i[(wake_lane*TAG_WIDTH)] && src2_tag_mem[reset_slot][0]) begin
                             src2_ready_mem[reset_slot] <= 1'b1;
-                            src2_value_mem[reset_slot] <= wake_value_i[(lane*32) +: 32];
+                            src2_value_mem[reset_slot] <= wake_value_i[(wake_lane*32) +: 32];
                         end
                     end
                 end
@@ -244,14 +246,14 @@ module rv32_reservation_station #(
         end else begin
             for (wake_slot = 0; wake_slot < ENTRIES; wake_slot = wake_slot + 1) begin
                 if (valid_mem[wake_slot]) begin
-                    for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
-                        if (!src1_ready_mem[wake_slot] && wake_valid_i[lane] && wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[wake_slot] && wake_tag_i[(lane*TAG_WIDTH)] && src1_tag_mem[wake_slot][0]) begin
+                    for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
+                        if (!src1_ready_mem[wake_slot] && wake_valid_i[wake_lane] && wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[wake_slot] && wake_tag_i[(wake_lane*TAG_WIDTH)] && src1_tag_mem[wake_slot][0]) begin
                             src1_ready_mem[wake_slot] <= 1'b1;
-                            src1_value_mem[wake_slot] <= wake_value_i[(lane*32) +: 32];
+                            src1_value_mem[wake_slot] <= wake_value_i[(wake_lane*32) +: 32];
                         end
-                        if (!src2_ready_mem[wake_slot] && wake_valid_i[lane] && wake_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[wake_slot] && wake_tag_i[(lane*TAG_WIDTH)] && src2_tag_mem[wake_slot][0]) begin
+                        if (!src2_ready_mem[wake_slot] && wake_valid_i[wake_lane] && wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[wake_slot] && wake_tag_i[(wake_lane*TAG_WIDTH)] && src2_tag_mem[wake_slot][0]) begin
                             src2_ready_mem[wake_slot] <= 1'b1;
-                            src2_value_mem[wake_slot] <= wake_value_i[(lane*32) +: 32];
+                            src2_value_mem[wake_slot] <= wake_value_i[(wake_lane*32) +: 32];
                         end
                     end
                 end

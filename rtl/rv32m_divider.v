@@ -44,6 +44,17 @@ module rv32m_divider #(
     reg [32:0] remainder_after;
     reg [31:0] quotient_after;
     reg [31:0] quotient_final, remainder_final;
+    wire req_want_remainder = (req_op_i == `RV32IM_OP_REM) ||
+                              (req_op_i == `RV32IM_OP_REMU);
+    wire req_signed_operation = (req_op_i == `RV32IM_OP_DIV) ||
+                                (req_op_i == `RV32IM_OP_REM);
+    wire req_divide_zero = (req_src2_i == 0);
+    wire req_signed_overflow = req_signed_operation &&
+        (req_src1_i == 32'h80000000) && (req_src2_i == 32'hffffffff);
+    wire req_fast_result = req_divide_zero || req_signed_overflow;
+    wire [31:0] req_fast_value = req_divide_zero ?
+        (req_want_remainder ? req_src1_i : 32'hffffffff) :
+        (req_want_remainder ? 32'b0 : 32'h80000000);
     wire result_discard = result_valid_reg && (!result_live_reg ||
         (live_tag_valid_i && (result_tag_reg != live_tag_i)));
 
@@ -101,7 +112,10 @@ module rv32m_divider #(
                 result_valid_reg <= 1'b0;
             if (!busy_reg) begin
                 if (req_valid_i && req_ready_o) begin
-                    busy_reg <= 1'b1;
+                    // The ISA fixes divide-by-zero and signed-overflow
+                    // results.  They do not need to occupy the 32-step
+                    // restoring datapath.
+                    busy_reg <= !req_fast_result;
                     step_reg <= 0;
                     original_a_reg <= req_src1_i;
                     original_b_reg <= req_src2_i;
@@ -118,6 +132,10 @@ module rv32m_divider #(
                     result_tag_reg <= req_rob_tag_i;
                     result_phys_reg <= req_phys_rd_i;
                     result_live_reg <= req_target_live_i && req_rob_tag_i[0];
+                    if (req_fast_result) begin
+                        result_valid_reg <= 1'b1;
+                        result_value_reg <= req_fast_value;
+                    end
                 end
             end else begin
                 dividend_reg <= {dividend_reg[30:0], 1'b0};
