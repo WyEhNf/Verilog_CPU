@@ -44,6 +44,32 @@ module rv32m_divider #(
     reg [32:0] remainder_after;
     reg [31:0] quotient_after;
     reg [31:0] quotient_final, remainder_final;
+
+    // A quotient/remainder pair is computed together by the restoring
+    // datapath.  Keep one signed and one unsigned pair so a compiler-emitted
+    // DIV/REM pair with identical operands only runs the iterator once.
+    reg signed_cache_valid_reg, unsigned_cache_valid_reg;
+    reg [31:0] signed_cache_a_reg, signed_cache_b_reg;
+    reg [31:0] signed_cache_q_reg, signed_cache_r_reg;
+    reg [31:0] unsigned_cache_a_reg, unsigned_cache_b_reg;
+    reg [31:0] unsigned_cache_q_reg, unsigned_cache_r_reg;
+
+    function [5:0] count_leading_zeros;
+        input [31:0] value;
+        integer bit_index;
+        reg found_one;
+        begin
+            count_leading_zeros = 6'd32;
+            found_one = 1'b0;
+            for (bit_index = 31; bit_index >= 0; bit_index = bit_index - 1) begin
+                if (!found_one && value[bit_index]) begin
+                    count_leading_zeros = 31 - bit_index;
+                    found_one = 1'b1;
+                end
+            end
+        end
+    endfunction
+
     wire req_want_remainder = (req_op_i == `RV32IM_OP_REM) ||
                               (req_op_i == `RV32IM_OP_REMU);
     wire req_signed_operation = (req_op_i == `RV32IM_OP_DIV) ||
@@ -51,10 +77,36 @@ module rv32m_divider #(
     wire req_divide_zero = (req_src2_i == 0);
     wire req_signed_overflow = req_signed_operation &&
         (req_src1_i == 32'h80000000) && (req_src2_i == 32'hffffffff);
-    wire req_fast_result = req_divide_zero || req_signed_overflow;
+    wire req_sign_a = req_signed_operation && req_src1_i[31];
+    wire req_sign_b = req_signed_operation && req_src2_i[31];
+    wire [31:0] req_abs_a = req_sign_a ? (~req_src1_i + 32'd1) : req_src1_i;
+    wire [31:0] req_abs_b = req_sign_b ? (~req_src2_i + 32'd1) : req_src2_i;
+    wire req_dividend_smaller = !req_divide_zero &&
+                                !req_signed_overflow &&
+                                (req_abs_a < req_abs_b);
+    wire req_signed_cache_hit = req_signed_operation &&
+                                signed_cache_valid_reg &&
+                                (signed_cache_a_reg == req_src1_i) &&
+                                (signed_cache_b_reg == req_src2_i);
+    wire req_unsigned_cache_hit = !req_signed_operation &&
+                                  unsigned_cache_valid_reg &&
+                                  (unsigned_cache_a_reg == req_src1_i) &&
+                                  (unsigned_cache_b_reg == req_src2_i);
+    wire req_cache_hit = req_signed_cache_hit || req_unsigned_cache_hit;
+    wire [31:0] req_cached_quotient = req_signed_operation ?
+                                      signed_cache_q_reg : unsigned_cache_q_reg;
+    wire [31:0] req_cached_remainder = req_signed_operation ?
+                                       signed_cache_r_reg : unsigned_cache_r_reg;
+    wire req_fast_result = req_divide_zero || req_signed_overflow ||
+                           req_dividend_smaller || req_cache_hit;
     wire [31:0] req_fast_value = req_divide_zero ?
         (req_want_remainder ? req_src1_i : 32'hffffffff) :
-        (req_want_remainder ? 32'b0 : 32'h80000000);
+        (req_signed_overflow ?
+         (req_want_remainder ? 32'b0 : 32'h80000000) :
+         (req_dividend_smaller ?
+          (req_want_remainder ? req_src1_i : 32'b0) :
+          (req_want_remainder ? req_cached_remainder : req_cached_quotient)));
+    wire [5:0] req_skip_steps = count_leading_zeros(req_abs_a);
     wire result_discard = result_valid_reg && (!result_live_reg ||
         (live_tag_valid_i && (result_tag_reg != live_tag_i)));
 
@@ -107,6 +159,16 @@ module rv32m_divider #(
             result_phys_reg <= 0;
             result_live_reg <= 0;
             result_value_reg <= 0;
+            signed_cache_valid_reg <= 1'b0;
+            unsigned_cache_valid_reg <= 1'b0;
+            signed_cache_a_reg <= 32'b0;
+            signed_cache_b_reg <= 32'b0;
+            signed_cache_q_reg <= 32'b0;
+            signed_cache_r_reg <= 32'b0;
+            unsigned_cache_a_reg <= 32'b0;
+            unsigned_cache_b_reg <= 32'b0;
+            unsigned_cache_q_reg <= 32'b0;
+            unsigned_cache_r_reg <= 32'b0;
         end else begin
             if (result_valid_reg && (result_discard || resp_ready_i))
                 result_valid_reg <= 1'b0;
@@ -116,17 +178,17 @@ module rv32m_divider #(
                     // results.  They do not need to occupy the 32-step
                     // restoring datapath.
                     busy_reg <= !req_fast_result;
-                    step_reg <= 0;
+                    step_reg <= req_skip_steps;
                     original_a_reg <= req_src1_i;
                     original_b_reg <= req_src2_i;
                     signed_mode_reg <= (req_op_i == `RV32IM_OP_DIV) || (req_op_i == `RV32IM_OP_REM);
                     want_remainder_reg <= (req_op_i == `RV32IM_OP_REM) || (req_op_i == `RV32IM_OP_REMU);
-                    sign_a_reg <= ((req_op_i == `RV32IM_OP_DIV) || (req_op_i == `RV32IM_OP_REM)) && req_src1_i[31];
-                    sign_b_reg <= ((req_op_i == `RV32IM_OP_DIV) || (req_op_i == `RV32IM_OP_REM)) && req_src2_i[31];
+                    sign_a_reg <= req_sign_a;
+                    sign_b_reg <= req_sign_b;
                     divide_zero_reg <= (req_src2_i == 0);
                     signed_overflow_reg <= ((req_op_i == `RV32IM_OP_DIV) && (req_src1_i == 32'h80000000) && (req_src2_i == 32'hffffffff));
-                    dividend_reg <= (((req_op_i == `RV32IM_OP_DIV) || (req_op_i == `RV32IM_OP_REM)) && req_src1_i[31]) ? (~req_src1_i + 32'd1) : req_src1_i;
-                    divisor_reg <= (((req_op_i == `RV32IM_OP_DIV) || (req_op_i == `RV32IM_OP_REM)) && req_src2_i[31]) ? (~req_src2_i + 32'd1) : req_src2_i;
+                    dividend_reg <= req_abs_a << req_skip_steps;
+                    divisor_reg <= req_abs_b;
                     quotient_reg <= 0;
                     remainder_reg <= 0;
                     result_tag_reg <= req_rob_tag_i;
@@ -153,6 +215,19 @@ module rv32m_divider #(
                         result_value_reg <= want_remainder_reg ? 32'b0 : 32'h80000000;
                     end else begin
                         result_value_reg <= want_remainder_reg ? remainder_final : quotient_final;
+                        if (signed_mode_reg) begin
+                            signed_cache_valid_reg <= 1'b1;
+                            signed_cache_a_reg <= original_a_reg;
+                            signed_cache_b_reg <= original_b_reg;
+                            signed_cache_q_reg <= quotient_final;
+                            signed_cache_r_reg <= remainder_final;
+                        end else begin
+                            unsigned_cache_valid_reg <= 1'b1;
+                            unsigned_cache_a_reg <= original_a_reg;
+                            unsigned_cache_b_reg <= original_b_reg;
+                            unsigned_cache_q_reg <= quotient_final;
+                            unsigned_cache_r_reg <= remainder_final;
+                        end
                     end
                 end else begin
                     step_reg <= step_reg + 1'b1;
