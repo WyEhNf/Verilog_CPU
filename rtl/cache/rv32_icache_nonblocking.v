@@ -73,6 +73,11 @@ module rv32_icache_nonblocking #(
     integer prefetch_remaining;
     reg last_demand_valid;
     reg [31:0] last_demand_line;
+    // Count transactions that have crossed the external interface, including
+    // old-epoch requests whose cache MSHRs were already recycled.  Keeping
+    // one request slot out of speculative use lets a redirected demand enter
+    // a full high-latency memory queue without discarding stream coverage.
+    reg [4:0] mem_inflight_count;
 
     wire [31:0] request_line = {if_req_pc_i[31:4], 4'b0000};
     wire [4:0] request_set = if_req_pc_i[8:4];
@@ -129,6 +134,8 @@ module rv32_icache_nonblocking #(
             if (mshr_valid[k] &&
                 (mshr_txn_epoch[k] == current_epoch_i) &&
                 !mshr_sent[k] &&
+                (!mshr_prefetch[k] ||
+                 (mem_inflight_count < (MSHR_ENTRIES-1))) &&
                 (!send_found ||
                  (mshr_prefetch[send_index] && !mshr_prefetch[k]))) begin
                 // A demand miss must not wait behind speculative stream
@@ -199,6 +206,8 @@ module rv32_icache_nonblocking #(
     wire prefetch_step_allocates = prefetch_step &&
                                     !prefetch_line_resident &&
                                     !prefetch_match_found;
+    wire mem_request_fire = mem_req_valid_o && mem_req_ready_i;
+    wire mem_response_fire = mem_resp_valid_i && mem_resp_ready_o;
 
     wire [4:0] refill_set = mem_resp_line_addr_i[8:4];
     wire [5:0] refill_way0 = {refill_set, 1'b0};
@@ -246,6 +255,7 @@ module rv32_icache_nonblocking #(
             prefetch_remaining <= 0;
             last_demand_valid <= 1'b0;
             last_demand_line <= 32'd0;
+            mem_inflight_count <= 5'd0;
             event_request_o <= 1'b0;
             event_hit_o <= 1'b0;
             event_miss_o <= 1'b0;
@@ -362,10 +372,16 @@ module rv32_icache_nonblocking #(
                 end
             end
 
-            if (mem_req_valid_o && mem_req_ready_i)
+            if (mem_request_fire)
                 mshr_sent[send_index] <= 1'b1;
 
-            if (mem_resp_valid_i && mem_resp_ready_o &&
+            case ({mem_request_fire, mem_response_fire})
+                2'b10: mem_inflight_count <= mem_inflight_count + 5'd1;
+                2'b01: mem_inflight_count <= mem_inflight_count - 5'd1;
+                default: mem_inflight_count <= mem_inflight_count;
+            endcase
+
+            if (mem_response_fire &&
                 response_target_found) begin
                 mshr_valid[response_index] <= 1'b0;
                 mshr_sent[response_index] <= 1'b0;
