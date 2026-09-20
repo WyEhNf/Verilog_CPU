@@ -35,6 +35,8 @@ module rv32_branch_predictor (
     reg [23:0] btb_tag [0:63];
     reg [31:0] btb_target [0:63];
     reg [1:0] btb_kind [0:63];
+    reg        ras_valid;
+    reg [31:0] ras_target;
 
     wire [6:0] query_opcode = query_inst_i[6:0];
     wire [7:0] query_bht_index = query_pc_i[9:2];
@@ -44,6 +46,12 @@ module rv32_branch_predictor (
     wire [31:0] jal_imm = {{11{query_inst_i[31]}}, query_inst_i[31],
                            query_inst_i[19:12], query_inst_i[20],
                            query_inst_i[30:21], 1'b0};
+    wire [31:0] branch_imm = {{19{query_inst_i[31]}}, query_inst_i[31],
+                              query_inst_i[7], query_inst_i[30:25],
+                              query_inst_i[11:8], 1'b0};
+    wire query_is_return = (query_inst_i[11:7] == 5'd0) &&
+                           ((query_inst_i[19:15] == 5'd1) ||
+                            (query_inst_i[19:15] == 5'd5));
     wire [7:0] feedback_bht_index = feedback_pc_i[9:2];
     wire [5:0] feedback_btb_index = feedback_pc_i[7:2];
     integer i;
@@ -67,6 +75,11 @@ module rv32_branch_predictor (
                     if (bht[query_bht_index][1] && pred_btb_hit_o) begin
                         pred_taken_o = 1'b1;
                         pred_target_o = btb_target[query_btb_index];
+                    end else if (!pred_btb_hit_o && branch_imm[31]) begin
+                        // Backward-taken/forward-not-taken gives a cold loop a
+                        // useful target before its first BTB allocation.
+                        pred_taken_o = 1'b1;
+                        pred_target_o = query_pc_i + branch_imm;
                     end
                 end
                 7'b1101111: begin
@@ -79,7 +92,10 @@ module rv32_branch_predictor (
                         pred_kind_o = `RV32IM_PRED_JALR;
                         pred_btb_hit_o = query_btb_match &&
                                          (btb_kind[query_btb_index] == `RV32IM_PRED_JALR);
-                        if (pred_btb_hit_o) begin
+                        if (query_is_return && ras_valid) begin
+                            pred_taken_o = 1'b1;
+                            pred_target_o = ras_target;
+                        end else if (pred_btb_hit_o) begin
                             pred_taken_o = 1'b1;
                             pred_target_o = btb_target[query_btb_index];
                         end
@@ -94,6 +110,8 @@ module rv32_branch_predictor (
         if (reset_i) begin
             prediction_count_o <= 32'd0;
             correct_count_o <= 32'd0;
+            ras_valid <= 1'b0;
+            ras_target <= 32'd0;
             for (i = 0; i < 256; i = i + 1)
                 bht[i] <= 2'b10; // weakly taken
             for (i = 0; i < 64; i = i + 1) begin
@@ -119,12 +137,21 @@ module rv32_branch_predictor (
                 end else if (bht[feedback_bht_index] != 2'b00) begin
                     bht[feedback_bht_index] <= bht[feedback_bht_index] - 2'b01;
                 end
+            end else if (feedback_kind_i == `RV32IM_PRED_JAL) begin
+                // A single-entry return stack captures the common leaf-call
+                // case at negligible cost.  Wrong-path contents only affect
+                // prediction quality; normal redirect recovery remains exact.
+                if (feedback_taken_i) begin
+                    ras_valid <= 1'b1;
+                    ras_target <= feedback_pc_i + 32'd4;
+                end
             end else if (feedback_kind_i == `RV32IM_PRED_JALR) begin
                 if (feedback_taken_i) begin
                     btb_valid[feedback_btb_index] <= 1'b1;
                     btb_tag[feedback_btb_index] <= feedback_pc_i[31:8];
                     btb_target[feedback_btb_index] <= {feedback_target_i[31:1], 1'b0};
                     btb_kind[feedback_btb_index] <= `RV32IM_PRED_JALR;
+                    ras_valid <= 1'b0;
                 end
             end
         end
