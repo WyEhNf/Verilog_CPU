@@ -394,7 +394,7 @@ module rv32_lsq #(
         for (scan = 0; scan < LSQ_ENTRIES; scan = scan + 1) begin
             age = scan - head_reg;
             if (age < 0) age = age + LSQ_ENTRIES;
-            if (age < occupancy_reg && valid_mem[scan] && !candidate_found) begin
+            if (age < occupancy_reg && valid_mem[scan]) begin
                 blocked = 1'b0;
                 if (load_mem[scan] && addr_ready_mem[scan] && !request_sent_mem[scan] && !complete_mem[scan]) begin
                     target_mask = access_mask(size_mem[scan]);
@@ -415,13 +415,14 @@ module rv32_lsq #(
                             end
                         end
                     end
-                    if (!blocked) begin
+                    if (!blocked && age < candidate_age) begin
                         candidate_found = 1'b1;
                         candidate = scan;
                         candidate_age = age;
                     end
                 end else if (store_mem[scan] && addr_ready_mem[scan] &&
-                             data_ready_mem[scan] && store_commit_mem[scan] && !request_sent_mem[scan]) begin
+                             data_ready_mem[scan] && store_commit_mem[scan] &&
+                             !request_sent_mem[scan] && age < candidate_age) begin
                     candidate_found = 1'b1;
                     candidate = scan;
                     candidate_age = age;
