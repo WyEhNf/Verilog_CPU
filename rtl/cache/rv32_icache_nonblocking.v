@@ -152,9 +152,13 @@ module rv32_icache_nonblocking #(
                  mshr_control_prefetch[k]) &&
                 !mshr_sent[k] &&
                 (!send_found ||
-                 (mshr_prefetch[send_index] && !mshr_prefetch[k]))) begin
-                // A demand miss must not wait behind speculative stream
-                // traffic.  This matters most immediately after a redirect.
+                 (mshr_prefetch[send_index] && !mshr_prefetch[k]) ||
+                 (mshr_prefetch[send_index] && mshr_prefetch[k] &&
+                  !mshr_control_prefetch[send_index] &&
+                  mshr_control_prefetch[k]))) begin
+                // Priority is demand, then a decoded direct-control target,
+                // then ordinary sequential traffic.  The target line used
+                // to sit behind a stale fall-through prefetch at startup.
                 send_found = 1'b1;
                 send_index = k;
             end
