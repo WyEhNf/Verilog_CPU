@@ -153,6 +153,8 @@ module cpu_core_image_tb #(
     end
 
     initial begin
+        $display("EVAL_MEMORY: unified=1 latency=%0d i_outstanding=%0d d_outstanding=%0d line_bytes=16",
+                 MEMORY_LATENCY, I_MEMORY_OUTSTANDING, D_MEMORY_OUTSTANDING);
         expected_value = 0;
         max_cycles = 100000;
         max_no_retire_cycles = 100000;
@@ -315,6 +317,43 @@ module cpu_core_image_tb #(
             $fclose(trace_file);
         $finish(finish_code);
     end
+
+    generate if (SERIAL_BACKEND == 0) begin : g_lsq_integrity_check
+        integer live_count, offset, slot_index;
+        reg ring_error;
+        reg previous_recovery;
+        reg [31:0] previous_recovery_tag;
+        always @(posedge clk) begin
+            if (!reset && $test$plusargs("CHECK_LSQ")) begin
+                live_count = 0;
+                ring_error = 1'b0;
+                for (offset = 0; offset < LSQ_ENTRIES; offset = offset + 1) begin
+                    slot_index = (dut.g_ooo_backend.backend.lsq.head_reg + offset) % LSQ_ENTRIES;
+                    if (dut.g_ooo_backend.backend.lsq.valid_mem[slot_index]) live_count = live_count + 1;
+                    if (dut.g_ooo_backend.backend.lsq.valid_mem[slot_index] !=
+                        (offset < dut.g_ooo_backend.backend.lsq.occupancy_reg)) ring_error = 1'b1;
+                end
+                if (ring_error || live_count != dut.g_ooo_backend.backend.lsq.occupancy_reg) begin
+                    $display("FAIL: LSQ ring invariant cycle=%0d head=%0d tail=%0d count=%0d live=%0d previous_recovery=%b tag=%x",
+                             cycles, dut.g_ooo_backend.backend.lsq.head_reg,
+                             dut.g_ooo_backend.backend.lsq.tail_reg,
+                             dut.g_ooo_backend.backend.lsq.occupancy_reg, live_count,
+                             previous_recovery, previous_recovery_tag);
+                    for (offset = 0; offset < LSQ_ENTRIES; offset = offset + 1)
+                        $display("LSQ_RING: slot=%0d valid=%b load=%b store=%b reported=%b committed=%b rob=%x",
+                                 offset, dut.g_ooo_backend.backend.lsq.valid_mem[offset],
+                                 dut.g_ooo_backend.backend.lsq.load_mem[offset],
+                                 dut.g_ooo_backend.backend.lsq.store_mem[offset],
+                                 dut.g_ooo_backend.backend.lsq.load_reported_mem[offset],
+                                 dut.g_ooo_backend.backend.lsq.store_commit_mem[offset],
+                                 dut.g_ooo_backend.backend.lsq.rob_tag_mem[offset]);
+                    $finish(1);
+                end
+            end
+            previous_recovery <= dut.g_ooo_backend.backend.rob_recovery_accept;
+            previous_recovery_tag <= dut.g_ooo_backend.backend.branch_pending_tag;
+        end
+    end endgenerate
 
     always @(posedge clk) begin
         if (trace_file != 0) begin
