@@ -324,6 +324,18 @@ module rv32_lsq #(
     assign tail_o = tail_reg;
     assign alloc_ready_o = !flush_i && (free_count_calc != 0);
 
+    // Physical-slot age is a narrow modulo subtraction (LSQ_ENTRIES is a
+    // power of two). Hazard detection is an unordered OR, so inspect each
+    // physical store directly instead of muxing the whole store array through
+    // head+offset once per older age and once per candidate load.
+    wire [SLOT_WIDTH-1:0] entry_age [0:LSQ_ENTRIES-1];
+    genvar age_slot;
+    generate
+        for (age_slot = 0; age_slot < LSQ_ENTRIES; age_slot = age_slot + 1) begin : g_entry_age
+            assign entry_age[age_slot] = (age_slot - head_reg) & (LSQ_ENTRIES - 1);
+        end
+    endgenerate
+
     initial begin
         if ((BE_WIDTH != 1) && (BE_WIDTH != 2) && (BE_WIDTH != 4)) begin
             $display("ERROR: invalid LSQ BE_WIDTH=%0d; expected 1, 2, or 4", BE_WIDTH);
@@ -404,10 +416,8 @@ module rv32_lsq #(
                 blocked = 1'b0;
                 if (load_mem[scan] && addr_ready_mem[scan] && !request_sent_mem[scan] && !complete_mem[scan]) begin
                     target_mask = access_mask(size_mem[scan]);
-                    for (older_age = 0; older_age < LSQ_ENTRIES; older_age = older_age + 1) begin
-                        if (older_age < age) begin
-                            i = head_reg + older_age;
-                            if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
+                    for (i = 0; i < LSQ_ENTRIES; i = i + 1) begin
+                        if (entry_age[i] < age) begin
                             if (valid_mem[i] && store_mem[i]) begin
                                 if (!addr_ready_mem[i]) begin
                                     blocked = 1'b1;
