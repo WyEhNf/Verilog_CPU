@@ -243,13 +243,13 @@ module rv32_rob #(
         end
         for (reclaim_phys = 0; reclaim_phys < RECLAIM_LEAVES; reclaim_phys = reclaim_phys + 1) begin : g_reclaim_phys
             if (reclaim_phys > 0 && reclaim_phys < PHYS_REGS) begin : g_register
-                wire [ROB_ENTRIES-1:0] matches;
+                wire [ROB_ENTRIES-1:0] destination_matches;
                 for (reclaim_match = 0; reclaim_match < ROB_ENTRIES; reclaim_match = reclaim_match + 1) begin : g_match
-                    assign matches[reclaim_match] = reclaim_eligible[reclaim_match] &&
+                    assign destination_matches[reclaim_match] = reclaim_eligible[reclaim_match] &&
                         (new_phys_mem[reclaim_match] == reclaim_phys);
                 end
-                assign reclaim_bitmap[reclaim_phys] = |matches;
-                assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys] = |matches;
+                assign reclaim_bitmap[reclaim_phys] = |destination_matches;
+                assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys] = |destination_matches;
             end else begin : g_zero
                 if (reclaim_phys == 0) assign reclaim_bitmap[0] = 1'b0;
                 assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys] = 0;
