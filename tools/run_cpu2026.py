@@ -108,6 +108,7 @@ def main(argv=None):
                 "+IMAGE=" + result["image"], "+TEST=cpu2026-" + name,
                 "+EXPECTED=0", "+MAX_CYCLES=" + str(max_cycles),
                 "+MAX_NO_RETIRE_CYCLES=1000000",
+                "+CHECK_LSQ",
             ]
             execute = ([args.executable] if args.executable else
                        [args.vvp, "-N", args.simulation]) + plusargs

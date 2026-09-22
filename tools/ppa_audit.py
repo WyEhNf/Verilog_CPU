@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble the current CPU-2026/Yosys/ASAP7 PPA evidence into one report."""
+"""Assemble the saved large-configuration CPU-2026/Yosys/ASAP7 snapshots."""
 
 import argparse
 import json
@@ -203,13 +203,14 @@ def main():
     json_output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
     lines = [
-        "# CPU PPA complete audit (2026-09-22)",
+        "# CPU PPA audit: large-configuration reference snapshots (2026-09-22)",
         "",
         "## Verdict",
         "",
-        "The current design does **not** satisfy any scoring stage because the 300 MHz gate is not met. "
+        "These saved large-configuration snapshots do **not** satisfy any scoring stage because the 300 MHz gate is not met. "
         "The six CPU-2026 tests pass and aggregate IPC is {:.6f}, but the best audited standard-cell timing variant reaches only {:.2f} MHz.".format(
             aggregate_ipc, timing["fmax_mhz"]),
+        "These measurements predate the retired-load LSQ repair. See `evaluation_alignment_2026-09-22.md` for the newer experiments; do not combine snapshots from different RTL versions as proof of qualification.",
         "",
         "## Evidence",
         "",
