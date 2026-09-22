@@ -16,6 +16,8 @@ param(
     [int]$IcacheMshrs = 8,
     [int]$DcacheMshrs = 4,
     [int]$DcacheLines = 256,
+    [int]$MemoryLatency = 50,
+    [int]$BuildJobs = 2,
     [int]$IMemoryOutstanding = 8,
     [int]$DMemoryOutstanding = 4,
     [int]$FetchQueueDepth = 16,
@@ -112,6 +114,7 @@ try {
 
     $arguments = @(
         "--binary",
+        "-j", "$BuildJobs",
         "--timing",
         "-Wno-fatal",
         "--language", "1364-2005",
@@ -131,6 +134,7 @@ try {
         "-GICACHE_MSHRS=$IcacheMshrs",
         "-GDCACHE_MSHRS=$DcacheMshrs",
         "-GDCACHE_LINES=$DcacheLines",
+        "-GMEMORY_LATENCY=$MemoryLatency",
         "-GI_MEMORY_OUTSTANDING=$IMemoryOutstanding",
         "-GD_MEMORY_OUTSTANDING=$DMemoryOutstanding",
         "-GFETCH_QUEUE_DEPTH=$FetchQueueDepth",

@@ -89,7 +89,13 @@ procs
 opt
 fsm
 opt
-memory -nomap
+# The generic `memory -nomap` pipeline runs opt_mem_priority over every
+# multi-write-port ROB/RS/LSQ array.  That pass is quadratic in the generated
+# write ports and does not change the priced result here because the memories
+# deliberately remain unpriced black boxes.  Merge adjacent registers where
+# possible, then collect the exact geometry/ports without rewriting priority.
+memory_dff
+memory_collect
 # Preserve the memory geometry and port counts before technology mapping.  The
 # post-run audit treats every one of these cells as unpriced until an SRAM,
 # banked/replicated macro implementation, or explicit standard-cell mapping is

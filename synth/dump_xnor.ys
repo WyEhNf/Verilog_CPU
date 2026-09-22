@@ -1,0 +1,2 @@
+read_liberty -wb _asap7_lib_filtered/asap7sc7p5t_SIMPLE_RVT_TT_nldm_201020.lib
+write_verilog -blackboxes -noattr build/simple_cells.v

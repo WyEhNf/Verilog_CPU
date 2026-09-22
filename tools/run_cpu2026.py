@@ -23,6 +23,17 @@ class BenchmarkError(Exception):
     pass
 
 
+def evaluation_memory(output, required_latency):
+    match = re.search(r"EVAL_MEMORY: unified=(\d+) latency=(\d+) i_outstanding=(\d+) d_outstanding=(\d+) line_bytes=(\d+)", output)
+    if not match:
+        raise BenchmarkError("simulation omitted the compiled memory configuration; rebuild the runner")
+    keys = ("unified", "latency_cycles", "i_outstanding", "d_outstanding", "line_bytes")
+    config = dict(zip(keys, map(int, match.groups())))
+    if config["unified"] != 1 or config["latency_cycles"] != required_latency:
+        raise BenchmarkError("compiled memory configuration does not match requested evaluation: {}".format(config))
+    return config
+
+
 def run(command, cwd, capture=False):
     print("+ " + " ".join(str(item) for item in command), flush=True)
     completed = subprocess.run(
@@ -52,6 +63,8 @@ def main(argv=None):
     parser.add_argument("--preallocate", choices=("0", "1"), default="0")
     parser.add_argument("--report", default="build/cpu2026/report.json")
     parser.add_argument("--config", default="unspecified")
+    parser.add_argument("--memory-latency", type=int, default=20,
+                        help="Required compiled main-memory latency (performance scoring: 20)")
     args = parser.parse_args(argv)
 
     root = Path(__file__).resolve().parents[1]
@@ -99,6 +112,7 @@ def main(argv=None):
             execute = ([args.executable] if args.executable else
                        [args.vvp, "-N", args.simulation]) + plusargs
             output = run(execute, root, capture=True)
+            result["memory"] = evaluation_memory(output, args.memory_latency)
             metrics = re.search(
                 r"PASS: JOIN-02 image=cpu2026-{} return=0 cycles=(\d+) instret=(\d+)".format(
                     re.escape(name)), output)
@@ -114,6 +128,7 @@ def main(argv=None):
         "format": "cpu2026-verilator-v1",
         "config": args.config,
         "preallocate": int(args.preallocate),
+        "required_memory_latency_cycles": args.memory_latency,
         "results": results,
     }
     if not args.build_only:
