@@ -4,8 +4,11 @@ module rv32_lsq_hazard_tb #(
     parameter integer ENTRIES = 8
 );
     integer seed, trial, slot, offset, older, index, age, best, best_age;
+    integer load_byte, store_byte, load_bytes;
     reg blocked;
     reg [19:0] load_mask, store_mask;
+    reg [3:0] expected_forward_mask;
+    reg [31:0] expected_forward_data;
     rv32_lsq #(.BE_WIDTH(2), .LSQ_ENTRIES(ENTRIES)) dut (
         .clk_i(1'b0), .reset_i(1'b0), .flush_i(1'b0),
         .alloc_valid_i(2'b0), .store_commit_rob_tag_i(16'b0),
@@ -71,6 +74,30 @@ module rv32_lsq_hazard_tb #(
             if (dut.candidate_found !== (best >= 0) ||
                 (best >= 0 && (dut.candidate != best || dut.candidate_age != best_age)))
                 $fatal(1, "hazard mismatch trial=%0d head=%0d expected=%0d actual=%0d", trial, dut.head_reg, best, dut.candidate);
+            expected_forward_mask = 0;
+            expected_forward_data = 0;
+            if (best >= 0 && dut.load_mem[best]) begin
+                load_bytes = (dut.size_mem[best] == 0) ? 1 : ((dut.size_mem[best] == 1) ? 2 : 4);
+                // Architectural age order means each later store overwrites
+                // only its overlapping bytes; no reference winner tree.
+                for (older = 0; older < best_age; older = older + 1) begin
+                    slot = (dut.head_reg + older) % ENTRIES;
+                    if (dut.valid_mem[slot] && dut.store_mem[slot] &&
+                        dut.addr_ready_mem[slot] && dut.data_ready_mem[slot] &&
+                        dut.addr_mem[slot][31:4] == dut.addr_mem[best][31:4]) begin
+                        for (load_byte = 0; load_byte < load_bytes; load_byte = load_byte + 1)
+                            for (store_byte = 0; store_byte < 4; store_byte = store_byte + 1)
+                                if (dut.mask_mem[slot][store_byte] &&
+                                    (dut.addr_mem[slot][3:0] + store_byte == dut.addr_mem[best][3:0] + load_byte)) begin
+                                    expected_forward_mask[load_byte] = 1;
+                                    expected_forward_data[load_byte*8 +: 8] = dut.data_mem[slot][store_byte*8 +: 8];
+                                end
+                    end
+                end
+                if (dut.fwd_mask !== expected_forward_mask || dut.fwd_data !== expected_forward_data)
+                    $fatal(1, "forward mismatch trial=%0d expected mask=%h data=%h actual mask=%h data=%h", trial,
+                        expected_forward_mask, expected_forward_data, dut.fwd_mask, dut.fwd_data);
+            end
         end
         $display("PASS: LSQ static hazard ENTRIES=%0d trials=%0d", ENTRIES, trial);
         $finish;
