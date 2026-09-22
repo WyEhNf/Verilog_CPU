@@ -47,7 +47,7 @@ module rv32_icache_nonblocking #(
     // 1 KiB total, two ways x 32 sets.  The two-way organization keeps the
     // startup return line resident when linked code at 0x1000 maps to the
     // same set, without increasing the 64-line data capacity.
-    reg valid_mem [0:63];
+    reg [63:0] valid_bits;
     reg [22:0] tag_mem [0:63];
     reg [127:0] data_mem [0:63];
     reg lru_mem [0:31];
@@ -81,9 +81,9 @@ module rv32_icache_nonblocking #(
     wire [22:0] request_tag = if_req_pc_i[31:9];
     wire [5:0] request_way0 = {request_set, 1'b0};
     wire [5:0] request_way1 = {request_set, 1'b1};
-    wire request_hit_way0 = valid_mem[request_way0] &&
+    wire request_hit_way0 = valid_bits[request_way0] &&
                             (tag_mem[request_way0] == request_tag);
-    wire request_hit_way1 = valid_mem[request_way1] &&
+    wire request_hit_way1 = valid_bits[request_way1] &&
                             (tag_mem[request_way1] == request_tag);
     wire request_hit = request_hit_way0 || request_hit_way1;
     wire [5:0] request_entry = request_hit_way1 ? request_way1 : request_way0;
@@ -236,10 +236,10 @@ module rv32_icache_nonblocking #(
         end
         if (control_target_valid) begin
             control_target_present =
-                (valid_mem[{control_target[8:4], 1'b0}] &&
+                (valid_bits[{control_target[8:4], 1'b0}] &&
                  (tag_mem[{control_target[8:4], 1'b0}] ==
                   control_target[31:9])) ||
-                (valid_mem[{control_target[8:4], 1'b1}] &&
+                (valid_bits[{control_target[8:4], 1'b1}] &&
                  (tag_mem[{control_target[8:4], 1'b1}] ==
                   control_target[31:9])) ||
                 (request_fire &&
@@ -267,9 +267,9 @@ module rv32_icache_nonblocking #(
     wire [5:0] prefetch_way0 = {prefetch_set, 1'b0};
     wire [5:0] prefetch_way1 = {prefetch_set, 1'b1};
     wire prefetch_line_resident =
-        (valid_mem[prefetch_way0] &&
+        (valid_bits[prefetch_way0] &&
          (tag_mem[prefetch_way0] == prefetch_tag)) ||
-        (valid_mem[prefetch_way1] &&
+        (valid_bits[prefetch_way1] &&
          (tag_mem[prefetch_way1] == prefetch_tag));
     wire prefetch_step = prefetch_active && (prefetch_remaining > 0) &&
                          !request_allocates && !stream_reset &&
@@ -284,8 +284,8 @@ module rv32_icache_nonblocking #(
     wire [5:0] refill_way1 = {refill_set, 1'b1};
     wire refill_conflicts_with_hit = request_fire && request_hit &&
                                      (request_set == refill_set);
-    wire [5:0] refill_entry = !valid_mem[refill_way0] ? refill_way0 :
-                              (!valid_mem[refill_way1] ? refill_way1 :
+    wire [5:0] refill_entry = !valid_bits[refill_way0] ? refill_way0 :
+                              (!valid_bits[refill_way1] ? refill_way1 :
                                (refill_conflicts_with_hit ?
                                 {refill_set, ~request_entry[0]} :
                                 {refill_set, lru_mem[refill_set]}));
@@ -331,9 +331,7 @@ module rv32_icache_nonblocking #(
             event_miss_o <= 1'b0;
             event_refill_o <= 1'b0;
             event_stall_o <= 1'b0;
-            for (reset_index = 0; reset_index < 64; reset_index = reset_index + 1) begin
-                valid_mem[reset_index] <= 1'b0;
-            end
+            valid_bits <= 64'd0;
             for (reset_index = 0; reset_index < 32; reset_index = reset_index + 1)
                 lru_mem[reset_index] <= 1'b0;
             for (reset_index = 0; reset_index < MSHR_ENTRIES; reset_index = reset_index + 1) begin
@@ -457,7 +455,7 @@ module rv32_icache_nonblocking #(
                 mshr_control_prefetch[response_index] <= 1'b0;
                 event_refill_o <= !mem_resp_error_i && response_matches;
                 if (!mem_resp_error_i && response_matches) begin
-                    valid_mem[refill_entry] <= 1'b1;
+                    valid_bits[refill_entry] <= 1'b1;
                     tag_mem[refill_entry] <= mem_resp_line_addr_i[31:9];
                     data_mem[refill_entry] <= mem_resp_data_i;
                     lru_mem[refill_set] <= ~refill_entry[0];
