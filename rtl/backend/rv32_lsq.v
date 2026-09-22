@@ -154,7 +154,6 @@ module rv32_lsq #(
     integer candidate;
     integer candidate_age;
     integer age;
-    integer older_age;
     integer alloc_count_calc;
     integer free_count_calc;
     integer pop_count_calc;
@@ -177,7 +176,6 @@ module rv32_lsq #(
     reg [3:0] target_mask;
     reg [3:0] fwd_mask;
     reg [31:0] fwd_data;
-    reg [3:0] overlap;
     reg [31:0] response_word;
     reg [31:0] merged_word;
     reg request_fire;
@@ -329,10 +327,65 @@ module rv32_lsq #(
     // physical store directly instead of muxing the whole store array through
     // head+offset once per older age and once per candidate load.
     wire [SLOT_WIDTH-1:0] entry_age [0:LSQ_ENTRIES-1];
+    reg [LSQ_ENTRIES-1:0] request_eligible;
+    wire pick_valid [1:2*LSQ_ENTRIES-1];
+    wire [SLOT_WIDTH-1:0] pick_slot [1:2*LSQ_ENTRIES-1];
+    wire [SLOT_WIDTH-1:0] pick_age [1:2*LSQ_ENTRIES-1];
+    wire [3:0] store_overlap [0:LSQ_ENTRIES-1];
+    wire [31:0] store_forward_data [0:LSQ_ENTRIES-1];
+    wire [3:0] tree_forward_mask;
+    wire [31:0] tree_forward_data;
     genvar age_slot;
     generate
         for (age_slot = 0; age_slot < LSQ_ENTRIES; age_slot = age_slot + 1) begin : g_entry_age
             assign entry_age[age_slot] = (age_slot - head_reg) & (LSQ_ENTRIES - 1);
+            assign pick_valid[LSQ_ENTRIES+age_slot] = request_eligible[age_slot];
+            assign pick_slot[LSQ_ENTRIES+age_slot] = age_slot;
+            assign pick_age[LSQ_ENTRIES+age_slot] = entry_age[age_slot];
+            assign store_overlap[age_slot] =
+                valid_mem[age_slot] && store_mem[age_slot] &&
+                addr_ready_mem[age_slot] && data_ready_mem[age_slot] &&
+                (entry_age[age_slot] < pick_age[1]) &&
+                (addr_mem[age_slot][31:4] == addr_mem[pick_slot[1]][31:4]) ?
+                relative_overlap(addr_mem[age_slot][3:0], mask_mem[age_slot],
+                    addr_mem[pick_slot[1]][3:0], access_mask(size_mem[pick_slot[1]])) : 4'b0;
+            assign store_forward_data[age_slot] = store_data_relative_to_load(
+                data_mem[age_slot], addr_mem[age_slot][3:0], mask_mem[age_slot],
+                addr_mem[pick_slot[1]][3:0], access_mask(size_mem[pick_slot[1]]));
+        end
+    endgenerate
+
+    // The oldest eligible operation wins a balanced tournament. This avoids
+    // a priority chain of age compares across every physical queue slot.
+    genvar pick_node, forward_byte, forward_slot, forward_node;
+    generate
+        for (pick_node = 1; pick_node < LSQ_ENTRIES; pick_node = pick_node + 1) begin : g_pick
+            wire choose_left = pick_valid[2*pick_node] &&
+                (!pick_valid[2*pick_node+1] || (pick_age[2*pick_node] <= pick_age[2*pick_node+1]));
+            assign pick_valid[pick_node] = pick_valid[2*pick_node] || pick_valid[2*pick_node+1];
+            assign pick_slot[pick_node] = choose_left ? pick_slot[2*pick_node] : pick_slot[2*pick_node+1];
+            assign pick_age[pick_node] = choose_left ? pick_age[2*pick_node] : pick_age[2*pick_node+1];
+        end
+        // Each byte independently selects the youngest overlapping older
+        // store. Static reads replace repeated head-relative array muxes.
+        for (forward_byte = 0; forward_byte < 4; forward_byte = forward_byte + 1) begin : g_forward
+            wire byte_valid [1:2*LSQ_ENTRIES-1];
+            wire [SLOT_WIDTH-1:0] byte_age [1:2*LSQ_ENTRIES-1];
+            wire [7:0] byte_data [1:2*LSQ_ENTRIES-1];
+            for (forward_slot = 0; forward_slot < LSQ_ENTRIES; forward_slot = forward_slot + 1) begin : g_leaf
+                assign byte_valid[LSQ_ENTRIES+forward_slot] = store_overlap[forward_slot][forward_byte];
+                assign byte_age[LSQ_ENTRIES+forward_slot] = entry_age[forward_slot];
+                assign byte_data[LSQ_ENTRIES+forward_slot] = store_forward_data[forward_slot][forward_byte*8 +: 8];
+            end
+            for (forward_node = 1; forward_node < LSQ_ENTRIES; forward_node = forward_node + 1) begin : g_node
+                wire choose_left = byte_valid[2*forward_node] &&
+                    (!byte_valid[2*forward_node+1] || (byte_age[2*forward_node] >= byte_age[2*forward_node+1]));
+                assign byte_valid[forward_node] = byte_valid[2*forward_node] || byte_valid[2*forward_node+1];
+                assign byte_age[forward_node] = choose_left ? byte_age[2*forward_node] : byte_age[2*forward_node+1];
+                assign byte_data[forward_node] = choose_left ? byte_data[2*forward_node] : byte_data[2*forward_node+1];
+            end
+            assign tree_forward_mask[forward_byte] = byte_valid[1];
+            assign tree_forward_data[forward_byte*8 +: 8] = byte_valid[1] ? byte_data[1] : 8'b0;
         end
     endgenerate
 
@@ -359,9 +412,7 @@ module rv32_lsq #(
         target_mask = 4'b0;
         fwd_mask = 4'b0;
         fwd_data = 32'b0;
-        overlap = 4'b0;
         alloc_slot = 0;
-        older_age = 0;
         free_count_calc = LSQ_ENTRIES - occupancy_reg;
         alloc_fire_o = {BE_WIDTH{1'b0}};
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
@@ -406,9 +457,7 @@ module rv32_lsq #(
         // Select the oldest eligible memory operation.  A younger load is
         // blocked by an older unknown address or an overlapping store whose
         // data is not ready; ready bytes are accumulated for forwarding.
-        candidate_found = 1'b0;
-        candidate = 0;
-        candidate_age = LSQ_ENTRIES + 1;
+        request_eligible = 0;
         for (scan = 0; scan < LSQ_ENTRIES; scan = scan + 1) begin
             age = scan - head_reg;
             if (age < 0) age = age + LSQ_ENTRIES;
@@ -431,20 +480,17 @@ module rv32_lsq #(
                             end
                         end
                     end
-                    if (!blocked && age < candidate_age) begin
-                        candidate_found = 1'b1;
-                        candidate = scan;
-                        candidate_age = age;
-                    end
+                    if (!blocked) request_eligible[scan] = 1'b1;
                 end else if (store_mem[scan] && addr_ready_mem[scan] &&
                              data_ready_mem[scan] && store_commit_mem[scan] &&
-                             !request_sent_mem[scan] && age < candidate_age) begin
-                    candidate_found = 1'b1;
-                    candidate = scan;
-                    candidate_age = age;
+                             !request_sent_mem[scan]) begin
+                    request_eligible[scan] = 1'b1;
                 end
             end
         end
+        candidate_found = pick_valid[1];
+        candidate = pick_valid[1] ? pick_slot[1] : 0;
+        candidate_age = pick_valid[1] ? pick_age[1] : LSQ_ENTRIES + 1;
 
         dcache_req_valid_o = 1'b0;
         dcache_req_is_load_o = 1'b0;
@@ -460,25 +506,8 @@ module rv32_lsq #(
         if (!flush_i && candidate_found && !response_wait_mem[candidate]) begin
             if (load_mem[candidate]) begin
                 target_mask = access_mask(size_mem[candidate]);
-                fwd_mask = 4'b0;
-                fwd_data = 32'b0;
-                for (older_age = 0; older_age < LSQ_ENTRIES; older_age = older_age + 1) begin
-                    if (older_age < candidate_age) begin
-                        i = head_reg + older_age;
-                        if (i >= LSQ_ENTRIES) i = i - LSQ_ENTRIES;
-                        if (valid_mem[i] && store_mem[i] && addr_ready_mem[i] && data_ready_mem[i] &&
-                            (addr_mem[i][31:4] == addr_mem[candidate][31:4])) begin
-                            overlap = relative_overlap(addr_mem[i][3:0], mask_mem[i],
-                                                       addr_mem[candidate][3:0], target_mask);
-                            fwd_data = (store_data_relative_to_load(
-                                            data_mem[i], addr_mem[i][3:0], mask_mem[i],
-                                            addr_mem[candidate][3:0], target_mask) &
-                                        expand_word_bytes(overlap)) |
-                                       (fwd_data & ~expand_word_bytes(overlap));
-                            fwd_mask = fwd_mask | overlap;
-                        end
-                    end
-                end
+                fwd_mask = tree_forward_mask;
+                fwd_data = tree_forward_data;
                 if ((fwd_mask & target_mask) != target_mask) begin
                     dcache_req_valid_o = 1'b1;
                     dcache_req_is_load_o = 1'b1;
