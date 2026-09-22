@@ -11,6 +11,7 @@ module rv32_dcache_nonblocking #(
     parameter integer WAITER_ENTRIES = 8,
     parameter integer PREFETCH = 1,
     parameter integer CACHE_LINES = 256,
+    parameter integer INDEX_HASH = 0,
     parameter integer CACHE_INDEX_WIDTH = $clog2(CACHE_LINES),
     parameter integer CACHE_TAG_WIDTH = 32 - 4 - CACHE_INDEX_WIDTH
 ) (
@@ -104,8 +105,29 @@ module rv32_dcache_nonblocking #(
     reg [TAG_WIDTH-1:0] ack_lsq_reg;
     reg ack_error_reg;
 
-    wire [CACHE_INDEX_WIDTH-1:0] request_index =
-        dcache_req_addr_i[CACHE_INDEX_WIDTH+3:4];
+    // Keep the original high address tag. XOR index folding is reversible
+    // given that tag, so dirty victims retain their exact physical address.
+    function [CACHE_INDEX_WIDTH-1:0] cache_index;
+        input [31:0] address;
+        begin
+            cache_index = address >> 4;
+            if (INDEX_HASH != 0)
+                cache_index = cache_index ^ (address >> (CACHE_INDEX_WIDTH + 4));
+        end
+    endfunction
+
+    function [31:0] victim_line_address;
+        input [CACHE_TAG_WIDTH-1:0] tag;
+        input [CACHE_INDEX_WIDTH-1:0] index;
+        reg [CACHE_INDEX_WIDTH-1:0] original_index;
+        begin
+            original_index = index;
+            if (INDEX_HASH != 0) original_index = index ^ tag;
+            victim_line_address = {tag, original_index, 4'b0};
+        end
+    endfunction
+
+    wire [CACHE_INDEX_WIDTH-1:0] request_index = cache_index(dcache_req_addr_i);
     wire [CACHE_TAG_WIDTH-1:0] request_tag =
         dcache_req_addr_i[31:CACHE_INDEX_WIDTH+4];
     wire request_hit = valid_bits[request_index] &&
@@ -138,8 +160,7 @@ module rv32_dcache_nonblocking #(
     reg waiter_store_ready_found;
     wire [31:0] request_line_addr = {dcache_req_addr_i[31:4], 4'b0};
     wire [31:0] prefetch_line_addr = request_line_addr + 32'd16;
-    wire [CACHE_INDEX_WIDTH-1:0] prefetch_index =
-        prefetch_line_addr[CACHE_INDEX_WIDTH+3:4];
+    wire [CACHE_INDEX_WIDTH-1:0] prefetch_index = cache_index(prefetch_line_addr);
     wire [CACHE_TAG_WIDTH-1:0] prefetch_tag =
         prefetch_line_addr[31:CACHE_INDEX_WIDTH+4];
     wire prefetch_cache_hit = valid_bits[prefetch_index] &&
@@ -194,10 +215,10 @@ module rv32_dcache_nonblocking #(
             // store hit accepted now.  Other in-flight lines are independent
             // and must not serialize a cache-resident committed store.
             if (mshr_valid[k] &&
-                (mshr_addr[k][CACHE_INDEX_WIDTH+3:4] == request_index))
+                (cache_index(mshr_addr[k]) == request_index))
                 request_index_conflict = 1'b1;
             if (mshr_valid[k] &&
-                (mshr_addr[k][CACHE_INDEX_WIDTH+3:4] == prefetch_index))
+                (cache_index(mshr_addr[k]) == prefetch_index))
                 prefetch_index_conflict = 1'b1;
         end
         for (k = 0; k < WAITER_ENTRIES; k = k + 1) begin
@@ -509,7 +530,7 @@ module rv32_dcache_nonblocking #(
                     mshr_wdata[free_index] <= dcache_req_wdata_i;
                     mshr_lsq[free_index] <= dcache_req_lsq_tag_i;
                     mshr_victim_addr[free_index] <=
-                        {tag_mem[request_index], request_index, 4'b0};
+                        victim_line_address(tag_mem[request_index], request_index);
                     mshr_victim_data[free_index] <= data_mem[request_index];
                     valid_bits[request_index] <= 1'b0;
                     dirty_bits[request_index] <= 1'b0;
@@ -616,7 +637,7 @@ module rv32_dcache_nonblocking #(
                         end
                     end
                     if (!mem_resp_error_i && response_matches) begin
-                        line_index = mshr_addr[response_index][CACHE_INDEX_WIDTH+3:4];
+                        line_index = cache_index(mshr_addr[response_index]);
                         valid_bits[line_index] <= 1'b1;
                         dirty_bits[line_index] <= 1'b1;
                         tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
@@ -626,7 +647,7 @@ module rv32_dcache_nonblocking #(
                 end else if (mshr_prefetch[response_index]) begin
                     mshr_valid[response_index] <= 1'b0;
                     if (!mem_resp_error_i && response_matches) begin
-                        line_index = mshr_addr[response_index][CACHE_INDEX_WIDTH+3:4];
+                        line_index = cache_index(mshr_addr[response_index]);
                         valid_bits[line_index] <= 1'b1;
                         tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
                         data_mem[line_index] <= mem_resp_data_i;
@@ -647,7 +668,7 @@ module rv32_dcache_nonblocking #(
                         end
                     end
                     if (!mem_resp_error_i && response_matches) begin
-                        line_index = mshr_addr[response_index][CACHE_INDEX_WIDTH+3:4];
+                        line_index = cache_index(mshr_addr[response_index]);
                         valid_bits[line_index] <= 1'b1;
                         tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
                         data_mem[line_index] <= mem_resp_data_i;
