@@ -50,6 +50,7 @@ module rv32_lsq_tb #(
     wire [TAG_WIDTH-1:0] alloc_tag0;
     wire [CW-1:0] occupancy;
     integer bad;
+    integer recovery_request_kind;
     reg [15:0] st_tag, st_tag2, st_tag3, st_tag4, st_tag5, st_tag6, unknown_tag;
     reg [TAG_WIDTH-1:0] last_alloc_tag;
     reg seen_load_valid;
@@ -303,6 +304,31 @@ module rv32_lsq_tb #(
             !dut.valid_mem[0] || !dut.valid_mem[1] || !dut.valid_mem[2] || dut.valid_mem[3]) begin
             $display("FAIL: retired-load recovery prefix corrupted count=%0d head=%0d tail=%0d", occupancy, dut.head_reg, dut.tail_reg);
             bad = bad + 1;
+        end
+        // The recovery branch cannot record a fresh request handshake.
+        // Hold an older load / committed store until recovery ends, then
+        // issue exactly once. A request pipeline must not capture duplicates.
+        for (recovery_request_kind = 0; recovery_request_kind < 2;
+             recovery_request_kind = recovery_request_kind + 1) begin
+            reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0;
+            alloc_one(recovery_request_kind == 0, recovery_request_kind == 1,
+                      16'h0001, 32'h00000800, 2, 0, 32'h12345678, 4'hf);
+            dreq_ready = 0;
+            if (recovery_request_kind == 1) begin
+                commit_rob = 16'h0001; commit_valid = 1;
+                @(posedge clk); #1; commit_valid = 0;
+            end
+            recovery_valid = 1; recovery_tag = 16'h0011;
+            recovery_head = 0; recovery_occupancy = 3; dreq_ready = 1;
+            #1;
+            if (dreq_valid) begin
+                $display("FAIL: fresh request on recovery kind=%0d", recovery_request_kind);
+                bad = bad + 1;
+            end
+            @(posedge clk); #1; recovery_valid = 0; #1;
+            if (!dreq_valid || dreq_addr != 32'h00000800) bad = bad + 1;
+            @(posedge clk); #1;
+            if (dreq_valid || !dut.request_sent_mem[0] || !dut.response_wait_mem[0]) bad = bad + 1;
         end
         if (bad != 0) begin $display("FAIL: B-08 LSQ BE_WIDTH=%0d checks=%0d", BE_WIDTH, bad); $finish(1); end
         $display("PASS: B-08 LSQ BE_WIDTH=%0d", BE_WIDTH); $finish(0);
