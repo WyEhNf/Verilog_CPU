@@ -150,8 +150,6 @@ module rv32_rob #(
     integer commit_slot;
     integer younger_age;
     integer recovery_slot;
-    integer reclaim_slot;
-    integer reclaim_age;
     reg recovery_found;
     reg prefix_open;
     reg commit_break;
@@ -228,6 +226,40 @@ module rv32_rob #(
         end
     endgenerate
 
+    // Decode killed destinations in parallel. Counting distinct bits after
+    // the OR reduction preserves duplicate-destination handling without a
+    // serial bitmap lookup/update and increment chain across ROB_ENTRIES.
+    localparam integer RECLAIM_COUNT_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1);
+    localparam integer RECLAIM_LEAVES = 2 ** ((PHYS_REGS <= 1) ? 0 : $clog2(PHYS_REGS));
+    wire [ROB_ENTRIES-1:0] reclaim_eligible;
+    wire [PHYS_REGS-1:0] reclaim_bitmap;
+    wire [RECLAIM_COUNT_WIDTH-1:0] reclaim_count_tree [1:2*RECLAIM_LEAVES-1];
+    genvar reclaim_entry, reclaim_phys, reclaim_match, reclaim_node;
+    generate
+        for (reclaim_entry = 0; reclaim_entry < ROB_ENTRIES; reclaim_entry = reclaim_entry + 1) begin : g_reclaim_age
+            wire [SLOT_WIDTH-1:0] relative_age = reclaim_entry - head_reg;
+            assign reclaim_eligible[reclaim_entry] = recovery_found && valid_mem[reclaim_entry] &&
+                rd_we_mem[reclaim_entry] && (relative_age > chosen_age) && (relative_age < occupancy_reg);
+        end
+        for (reclaim_phys = 0; reclaim_phys < RECLAIM_LEAVES; reclaim_phys = reclaim_phys + 1) begin : g_reclaim_phys
+            if (reclaim_phys > 0 && reclaim_phys < PHYS_REGS) begin : g_register
+                wire [ROB_ENTRIES-1:0] matches;
+                for (reclaim_match = 0; reclaim_match < ROB_ENTRIES; reclaim_match = reclaim_match + 1) begin : g_match
+                    assign matches[reclaim_match] = reclaim_eligible[reclaim_match] &&
+                        (new_phys_mem[reclaim_match] == reclaim_phys);
+                end
+                assign reclaim_bitmap[reclaim_phys] = |matches;
+                assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys] = |matches;
+            end else begin : g_zero
+                if (reclaim_phys == 0) assign reclaim_bitmap[0] = 1'b0;
+                assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys] = 0;
+            end
+        end
+        for (reclaim_node = 1; reclaim_node < RECLAIM_LEAVES; reclaim_node = reclaim_node + 1) begin : g_reclaim_sum
+            assign reclaim_count_tree[reclaim_node] = reclaim_count_tree[2*reclaim_node] + reclaim_count_tree[2*reclaim_node+1];
+        end
+    endgenerate
+
     initial begin
         if ((BE_WIDTH != 1) && (BE_WIDTH != 2) && (BE_WIDTH != 4)) begin
             $display("ERROR: invalid ROB BE_WIDTH=%0d; expected 1, 2, or 4", BE_WIDTH);
@@ -289,8 +321,8 @@ module rv32_rob #(
         recovery_rd_we_o = 1'b0;
         recovery_rd_o = 5'b0;
         recovery_new_phys_o = {PHYS_ADDR_WIDTH{1'b0}};
-        recovery_reclaim_bitmap_o = {PHYS_REGS{1'b0}};
-        recovery_reclaim_count_o = 0;
+        recovery_reclaim_bitmap_o = reclaim_bitmap;
+        recovery_reclaim_count_o = reclaim_count_tree[1];
         if (recovery_found) begin
             redirect_pc_o = recovery_pc_i[0 +: 32];
             if (CHECKPOINT_IMPL == 0)
@@ -298,18 +330,6 @@ module rv32_rob #(
             recovery_rd_we_o = rd_we_mem[chosen_slot];
             recovery_rd_o = rd_mem[chosen_slot];
             recovery_new_phys_o = new_phys_mem[chosen_slot];
-            for (reclaim_slot = 0; reclaim_slot < ROB_ENTRIES; reclaim_slot = reclaim_slot + 1) begin
-                reclaim_age = reclaim_slot - head_reg;
-                if (reclaim_age < 0) reclaim_age = reclaim_age + ROB_ENTRIES;
-                if (valid_mem[reclaim_slot] && (reclaim_age > chosen_age) &&
-                    (reclaim_age < occupancy_reg) && rd_we_mem[reclaim_slot] &&
-                    (new_phys_mem[reclaim_slot] != 0) &&
-                    (new_phys_mem[reclaim_slot] < PHYS_REGS) &&
-                    !recovery_reclaim_bitmap_o[new_phys_mem[reclaim_slot]]) begin
-                    recovery_reclaim_bitmap_o[new_phys_mem[reclaim_slot]] = 1'b1;
-                    recovery_reclaim_count_o = recovery_reclaim_count_o + 1'b1;
-                end
-            end
         end
 
         commit_valid_o = {BE_WIDTH{1'b0}};
