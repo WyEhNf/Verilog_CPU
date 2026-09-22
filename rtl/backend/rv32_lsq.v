@@ -27,6 +27,10 @@ module rv32_lsq #(
     input  wire [ROB_TAG_WIDTH-1:0]     recovery_tag_i,
     input  wire [((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES))-1:0] recovery_head_i,
     input  wire [15:0]                  recovery_occupancy_i,
+    // Completed loads can remain behind a buffered store after retiring.
+    // Their ROB slots may be reused before the LSQ head reaches them.
+    input  wire [BE_WIDTH-1:0]           retire_valid_i,
+    input  wire [(BE_WIDTH*ROB_TAG_WIDTH)-1:0] retire_rob_tag_i,
 
     input  wire [BE_WIDTH-1:0]           alloc_valid_i,
     output wire                         alloc_ready_o,
@@ -108,6 +112,8 @@ module rv32_lsq #(
     reg load_mem [0:LSQ_ENTRIES-1];
     reg store_mem [0:LSQ_ENTRIES-1];
     reg [ROB_TAG_WIDTH-1:0] rob_tag_mem [0:LSQ_ENTRIES-1];
+    reg retired_mem [0:LSQ_ENTRIES-1];
+    integer retirement_slot, retirement_lane;
     reg [GENERATION_WIDTH-1:0] generation_mem [0:LSQ_ENTRIES-1];
     reg [GENERATION_WIDTH-1:0] generation_next_mem [0:LSQ_ENTRIES-1];
     reg [1:0] size_mem [0:LSQ_ENTRIES-1];
@@ -558,6 +564,7 @@ module rv32_lsq #(
             occupancy_reg <= 0;
             for (slot = 0; slot < LSQ_ENTRIES; slot = slot + 1) begin
                 valid_mem[slot] <= 1'b0;
+                retired_mem[slot] <= 1'b0;
                 generation_mem[slot] <= {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
                 generation_next_mem[slot] <= {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
                 request_sent_mem[slot] <= 1'b0;
@@ -573,6 +580,7 @@ module rv32_lsq #(
             occupancy_reg <= 0;
             for (slot = 0; slot < LSQ_ENTRIES; slot = slot + 1) begin
                 valid_mem[slot] <= 1'b0;
+                retired_mem[slot] <= 1'b0;
                 request_sent_mem[slot] <= 1'b0;
                 response_wait_mem[slot] <= 1'b0;
                 complete_mem[slot] <= 1'b0;
@@ -603,7 +611,11 @@ module rv32_lsq #(
                     // applying backpressure.  Its ROB slot can be recycled
                     // before the LSQ drains it, so slot-age recovery must not
                     // mistake that committed store for a younger instruction.
+                    // Retired loads have the same recycled-ROB-slot hazard
+                    // as committed stores. Completion alone is insufficient:
+                    // an already-reported wrong-path load must still be killed.
                     if (!(store_mem[scan] && store_commit_mem[scan]) &&
+                        !(load_mem[scan] && retired_mem[scan]) &&
                         (recovery_entry_age > recovery_branch_age) &&
                         (recovery_entry_age < recovery_occupancy_i)) begin
                         if (!recovery_kill_found) begin
@@ -691,6 +703,13 @@ module rv32_lsq #(
         end else begin
             commit_fire = store_commit_valid_i && store_commit_ready_o;
             if (commit_fire) store_commit_mem[commit_slot_select] <= 1'b1;
+
+            for (retirement_slot = 0; retirement_slot < LSQ_ENTRIES; retirement_slot = retirement_slot + 1)
+                for (retirement_lane = 0; retirement_lane < BE_WIDTH; retirement_lane = retirement_lane + 1)
+                    if (valid_mem[retirement_slot] && load_mem[retirement_slot] &&
+                        retire_valid_i[retirement_lane] &&
+                        rob_tag_mem[retirement_slot] == retire_rob_tag_i[retirement_lane*ROB_TAG_WIDTH +: ROB_TAG_WIDTH])
+                        retired_mem[retirement_slot] <= 1'b1;
 
             // Independent address/data wakeups are tag-qualified.  An old
             // response cannot update a reused LSQ slot after wrap/flush.
@@ -793,6 +812,7 @@ module rv32_lsq #(
                     load_mem[alloc_slot] <= alloc_is_load_i[lane];
                     store_mem[alloc_slot] <= alloc_is_store_i[lane];
                     rob_tag_mem[alloc_slot] <= alloc_rob_tag_i[(lane*ROB_TAG_WIDTH) +: ROB_TAG_WIDTH];
+                    retired_mem[alloc_slot] <= 1'b0;
                     size_mem[alloc_slot] <= alloc_size_i[(lane*2) +: 2];
                     unsigned_mem[alloc_slot] <= alloc_unsigned_i[lane];
                     addr_ready_mem[alloc_slot] <= alloc_addr_valid_i[lane];
