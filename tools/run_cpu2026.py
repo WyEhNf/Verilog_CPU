@@ -34,6 +34,24 @@ def evaluation_memory(output, required_latency):
     return config
 
 
+def performance_counters(output):
+    """Keep optional diagnostic counters separate from architectural PASS checks."""
+    counters = {}
+    for match in re.finditer(r"^(PERF(?:_CACHE|_PRED)?):[ \t]*(.*)$", output, re.MULTILINE):
+        group, values = match.groups()
+        if group in counters:
+            raise BenchmarkError("duplicate performance summary: " + group)
+        fields = values.split()
+        parsed = {}
+        for field in fields:
+            pair = re.fullmatch(r"([a-z][a-z0-9_]*)=(\d+)", field)
+            if not pair or pair.group(1) in parsed:
+                raise BenchmarkError("invalid performance counter: " + field)
+            parsed[pair.group(1)] = int(pair.group(2))
+        counters[group] = parsed
+    return counters
+
+
 def run(command, cwd, capture=False):
     print("+ " + " ".join(str(item) for item in command), flush=True)
     completed = subprocess.run(
@@ -114,6 +132,7 @@ def main(argv=None):
                        [args.vvp, "-N", args.simulation]) + plusargs
             output = run(execute, root, capture=True)
             result["memory"] = evaluation_memory(output, args.memory_latency)
+            result["performance"] = performance_counters(output)
             metrics = re.search(
                 r"PASS: JOIN-02 image=cpu2026-{} return=0 cycles=(\d+) instret=(\d+)".format(
                     re.escape(name)), output)

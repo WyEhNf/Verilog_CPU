@@ -139,6 +139,7 @@ def build_report(args):
             "rs_entries": args.rs_entries,
             "lsq_entries": args.lsq_entries,
             "dcache_lines": args.dcache_lines,
+            "dcache_index_hash": args.dcache_index_hash,
             "cache_stats_enabled": bool(args.cache_stats),
             "caches_enabled": bool(args.caches),
             "predictor_enabled": bool(args.predictor),
@@ -192,6 +193,7 @@ def main(argv=None):
     parser.add_argument("--completion-bypass", type=int, choices=(0, 1), default=0)
     parser.add_argument("--serial-backend", type=int, choices=(0, 1), default=0)
     parser.add_argument("--dcache-lines", type=int, default=256)
+    parser.add_argument("--dcache-index-hash", type=int, choices=(0, 1), default=0)
     parser.add_argument("--mul-impl", type=int, choices=(0, 1, 2), default=0)
     parser.add_argument("--shift-impl", type=int, choices=(0, 1), default=0)
     parser.add_argument("--phys-tag-impl", type=int, choices=(0, 1), default=0)
