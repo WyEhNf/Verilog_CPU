@@ -693,7 +693,8 @@ module rv32_dcache_nonblocking #(
     initial begin
         if (TAG_WIDTH < 8 || MSHR_ENTRIES < 2 || MSHR_ENTRIES > 8 ||
             WAITER_ENTRIES < 1 || WAITER_ENTRIES > 16 ||
-            (PREFETCH != 0 && PREFETCH != 1) || CACHE_LINES < 16 ||
+            (PREFETCH != 0 && PREFETCH != 1) ||
+            (INDEX_HASH != 0 && INDEX_HASH != 1) || CACHE_LINES < 16 ||
             CACHE_LINES > 4096 ||
             ((CACHE_LINES & (CACHE_LINES - 1)) != 0)) begin
             $display("ERROR: invalid rv32_dcache_nonblocking parameter");
