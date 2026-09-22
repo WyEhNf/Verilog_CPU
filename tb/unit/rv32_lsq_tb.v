@@ -13,6 +13,8 @@ module rv32_lsq_tb #(
     reg [ROB_TAG_WIDTH-1:0] recovery_tag;
     reg [4:0] recovery_head;
     reg [15:0] recovery_occupancy;
+    reg [BE_WIDTH-1:0] retire_valid;
+    reg [BE_WIDTH*ROB_TAG_WIDTH-1:0] retire_rob_tag;
     reg [BE_WIDTH-1:0] alloc_valid, alloc_load, alloc_store, alloc_addr_valid, alloc_data_valid, alloc_unsigned;
     reg [BE_WIDTH*ROB_TAG_WIDTH-1:0] alloc_rob;
     reg [BE_WIDTH*2-1:0] alloc_size;
@@ -58,6 +60,7 @@ module rv32_lsq_tb #(
     rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(ENTRIES), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(ROB_TAG_WIDTH)) dut (
         .clk_i(clk), .reset_i(reset), .flush_i(flush), .recovery_valid_i(recovery_valid),
         .recovery_tag_i(recovery_tag), .recovery_head_i(recovery_head), .recovery_occupancy_i(recovery_occupancy),
+        .retire_valid_i(retire_valid), .retire_rob_tag_i(retire_rob_tag),
         .alloc_valid_i(alloc_valid), .alloc_ready_o(alloc_ready),
         .alloc_fire_o(alloc_fire), .alloc_count_o(alloc_count), .alloc_lsq_tag_o(alloc_tag), .alloc_is_load_i(alloc_load),
         .alloc_is_store_i(alloc_store), .alloc_rob_tag_i(alloc_rob), .alloc_size_i(alloc_size), .alloc_unsigned_i(alloc_unsigned),
@@ -119,6 +122,7 @@ module rv32_lsq_tb #(
             dreq_ready = 1; dresp_valid = 0; dresp_line_valid = 1; dresp_error = 0; dresp_tag = 0; dresp_addr = 0;
             dresp_word = 0; dresp_line = 0; dack_valid = 0; dack_error = 0; dack_tag = 0; load_ready = 1; store_ack_ready = 1;
             recovery_valid = 0; recovery_tag = 0; recovery_head = 0; recovery_occupancy = 0;
+            retire_valid = 0; retire_rob_tag = 0;
         end
     endtask
 
@@ -271,6 +275,35 @@ module rv32_lsq_tb #(
         if (!load_valid || load_value != 32'h89abcdef || occupancy != 1) bad = bad + 1;
         @(posedge clk); #1; clear_inputs();
         if (occupancy != 0) bad = bad + 1;
+        // A retired load can remain behind an unacknowledged committed store.
+        // After ROB wrap, slot-only age makes it appear younger than a new
+        // branch. Keep the retired prefix; kill reported-but-unretired loads
+        // only when they are actually younger than that branch.
+        reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0; #1;
+        alloc_one(0, 1, 16'h0101, 32'h00000700, 2, 0, 32'hdeadbeef, 4'hf);
+        commit_rob = 16'h0101; commit_valid = 1;
+        @(posedge clk); #1; commit_valid = 0;
+        @(posedge clk); #1;
+        alloc_one(1, 0, 16'h0109, 32'h00000700, 2, 0, 0, 0);
+        alloc_one(1, 0, 16'h0119, 32'h00000700, 2, 0, 0, 0);
+        alloc_one(1, 0, 16'h0129, 32'h00000700, 2, 0, 0, 0);
+        repeat (5) begin @(posedge clk); #1; end
+        if (occupancy != 4 || !dut.load_reported_mem[1] || !dut.load_reported_mem[3]) bad = bad + 1;
+        retire_valid[0] = 1; retire_rob_tag[0 +: ROB_TAG_WIDTH] = 16'h0209;
+        @(posedge clk); #1; clear_inputs();
+        if (dut.retired_mem[1]) begin
+            $display("FAIL: retirement accepted a different ROB generation");
+            bad = bad + 1;
+        end
+        retire_valid[0] = 1; retire_rob_tag[0 +: ROB_TAG_WIDTH] = 16'h0109;
+        @(posedge clk); #1; clear_inputs();
+        recovery_valid = 1; recovery_tag = 16'h0121; recovery_head = 2; recovery_occupancy = 32;
+        @(posedge clk); #1; clear_inputs();
+        if (occupancy != 3 || dut.head_reg != 0 || dut.tail_reg != 3 ||
+            !dut.valid_mem[0] || !dut.valid_mem[1] || !dut.valid_mem[2] || dut.valid_mem[3]) begin
+            $display("FAIL: retired-load recovery prefix corrupted count=%0d head=%0d tail=%0d", occupancy, dut.head_reg, dut.tail_reg);
+            bad = bad + 1;
+        end
         if (bad != 0) begin $display("FAIL: B-08 LSQ BE_WIDTH=%0d checks=%0d", BE_WIDTH, bad); $finish(1); end
         $display("PASS: B-08 LSQ BE_WIDTH=%0d", BE_WIDTH); $finish(0);
     end
