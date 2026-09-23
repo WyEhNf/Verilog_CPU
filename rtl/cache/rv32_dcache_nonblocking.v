@@ -11,8 +11,10 @@ module rv32_dcache_nonblocking #(
     parameter integer WAITER_ENTRIES = 8,
     parameter integer PREFETCH = 1,
     parameter integer CACHE_LINES = 256,
+    parameter integer CACHE_WAYS = 1,
     parameter integer INDEX_HASH = 0,
-    parameter integer CACHE_INDEX_WIDTH = $clog2(CACHE_LINES),
+    parameter integer CACHE_SETS = CACHE_LINES / CACHE_WAYS,
+    parameter integer CACHE_INDEX_WIDTH = $clog2(CACHE_SETS),
     parameter integer CACHE_TAG_WIDTH = 32 - 4 - CACHE_INDEX_WIDTH
 ) (
     input  wire                     clk_i,
@@ -65,6 +67,8 @@ module rv32_dcache_nonblocking #(
     reg [CACHE_LINES-1:0] dirty_bits;
     reg [CACHE_TAG_WIDTH-1:0] tag_mem [0:CACHE_LINES-1];
     reg [127:0] data_mem [0:CACHE_LINES-1];
+    reg [CACHE_SETS-1:0] lru_way_mem;
+    localparam integer CACHE_ENTRY_WIDTH = $clog2(CACHE_LINES);
 
     reg mshr_valid [0:MSHR_ENTRIES-1];
     reg mshr_sent [0:MSHR_ENTRIES-1];
@@ -79,6 +83,7 @@ module rv32_dcache_nonblocking #(
     reg [TAG_WIDTH-1:0] mshr_lsq [0:MSHR_ENTRIES-1];
     reg [31:0] mshr_victim_addr [0:MSHR_ENTRIES-1];
     reg [127:0] mshr_victim_data [0:MSHR_ENTRIES-1];
+    reg [CACHE_ENTRY_WIDTH-1:0] mshr_victim_entry [0:MSHR_ENTRIES-1];
 
     // Secondary misses to an already outstanding demand line are accepted
     // here.  Keeping the returned line with each waiter lets refills retire
@@ -127,11 +132,20 @@ module rv32_dcache_nonblocking #(
         end
     endfunction
 
+    function [CACHE_ENTRY_WIDTH-1:0] cache_entry;
+        input [CACHE_INDEX_WIDTH-1:0] set_index;
+        input integer way;
+        begin
+            cache_entry = set_index * CACHE_WAYS + way;
+        end
+    endfunction
+
     wire [CACHE_INDEX_WIDTH-1:0] request_index = cache_index(dcache_req_addr_i);
     wire [CACHE_TAG_WIDTH-1:0] request_tag =
         dcache_req_addr_i[31:CACHE_INDEX_WIDTH+4];
-    wire request_hit = valid_bits[request_index] &&
-                       (tag_mem[request_index] == request_tag);
+    reg request_hit;
+    reg [CACHE_ENTRY_WIDTH-1:0] request_hit_entry;
+    reg [CACHE_ENTRY_WIDTH-1:0] request_victim_entry;
     wire resp_slot_free = !resp_valid_reg || dcache_resp_ready_i;
     wire ack_slot_free = !ack_valid_reg || dcache_store_ack_ready_i;
 
@@ -163,8 +177,42 @@ module rv32_dcache_nonblocking #(
     wire [CACHE_INDEX_WIDTH-1:0] prefetch_index = cache_index(prefetch_line_addr);
     wire [CACHE_TAG_WIDTH-1:0] prefetch_tag =
         prefetch_line_addr[31:CACHE_INDEX_WIDTH+4];
-    wire prefetch_cache_hit = valid_bits[prefetch_index] &&
-                              (tag_mem[prefetch_index] == prefetch_tag);
+    reg prefetch_cache_hit;
+    reg [CACHE_ENTRY_WIDTH-1:0] prefetch_victim_entry;
+    integer way_scan;
+    reg request_invalid_found;
+    reg prefetch_invalid_found;
+    always @* begin
+        request_hit = 1'b0;
+        prefetch_cache_hit = 1'b0;
+        request_hit_entry = cache_entry(request_index, 0);
+        request_victim_entry = cache_entry(request_index,
+            (CACHE_WAYS == 2) ? lru_way_mem[request_index] : 0);
+        prefetch_victim_entry = cache_entry(prefetch_index,
+            (CACHE_WAYS == 2) ? lru_way_mem[prefetch_index] : 0);
+        request_invalid_found = 1'b0;
+        prefetch_invalid_found = 1'b0;
+        for (way_scan = 0; way_scan < CACHE_WAYS; way_scan = way_scan + 1) begin
+            if (valid_bits[cache_entry(request_index, way_scan)] &&
+                (tag_mem[cache_entry(request_index, way_scan)] == request_tag)) begin
+                request_hit = 1'b1;
+                request_hit_entry = cache_entry(request_index, way_scan);
+            end
+            if (!request_invalid_found &&
+                !valid_bits[cache_entry(request_index, way_scan)]) begin
+                request_invalid_found = 1'b1;
+                request_victim_entry = cache_entry(request_index, way_scan);
+            end
+            if (valid_bits[cache_entry(prefetch_index, way_scan)] &&
+                (tag_mem[cache_entry(prefetch_index, way_scan)] == prefetch_tag))
+                prefetch_cache_hit = 1'b1;
+            if (!prefetch_invalid_found &&
+                !valid_bits[cache_entry(prefetch_index, way_scan)]) begin
+                prefetch_invalid_found = 1'b1;
+                prefetch_victim_entry = cache_entry(prefetch_index, way_scan);
+            end
+        end
+    end
     always @* begin
         free_found = 1'b0;
         free_index = 0;
@@ -388,6 +436,7 @@ module rv32_dcache_nonblocking #(
             event_writeback_o <= 1'b0;
             event_stall_o <= 1'b0;
             valid_bits <= {CACHE_LINES{1'b0}};
+            lru_way_mem <= {CACHE_SETS{1'b0}};
             for (reset_index = 0; reset_index < MSHR_ENTRIES; reset_index = reset_index + 1) begin
                 mshr_valid[reset_index] <= 1'b0;
                 mshr_sent[reset_index] <= 1'b0;
@@ -402,6 +451,7 @@ module rv32_dcache_nonblocking #(
                 mshr_lsq[reset_index] <= {TAG_WIDTH{1'b0}};
                 mshr_victim_addr[reset_index] <= 32'd0;
                 mshr_victim_data[reset_index] <= 128'd0;
+                mshr_victim_entry[reset_index] <= {CACHE_ENTRY_WIDTH{1'b0}};
             end
             for (reset_index = 0; reset_index < WAITER_ENTRIES; reset_index = reset_index + 1) begin
                 waiter_valid[reset_index] <= 1'b0;
@@ -433,20 +483,24 @@ module rv32_dcache_nonblocking #(
                     resp_valid_reg <= 1'b1;
                     resp_lsq_reg <= dcache_req_lsq_tag_i;
                     resp_addr_reg <= dcache_req_addr_i;
-                    resp_line_reg <= data_mem[request_index];
-                    resp_word_reg <= extract_value(data_mem[request_index],
+                    resp_line_reg <= data_mem[request_hit_entry];
+                    resp_word_reg <= extract_value(data_mem[request_hit_entry],
                                                    dcache_req_addr_i,
                                                    dcache_req_size_i,
                                                    dcache_req_unsigned_i);
                     resp_line_valid_reg <= 1'b1;
                     resp_error_reg <= 1'b0;
+                    if (CACHE_WAYS == 2)
+                        lru_way_mem[request_index] <= !request_hit_entry[0];
                 end else if (request_is_store && request_hit) begin
                     event_hit_o <= 1'b1;
-                    updated_line = merge_store(data_mem[request_index],
+                    updated_line = merge_store(data_mem[request_hit_entry],
                                                dcache_req_wdata_i,
                                                dcache_req_mask_i);
-                    data_mem[request_index] <= updated_line;
-                    dirty_bits[request_index] <= 1'b1;
+                    data_mem[request_hit_entry] <= updated_line;
+                    dirty_bits[request_hit_entry] <= 1'b1;
+                    if (CACHE_WAYS == 2)
+                        lru_way_mem[request_index] <= !request_hit_entry[0];
                     ack_valid_reg <= 1'b1;
                     ack_lsq_reg <= dcache_req_lsq_tag_i;
                     ack_error_reg <= 1'b0;
@@ -521,8 +575,8 @@ module rv32_dcache_nonblocking #(
                     mshr_sent[free_index] <= 1'b0;
                     mshr_store[free_index] <= request_is_store;
                     mshr_prefetch[free_index] <= 1'b0;
-                    mshr_writeback[free_index] <= valid_bits[request_index] &&
-                                                  dirty_bits[request_index];
+                    mshr_writeback[free_index] <= valid_bits[request_victim_entry] &&
+                                                  dirty_bits[request_victim_entry];
                     mshr_addr[free_index] <= dcache_req_addr_i;
                     mshr_size[free_index] <= dcache_req_size_i;
                     mshr_unsigned[free_index] <= dcache_req_unsigned_i;
@@ -530,10 +584,13 @@ module rv32_dcache_nonblocking #(
                     mshr_wdata[free_index] <= dcache_req_wdata_i;
                     mshr_lsq[free_index] <= dcache_req_lsq_tag_i;
                     mshr_victim_addr[free_index] <=
-                        victim_line_address(tag_mem[request_index], request_index);
-                    mshr_victim_data[free_index] <= data_mem[request_index];
-                    valid_bits[request_index] <= 1'b0;
-                    dirty_bits[request_index] <= 1'b0;
+                        victim_line_address(tag_mem[request_victim_entry], request_index);
+                    mshr_victim_data[free_index] <= data_mem[request_victim_entry];
+                    mshr_victim_entry[free_index] <= request_victim_entry;
+                    valid_bits[request_victim_entry] <= 1'b0;
+                    dirty_bits[request_victim_entry] <= 1'b0;
+                    if (CACHE_WAYS == 2)
+                        lru_way_mem[request_index] <= !request_victim_entry[0];
 
                     // Store streams already expose every committed address
                     // to the cache.  Prefetching after a store miss wastes a
@@ -544,7 +601,9 @@ module rv32_dcache_nonblocking #(
                         second_free_found && !prefetch_cache_hit &&
                         !prefetch_line_present &&
                         !prefetch_index_conflict &&
-                        !(valid_bits[prefetch_index] && dirty_bits[prefetch_index])) begin
+                        (prefetch_index != request_index) &&
+                        !(valid_bits[prefetch_victim_entry] &&
+                          dirty_bits[prefetch_victim_entry])) begin
                         mshr_valid[second_free_index] <= 1'b1;
                         mshr_sent[second_free_index] <= 1'b0;
                         mshr_store[second_free_index] <= 1'b0;
@@ -558,8 +617,11 @@ module rv32_dcache_nonblocking #(
                         mshr_lsq[second_free_index] <= {TAG_WIDTH{1'b0}};
                         mshr_victim_addr[second_free_index] <= 32'd0;
                         mshr_victim_data[second_free_index] <= 128'd0;
-                        valid_bits[prefetch_index] <= 1'b0;
-                        dirty_bits[prefetch_index] <= 1'b0;
+                        mshr_victim_entry[second_free_index] <= prefetch_victim_entry;
+                        valid_bits[prefetch_victim_entry] <= 1'b0;
+                        dirty_bits[prefetch_victim_entry] <= 1'b0;
+                        if (CACHE_WAYS == 2)
+                            lru_way_mem[prefetch_index] <= !prefetch_victim_entry[0];
                     end
                 end
                 if (request_is_store) begin
@@ -637,7 +699,7 @@ module rv32_dcache_nonblocking #(
                         end
                     end
                     if (!mem_resp_error_i && response_matches) begin
-                        line_index = cache_index(mshr_addr[response_index]);
+                        line_index = mshr_victim_entry[response_index];
                         valid_bits[line_index] <= 1'b1;
                         dirty_bits[line_index] <= 1'b1;
                         tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
@@ -647,7 +709,7 @@ module rv32_dcache_nonblocking #(
                 end else if (mshr_prefetch[response_index]) begin
                     mshr_valid[response_index] <= 1'b0;
                     if (!mem_resp_error_i && response_matches) begin
-                        line_index = cache_index(mshr_addr[response_index]);
+                        line_index = mshr_victim_entry[response_index];
                         valid_bits[line_index] <= 1'b1;
                         tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
                         data_mem[line_index] <= mem_resp_data_i;
@@ -668,7 +730,7 @@ module rv32_dcache_nonblocking #(
                         end
                     end
                     if (!mem_resp_error_i && response_matches) begin
-                        line_index = cache_index(mshr_addr[response_index]);
+                        line_index = mshr_victim_entry[response_index];
                         valid_bits[line_index] <= 1'b1;
                         tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
                         data_mem[line_index] <= mem_resp_data_i;
@@ -695,6 +757,8 @@ module rv32_dcache_nonblocking #(
             WAITER_ENTRIES < 1 || WAITER_ENTRIES > 16 ||
             (PREFETCH != 0 && PREFETCH != 1) ||
             (INDEX_HASH != 0 && INDEX_HASH != 1) || CACHE_LINES < 16 ||
+            ((CACHE_WAYS != 1) && (CACHE_WAYS != 2)) ||
+            (CACHE_LINES % CACHE_WAYS != 0) ||
             CACHE_LINES > 4096 ||
             ((CACHE_LINES & (CACHE_LINES - 1)) != 0)) begin
             $display("ERROR: invalid rv32_dcache_nonblocking parameter");
