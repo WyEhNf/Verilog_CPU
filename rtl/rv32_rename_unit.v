@@ -48,6 +48,7 @@ module rv32_rename_unit #(
 );
     localparam integer RENAME_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
     localparam integer FREE_SLOTS = PHYS_REGS - 1;
+    localparam integer FREE_GROUPS = (PHYS_REGS + 7) / 8;
 
     reg [PHYS_ADDR_WIDTH-1:0] rat [0:31];
     reg [PHYS_REGS-1:0] free_bitmap;
@@ -63,15 +64,41 @@ module rv32_rename_unit #(
     integer rs_used;
     integer lsq_used;
     integer release_used;
-    integer free_index;
     integer candidate_lane;
     integer reset_index;
     integer commit_lane;
     integer restore_index;
     integer selected_phys;
-    reg alloc_found;
     reg prefix_open;
     reg [COUNT_WIDTH-1:0] alloc_count_comb;
+
+    // Two-level priority encoding keeps the per-candidate search to eight
+    // local bits followed by at most ceil(PHYS_REGS/8) group selections.
+    function [PHYS_ADDR_WIDTH-1:0] lowest_free_phys;
+        input [PHYS_REGS-1:0] bitmap;
+        integer group_index;
+        integer bit_index;
+        reg [2:0] local_index;
+        reg group_found;
+        begin
+            lowest_free_phys = {PHYS_ADDR_WIDTH{1'b0}};
+            for (group_index = FREE_GROUPS - 1; group_index >= 0;
+                 group_index = group_index - 1) begin
+                local_index = 3'd0;
+                group_found = 1'b0;
+                for (bit_index = 7; bit_index >= 0;
+                     bit_index = bit_index - 1) begin
+                    if (((group_index * 8 + bit_index) < PHYS_REGS) &&
+                        bitmap[group_index * 8 + bit_index]) begin
+                        local_index = bit_index[2:0];
+                        group_found = 1'b1;
+                    end
+                end
+                if (group_found)
+                    lowest_free_phys = group_index * 8 + local_index;
+            end
+        end
+    endfunction
 
     initial begin
         if ((BE_WIDTH != 1) && (BE_WIDTH != 2) && (BE_WIDTH != 4)) begin
@@ -107,15 +134,7 @@ module rv32_rename_unit #(
         candidate_free_bitmap = free_bitmap;
         for (candidate_lane = 0; candidate_lane < BE_WIDTH;
              candidate_lane = candidate_lane + 1) begin
-            selected_phys = 0;
-            alloc_found = 1'b0;
-            for (free_index = 1; free_index < PHYS_REGS;
-                 free_index = free_index + 1) begin
-                if (!alloc_found && candidate_free_bitmap[free_index]) begin
-                    selected_phys = free_index;
-                    alloc_found = 1'b1;
-                end
-            end
+            selected_phys = lowest_free_phys(candidate_free_bitmap);
             free_candidate[candidate_lane] =
                 selected_phys[PHYS_ADDR_WIDTH-1:0];
             candidate_free_bitmap[selected_phys] = 1'b0;
