@@ -8,7 +8,13 @@ module rv32_icache_nonblocking #(
     parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH,
     parameter integer MSHR_ENTRIES = 4,
     parameter integer NEXT_LINE_PREFETCH = 1,
-    parameter integer PREFETCH_DISTANCE = 3
+    parameter integer PREFETCH_DISTANCE = 3,
+    parameter integer CACHE_LINES = 64,
+    parameter integer CACHE_WAYS = 2,
+    parameter integer CACHE_SETS = CACHE_LINES / CACHE_WAYS,
+    parameter integer CACHE_SET_WIDTH = $clog2(CACHE_SETS),
+    parameter integer CACHE_ENTRY_WIDTH = $clog2(CACHE_LINES),
+    parameter integer CACHE_TAG_WIDTH = 32 - 4 - CACHE_SET_WIDTH
 ) (
     input  wire                       clk_i,
     input  wire                       reset_i,
@@ -44,13 +50,18 @@ module rv32_icache_nonblocking #(
     output reg                        event_refill_o,
     output reg                        event_stall_o
 );
-    // 1 KiB total, two ways x 32 sets.  The two-way organization keeps the
-    // startup return line resident when linked code at 0x1000 maps to the
-    // same set, without increasing the 64-line data capacity.
-    reg [63:0] valid_bits;
-    reg [22:0] tag_mem [0:63];
-    reg [127:0] data_mem [0:63];
-    reg lru_mem [0:31];
+    reg [CACHE_LINES-1:0] valid_bits;
+    reg [CACHE_TAG_WIDTH-1:0] tag_mem [0:CACHE_LINES-1];
+    reg [127:0] data_mem [0:CACHE_LINES-1];
+    reg lru_mem [0:CACHE_SETS-1];
+
+    function [CACHE_ENTRY_WIDTH-1:0] cache_entry;
+        input [CACHE_SET_WIDTH-1:0] set_index;
+        input integer way;
+        begin
+            cache_entry = set_index * CACHE_WAYS + way;
+        end
+    endfunction
 
     reg mshr_valid [0:MSHR_ENTRIES-1];
     reg mshr_sent [0:MSHR_ENTRIES-1];
@@ -77,16 +88,17 @@ module rv32_icache_nonblocking #(
     reg [31:0] last_demand_line;
 
     wire [31:0] request_line = {if_req_pc_i[31:4], 4'b0000};
-    wire [4:0] request_set = if_req_pc_i[8:4];
-    wire [22:0] request_tag = if_req_pc_i[31:9];
-    wire [5:0] request_way0 = {request_set, 1'b0};
-    wire [5:0] request_way1 = {request_set, 1'b1};
+    wire [CACHE_SET_WIDTH-1:0] request_set = if_req_pc_i[CACHE_SET_WIDTH+3:4];
+    wire [CACHE_TAG_WIDTH-1:0] request_tag = if_req_pc_i[31:CACHE_SET_WIDTH+4];
+    wire [CACHE_ENTRY_WIDTH-1:0] request_way0 = cache_entry(request_set, 0);
+    wire [CACHE_ENTRY_WIDTH-1:0] request_way1 = cache_entry(request_set, 1);
     wire request_hit_way0 = valid_bits[request_way0] &&
                             (tag_mem[request_way0] == request_tag);
-    wire request_hit_way1 = valid_bits[request_way1] &&
+    wire request_hit_way1 = (CACHE_WAYS == 2) && valid_bits[request_way1] &&
                             (tag_mem[request_way1] == request_tag);
     wire request_hit = request_hit_way0 || request_hit_way1;
-    wire [5:0] request_entry = request_hit_way1 ? request_way1 : request_way0;
+    wire [CACHE_ENTRY_WIDTH-1:0] request_entry =
+        request_hit_way1 ? request_way1 : request_way0;
     wire response_live = resp_valid_reg && (resp_epoch_reg == current_epoch_i);
     wire response_slot_free = !resp_valid_reg || !response_live || if_resp_ready_i;
 
@@ -98,6 +110,7 @@ module rv32_icache_nonblocking #(
     integer prefetch_match_index;
     integer control_word;
     integer control_check;
+    integer control_way;
     reg request_match_found;
     reg free_found;
     reg send_found;
@@ -235,15 +248,16 @@ module rv32_icache_nonblocking #(
             end
         end
         if (control_target_valid) begin
-            control_target_present =
-                (valid_bits[{control_target[8:4], 1'b0}] &&
-                 (tag_mem[{control_target[8:4], 1'b0}] ==
-                  control_target[31:9])) ||
-                (valid_bits[{control_target[8:4], 1'b1}] &&
-                 (tag_mem[{control_target[8:4], 1'b1}] ==
-                  control_target[31:9])) ||
-                (request_fire &&
-                 (request_line == {control_target[31:4], 4'b0}));
+            control_target_present = request_fire &&
+                (request_line == {control_target[31:4], 4'b0});
+            for (control_way = 0; control_way < CACHE_WAYS;
+                 control_way = control_way + 1)
+                if (valid_bits[cache_entry(
+                        control_target[CACHE_SET_WIDTH+3:4], control_way)] &&
+                    (tag_mem[cache_entry(
+                        control_target[CACHE_SET_WIDTH+3:4], control_way)] ==
+                     control_target[31:CACHE_SET_WIDTH+4]))
+                    control_target_present = 1'b1;
             for (control_check = 0; control_check < MSHR_ENTRIES;
                  control_check = control_check + 1)
                 if (mshr_valid[control_check] &&
@@ -262,14 +276,16 @@ module rv32_icache_nonblocking #(
                                  (request_match_index == response_index))) &&
                                ((mshr_demand_epoch[response_index] == current_epoch_i) ||
                                 (request_fire && (if_req_epoch_i == current_epoch_i)));
-    wire [4:0] prefetch_set = prefetch_next_line[8:4];
-    wire [22:0] prefetch_tag = prefetch_next_line[31:9];
-    wire [5:0] prefetch_way0 = {prefetch_set, 1'b0};
-    wire [5:0] prefetch_way1 = {prefetch_set, 1'b1};
+    wire [CACHE_SET_WIDTH-1:0] prefetch_set =
+        prefetch_next_line[CACHE_SET_WIDTH+3:4];
+    wire [CACHE_TAG_WIDTH-1:0] prefetch_tag =
+        prefetch_next_line[31:CACHE_SET_WIDTH+4];
+    wire [CACHE_ENTRY_WIDTH-1:0] prefetch_way0 = cache_entry(prefetch_set, 0);
+    wire [CACHE_ENTRY_WIDTH-1:0] prefetch_way1 = cache_entry(prefetch_set, 1);
     wire prefetch_line_resident =
         (valid_bits[prefetch_way0] &&
          (tag_mem[prefetch_way0] == prefetch_tag)) ||
-        (valid_bits[prefetch_way1] &&
+        ((CACHE_WAYS == 2) && valid_bits[prefetch_way1] &&
          (tag_mem[prefetch_way1] == prefetch_tag));
     wire prefetch_step = prefetch_active && (prefetch_remaining > 0) &&
                          !request_allocates && !stream_reset &&
@@ -279,16 +295,19 @@ module rv32_icache_nonblocking #(
                                     !prefetch_line_resident &&
                                     !prefetch_match_found;
 
-    wire [4:0] refill_set = mem_resp_line_addr_i[8:4];
-    wire [5:0] refill_way0 = {refill_set, 1'b0};
-    wire [5:0] refill_way1 = {refill_set, 1'b1};
+    wire [CACHE_SET_WIDTH-1:0] refill_set =
+        mem_resp_line_addr_i[CACHE_SET_WIDTH+3:4];
+    wire [CACHE_ENTRY_WIDTH-1:0] refill_way0 = cache_entry(refill_set, 0);
+    wire [CACHE_ENTRY_WIDTH-1:0] refill_way1 = cache_entry(refill_set, 1);
     wire refill_conflicts_with_hit = request_fire && request_hit &&
                                      (request_set == refill_set);
-    wire [5:0] refill_entry = !valid_bits[refill_way0] ? refill_way0 :
+    wire [CACHE_ENTRY_WIDTH-1:0] refill_entry =
+                              (CACHE_WAYS == 1) ? refill_way0 :
+                              (!valid_bits[refill_way0] ? refill_way0 :
                               (!valid_bits[refill_way1] ? refill_way1 :
                                (refill_conflicts_with_hit ?
-                                {refill_set, ~request_entry[0]} :
-                                {refill_set, lru_mem[refill_set]}));
+                                cache_entry(refill_set, !request_entry[0]) :
+                                cache_entry(refill_set, lru_mem[refill_set]))));
 
     assign if_req_ready_o = !reset_i && response_slot_free &&
                             !request_would_conflict &&
@@ -331,8 +350,8 @@ module rv32_icache_nonblocking #(
             event_miss_o <= 1'b0;
             event_refill_o <= 1'b0;
             event_stall_o <= 1'b0;
-            valid_bits <= 64'd0;
-            for (reset_index = 0; reset_index < 32; reset_index = reset_index + 1)
+            valid_bits <= {CACHE_LINES{1'b0}};
+            for (reset_index = 0; reset_index < CACHE_SETS; reset_index = reset_index + 1)
                 lru_mem[reset_index] <= 1'b0;
             for (reset_index = 0; reset_index < MSHR_ENTRIES; reset_index = reset_index + 1) begin
                 mshr_valid[reset_index] <= 1'b0;
@@ -383,7 +402,8 @@ module rv32_icache_nonblocking #(
                         resp_data_reg <= data_mem[request_entry];
                         resp_epoch_reg <= if_req_epoch_i;
                         resp_error_reg <= 1'b0;
-                        lru_mem[request_set] <= ~request_entry[0];
+                        if (CACHE_WAYS == 2)
+                            lru_mem[request_set] <= ~request_entry[0];
                     end
                 end else begin
                     event_miss_o <= 1'b1;
@@ -456,9 +476,11 @@ module rv32_icache_nonblocking #(
                 event_refill_o <= !mem_resp_error_i && response_matches;
                 if (!mem_resp_error_i && response_matches) begin
                     valid_bits[refill_entry] <= 1'b1;
-                    tag_mem[refill_entry] <= mem_resp_line_addr_i[31:9];
+                    tag_mem[refill_entry] <=
+                        mem_resp_line_addr_i[31:CACHE_SET_WIDTH+4];
                     data_mem[refill_entry] <= mem_resp_data_i;
-                    lru_mem[refill_set] <= ~refill_entry[0];
+                    if (CACHE_WAYS == 2)
+                        lru_mem[refill_set] <= ~refill_entry[0];
                 end
 
                 if (request_fire && request_match_found &&
@@ -506,6 +528,13 @@ module rv32_icache_nonblocking #(
     end
 
     initial begin
+        if (CACHE_LINES < 16 || CACHE_LINES > 4096 ||
+            ((CACHE_LINES & (CACHE_LINES - 1)) != 0) ||
+            ((CACHE_WAYS != 1) && (CACHE_WAYS != 2)) ||
+            (CACHE_LINES % CACHE_WAYS != 0)) begin
+            $display("ERROR: invalid rv32_icache_nonblocking cache geometry");
+            $finish;
+        end
         if (MSHR_ENTRIES < 2 || MSHR_ENTRIES > 16) begin
             $display("ERROR: rv32_icache_nonblocking MSHR_ENTRIES must be 2..16");
             $finish;

@@ -18,6 +18,8 @@ module cpu_core #(
     parameter integer ICACHE_COMBINATIONAL_HIT = 0,
     parameter integer ICACHE_PREFETCH = 1,
     parameter integer ICACHE_MSHRS = 8,
+    parameter integer ICACHE_LINES = 64,
+    parameter integer ICACHE_WAYS = 2,
     parameter integer DCACHE_MSHRS = 4,
     parameter integer DCACHE_LINES = 256,
     parameter integer DCACHE_WAYS = 1,
@@ -413,6 +415,7 @@ module cpu_core #(
     if (ICACHE_MSHRS > 1) begin : g_nonblocking_icache
     rv32_icache_nonblocking #(
         .MSHR_ENTRIES(ICACHE_MSHRS),
+        .CACHE_LINES(ICACHE_LINES), .CACHE_WAYS(ICACHE_WAYS),
         .NEXT_LINE_PREFETCH(ICACHE_PREFETCH),
         // Fill the remaining MSHRs with sequential lines.  Redirected
         // demands can immediately recycle old-epoch entries, so speculative
