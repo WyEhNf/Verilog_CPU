@@ -148,11 +148,16 @@ module rv32_backend_joint_tb #(
     task release_held_load_with_mul;
         begin
             while (!held_load_valid) begin @(posedge clk); #1; end
-            while (!dut.mdu.gen_wallace_multiplier.multiplier.s2_valid) begin @(posedge clk); #1; end
+            // Hold the multiplier result for one edge while the delayed load
+            // response enters the LSQ.  This creates simultaneous producer
+            // handshakes independent of the multiplier's pipeline depth.
+            force dut.mdu_completion_ready = 1'b0;
             @(negedge clk);
             resp_valid=1'b1; resp_error=inject_load_error; resp_lsq_tag=held_load_lsq_tag;
             resp_addr=held_load_addr; resp_line_valid=1'b1; resp_line=held_load_line; resp_word=held_load_word;
             held_load_valid=1'b0;
+            @(posedge clk); #1;
+            release dut.mdu_completion_ready;
         end
     endtask
 
@@ -284,7 +289,7 @@ module rv32_backend_joint_tb #(
         expect_commit(32'h54, 0, 0);
         if (!error) begin $display("STORE_ERROR_MISSING_FAIL"); bad=bad+1; end
 
-        // Force a three-stage MUL result and an LSQ load result into the
+        // Force a MUL result and an LSQ load result into the
         // completion network on the same cycle. Both must be accepted and
         // retain their ROB order through the single-lane CDB.
         reset=1; inject_store_error=0; defer_load_response=0; held_load_valid=0; completion_collision_seen=0; clear_trace(); @(posedge clk); #1; reset=0; #1;
