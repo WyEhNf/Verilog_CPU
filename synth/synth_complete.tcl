@@ -36,6 +36,9 @@ set dcache_mshrs          [lindex $argv 22]
 set dcache_lines          [lindex $argv 23]
 set dcache_index_hash     [lindex $argv 24]
 set dcache_request_pipeline [lindex $argv 25]
+set dcache_ways [lindex $argv 26]
+set ram_size_bytes [lindex $argv 27]
+set legacy_sentinel_halt [lindex $argv 28]
 
 if {$rs_entries eq ""}          { set rs_entries 8 }
 if {$lsq_entries eq ""}         { set lsq_entries 8 }
@@ -58,6 +61,9 @@ if {$dcache_mshrs eq ""}        { set dcache_mshrs 4 }
 if {$dcache_lines eq ""}        { set dcache_lines 256 }
 if {$dcache_index_hash eq ""}   { set dcache_index_hash 0 }
 if {$dcache_request_pipeline eq ""} { set dcache_request_pipeline 0 }
+if {$dcache_ways eq ""} { set dcache_ways 1 }
+if {$ram_size_bytes eq ""} { set ram_size_bytes 268435456 }
+if {$legacy_sentinel_halt eq ""} { set legacy_sentinel_halt 0 }
 
 set libdir "_asap7_lib_filtered"
 file mkdir $outdir
@@ -87,7 +93,9 @@ chparam -set SERIAL_BACKEND $serial_backend cpu_core
 chparam -set INT_ISSUE_WIDTH $int_issue_width -set CDB_WIDTH $cdb_width cpu_core
 chparam -set ICACHE_MSHRS $icache_mshrs -set DCACHE_MSHRS $dcache_mshrs \
         -set DCACHE_LINES $dcache_lines -set DCACHE_INDEX_HASH $dcache_index_hash \
-        -set DCACHE_REQUEST_PIPELINE $dcache_request_pipeline cpu_core
+        -set DCACHE_REQUEST_PIPELINE $dcache_request_pipeline \
+        -set DCACHE_WAYS $dcache_ways -set RAM_SIZE_BYTES $ram_size_bytes \
+        -set LEGACY_SENTINEL_HALT $legacy_sentinel_halt cpu_core
 
 hierarchy -check -top cpu_core
 procs

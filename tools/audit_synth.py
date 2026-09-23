@@ -141,6 +141,9 @@ def build_report(args):
             "dcache_lines": args.dcache_lines,
             "dcache_index_hash": args.dcache_index_hash,
             "dcache_request_pipeline": args.dcache_request_pipeline,
+            "dcache_ways": args.dcache_ways,
+            "ram_size_bytes": args.ram_size_bytes,
+            "legacy_sentinel_halt": bool(args.legacy_sentinel_halt),
             "cache_stats_enabled": bool(args.cache_stats),
             "caches_enabled": bool(args.caches),
             "predictor_enabled": bool(args.predictor),
@@ -196,6 +199,9 @@ def main(argv=None):
     parser.add_argument("--dcache-lines", type=int, default=256)
     parser.add_argument("--dcache-index-hash", type=int, choices=(0, 1), default=0)
     parser.add_argument("--dcache-request-pipeline", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--dcache-ways", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--ram-size-bytes", type=int, default=268435456)
+    parser.add_argument("--legacy-sentinel-halt", type=int, choices=(0, 1), default=0)
     parser.add_argument("--mul-impl", type=int, choices=(0, 1, 2), default=0)
     parser.add_argument("--shift-impl", type=int, choices=(0, 1), default=0)
     parser.add_argument("--phys-tag-impl", type=int, choices=(0, 1), default=0)

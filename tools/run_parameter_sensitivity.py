@@ -16,9 +16,10 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 BASE = dict(FeWidth=2, BeWidth=2, PhysRegs=48, RobEntries=16, RsEntries=4,
             LsqEntries=8, IntIssueWidth=2, CdbWidth=2, EnableCacheStats=1,
-            IcacheMshrs=8, DcacheMshrs=4, DcacheLines=128, DcacheIndexHash=1,
+            IcacheMshrs=8, DcacheMshrs=4, DcacheLines=128,
+            DcacheWays=1, DcacheIndexHash=1,
             DcacheRequestPipeline=0,
-            RamSizeBytes=1048576,
+            RamSizeBytes=1048576, LegacySentinelHalt=1,
             IMemoryOutstanding=16, DMemoryOutstanding=8, CompletionDepth=8,
             FetchQueueDepth=16, MemoryLatency=20, MulImpl=0, ShiftImpl=0,
             PhysTagImpl=0, GenerationWidth=8, CheckpointImpl=0,
@@ -34,6 +35,8 @@ CASES["pipe1"] = dict(DcacheRequestPipeline=1)
 CASES["rob32_rs8_pipe1"] = dict(RobEntries=32, RsEntries=8, DcacheRequestPipeline=1)
 CASES["d64"] = dict(DcacheLines=64)
 CASES["d64_pipe1"] = dict(DcacheLines=64, DcacheRequestPipeline=1)
+CASES["assoc2"] = dict(DcacheWays=2)
+CASES["assoc2_64"] = dict(DcacheWays=2, DcacheLines=64)
 
 
 def digest(path):

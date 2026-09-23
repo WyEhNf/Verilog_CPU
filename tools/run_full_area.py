@@ -32,7 +32,8 @@ def main():
                           ("icache-mshrs", 16), ("dcache-mshrs", 8), ("dcache-lines", 2048),
                           ("fetch-queue-depth", 16), ("completion-depth", 16),
                           ("cache-stats", 1), ("dcache-index-hash", 0),
-                          ("dcache-request-pipeline", 0)):
+                          ("dcache-request-pipeline", 0), ("dcache-ways", 1),
+                          ("ram-size-bytes", 268435456), ("legacy-sentinel-halt", 0)):
         parser.add_argument("--" + name, type=int, default=default)
     args = parser.parse_args()
     out = (ROOT / args.outdir).resolve()
@@ -45,7 +46,8 @@ def main():
               out.as_posix(), args.rs_entries, args.lsq_entries, args.cache_stats, 0, 1, 1,
               args.fetch_queue_depth, args.completion_depth, 0, 0, 8, 0, 0, 0,
               args.int_issue_width, args.cdb_width, args.icache_mshrs, args.dcache_mshrs,
-              args.dcache_lines, args.dcache_index_hash, args.dcache_request_pipeline]
+              args.dcache_lines, args.dcache_index_hash, args.dcache_request_pipeline,
+              args.dcache_ways, args.ram_size_bytes, args.legacy_sentinel_halt]
     sources = [ROOT / p.strip() for p in (ROOT / "rtl/filelist.f").read_text().splitlines() if p.strip()]
     sources += list((ROOT / "rtl").rglob("*.vh"))
     sources += [ROOT / "synth/synth.tcl", Path(__file__), *LIBS, LIBDIR / "asap7_comb.genlib"]
@@ -178,7 +180,8 @@ write_verilog -noattr -noexpr {out.as_posix()}/cpu_core_synth.v
                        "completion_depth", "shift_impl", "phys_tag_impl", "generation_width",
                        "checkpoint_impl", "completion_bypass", "serial_backend",
                        "int_issue_width", "cdb_width", "icache_mshrs", "dcache_mshrs", "dcache_lines",
-                       "dcache_index_hash", "dcache_request_pipeline"]
+                       "dcache_index_hash", "dcache_request_pipeline", "dcache_ways",
+                       "ram_size_bytes", "legacy_sentinel_halt"]
     configuration = dict(zip(parameter_names, config))
     configuration.pop("outdir")
     for key in ("cache_stats_enabled", "caches_enabled", "predictor_enabled", "completion_bypass", "serial_backend"):
