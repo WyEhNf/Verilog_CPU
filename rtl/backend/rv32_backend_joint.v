@@ -93,7 +93,7 @@ module rv32_backend_joint #(
     output wire [3:0]                   redirect_epoch_o,
     output wire                         halted_o,
     output wire                         error_o,
-    output wire [7:0]                   return_value_o,
+    output wire [31:0]                  return_value_o,
     output wire                         branch_feedback_valid_o,
     output wire [31:0]                  branch_feedback_pc_o,
     output wire [1:0]                   branch_feedback_kind_o,

@@ -87,7 +87,7 @@ module rv32_rob #(
 
     output reg                          halted_o,
     output reg                          error_o,
-    output reg  [7:0]                   return_value_o,
+    output reg  [31:0]                  return_value_o,
     output wire [SLOT_WIDTH-1:0]        head_o,
     output wire [SLOT_WIDTH-1:0]        tail_o,
     output wire [((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1))-1:0] occupancy_o,
@@ -382,7 +382,9 @@ module rv32_rob #(
                         // because there is one store-admission port.
                         if (store_mem[commit_slot]) begin
                             if (commit_lane == 0) begin
-                                if (STORE_BUFFERED_RETIRE != 0)
+                                if ((STORE_BUFFERED_RETIRE != 0) &&
+                                    !((store_addr_mem[commit_slot] == 32'h80000000) &&
+                                      (store_mask_mem[commit_slot] == 4'hf)))
                                     // Admission is recorded in store_sent_mem
                                     // on the preceding edge.  Retire from that
                                     // registered state to avoid a ROB<->LSQ
@@ -410,7 +412,10 @@ module rv32_rob #(
                             // HALT/error are precise terminal events.  A wide
                             // commit bundle must not expose younger lanes after
                             // either reaches the architectural head.
-                            if (halt_mem[commit_slot] || error_mem[commit_slot])
+                            if (halt_mem[commit_slot] || error_mem[commit_slot] ||
+                                (store_mem[commit_slot] &&
+                                 (store_addr_mem[commit_slot] == 32'h80000000) &&
+                                 (store_mask_mem[commit_slot] == 4'hf)))
                                 commit_break = 1'b1;
                         end else commit_break = 1'b1;
                     end else begin
@@ -506,9 +511,14 @@ module rv32_rob #(
                 if (commit_valid_o[commit_lane] && commit_ready_i) begin
                     commit_slot = head_reg + commit_lane;
                     if (commit_slot >= ROB_ENTRIES) commit_slot = commit_slot - ROB_ENTRIES;
-                    if (halt_mem[commit_slot]) begin
+                    if (store_mem[commit_slot] &&
+                        (store_addr_mem[commit_slot] == 32'h80000000) &&
+                        (store_mask_mem[commit_slot] == 4'hf)) begin
                         halted_o <= 1'b1;
-                        return_value_o <= value_mem[commit_slot][7:0];
+                        return_value_o <= store_data_mem[commit_slot];
+                    end else if (halt_mem[commit_slot]) begin
+                        halted_o <= 1'b1;
+                        return_value_o <= value_mem[commit_slot];
                     end
                     if (error_mem[commit_slot]) error_o <= 1'b1;
                     valid_mem[commit_slot] <= 1'b0;

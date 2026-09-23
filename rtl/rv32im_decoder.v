@@ -3,7 +3,9 @@
 
 // Combinational RV32IM decoder.  A frontend instantiates one decoder per lane;
 // address-dependent store-mask shifting remains in the AGU/LSQ.
-module rv32im_decoder (
+module rv32im_decoder #(
+    parameter integer LEGACY_SENTINEL_HALT = 0
+) (
     input  wire [31:0]                  inst_i,
     output reg                          legal_o,
     output reg  [`RV32IM_OP_WIDTH-1:0] op_o,
@@ -225,7 +227,7 @@ module rv32im_decoder (
 
         // The acceptance-program sentinel aliases ADDI a0, zero, 255 and must
         // therefore override normal opcode decode.
-        if (inst_i == 32'h0ff00513) begin
+        if ((LEGACY_SENTINEL_HALT != 0) && (inst_i == 32'h0ff00513)) begin
             legal_o = 1'b1;
             op_o = `RV32IM_OP_HALT;
             class_o = `RV32IM_CLASS_HALT;

@@ -23,6 +23,7 @@ module cpu_core #(
     parameter integer DCACHE_INDEX_HASH = 0,
     parameter integer DCACHE_REQUEST_PIPELINE = 0,
     parameter integer RAM_SIZE_BYTES = 268435456,
+    parameter integer LEGACY_SENTINEL_HALT = 0,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
@@ -40,7 +41,7 @@ module cpu_core #(
     input  wire       reset,
     output wire       halted,
     output wire       error,
-    output wire [7:0] return_value,
+    output wire [31:0] return_value,
     output reg  [31:0] cycles,
     output reg  [31:0] instret,
     output wire        mem_i_req_valid,
@@ -301,6 +302,7 @@ module cpu_core #(
     wire [ROB_TAG_WIDTH-1:0] dcache_req_rob_tag, dcache_req_lsq_tag;
     wire [127:0] dcache_req_wdata;
     wire memory_dreq_valid, memory_dreq_ready, memory_dreq_load, memory_dreq_store;
+    wire normal_memory_dreq_ready;
     wire memory_dreq_unsigned;
     wire [31:0] memory_dreq_addr;
     wire [1:0] memory_dreq_size;
@@ -316,6 +318,15 @@ module cpu_core #(
     assign {memory_dreq_load, memory_dreq_store, memory_dreq_addr, memory_dreq_size,
             memory_dreq_unsigned, memory_dreq_mask, memory_dreq_wdata,
             memory_dreq_rob_tag, memory_dreq_lsq_tag} = dreq_payload_out;
+    // An exit store is an uncached architectural side effect. It must reach
+    // the external data port with its full 32-bit payload before the ROB may
+    // retire it; ordinary cache write-back must not absorb this MMIO access.
+    wire mmio_exit_request = memory_dreq_valid && memory_dreq_store &&
+                             (memory_dreq_addr == 32'h80000000) &&
+                             (memory_dreq_mask == 16'h000f);
+    wire normal_memory_dreq_valid = memory_dreq_valid && !mmio_exit_request;
+    assign memory_dreq_ready = mmio_exit_request ? mem_d_req_ready :
+                                normal_memory_dreq_ready;
     generate
     if (DCACHE_REQUEST_PIPELINE != 0) begin : g_dcache_request_pipeline
         wire input_ready, output_valid;
@@ -344,11 +355,53 @@ module cpu_core #(
     wire [127:0] dcache_resp_line;
     wire dcache_store_ack_valid, dcache_store_ack_error;
     wire [ROB_TAG_WIDTH-1:0] dcache_store_ack_lsq_tag;
+    wire cache_store_ack_valid, cache_store_ack_error;
+    wire [ROB_TAG_WIDTH-1:0] cache_store_ack_lsq_tag;
+    reg mmio_ack_pending;
+    reg [ROB_TAG_WIDTH-1:0] mmio_ack_lsq_tag;
+    assign dcache_store_ack_valid = cache_store_ack_valid || mmio_ack_pending;
+    assign dcache_store_ack_lsq_tag = cache_store_ack_valid ?
+        cache_store_ack_lsq_tag : mmio_ack_lsq_tag;
+    assign dcache_store_ack_error = cache_store_ack_valid ?
+        cache_store_ack_error : 1'b0;
+    always @(posedge clk) begin
+        if (reset) begin
+            mmio_ack_pending <= 1'b0;
+            mmio_ack_lsq_tag <= {ROB_TAG_WIDTH{1'b0}};
+        end else begin
+            if (mmio_ack_pending && !cache_store_ack_valid)
+                mmio_ack_pending <= 1'b0;
+            if (mmio_exit_request && mem_d_req_ready) begin
+                mmio_ack_pending <= 1'b1;
+                mmio_ack_lsq_tag <= memory_dreq_lsq_tag;
+            end
+        end
+    end
     wire dc_mem_req_valid, dc_mem_req_ready, dc_mem_req_write, dc_mem_resp_valid, dc_mem_resp_ready, dc_mem_resp_error;
     wire [31:0] dc_mem_req_line_addr, dc_mem_resp_line_addr;
     wire [127:0] dc_mem_req_wdata, dc_mem_resp_data;
     wire [15:0] dc_mem_req_wmask;
     wire [7:0] dc_mem_req_id, dc_mem_resp_id;
+    wire normal_mem_d_req_valid, normal_mem_d_req_ready, normal_mem_d_req_write;
+    wire [31:0] normal_mem_d_req_line_addr;
+    wire [127:0] normal_mem_d_req_wdata;
+    wire [15:0] normal_mem_d_req_wmask;
+    wire [7:0] normal_mem_d_req_id;
+    wire normal_mem_d_resp_ready;
+    wire normal_mem_d_resp_valid = mem_d_resp_valid &&
+                                   (mem_d_resp_id != 8'hfe);
+    assign mem_d_req_valid = mmio_exit_request || normal_mem_d_req_valid;
+    assign mem_d_req_write = mmio_exit_request ? 1'b1 : normal_mem_d_req_write;
+    assign mem_d_req_line_addr = mmio_exit_request ? 32'h80000000 :
+                                  normal_mem_d_req_line_addr;
+    assign mem_d_req_wdata = mmio_exit_request ? memory_dreq_wdata :
+                              normal_mem_d_req_wdata;
+    assign mem_d_req_wmask = mmio_exit_request ? 16'h000f :
+                              normal_mem_d_req_wmask;
+    assign mem_d_req_id = mmio_exit_request ? 8'hfe : normal_mem_d_req_id;
+    assign normal_mem_d_req_ready = mem_d_req_ready && !mmio_exit_request;
+    assign mem_d_resp_ready = (mem_d_resp_id == 8'hfe) ? 1'b1 :
+                              normal_mem_d_resp_ready;
     wire dc_event_request, dc_event_hit, dc_event_miss, dc_event_refill, dc_event_writeback, dc_event_stall;
     wire dcache_debug_s0_valid, dcache_debug_s0_store;
     wire dcache_debug_s1_valid, dcache_debug_s1_store;
@@ -408,8 +461,8 @@ module cpu_core #(
     ) dcache (
         // LSQ generations reject wrong-path responses while retaining older
         // loads across a redirect.  The cache itself has no ROB-age context.
-        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(memory_dreq_valid),
-        .dcache_req_ready_o(memory_dreq_ready), .dcache_req_is_load_i(memory_dreq_load),
+        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(normal_memory_dreq_valid),
+        .dcache_req_ready_o(normal_memory_dreq_ready), .dcache_req_is_load_i(memory_dreq_load),
         .dcache_req_is_store_i(memory_dreq_store), .dcache_req_addr_i(memory_dreq_addr),
         .dcache_req_size_i(memory_dreq_size), .dcache_req_unsigned_i(memory_dreq_unsigned),
         .dcache_req_mask_i(memory_dreq_mask), .dcache_req_wdata_i(memory_dreq_wdata),
@@ -418,8 +471,8 @@ module cpu_core #(
         .dcache_resp_lsq_tag_o(dcache_resp_lsq_tag), .dcache_resp_addr_o(dcache_resp_addr),
         .dcache_resp_line_data_o(dcache_resp_line), .dcache_resp_word_data_o(dcache_resp_word),
         .dcache_resp_line_valid_o(dcache_resp_line_valid), .dcache_resp_error_o(dcache_resp_error),
-        .dcache_store_ack_valid_o(dcache_store_ack_valid), .dcache_store_ack_ready_i(1'b1),
-        .dcache_store_ack_lsq_tag_o(dcache_store_ack_lsq_tag), .dcache_store_ack_error_o(dcache_store_ack_error),
+        .dcache_store_ack_valid_o(cache_store_ack_valid), .dcache_store_ack_ready_i(1'b1),
+        .dcache_store_ack_lsq_tag_o(cache_store_ack_lsq_tag), .dcache_store_ack_error_o(cache_store_ack_error),
         .mem_req_valid_o(dc_mem_req_valid), .mem_req_ready_i(dc_mem_req_ready),
         .mem_req_write_o(dc_mem_req_write), .mem_req_line_addr_o(dc_mem_req_line_addr),
         .mem_req_wdata_o(dc_mem_req_wdata), .mem_req_wmask_o(dc_mem_req_wmask),
@@ -432,8 +485,8 @@ module cpu_core #(
     );
     end else begin : g_blocking_dcache
     rv32_dcache #(.TAG_WIDTH(ROB_TAG_WIDTH)) dcache (
-        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(memory_dreq_valid),
-        .dcache_req_ready_o(memory_dreq_ready), .dcache_req_is_load_i(memory_dreq_load),
+        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(normal_memory_dreq_valid),
+        .dcache_req_ready_o(normal_memory_dreq_ready), .dcache_req_is_load_i(memory_dreq_load),
         .dcache_req_is_store_i(memory_dreq_store), .dcache_req_addr_i(memory_dreq_addr),
         .dcache_req_size_i(memory_dreq_size), .dcache_req_unsigned_i(memory_dreq_unsigned),
         .dcache_req_mask_i(memory_dreq_mask), .dcache_req_wdata_i(memory_dreq_wdata),
@@ -442,8 +495,8 @@ module cpu_core #(
         .dcache_resp_lsq_tag_o(dcache_resp_lsq_tag), .dcache_resp_addr_o(dcache_resp_addr),
         .dcache_resp_line_data_o(dcache_resp_line), .dcache_resp_word_data_o(dcache_resp_word),
         .dcache_resp_line_valid_o(dcache_resp_line_valid), .dcache_resp_error_o(dcache_resp_error),
-        .dcache_store_ack_valid_o(dcache_store_ack_valid), .dcache_store_ack_ready_i(1'b1),
-        .dcache_store_ack_lsq_tag_o(dcache_store_ack_lsq_tag), .dcache_store_ack_error_o(dcache_store_ack_error),
+        .dcache_store_ack_valid_o(cache_store_ack_valid), .dcache_store_ack_ready_i(1'b1),
+        .dcache_store_ack_lsq_tag_o(cache_store_ack_lsq_tag), .dcache_store_ack_error_o(cache_store_ack_error),
         .mem_req_valid_o(dc_mem_req_valid), .mem_req_ready_i(dc_mem_req_ready),
         .mem_req_write_o(dc_mem_req_write), .mem_req_line_addr_o(dc_mem_req_line_addr),
         .mem_req_wdata_o(dc_mem_req_wdata), .mem_req_wmask_o(dc_mem_req_wmask),
@@ -474,11 +527,11 @@ module cpu_core #(
         .mem_i_resp_valid_i(mem_i_resp_valid), .mem_i_resp_ready_o(mem_i_resp_ready),
         .mem_i_resp_line_addr_i(mem_i_resp_line_addr), .mem_i_resp_data_i(mem_i_resp_data),
         .mem_i_resp_id_i(mem_i_resp_id), .mem_i_resp_error_i(mem_i_resp_error),
-        .mem_d_req_valid_o(mem_d_req_valid), .mem_d_req_ready_i(mem_d_req_ready),
-        .mem_d_req_write_o(mem_d_req_write), .mem_d_req_line_addr_o(mem_d_req_line_addr),
-        .mem_d_req_wdata_o(mem_d_req_wdata), .mem_d_req_wmask_o(mem_d_req_wmask),
-        .mem_d_req_id_o(mem_d_req_id), .mem_d_resp_valid_i(mem_d_resp_valid),
-        .mem_d_resp_ready_o(mem_d_resp_ready), .mem_d_resp_line_addr_i(mem_d_resp_line_addr),
+        .mem_d_req_valid_o(normal_mem_d_req_valid), .mem_d_req_ready_i(normal_mem_d_req_ready),
+        .mem_d_req_write_o(normal_mem_d_req_write), .mem_d_req_line_addr_o(normal_mem_d_req_line_addr),
+        .mem_d_req_wdata_o(normal_mem_d_req_wdata), .mem_d_req_wmask_o(normal_mem_d_req_wmask),
+        .mem_d_req_id_o(normal_mem_d_req_id), .mem_d_resp_valid_i(normal_mem_d_resp_valid),
+        .mem_d_resp_ready_o(normal_mem_d_resp_ready), .mem_d_resp_line_addr_i(mem_d_resp_line_addr),
         .mem_d_resp_data_i(mem_d_resp_data), .mem_d_resp_id_i(mem_d_resp_id),
         .mem_d_resp_error_i(mem_d_resp_error), .event_i_mem_request_o(),
         .event_d_mem_read_o(), .event_d_mem_write_o()
@@ -506,7 +559,7 @@ module cpu_core #(
             .if_resp_pc_o(if_resp_pc), .if_resp_line_addr_o(if_resp_line_addr),
             .if_resp_line_data_o(if_resp_line_data), .if_resp_epoch_o(if_resp_epoch),
             .if_resp_error_o(if_resp_error),
-            .d_req_valid_i(memory_dreq_valid), .d_req_ready_o(memory_dreq_ready),
+            .d_req_valid_i(normal_memory_dreq_valid), .d_req_ready_o(normal_memory_dreq_ready),
             .d_req_is_load_i(memory_dreq_load), .d_req_is_store_i(memory_dreq_store),
             .d_req_addr_i(memory_dreq_addr), .d_req_size_i(memory_dreq_size),
             .d_req_unsigned_i(memory_dreq_unsigned), .d_req_mask_i(memory_dreq_mask),
@@ -515,19 +568,19 @@ module cpu_core #(
             .d_resp_lsq_tag_o(dcache_resp_lsq_tag), .d_resp_addr_o(dcache_resp_addr),
             .d_resp_line_data_o(dcache_resp_line), .d_resp_word_data_o(dcache_resp_word),
             .d_resp_line_valid_o(dcache_resp_line_valid), .d_resp_error_o(dcache_resp_error),
-            .d_store_ack_valid_o(dcache_store_ack_valid), .d_store_ack_ready_i(1'b1),
-            .d_store_ack_lsq_tag_o(dcache_store_ack_lsq_tag),
-            .d_store_ack_error_o(dcache_store_ack_error),
+            .d_store_ack_valid_o(cache_store_ack_valid), .d_store_ack_ready_i(1'b1),
+            .d_store_ack_lsq_tag_o(cache_store_ack_lsq_tag),
+            .d_store_ack_error_o(cache_store_ack_error),
             .mem_i_req_valid_o(mem_i_req_valid), .mem_i_req_ready_i(mem_i_req_ready),
             .mem_i_req_line_addr_o(mem_i_req_line_addr), .mem_i_req_id_o(mem_i_req_id),
             .mem_i_resp_valid_i(mem_i_resp_valid), .mem_i_resp_ready_o(mem_i_resp_ready),
             .mem_i_resp_line_addr_i(mem_i_resp_line_addr), .mem_i_resp_data_i(mem_i_resp_data),
             .mem_i_resp_id_i(mem_i_resp_id), .mem_i_resp_error_i(mem_i_resp_error),
-            .mem_d_req_valid_o(mem_d_req_valid), .mem_d_req_ready_i(mem_d_req_ready),
-            .mem_d_req_write_o(mem_d_req_write), .mem_d_req_line_addr_o(mem_d_req_line_addr),
-            .mem_d_req_wdata_o(mem_d_req_wdata), .mem_d_req_wmask_o(mem_d_req_wmask),
-            .mem_d_req_id_o(mem_d_req_id), .mem_d_resp_valid_i(mem_d_resp_valid),
-            .mem_d_resp_ready_o(mem_d_resp_ready), .mem_d_resp_line_addr_i(mem_d_resp_line_addr),
+            .mem_d_req_valid_o(normal_mem_d_req_valid), .mem_d_req_ready_i(normal_mem_d_req_ready),
+            .mem_d_req_write_o(normal_mem_d_req_write), .mem_d_req_line_addr_o(normal_mem_d_req_line_addr),
+            .mem_d_req_wdata_o(normal_mem_d_req_wdata), .mem_d_req_wmask_o(normal_mem_d_req_wmask),
+            .mem_d_req_id_o(normal_mem_d_req_id), .mem_d_resp_valid_i(normal_mem_d_resp_valid),
+            .mem_d_resp_ready_o(normal_mem_d_resp_ready), .mem_d_resp_line_addr_i(mem_d_resp_line_addr),
             .mem_d_resp_data_i(mem_d_resp_data), .mem_d_resp_id_i(mem_d_resp_id),
             .mem_d_resp_error_i(mem_d_resp_error)
         );
@@ -616,7 +669,7 @@ module cpu_core #(
             assign trace_pred_kind[decode_lane*2 +: 2] =
                 trace_packet[decode_lane*PACKET_WIDTH + 97 +: 2];
 
-            rv32im_decoder decoder (
+            rv32im_decoder #(.LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) decoder (
                 .inst_i(trace_inst[decode_lane*32 +: 32]),
                 .legal_o(dec_legal[decode_lane]),
                 .op_o(dec_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH]),

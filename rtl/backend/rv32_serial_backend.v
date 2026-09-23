@@ -78,7 +78,7 @@ module rv32_serial_backend #(
     output wire [3:0]                   redirect_epoch_o,
     output reg                          halted_o,
     output reg                          error_o,
-    output reg  [7:0]                   return_value_o,
+    output reg  [31:0]                  return_value_o,
     output wire                         branch_feedback_valid_o,
     output wire [31:0]                  branch_feedback_pc_o,
     output wire [1:0]                   branch_feedback_kind_o,
@@ -236,7 +236,7 @@ module rv32_serial_backend #(
             state <= S_IDLE;
             halted_o <= 1'b0;
             error_o <= 1'b0;
-            return_value_o <= 8'b0;
+            return_value_o <= 32'b0;
             epoch_reg <= 4'b0;
             register_valid <= {31{1'b0}};
         end else begin
@@ -314,7 +314,7 @@ module rv32_serial_backend #(
                         register_valid[rd_reg] <= 1'b1;
                     if (halt_reg) begin
                         halted_o <= 1'b1;
-                        return_value_o <= result_reg[7:0];
+                        return_value_o <= result_reg;
                     end
                     if (result_error_reg)
                         error_o <= 1'b1;
