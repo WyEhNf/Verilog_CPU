@@ -54,7 +54,8 @@ module rv32_rename_unit #(
     reg [COUNT_WIDTH-1:0] free_count;
 
     reg [PHYS_ADDR_WIDTH-1:0] bundle_rat [0:31];
-    reg [PHYS_REGS-1:0] bundle_free_bitmap;
+    reg [PHYS_REGS-1:0] candidate_free_bitmap;
+    reg [PHYS_ADDR_WIDTH-1:0] free_candidate [0:BE_WIDTH-1];
     integer lane;
     integer reg_index;
     integer alloc_used;
@@ -63,6 +64,7 @@ module rv32_rename_unit #(
     integer lsq_used;
     integer release_used;
     integer free_index;
+    integer candidate_lane;
     integer reset_index;
     integer commit_lane;
     integer restore_index;
@@ -98,15 +100,33 @@ module rv32_rename_unit #(
         end
     endgenerate
 
+    // Preselect the first BE_WIDTH free physical registers from registered
+    // state.  This priority search no longer depends on the decoded bundle;
+    // the instruction-dependent path only chooses candidate[alloc_used].
+    always @* begin
+        candidate_free_bitmap = free_bitmap;
+        for (candidate_lane = 0; candidate_lane < BE_WIDTH;
+             candidate_lane = candidate_lane + 1) begin
+            selected_phys = 0;
+            alloc_found = 1'b0;
+            for (free_index = 1; free_index < PHYS_REGS;
+                 free_index = free_index + 1) begin
+                if (!alloc_found && candidate_free_bitmap[free_index]) begin
+                    selected_phys = free_index;
+                    alloc_found = 1'b1;
+                end
+            end
+            free_candidate[candidate_lane] =
+                selected_phys[PHYS_ADDR_WIDTH-1:0];
+            candidate_free_bitmap[selected_phys] = 1'b0;
+        end
+    end
+
     // Work on a temporary RAT in program order.  Only a contiguous prefix can
     // be accepted, and later lanes see earlier lanes' newly allocated maps.
     always @* begin
-        free_index = 0;
-        selected_phys = 0;
-        alloc_found = 1'b0;
         for (reg_index = 0; reg_index < 32; reg_index = reg_index + 1)
             bundle_rat[reg_index] = rat[reg_index];
-        bundle_free_bitmap = free_bitmap;
         rename_valid_o = {BE_WIDTH{1'b0}};
         rename_rd_we_o = {BE_WIDTH{1'b0}};
         rename_rd_o = {(BE_WIDTH*5){1'b0}};
@@ -136,17 +156,10 @@ module rv32_rename_unit #(
                     rename_rs2_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = bundle_rat[decoded_rs2_i[(lane*5) +: 5]];
                 if (rename_rd_we_o[lane]) begin
                     rename_old_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = bundle_rat[decoded_rd_i[(lane*5) +: 5]];
-                    selected_phys = 0;
-                    alloc_found = 1'b0;
-                    for (free_index = 1; free_index < PHYS_REGS; free_index = free_index + 1) begin
-                        if (!alloc_found && bundle_free_bitmap[free_index]) begin
-                            selected_phys = free_index;
-                            alloc_found = 1'b1;
-                        end
-                    end
-                    rename_new_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = selected_phys[PHYS_ADDR_WIDTH-1:0];
-                    bundle_rat[decoded_rd_i[(lane*5) +: 5]] = selected_phys[PHYS_ADDR_WIDTH-1:0];
-                    bundle_free_bitmap[selected_phys] = 1'b0;
+                    rename_new_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] =
+                        free_candidate[alloc_used];
+                    bundle_rat[decoded_rd_i[(lane*5) +: 5]] =
+                        free_candidate[alloc_used];
                     alloc_used = alloc_used + 1;
                 end
                 rob_used = rob_used + 1;
