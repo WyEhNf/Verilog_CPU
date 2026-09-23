@@ -22,6 +22,7 @@ module cpu_core_image_tb #(
     parameter integer DCACHE_LINES = 256,
     parameter integer DCACHE_INDEX_HASH = 0,
     parameter integer DCACHE_REQUEST_PIPELINE = 0,
+    parameter integer RAM_SIZE_BYTES = 1048576,
     parameter integer MEMORY_LATENCY = 50,
     parameter integer I_MEMORY_OUTSTANDING = 8,
     parameter integer D_MEMORY_OUTSTANDING = 4,
@@ -103,6 +104,7 @@ module cpu_core_image_tb #(
         .DCACHE_LINES(DCACHE_LINES),
         .DCACHE_INDEX_HASH(DCACHE_INDEX_HASH),
         .DCACHE_REQUEST_PIPELINE(DCACHE_REQUEST_PIPELINE),
+        .RAM_SIZE_BYTES(RAM_SIZE_BYTES),
         .ENABLE_PREDICTOR(ENABLE_PREDICTOR),
         .FETCH_QUEUE_DEPTH(FETCH_QUEUE_DEPTH),
         .MUL_IMPL(MUL_IMPL),
@@ -132,6 +134,7 @@ module cpu_core_image_tb #(
     );
 
     rv32im_memory_model #(
+        .MEMORY_SIZE(RAM_SIZE_BYTES),
         .LATENCY(MEMORY_LATENCY),
         .I_OUTSTANDING(I_MEMORY_OUTSTANDING),
         .D_OUTSTANDING(D_MEMORY_OUTSTANDING)
