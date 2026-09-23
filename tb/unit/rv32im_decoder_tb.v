@@ -12,6 +12,9 @@ module rv32im_decoder_tb;
     wire [31:0] imm;
     wire [1:0] mem_size;
     wire [3:0] mem_base_mask;
+    wire legacy_legal, legacy_serialize;
+    wire [`RV32IM_OP_WIDTH-1:0] legacy_op;
+    wire [`RV32IM_CLASS_WIDTH-1:0] legacy_class;
     integer tests;
 
     rv32im_decoder dut (
@@ -22,6 +25,10 @@ module rv32im_decoder_tb;
         .is_jump_o(is_jump), .is_serialize_o(is_serialize),
         .mem_size_o(mem_size), .mem_unsigned_o(mem_unsigned),
         .mem_base_mask_o(mem_base_mask), .jalr_clear_lsb_o(jalr_clear_lsb)
+    );
+    rv32im_decoder #(.LEGACY_SENTINEL_HALT(1)) legacy_dut (
+        .inst_i(inst), .legal_o(legacy_legal), .op_o(legacy_op),
+        .class_o(legacy_class), .is_serialize_o(legacy_serialize)
     );
 
     task check_op;
@@ -116,8 +123,15 @@ module rv32im_decoder_tb;
         check_op(32'h0220e1b3, `RV32IM_OP_REM, 32'd0);
         check_op(32'h0220f1b3, `RV32IM_OP_REMU, 32'd0);
 
-        check_op(32'h0ff00513, `RV32IM_OP_HALT, 32'd0);
-        if (!is_serialize || class_id != `RV32IM_CLASS_HALT) begin $display("FAIL: HALT controls"); $finish(1); end
+        check_op(32'h0ff00513, `RV32IM_OP_ADDI, 32'd255);
+        if (is_serialize || class_id != `RV32IM_CLASS_INT || !rd_we ||
+            rd != 5'd10 || rs1 != 5'd0) begin
+            $display("FAIL: final decoder misclassified legal ADDI"); $finish(1);
+        end
+        if (!legacy_legal || legacy_op != `RV32IM_OP_HALT ||
+            legacy_class != `RV32IM_CLASS_HALT || !legacy_serialize) begin
+            $display("FAIL: optional legacy HALT controls"); $finish(1);
+        end
 
         check_illegal(32'h0000100f); // FENCE.I
         check_illegal(32'h00000073); // ECALL

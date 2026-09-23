@@ -54,7 +54,7 @@ module rv32_rob_tb #(
     wire [(BE_WIDTH*PHYS_AW)-1:0] commit_old_phys, commit_new_phys;
     reg [TAG_W-1:0] store_ack_tag;
     wire halted, error;
-    wire [7:0] return_value;
+    wire [31:0] return_value;
     wire [SLOT_W-1:0] head, tail;
     wire [COUNT_W-1:0] occupancy;
     integer bad;

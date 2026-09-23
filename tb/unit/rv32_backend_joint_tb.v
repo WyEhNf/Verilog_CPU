@@ -52,7 +52,7 @@ module rv32_backend_joint_tb #(
     wire [TAGW-1:0] commit_tag;
     wire redirect_valid, halted, error;
     wire [31:0] redirect_pc;
-    wire [7:0] return_value;
+    wire [31:0] return_value;
     integer bad, commit_count;
     reg redirect_seen, younger_commit_seen;
     reg [31:0] redirect_pc_seen;
