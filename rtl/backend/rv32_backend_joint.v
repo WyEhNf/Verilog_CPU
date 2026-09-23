@@ -1040,11 +1040,15 @@ module rv32_backend_joint #(
     rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .SOURCES(PRODUCERS), .FIFO_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .BYPASS(COMPLETION_BYPASS)) completion (
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .kill_valid_i(rob_recovery_accept), .kill_mask_i(completion_kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready_r), .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live_r), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}}), .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect_valid), .cdb_is_memory_o(cdb_is_memory), .cdb_is_load_o(cdb_is_load), .prf_write_valid_o(completion_prf_write_valid), .prf_write_tag_o(prf_wb_tag), .prf_write_phys_rd_o(completion_prf_write_phys), .prf_write_value_o(completion_prf_write_data), .rob_ready_valid_o(rob_wb_valid), .rob_ready_tag_o(rob_wb_tag), .rob_ready_value_o(rob_wb_value), .wakeup_valid_o(wake_wb_valid), .wakeup_tag_o(wake_wb_tag), .wakeup_value_o(wake_wb_value), .entry_valid_o(completion_entry_valid), .entry_tag_o(completion_entry_tag), .occupancy_o()
     );
-    // Wake dependants as soon as an execution result is accepted into the
-    // completion network.  Keep the ordinary CDB lanes in the same wake bus
-    // because older queued results still have to be observed exactly once.
+    // A valid producer holds its result until the completion network accepts
+    // it.  Its value can therefore wake a dependent RS entry even when the
+    // completion FIFO is temporarily full.  Keeping the wake path independent
+    // of producer_ready also avoids the FIFO admission/backpressure chain on
+    // the producer -> RS -> ALU same-cycle bypass path.  A producer killed by
+    // recovery is suppressed by producer_target_live_r; the ordinary CDB
+    // lanes remain in the bus for already-queued results.
     assign rs_wake_valid = {
-        producer_valid & producer_ready & producer_rd_we & producer_target_live_r,
+        producer_valid & producer_rd_we & producer_target_live_r,
         wake_wb_valid
     };
     assign rs_wake_tag = {producer_tag, wake_wb_tag};
