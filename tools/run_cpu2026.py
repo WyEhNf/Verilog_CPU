@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 import re
 import subprocess
 import sys
@@ -83,6 +84,11 @@ def main(argv=None):
     parser.add_argument("--config", default="unspecified")
     parser.add_argument("--memory-latency", type=int, default=20,
                         help="Required compiled main-memory latency (performance scoring: 20)")
+    parser.add_argument("--exit-protocol", choices=("sentinel", "mmio"),
+                        default="sentinel")
+    parser.add_argument("--memory-size", type=lambda value: int(value, 0),
+                        default=1048576,
+                        help="image address limit in bytes (default: 1 MiB)")
     args = parser.parse_args(argv)
 
     root = Path(__file__).resolve().parents[1]
@@ -99,7 +105,8 @@ def main(argv=None):
         for source in sources:
             if not source.is_file():
                 raise BenchmarkError("missing source: {}".format(source))
-        out_dir = root / "build" / "cpu2026" / name
+        out_dir = root / "build" / "cpu2026" / (
+            name if args.exit_protocol == "sentinel" else "mmio/" + name)
         command = [
             sys.executable, str(root / "tools" / "make_image.py"), str(sources[0]),
             "--arch", "rv32im", "--out-dir", str(out_dir),
@@ -107,6 +114,8 @@ def main(argv=None):
             "--include", str(benchmark_dir),
             "--define", "PREALLOCATE=" + args.preallocate,
             "--define", "HOST_DEBUG=0",
+            "--exit-protocol", args.exit_protocol,
+            "--memory-size", str(args.memory_size),
             "--cc", args.cc, "--objdump", args.objdump,
             "--objcopy", args.objcopy, "--readelf", args.readelf,
         ]
@@ -149,6 +158,8 @@ def main(argv=None):
         "config": args.config,
         "preallocate": int(args.preallocate),
         "required_memory_latency_cycles": args.memory_latency,
+        "exit_protocol": args.exit_protocol,
+        "image_memory_size_bytes": args.memory_size,
         "results": results,
     }
     if not args.build_only:
@@ -157,6 +168,8 @@ def main(argv=None):
         report["total_cycles"] = total_cycles
         report["total_instret"] = total_instret
         report["aggregate_ipc"] = total_instret / total_cycles
+        report["geomean_ipc"] = math.exp(
+            sum(math.log(item["ipc"]) for item in results) / len(results))
 
     report_path = root / args.report
     report_path.parent.mkdir(parents=True, exist_ok=True)

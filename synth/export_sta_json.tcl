@@ -5,8 +5,14 @@
 yosys -import
 set root [file normalize [file join [file dirname [info script]] ..]]
 set libdir [file join $root _asap7_lib_filtered]
-set indir [file join $root build synth p4_i16_d32k_bitmap_fastbb_bb]
-set outdir [file join $root build timing p4_i16_d32k_bitmap_fastbb]
+# Optional directories let the same flow audit the current candidate instead
+# of silently exporting the historical P4/D32K snapshot.
+set indir [lindex $argv 0]
+set outdir [lindex $argv 1]
+if {$indir eq ""} { set indir [file join $root build synth p4_i16_d32k_bitmap_fastbb_bb] }
+if {$outdir eq ""} { set outdir [file join $root build timing p4_i16_d32k_bitmap_fastbb] }
+set indir [file normalize $indir]
+set outdir [file normalize $outdir]
 file mkdir $outdir
 
 foreach lib {

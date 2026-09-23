@@ -39,6 +39,8 @@ set dcache_request_pipeline [lindex $argv 25]
 set dcache_ways [lindex $argv 26]
 set ram_size_bytes [lindex $argv 27]
 set legacy_sentinel_halt [lindex $argv 28]
+set icache_lines [lindex $argv 29]
+set icache_ways [lindex $argv 30]
 
 if {$rs_entries eq ""}          { set rs_entries 8 }
 if {$lsq_entries eq ""}         { set lsq_entries 8 }
@@ -64,6 +66,8 @@ if {$dcache_request_pipeline eq ""} { set dcache_request_pipeline 0 }
 if {$dcache_ways eq ""} { set dcache_ways 1 }
 if {$ram_size_bytes eq ""} { set ram_size_bytes 268435456 }
 if {$legacy_sentinel_halt eq ""} { set legacy_sentinel_halt 0 }
+if {$icache_lines eq ""} { set icache_lines 64 }
+if {$icache_ways eq ""} { set icache_ways 2 }
 
 set libdir "_asap7_lib_filtered"
 file mkdir $outdir
@@ -95,7 +99,8 @@ chparam -set ICACHE_MSHRS $icache_mshrs -set DCACHE_MSHRS $dcache_mshrs \
         -set DCACHE_LINES $dcache_lines -set DCACHE_INDEX_HASH $dcache_index_hash \
         -set DCACHE_REQUEST_PIPELINE $dcache_request_pipeline \
         -set DCACHE_WAYS $dcache_ways -set RAM_SIZE_BYTES $ram_size_bytes \
-        -set LEGACY_SENTINEL_HALT $legacy_sentinel_halt cpu_core
+        -set LEGACY_SENTINEL_HALT $legacy_sentinel_halt \
+        -set ICACHE_LINES $icache_lines -set ICACHE_WAYS $icache_ways cpu_core
 
 hierarchy -check -top cpu_core
 procs

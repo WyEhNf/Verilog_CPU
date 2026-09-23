@@ -16,7 +16,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 BASE = dict(FeWidth=2, BeWidth=2, PhysRegs=48, RobEntries=16, RsEntries=4,
             LsqEntries=8, IntIssueWidth=2, CdbWidth=2, EnableCacheStats=1,
-            IcacheMshrs=8, DcacheMshrs=4, DcacheLines=128,
+            IcacheMshrs=8, IcacheLines=64, IcacheWays=2,
+            DcacheMshrs=4, DcacheLines=128,
             DcacheWays=1, DcacheIndexHash=1,
             DcacheRequestPipeline=0,
             RamSizeBytes=1048576, LegacySentinelHalt=1,
@@ -37,6 +38,25 @@ CASES["d64"] = dict(DcacheLines=64)
 CASES["d64_pipe1"] = dict(DcacheLines=64, DcacheRequestPipeline=1)
 CASES["assoc2"] = dict(DcacheWays=2)
 CASES["assoc2_64"] = dict(DcacheWays=2, DcacheLines=64)
+CASES["icache128"] = dict(IcacheLines=128)
+CASES["icache1way"] = dict(IcacheWays=1)
+CASES["p4"] = dict(FeWidth=4, BeWidth=4, PhysRegs=96, RobEntries=64,
+                   RsEntries=16, LsqEntries=16, IntIssueWidth=4, CdbWidth=4,
+                   DcacheLines=256, CompletionDepth=16)
+CASES["p4_assoc2"] = dict(CASES["p4"], DcacheWays=2)
+CASES["p4_assoc2_rs32"] = dict(CASES["p4_assoc2"], RsEntries=32)
+CASES["p4_assoc2_lsq32"] = dict(CASES["p4_assoc2"], LsqEntries=32)
+CASES["p4_assoc2_d512"] = dict(CASES["p4_assoc2"], DcacheLines=512)
+CASES["p4_d512_checkpoint1"] = dict(CASES["p4_assoc2_d512"], CheckpointImpl=1)
+CASES["p4_d512_rob32"] = dict(CASES["p4_assoc2_d512"], RobEntries=32)
+CASES["p4_d1024"] = dict(CASES["p4_assoc2"], DcacheLines=1024)
+CASES["p4_d1024_cp1"] = dict(CASES["p4_d1024"], CheckpointImpl=1)
+CASES["p4_d1024_cp1_rob32"] = dict(CASES["p4_d1024_cp1"], RobEntries=32)
+CASES["p4_d1024_cp1_phys64"] = dict(CASES["p4_d1024_cp1"], PhysRegs=64)
+CASES["p4_d1024_cp1_r32p64"] = dict(CASES["p4_d1024_cp1"],
+                                     RobEntries=32, PhysRegs=64)
+CASES["p4_d1024_cp1_r16p64"] = dict(CASES["p4_d1024_cp1"],
+                                     RobEntries=16, PhysRegs=64)
 
 
 def digest(path):
