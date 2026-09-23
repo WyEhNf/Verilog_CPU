@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = dict(FeWidth=2, BeWidth=2, PhysRegs=48, RobEntries=16, RsEntries=4,
             LsqEntries=8, IntIssueWidth=2, CdbWidth=2, EnableCacheStats=1,
             IcacheMshrs=8, DcacheMshrs=4, DcacheLines=128, DcacheIndexHash=1,
+            DcacheRequestPipeline=0,
             IMemoryOutstanding=16, DMemoryOutstanding=8, CompletionDepth=8,
             FetchQueueDepth=16, MemoryLatency=20, MulImpl=0, ShiftImpl=0,
             PhysTagImpl=0, GenerationWidth=8, CheckpointImpl=0,
@@ -28,6 +29,10 @@ SINGLE_KNOB_CASES = tuple(CASES)
 # Explicit opt-in interaction test; never label this as an isolated parameter.
 CASES["rob32_rs8"] = dict(RobEntries=32, RsEntries=8)
 CASES["rob32_rs8_phys64"] = dict(RobEntries=32, RsEntries=8, PhysRegs=64)
+CASES["pipe1"] = dict(DcacheRequestPipeline=1)
+CASES["rob32_rs8_pipe1"] = dict(RobEntries=32, RsEntries=8, DcacheRequestPipeline=1)
+CASES["d64"] = dict(DcacheLines=64)
+CASES["d64_pipe1"] = dict(DcacheLines=64, DcacheRequestPipeline=1)
 
 
 def digest(path):
