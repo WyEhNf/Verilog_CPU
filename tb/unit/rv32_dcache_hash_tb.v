@@ -2,6 +2,7 @@
 module rv32_dcache_hash_tb #(
     parameter integer INDEX_HASH = 1,
     parameter integer CACHE_LINES = 64,
+    parameter integer CACHE_WAYS = 1,
     parameter integer PREFETCH = 1
 );
     reg clk = 0, reset = 1;
@@ -20,11 +21,12 @@ module rv32_dcache_hash_tb #(
     wire [7:0] mem_id, mem_resp_id;
     reg [7:0] reference [0:4095];
     integer seed, trial, byte_index;
-    reg [31:0] address_a, address_b, random_address, random_data, inverse_address;
+    reg [31:0] address_a, address_b, address_c, random_address, random_data, inverse_address;
     reg [3:0] random_mask;
     reg saw_victim_write = 0;
 
-    rv32_dcache_nonblocking #(.CACHE_LINES(CACHE_LINES), .INDEX_HASH(INDEX_HASH),
+    rv32_dcache_nonblocking #(.CACHE_LINES(CACHE_LINES), .CACHE_WAYS(CACHE_WAYS),
+        .INDEX_HASH(INDEX_HASH),
         .PREFETCH(PREFETCH), .TAG_WIDTH(16)) dut (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0),
         .dcache_req_valid_i(req_valid), .dcache_req_ready_o(req_ready),
@@ -96,16 +98,23 @@ module rv32_dcache_hash_tb #(
         for (byte_index = 0; byte_index < 4096; byte_index = byte_index + 1) reference[byte_index] = 0;
         address_a = CACHE_LINES*16 + (INDEX_HASH ? 16 : 0);
         address_b = CACHE_LINES*32 + (INDEX_HASH ? 32 : 0);
+        address_c = CACHE_LINES*48 + (INDEX_HASH ? 48 : 0);
+        if (CACHE_WAYS == 2) begin
+            address_a = 0;
+            address_b = ((CACHE_LINES/CACHE_WAYS) + (INDEX_HASH ? 1 : 0))*16;
+            address_c = ((CACHE_LINES/CACHE_WAYS)*2 + (INDEX_HASH ? 2 : 0))*16;
+        end
         repeat (3) @(negedge clk);
         reset = 0;
         for (trial = 0; trial < 1000; trial = trial + 1) begin
             random_address = $random(seed);
-            inverse_address = dut.victim_line_address(random_address >> ($clog2(CACHE_LINES)+4), dut.cache_index(random_address));
+            inverse_address = dut.victim_line_address(random_address >> ($clog2(CACHE_LINES/CACHE_WAYS)+4), dut.cache_index(random_address));
             if (inverse_address !== {random_address[31:4], 4'b0}) $fatal(1, "index inversion failed");
         end
         access_word(address_a, 1, 32'h89abcdef, 4'hf);
         access_word(address_a, 0, 0, 4'hf);
         access_word(address_b, 0, 0, 4'hf);
+        if (CACHE_WAYS == 2) access_word(address_c, 0, 0, 4'hf);
         if (!saw_victim_write || {memory.memory[address_a+3], memory.memory[address_a+2],
             memory.memory[address_a+1], memory.memory[address_a]} !== 32'h89abcdef)
             $fatal(1, "dirty victim physical address/data corrupted");
@@ -121,7 +130,7 @@ module rv32_dcache_hash_tb #(
         // store-buffer forwarded value.
         for (trial = 0; trial < 1024; trial = trial + 1)
             access_word(trial*4, 0, 0, 4'hf);
-        $display("PASS: D-cache hash=%0d lines=%0d prefetch=%0d", INDEX_HASH, CACHE_LINES, PREFETCH);
+        $display("PASS: D-cache hash=%0d lines=%0d ways=%0d prefetch=%0d", INDEX_HASH, CACHE_LINES, CACHE_WAYS, PREFETCH);
         $finish;
     end
 endmodule
