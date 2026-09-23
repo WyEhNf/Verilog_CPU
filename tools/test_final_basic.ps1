@@ -4,6 +4,7 @@ param(
     [string]$CadLib = "E:/Verilog_cpu/.deps/oss-cad-suite-install/oss-cad-suite/lib",
     [int]$RobEntries = 64,
     [int]$PhysRegs = 96,
+    [int]$LsqEntries = 16,
     [int]$DcacheLines = 512
 )
 
@@ -28,7 +29,7 @@ try {
         "-P", "cpu_core_image_tb.PHYS_REGS=$PhysRegs",
         "-P", "cpu_core_image_tb.ROB_ENTRIES=$RobEntries",
         "-P", "cpu_core_image_tb.RS_ENTRIES=16",
-        "-P", "cpu_core_image_tb.LSQ_ENTRIES=16",
+        "-P", "cpu_core_image_tb.LSQ_ENTRIES=$LsqEntries",
         "-P", "cpu_core_image_tb.INT_ISSUE_WIDTH=4",
         "-P", "cpu_core_image_tb.CDB_WIDTH=4",
         "-P", "cpu_core_image_tb.DCACHE_LINES=$DcacheLines",
