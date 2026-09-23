@@ -11,6 +11,7 @@ module rv32_lsq_hazard_tb #(
     reg [31:0] expected_forward_data;
     rv32_lsq #(.BE_WIDTH(2), .LSQ_ENTRIES(ENTRIES)) dut (
         .clk_i(1'b0), .reset_i(1'b0), .flush_i(1'b0),
+        .recovery_valid_i(1'b0),
         .alloc_valid_i(2'b0), .store_commit_rob_tag_i(16'b0),
         .dcache_req_ready_i(1'b0), .dcache_resp_valid_i(1'b0),
         .dcache_resp_lsq_tag_i(16'b0)
