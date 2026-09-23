@@ -22,6 +22,7 @@ module cpu_core #(
     parameter integer DCACHE_LINES = 256,
     parameter integer DCACHE_INDEX_HASH = 0,
     parameter integer DCACHE_REQUEST_PIPELINE = 0,
+    parameter integer RAM_SIZE_BYTES = 268435456,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
@@ -455,7 +456,7 @@ module cpu_core #(
     );
     end
 
-    rv32_memory_bridge memory_bridge (
+    rv32_memory_bridge #(.MEMORY_SIZE(RAM_SIZE_BYTES)) memory_bridge (
         .clk_i(clk), .reset_i(reset), .cache_i_req_valid_i(ic_mem_req_valid),
         .cache_i_req_ready_o(ic_mem_req_ready), .cache_i_req_line_addr_i(ic_mem_req_line_addr),
         .cache_i_req_id_i(ic_mem_req_id), .cache_i_resp_valid_o(ic_mem_resp_valid),
