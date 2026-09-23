@@ -70,10 +70,19 @@ module rv32im_decoder_tb;
         if (!is_load || mem_size != `RV32IM_MEM_BYTE || mem_unsigned || mem_base_mask != 4'b0001) begin $display("FAIL: LB controls"); $finish(1); end
         check_op(32'h0030c183, `RV32IM_OP_LBU, 32'h00000003);
         if (!mem_unsigned || mem_size != `RV32IM_MEM_BYTE) begin $display("FAIL: LBU controls"); $finish(1); end
+        check_op(32'h00209183, `RV32IM_OP_LH, 32'h00000002);
+        if (!is_load || mem_unsigned || mem_size != `RV32IM_MEM_HALF ||
+            mem_base_mask != 4'b0011) begin $display("FAIL: LH controls"); $finish(1); end
+        check_op(32'h0020d183, `RV32IM_OP_LHU, 32'h00000002);
+        if (!is_load || !mem_unsigned || mem_size != `RV32IM_MEM_HALF ||
+            mem_base_mask != 4'b0011) begin $display("FAIL: LHU controls"); $finish(1); end
         check_op(32'h0040a183, `RV32IM_OP_LW, 32'h00000004);
         if (mem_size != `RV32IM_MEM_WORD || mem_base_mask != 4'b1111) begin $display("FAIL: LW controls"); $finish(1); end
         check_op(32'hfe308fa3, `RV32IM_OP_SB, 32'hffffffff);
         if (!is_store || mem_base_mask != 4'b0001) begin $display("FAIL: SB controls"); $finish(1); end
+        check_op(32'h00309123, `RV32IM_OP_SH, 32'h00000002);
+        if (!is_store || mem_size != `RV32IM_MEM_HALF ||
+            mem_base_mask != 4'b0011) begin $display("FAIL: SH controls"); $finish(1); end
         check_op(32'h0030a423, `RV32IM_OP_SW, 32'h00000008);
         if (mem_base_mask != 4'b1111) begin $display("FAIL: SW controls"); $finish(1); end
 
@@ -115,9 +124,6 @@ module rv32im_decoder_tb;
         check_illegal(32'h02109093); // invalid SLLI funct7
         check_illegal(32'h2010d193); // invalid right shift funct7
         check_illegal(32'h0020a063); // reserved branch funct3
-        check_illegal(32'h00009183); // LH unsupported
-        check_illegal(32'h0000d183); // LHU unsupported
-        check_illegal(32'h00309123); // SH unsupported
         check_illegal(32'hffffffff);
 
         $display("PASS: A-01 decoder %0d directed vectors", tests);
