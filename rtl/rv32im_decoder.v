@@ -103,7 +103,7 @@ module rv32im_decoder (
                     default: begin end
                 endcase
             end
-            7'b0000011: begin // loads; halfword forms intentionally unsupported
+            7'b0000011: begin // loads
                 rs1_used_o = 1'b1;
                 rd_we_o = 1'b1;
                 is_load_o = 1'b1;
@@ -114,6 +114,10 @@ module rv32im_decoder (
                         legal_o = 1'b1; op_o = `RV32IM_OP_LB;
                         mem_size_o = `RV32IM_MEM_BYTE; mem_base_mask_o = 4'b0001;
                     end
+                    3'b001: begin
+                        legal_o = 1'b1; op_o = `RV32IM_OP_LH;
+                        mem_size_o = `RV32IM_MEM_HALF; mem_base_mask_o = 4'b0011;
+                    end
                     3'b010: begin
                         legal_o = 1'b1; op_o = `RV32IM_OP_LW;
                         mem_size_o = `RV32IM_MEM_WORD; mem_base_mask_o = 4'b1111;
@@ -123,10 +127,15 @@ module rv32im_decoder (
                         mem_size_o = `RV32IM_MEM_BYTE; mem_unsigned_o = 1'b1;
                         mem_base_mask_o = 4'b0001;
                     end
+                    3'b101: begin
+                        legal_o = 1'b1; op_o = `RV32IM_OP_LHU;
+                        mem_size_o = `RV32IM_MEM_HALF; mem_unsigned_o = 1'b1;
+                        mem_base_mask_o = 4'b0011;
+                    end
                     default: begin end
                 endcase
             end
-            7'b0100011: begin // stores; SH intentionally unsupported
+            7'b0100011: begin // stores
                 rs1_used_o = 1'b1;
                 rs2_used_o = 1'b1;
                 is_store_o = 1'b1;
@@ -136,6 +145,10 @@ module rv32im_decoder (
                     3'b000: begin
                         legal_o = 1'b1; op_o = `RV32IM_OP_SB;
                         mem_size_o = `RV32IM_MEM_BYTE; mem_base_mask_o = 4'b0001;
+                    end
+                    3'b001: begin
+                        legal_o = 1'b1; op_o = `RV32IM_OP_SH;
+                        mem_size_o = `RV32IM_MEM_HALF; mem_base_mask_o = 4'b0011;
                     end
                     3'b010: begin
                         legal_o = 1'b1; op_o = `RV32IM_OP_SW;
