@@ -33,6 +33,8 @@ module rv32im_memory_model #(
     output wire         d_resp_error_o
 );
     reg [7:0] memory [0:MEMORY_SIZE-1];
+    reg mmio_exit_valid;
+    reg [31:0] mmio_exit_code;
     reg d_slot_valid [0:D_OUTSTANDING-1];
     reg d_slot_ready [0:D_OUTSTANDING-1];
     integer d_slot_count [0:D_OUTSTANDING-1];
@@ -80,6 +82,8 @@ module rv32im_memory_model #(
 
     always @(posedge clk_i) begin
         if (reset_i) begin
+            mmio_exit_valid <= 1'b0;
+            mmio_exit_code <= 32'b0;
             i_head <= 0;
             i_tail <= 0;
             i_occupancy <= 0;
@@ -131,8 +135,16 @@ module rv32im_memory_model #(
                 d_slot_count[d_tail] <= (LATENCY > 1) ? (LATENCY-1) : 1;
                 d_slot_addr[d_tail] <= d_req_line_addr_i;
                 d_slot_id[d_tail] <= d_req_id_i;
-                d_slot_error[d_tail] <= (d_req_line_addr_i[3:0] != 0) ||
-                                        (d_req_line_addr_i >= MEMORY_SIZE - 15);
+                d_slot_error[d_tail] <= !((d_req_write_i &&
+                    (d_req_line_addr_i == 32'h80000000) &&
+                    (d_req_wmask_i == 16'h000f)) ||
+                    ((d_req_line_addr_i[3:0] == 0) &&
+                     (d_req_line_addr_i < MEMORY_SIZE - 15)));
+                if (d_req_write_i && (d_req_line_addr_i == 32'h80000000) &&
+                    (d_req_wmask_i == 16'h000f)) begin
+                    mmio_exit_valid <= 1'b1;
+                    mmio_exit_code <= d_req_wdata_i[31:0];
+                end
                 for (k = 0; k < 16; k = k + 1)
                     if (d_req_line_addr_i + k < MEMORY_SIZE)
                         d_slot_snapshot[d_tail][(k*8) +: 8] <= memory[d_req_line_addr_i + k];

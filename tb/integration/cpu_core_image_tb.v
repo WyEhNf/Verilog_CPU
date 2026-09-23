@@ -23,6 +23,7 @@ module cpu_core_image_tb #(
     parameter integer DCACHE_INDEX_HASH = 0,
     parameter integer DCACHE_REQUEST_PIPELINE = 0,
     parameter integer RAM_SIZE_BYTES = 1048576,
+    parameter integer LEGACY_SENTINEL_HALT = 1,
     parameter integer MEMORY_LATENCY = 50,
     parameter integer I_MEMORY_OUTSTANDING = 8,
     parameter integer D_MEMORY_OUTSTANDING = 4,
@@ -43,7 +44,7 @@ module cpu_core_image_tb #(
     reg reset;
     wire halted;
     wire error;
-    wire [7:0] return_value;
+    wire [31:0] return_value;
     wire [31:0] cycles;
     wire [31:0] instret;
 
@@ -105,6 +106,7 @@ module cpu_core_image_tb #(
         .DCACHE_INDEX_HASH(DCACHE_INDEX_HASH),
         .DCACHE_REQUEST_PIPELINE(DCACHE_REQUEST_PIPELINE),
         .RAM_SIZE_BYTES(RAM_SIZE_BYTES),
+        .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT),
         .ENABLE_PREDICTOR(ENABLE_PREDICTOR),
         .FETCH_QUEUE_DEPTH(FETCH_QUEUE_DEPTH),
         .MUL_IMPL(MUL_IMPL),
@@ -296,8 +298,14 @@ module cpu_core_image_tb #(
         end else if (!halted) begin
             $display("FAIL: JOIN-02 image=%0s timeout cycles=%0d instret=%0d limit=%0d", test_name, cycles, instret, max_cycles);
             finish_code = 1;
-        end else if (return_value !== expected_value[7:0]) begin
-            $display("FAIL: JOIN-02 image=%0s return=%0d expected=%0d cycles=%0d instret=%0d", test_name, return_value, expected_value[7:0], cycles, instret);
+        end else if ((LEGACY_SENTINEL_HALT == 0) &&
+                     (!memory.mmio_exit_valid ||
+                      (memory.mmio_exit_code !== return_value))) begin
+            $display("FAIL: JOIN-02 image=%0s MMIO exit missing/mismatched valid=%b bus_code=%08x cpu_code=%08x",
+                     test_name, memory.mmio_exit_valid, memory.mmio_exit_code, return_value);
+            finish_code = 1;
+        end else if (return_value !== expected_value[31:0]) begin
+            $display("FAIL: JOIN-02 image=%0s return=%0d expected=%0d cycles=%0d instret=%0d", test_name, return_value, expected_value, cycles, instret);
             finish_code = 1;
         end else begin
             $display("PASS: JOIN-02 image=%0s return=%0d cycles=%0d instret=%0d", test_name, return_value, cycles, instret);
