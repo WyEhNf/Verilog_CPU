@@ -153,7 +153,6 @@ module rv32_lsq #(
     integer scan;
     integer candidate;
     integer candidate_age;
-    integer age;
     integer alloc_count_calc;
     integer free_count_calc;
     integer pop_count_calc;
@@ -172,7 +171,6 @@ module rv32_lsq #(
     integer recovery_first_killed;
     integer recovery_kill_found;
     reg candidate_found;
-    reg blocked;
     reg [3:0] target_mask;
     reg [3:0] fwd_mask;
     reg [31:0] fwd_data;
@@ -327,7 +325,9 @@ module rv32_lsq #(
     // physical store directly instead of muxing the whole store array through
     // head+offset once per older age and once per candidate load.
     wire [SLOT_WIDTH-1:0] entry_age [0:LSQ_ENTRIES-1];
-    reg [LSQ_ENTRIES-1:0] request_eligible;
+    wire [LSQ_ENTRIES-1:0] request_eligible;
+    wire [15:0] load_line_mask [0:LSQ_ENTRIES-1];
+    wire [15:0] store_line_mask [0:LSQ_ENTRIES-1];
     wire pick_valid [1:2*LSQ_ENTRIES-1];
     wire [SLOT_WIDTH-1:0] pick_slot [1:2*LSQ_ENTRIES-1];
     wire [SLOT_WIDTH-1:0] pick_age [1:2*LSQ_ENTRIES-1];
@@ -339,6 +339,10 @@ module rv32_lsq #(
     generate
         for (age_slot = 0; age_slot < LSQ_ENTRIES; age_slot = age_slot + 1) begin : g_entry_age
             assign entry_age[age_slot] = (age_slot - head_reg) & (LSQ_ENTRIES - 1);
+            assign load_line_mask[age_slot] =
+                {12'b0, access_mask(size_mem[age_slot])} << addr_mem[age_slot][3:0];
+            assign store_line_mask[age_slot] =
+                {12'b0, mask_mem[age_slot]} << addr_mem[age_slot][3:0];
             assign pick_valid[LSQ_ENTRIES+age_slot] = request_eligible[age_slot];
             assign pick_slot[LSQ_ENTRIES+age_slot] = age_slot;
             assign pick_age[LSQ_ENTRIES+age_slot] = entry_age[age_slot];
@@ -352,6 +356,40 @@ module rv32_lsq #(
             assign store_forward_data[age_slot] = store_data_relative_to_load(
                 data_mem[age_slot], addr_mem[age_slot][3:0], mask_mem[age_slot],
                 addr_mem[pick_slot[1]][3:0], access_mask(size_mem[pick_slot[1]]));
+        end
+    endgenerate
+
+    // A load is blocked by any older store with an unknown address, or by an
+    // older same-line store whose data is unknown for an overlapping byte.
+    // Natural alignment keeps each access inside one 16-byte cache line.
+    // Per-entry line masks and an OR reduction avoid a serial hazard scan.
+    genvar request_slot, older_slot;
+    generate
+        for (request_slot = 0; request_slot < LSQ_ENTRIES;
+             request_slot = request_slot + 1) begin : g_request_eligible
+            wire [LSQ_ENTRIES-1:0] older_hazard;
+            for (older_slot = 0; older_slot < LSQ_ENTRIES;
+                 older_slot = older_slot + 1) begin : g_older_hazard
+                assign older_hazard[older_slot] =
+                    (entry_age[older_slot] < entry_age[request_slot]) &&
+                    valid_mem[older_slot] && store_mem[older_slot] &&
+                    (!addr_ready_mem[older_slot] ||
+                     ((addr_mem[older_slot][31:4] ==
+                       addr_mem[request_slot][31:4]) &&
+                      !data_ready_mem[older_slot] &&
+                      (|(store_line_mask[older_slot] &
+                         load_line_mask[request_slot]))));
+            end
+            assign request_eligible[request_slot] =
+                (entry_age[request_slot] < occupancy_reg) &&
+                valid_mem[request_slot] &&
+                ((load_mem[request_slot] && addr_ready_mem[request_slot] &&
+                  !request_sent_mem[request_slot] &&
+                  !complete_mem[request_slot] && !(|older_hazard)) ||
+                 (store_mem[request_slot] && addr_ready_mem[request_slot] &&
+                  data_ready_mem[request_slot] &&
+                  store_commit_mem[request_slot] &&
+                  !request_sent_mem[request_slot]));
         end
     endgenerate
 
@@ -408,7 +446,6 @@ module rv32_lsq #(
         // Unconditional defaults: these temporaries are written only inside
         // nested conditions below, and a conditional-only write would infer
         // latches (thousands of proc_dlatch candidates in synthesis).
-        blocked = 1'b0;
         target_mask = 4'b0;
         fwd_mask = 4'b0;
         fwd_data = 32'b0;
@@ -454,40 +491,7 @@ module rv32_lsq #(
             end
         end
 
-        // Select the oldest eligible memory operation.  A younger load is
-        // blocked by an older unknown address or an overlapping store whose
-        // data is not ready; ready bytes are accumulated for forwarding.
-        request_eligible = 0;
-        for (scan = 0; scan < LSQ_ENTRIES; scan = scan + 1) begin
-            age = scan - head_reg;
-            if (age < 0) age = age + LSQ_ENTRIES;
-            if (age < occupancy_reg && valid_mem[scan]) begin
-                blocked = 1'b0;
-                if (load_mem[scan] && addr_ready_mem[scan] && !request_sent_mem[scan] && !complete_mem[scan]) begin
-                    target_mask = access_mask(size_mem[scan]);
-                    for (i = 0; i < LSQ_ENTRIES; i = i + 1) begin
-                        if (entry_age[i] < age) begin
-                            if (valid_mem[i] && store_mem[i]) begin
-                                if (!addr_ready_mem[i]) begin
-                                    blocked = 1'b1;
-                                end else if ((addr_mem[i][31:4] == addr_mem[scan][31:4])) begin
-                                    if (!data_ready_mem[i] &&
-                                        (relative_overlap(addr_mem[i][3:0], mask_mem[i],
-                                                          addr_mem[scan][3:0], target_mask) != 0)) begin
-                                        blocked = 1'b1;
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    if (!blocked) request_eligible[scan] = 1'b1;
-                end else if (store_mem[scan] && addr_ready_mem[scan] &&
-                             data_ready_mem[scan] && store_commit_mem[scan] &&
-                             !request_sent_mem[scan]) begin
-                    request_eligible[scan] = 1'b1;
-                end
-            end
-        end
+        // The eligibility bits above feed the balanced oldest-first tree.
         candidate_found = pick_valid[1];
         candidate = pick_valid[1] ? pick_slot[1] : 0;
         candidate_age = pick_valid[1] ? pick_age[1] : LSQ_ENTRIES + 1;
