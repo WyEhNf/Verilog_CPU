@@ -21,6 +21,7 @@ module cpu_core #(
     parameter integer DCACHE_MSHRS = 4,
     parameter integer DCACHE_LINES = 256,
     parameter integer DCACHE_INDEX_HASH = 0,
+    parameter integer DCACHE_REQUEST_PIPELINE = 0,
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
@@ -73,6 +74,10 @@ module cpu_core #(
         GENERATION_WIDTH;
 
     initial begin
+        if ((DCACHE_REQUEST_PIPELINE != 0) && (DCACHE_REQUEST_PIPELINE != 1)) begin
+            $display("ERROR: invalid DCACHE_REQUEST_PIPELINE; expected 0 or 1");
+            $finish;
+        end
         if ((FE_WIDTH != 1) && (FE_WIDTH != 2) && (FE_WIDTH != 4)) begin
             $display("ERROR: invalid FE_WIDTH=%0d; expected 1, 2, or 4", FE_WIDTH);
             $finish;
@@ -294,6 +299,44 @@ module cpu_core #(
     wire [15:0] dcache_req_mask;
     wire [ROB_TAG_WIDTH-1:0] dcache_req_rob_tag, dcache_req_lsq_tag;
     wire [127:0] dcache_req_wdata;
+    wire memory_dreq_valid, memory_dreq_ready, memory_dreq_load, memory_dreq_store;
+    wire memory_dreq_unsigned;
+    wire [31:0] memory_dreq_addr;
+    wire [1:0] memory_dreq_size;
+    wire [15:0] memory_dreq_mask;
+    wire [127:0] memory_dreq_wdata;
+    wire [ROB_TAG_WIDTH-1:0] memory_dreq_rob_tag, memory_dreq_lsq_tag;
+    localparam integer DREQ_PAYLOAD_WIDTH = 181 + 2*ROB_TAG_WIDTH;
+    wire [DREQ_PAYLOAD_WIDTH-1:0] dreq_payload_in = {
+        dcache_req_load, dcache_req_store, dcache_req_addr, dcache_req_size,
+        dcache_req_unsigned, dcache_req_mask, dcache_req_wdata,
+        dcache_req_rob_tag, dcache_req_lsq_tag};
+    wire [DREQ_PAYLOAD_WIDTH-1:0] dreq_payload_out;
+    assign {memory_dreq_load, memory_dreq_store, memory_dreq_addr, memory_dreq_size,
+            memory_dreq_unsigned, memory_dreq_mask, memory_dreq_wdata,
+            memory_dreq_rob_tag, memory_dreq_lsq_tag} = dreq_payload_out;
+    generate
+    if (DCACHE_REQUEST_PIPELINE != 0) begin : g_dcache_request_pipeline
+        wire input_ready, output_valid;
+        // This is a registered, non-fall-through stage. Keep accepted traffic
+        // across branch recovery: stores are already committed; stale loads
+        // are harmless cache accesses and LSQ generations reject responses.
+        // Clearing this stage on redirect would lose older surviving loads
+        // and architectural stores. Only whole-core reset cancels requests.
+        rv32im_skid_buffer #(.WIDTH(DREQ_PAYLOAD_WIDTH)) request_register (
+            .clk_i(clk), .reset_i(reset), .flush_i(1'b0),
+            .in_valid_i(dcache_req_valid && !reset), .in_ready_o(input_ready),
+            .in_payload_i(dreq_payload_in), .out_valid_o(output_valid),
+            .out_ready_i(memory_dreq_ready), .out_payload_o(dreq_payload_out)
+        );
+        assign dcache_req_ready = input_ready && !reset;
+        assign memory_dreq_valid = output_valid && !reset;
+    end else begin : g_dcache_request_direct
+        assign dcache_req_ready = memory_dreq_ready;
+        assign memory_dreq_valid = dcache_req_valid;
+        assign dreq_payload_out = dreq_payload_in;
+    end
+    endgenerate
     wire dcache_resp_valid, dcache_resp_ready, dcache_resp_line_valid, dcache_resp_error;
     wire [ROB_TAG_WIDTH-1:0] dcache_resp_lsq_tag;
     wire [31:0] dcache_resp_addr, dcache_resp_word;
@@ -364,12 +407,12 @@ module cpu_core #(
     ) dcache (
         // LSQ generations reject wrong-path responses while retaining older
         // loads across a redirect.  The cache itself has no ROB-age context.
-        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(dcache_req_valid),
-        .dcache_req_ready_o(dcache_req_ready), .dcache_req_is_load_i(dcache_req_load),
-        .dcache_req_is_store_i(dcache_req_store), .dcache_req_addr_i(dcache_req_addr),
-        .dcache_req_size_i(dcache_req_size), .dcache_req_unsigned_i(dcache_req_unsigned),
-        .dcache_req_mask_i(dcache_req_mask), .dcache_req_wdata_i(dcache_req_wdata),
-        .dcache_req_rob_tag_i(dcache_req_rob_tag), .dcache_req_lsq_tag_i(dcache_req_lsq_tag),
+        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(memory_dreq_valid),
+        .dcache_req_ready_o(memory_dreq_ready), .dcache_req_is_load_i(memory_dreq_load),
+        .dcache_req_is_store_i(memory_dreq_store), .dcache_req_addr_i(memory_dreq_addr),
+        .dcache_req_size_i(memory_dreq_size), .dcache_req_unsigned_i(memory_dreq_unsigned),
+        .dcache_req_mask_i(memory_dreq_mask), .dcache_req_wdata_i(memory_dreq_wdata),
+        .dcache_req_rob_tag_i(memory_dreq_rob_tag), .dcache_req_lsq_tag_i(memory_dreq_lsq_tag),
         .dcache_resp_valid_o(dcache_resp_valid), .dcache_resp_ready_i(dcache_resp_ready),
         .dcache_resp_lsq_tag_o(dcache_resp_lsq_tag), .dcache_resp_addr_o(dcache_resp_addr),
         .dcache_resp_line_data_o(dcache_resp_line), .dcache_resp_word_data_o(dcache_resp_word),
@@ -388,12 +431,12 @@ module cpu_core #(
     );
     end else begin : g_blocking_dcache
     rv32_dcache #(.TAG_WIDTH(ROB_TAG_WIDTH)) dcache (
-        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(dcache_req_valid),
-        .dcache_req_ready_o(dcache_req_ready), .dcache_req_is_load_i(dcache_req_load),
-        .dcache_req_is_store_i(dcache_req_store), .dcache_req_addr_i(dcache_req_addr),
-        .dcache_req_size_i(dcache_req_size), .dcache_req_unsigned_i(dcache_req_unsigned),
-        .dcache_req_mask_i(dcache_req_mask), .dcache_req_wdata_i(dcache_req_wdata),
-        .dcache_req_rob_tag_i(dcache_req_rob_tag), .dcache_req_lsq_tag_i(dcache_req_lsq_tag),
+        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .dcache_req_valid_i(memory_dreq_valid),
+        .dcache_req_ready_o(memory_dreq_ready), .dcache_req_is_load_i(memory_dreq_load),
+        .dcache_req_is_store_i(memory_dreq_store), .dcache_req_addr_i(memory_dreq_addr),
+        .dcache_req_size_i(memory_dreq_size), .dcache_req_unsigned_i(memory_dreq_unsigned),
+        .dcache_req_mask_i(memory_dreq_mask), .dcache_req_wdata_i(memory_dreq_wdata),
+        .dcache_req_rob_tag_i(memory_dreq_rob_tag), .dcache_req_lsq_tag_i(memory_dreq_lsq_tag),
         .dcache_resp_valid_o(dcache_resp_valid), .dcache_resp_ready_i(dcache_resp_ready),
         .dcache_resp_lsq_tag_o(dcache_resp_lsq_tag), .dcache_resp_addr_o(dcache_resp_addr),
         .dcache_resp_line_data_o(dcache_resp_line), .dcache_resp_word_data_o(dcache_resp_word),
@@ -462,11 +505,11 @@ module cpu_core #(
             .if_resp_pc_o(if_resp_pc), .if_resp_line_addr_o(if_resp_line_addr),
             .if_resp_line_data_o(if_resp_line_data), .if_resp_epoch_o(if_resp_epoch),
             .if_resp_error_o(if_resp_error),
-            .d_req_valid_i(dcache_req_valid), .d_req_ready_o(dcache_req_ready),
-            .d_req_is_load_i(dcache_req_load), .d_req_is_store_i(dcache_req_store),
-            .d_req_addr_i(dcache_req_addr), .d_req_size_i(dcache_req_size),
-            .d_req_unsigned_i(dcache_req_unsigned), .d_req_mask_i(dcache_req_mask),
-            .d_req_wdata_i(dcache_req_wdata), .d_req_lsq_tag_i(dcache_req_lsq_tag),
+            .d_req_valid_i(memory_dreq_valid), .d_req_ready_o(memory_dreq_ready),
+            .d_req_is_load_i(memory_dreq_load), .d_req_is_store_i(memory_dreq_store),
+            .d_req_addr_i(memory_dreq_addr), .d_req_size_i(memory_dreq_size),
+            .d_req_unsigned_i(memory_dreq_unsigned), .d_req_mask_i(memory_dreq_mask),
+            .d_req_wdata_i(memory_dreq_wdata), .d_req_lsq_tag_i(memory_dreq_lsq_tag),
             .d_resp_valid_o(dcache_resp_valid), .d_resp_ready_i(dcache_resp_ready),
             .d_resp_lsq_tag_o(dcache_resp_lsq_tag), .d_resp_addr_o(dcache_resp_addr),
             .d_resp_line_data_o(dcache_resp_line), .d_resp_word_data_o(dcache_resp_word),
@@ -503,12 +546,12 @@ module cpu_core #(
         assign ic_event_miss = ic_event_request;
         assign ic_event_refill = if_resp_valid && if_resp_ready;
         assign ic_event_stall = if_req_valid && !if_req_ready;
-        assign dc_event_request = dcache_req_valid && dcache_req_ready;
+        assign dc_event_request = memory_dreq_valid && memory_dreq_ready;
         assign dc_event_hit = 1'b0;
         assign dc_event_miss = dc_event_request;
         assign dc_event_refill = dcache_resp_valid && dcache_resp_ready;
         assign dc_event_writeback = dcache_store_ack_valid;
-        assign dc_event_stall = dcache_req_valid && !dcache_req_ready;
+        assign dc_event_stall = memory_dreq_valid && !memory_dreq_ready;
         assign dcache_debug_s0_valid = 1'b0;
         assign dcache_debug_s0_store = 1'b0;
         assign dcache_debug_s1_valid = 1'b0;

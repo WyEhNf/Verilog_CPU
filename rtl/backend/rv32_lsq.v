@@ -503,7 +503,9 @@ module rv32_lsq #(
         dcache_req_rob_tag_o = {ROB_TAG_WIDTH{1'b0}};
         dcache_req_lsq_tag_o = {TAG_WIDTH{1'b0}};
         request_fire = 1'b0;
-        if (!flush_i && candidate_found && !response_wait_mem[candidate]) begin
+        // Recovery updates retained responses but cannot record a new request.
+        // Do not let the cache (or request register) accept an untracked send.
+        if (!flush_i && !recovery_valid_i && candidate_found && !response_wait_mem[candidate]) begin
             if (load_mem[candidate]) begin
                 target_mask = access_mask(size_mem[candidate]);
                 fwd_mask = tree_forward_mask;
