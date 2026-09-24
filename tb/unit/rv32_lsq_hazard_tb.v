@@ -98,6 +98,11 @@ module rv32_lsq_hazard_tb #(
                 if (dut.fwd_mask !== expected_forward_mask || dut.fwd_data !== expected_forward_data)
                     $fatal(1, "forward mismatch trial=%0d expected mask=%h data=%h actual mask=%h data=%h", trial,
                         expected_forward_mask, expected_forward_data, dut.fwd_mask, dut.fwd_data);
+                if ((dut.addr_mem[best][3:0] & (load_bytes-1)) == 0 &&
+                    dut.pick_fully_forwarded[1] !==
+                    ((expected_forward_mask & ((1 << load_bytes)-1)) == ((1 << load_bytes)-1)))
+                    $fatal(1, "forward coverage mismatch trial=%0d load=%0d mask=%h full=%b", trial,
+                        best, expected_forward_mask, dut.pick_fully_forwarded[1]);
             end
         end
         $display("PASS: LSQ static hazard ENTRIES=%0d trials=%0d", ENTRIES, trial);
