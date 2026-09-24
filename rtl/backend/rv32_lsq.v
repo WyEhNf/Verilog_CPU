@@ -332,7 +332,6 @@ module rv32_lsq #(
     wire [SLOT_WIDTH-1:0] pick_slot [1:2*LSQ_ENTRIES-1];
     wire [SLOT_WIDTH-1:0] pick_age [1:2*LSQ_ENTRIES-1];
     wire [31:0] pick_addr [1:2*LSQ_ENTRIES-1];
-    wire pick_fully_forwarded [1:2*LSQ_ENTRIES-1];
     wire [3:0] store_overlap [0:LSQ_ENTRIES-1];
     wire [31:0] store_forward_data [0:LSQ_ENTRIES-1];
     wire [3:0] tree_forward_mask;
@@ -366,12 +365,11 @@ module rv32_lsq #(
     // older same-line store whose data is unknown for an overlapping byte.
     // Natural alignment keeps each access inside one 16-byte cache line.
     // Per-entry line masks and an OR reduction avoid a serial hazard scan.
-    genvar request_slot, older_slot, coverage_node;
+    genvar request_slot, older_slot;
     generate
         for (request_slot = 0; request_slot < LSQ_ENTRIES;
              request_slot = request_slot + 1) begin : g_request_eligible
             wire [LSQ_ENTRIES-1:0] older_hazard;
-            wire [15:0] older_coverage [1:2*LSQ_ENTRIES-1];
             for (older_slot = 0; older_slot < LSQ_ENTRIES;
                   older_slot = older_slot + 1) begin : g_older_hazard
                 assign older_hazard[older_slot] =
@@ -383,25 +381,7 @@ module rv32_lsq #(
                       !data_ready_mem[older_slot] &&
                        (|(store_line_mask[older_slot] &
                           load_line_mask[request_slot]))));
-                assign older_coverage[LSQ_ENTRIES+older_slot] =
-                    (entry_age[older_slot] < entry_age[request_slot]) &&
-                    valid_mem[older_slot] && store_mem[older_slot] &&
-                    addr_ready_mem[older_slot] && data_ready_mem[older_slot] &&
-                    (addr_mem[older_slot][31:4] == addr_mem[request_slot][31:4]) ?
-                    store_line_mask[older_slot] : 16'b0;
             end
-            for (coverage_node = 1; coverage_node < LSQ_ENTRIES;
-                 coverage_node = coverage_node + 1) begin : g_coverage
-                assign older_coverage[coverage_node] =
-                    older_coverage[2*coverage_node] |
-                    older_coverage[2*coverage_node+1];
-            end
-            // Coverage of every candidate load is independent of the winner.
-            // Carry the flag through the pick tree so request-valid does not
-            // wait for selected-load forwarding and its byte-wise data tree.
-            assign pick_fully_forwarded[LSQ_ENTRIES+request_slot] =
-                (older_coverage[1] & load_line_mask[request_slot]) ==
-                load_line_mask[request_slot];
             assign request_eligible[request_slot] =
                 (entry_age[request_slot] < occupancy_reg) &&
                 valid_mem[request_slot] &&
@@ -425,8 +405,6 @@ module rv32_lsq #(
             assign pick_valid[pick_node] = pick_valid[2*pick_node] || pick_valid[2*pick_node+1];
             assign pick_slot[pick_node] = choose_left ? pick_slot[2*pick_node] : pick_slot[2*pick_node+1];
             assign pick_age[pick_node] = choose_left ? pick_age[2*pick_node] : pick_age[2*pick_node+1];
-            assign pick_fully_forwarded[pick_node] = choose_left ?
-                pick_fully_forwarded[2*pick_node] : pick_fully_forwarded[2*pick_node+1];
             // Carry the address alongside the winning age/slot. The cache
             // need not wait for a second binary-indexed read after selection.
             assign pick_addr[pick_node] = choose_left ? pick_addr[2*pick_node] : pick_addr[2*pick_node+1];
@@ -544,7 +522,7 @@ module rv32_lsq #(
                 target_mask = access_mask(size_mem[candidate]);
                 fwd_mask = tree_forward_mask;
                 fwd_data = tree_forward_data;
-                if (!pick_fully_forwarded[1]) begin
+                if ((fwd_mask & target_mask) != target_mask) begin
                     dcache_req_valid_o = 1'b1;
                     dcache_req_is_load_o = 1'b1;
                     dcache_req_size_o = size_mem[candidate];
@@ -810,7 +788,7 @@ module rv32_lsq #(
             // The selected load's forwarding result was computed once in the
             // request combinational block.  Reuse it here for cache bypass.
             if (candidate_found && load_mem[candidate] && !request_sent_mem[candidate] && !complete_mem[candidate]) begin
-                if (pick_fully_forwarded[1]) begin
+                if ((fwd_mask & target_mask) == target_mask) begin
                     complete_value_mem[candidate] <= format_relative_value(
                         fwd_data, size_mem[candidate], unsigned_mem[candidate]);
                     complete_error_mem[candidate] <= 1'b0;
