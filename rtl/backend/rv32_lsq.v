@@ -331,6 +331,7 @@ module rv32_lsq #(
     wire pick_valid [1:2*LSQ_ENTRIES-1];
     wire [SLOT_WIDTH-1:0] pick_slot [1:2*LSQ_ENTRIES-1];
     wire [SLOT_WIDTH-1:0] pick_age [1:2*LSQ_ENTRIES-1];
+    wire [31:0] pick_addr [1:2*LSQ_ENTRIES-1];
     wire [3:0] store_overlap [0:LSQ_ENTRIES-1];
     wire [31:0] store_forward_data [0:LSQ_ENTRIES-1];
     wire [3:0] tree_forward_mask;
@@ -346,16 +347,17 @@ module rv32_lsq #(
             assign pick_valid[LSQ_ENTRIES+age_slot] = request_eligible[age_slot];
             assign pick_slot[LSQ_ENTRIES+age_slot] = age_slot;
             assign pick_age[LSQ_ENTRIES+age_slot] = entry_age[age_slot];
+            assign pick_addr[LSQ_ENTRIES+age_slot] = addr_mem[age_slot];
             assign store_overlap[age_slot] =
                 valid_mem[age_slot] && store_mem[age_slot] &&
                 addr_ready_mem[age_slot] && data_ready_mem[age_slot] &&
                 (entry_age[age_slot] < pick_age[1]) &&
-                (addr_mem[age_slot][31:4] == addr_mem[pick_slot[1]][31:4]) ?
+                (addr_mem[age_slot][31:4] == pick_addr[1][31:4]) ?
                 relative_overlap(addr_mem[age_slot][3:0], mask_mem[age_slot],
-                    addr_mem[pick_slot[1]][3:0], access_mask(size_mem[pick_slot[1]])) : 4'b0;
+                    pick_addr[1][3:0], access_mask(size_mem[pick_slot[1]])) : 4'b0;
             assign store_forward_data[age_slot] = store_data_relative_to_load(
                 data_mem[age_slot], addr_mem[age_slot][3:0], mask_mem[age_slot],
-                addr_mem[pick_slot[1]][3:0], access_mask(size_mem[pick_slot[1]]));
+                pick_addr[1][3:0], access_mask(size_mem[pick_slot[1]]));
         end
     endgenerate
 
@@ -403,6 +405,9 @@ module rv32_lsq #(
             assign pick_valid[pick_node] = pick_valid[2*pick_node] || pick_valid[2*pick_node+1];
             assign pick_slot[pick_node] = choose_left ? pick_slot[2*pick_node] : pick_slot[2*pick_node+1];
             assign pick_age[pick_node] = choose_left ? pick_age[2*pick_node] : pick_age[2*pick_node+1];
+            // Carry the address alongside the winning age/slot. The cache
+            // need not wait for a second binary-indexed read after selection.
+            assign pick_addr[pick_node] = choose_left ? pick_addr[2*pick_node] : pick_addr[2*pick_node+1];
         end
         // Each byte independently selects the youngest overlapping older
         // store. Static reads replace repeated head-relative array muxes.
@@ -499,7 +504,10 @@ module rv32_lsq #(
         dcache_req_valid_o = 1'b0;
         dcache_req_is_load_o = 1'b0;
         dcache_req_is_store_o = 1'b0;
-        dcache_req_addr_o = 32'b0;
+        // Payload is meaningful only with valid. Expose the selected address
+        // directly so forwarding and recovery gates do not sit on the cache
+        // index path.
+        dcache_req_addr_o = pick_addr[1];
         dcache_req_size_o = 2'b0;
         dcache_req_unsigned_o = 1'b0;
         dcache_req_mask_o = 16'b0;
@@ -517,12 +525,11 @@ module rv32_lsq #(
                 if ((fwd_mask & target_mask) != target_mask) begin
                     dcache_req_valid_o = 1'b1;
                     dcache_req_is_load_o = 1'b1;
-                    dcache_req_addr_o = addr_mem[candidate];
                     dcache_req_size_o = size_mem[candidate];
                     dcache_req_unsigned_o = unsigned_mem[candidate];
                     dcache_req_mask_o = line_mask_from_relative(target_mask & ~fwd_mask,
-                                                                 addr_mem[candidate]);
-                    dcache_req_wdata_o = line_data_from_relative(fwd_data, addr_mem[candidate]);
+                                                                 pick_addr[1]);
+                    dcache_req_wdata_o = line_data_from_relative(fwd_data, pick_addr[1]);
                     dcache_req_rob_tag_o = rob_tag_mem[candidate];
                     dcache_req_lsq_tag_o = make_lsq_tag(candidate, generation_mem[candidate]);
                     request_fire = dcache_req_ready_i;
@@ -530,11 +537,10 @@ module rv32_lsq #(
             end else begin
                 dcache_req_valid_o = 1'b1;
                 dcache_req_is_store_o = 1'b1;
-                dcache_req_addr_o = addr_mem[candidate];
                 dcache_req_size_o = size_mem[candidate];
                 dcache_req_unsigned_o = 1'b0;
-                dcache_req_mask_o = line_mask_from_relative(mask_mem[candidate], addr_mem[candidate]);
-                dcache_req_wdata_o = line_data_from_relative(data_mem[candidate], addr_mem[candidate]);
+                dcache_req_mask_o = line_mask_from_relative(mask_mem[candidate], pick_addr[1]);
+                dcache_req_wdata_o = line_data_from_relative(data_mem[candidate], pick_addr[1]);
                 dcache_req_rob_tag_o = rob_tag_mem[candidate];
                 dcache_req_lsq_tag_o = make_lsq_tag(candidate, generation_mem[candidate]);
                 request_fire = dcache_req_ready_i;
