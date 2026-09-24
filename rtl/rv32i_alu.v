@@ -114,6 +114,39 @@ module rv32i_alu #(
          (issue_op_i == `RV32IM_OP_SRAI)) ?
         issue_imm_i[4:0] : issue_src2_value_i[4:0];
 
+    // Compare four-bit chunks in parallel, then combine high chunks before
+    // low chunks. The issue path otherwise contains a 32-bit serial compare
+    // between the RS operand mux and the branch redirect register.
+    wire [7:0] cmp_eq0, cmp_lt0;
+    wire [3:0] cmp_eq1, cmp_lt1;
+    wire [1:0] cmp_eq2, cmp_lt2;
+    wire cmp_equal, cmp_unsigned_lt, cmp_signed_lt;
+    genvar cmp_chunk;
+    generate
+        for (cmp_chunk = 0; cmp_chunk < 8; cmp_chunk = cmp_chunk + 1) begin : g_cmp_chunk
+            assign cmp_eq0[cmp_chunk] =
+                issue_src1_value_i[cmp_chunk*4 +: 4] ==
+                issue_src2_value_i[cmp_chunk*4 +: 4];
+            assign cmp_lt0[cmp_chunk] =
+                issue_src1_value_i[cmp_chunk*4 +: 4] <
+                issue_src2_value_i[cmp_chunk*4 +: 4];
+        end
+        for (cmp_chunk = 0; cmp_chunk < 4; cmp_chunk = cmp_chunk + 1) begin : g_cmp_pair
+            assign cmp_eq1[cmp_chunk] = cmp_eq0[2*cmp_chunk+1] && cmp_eq0[2*cmp_chunk];
+            assign cmp_lt1[cmp_chunk] = cmp_lt0[2*cmp_chunk+1] ||
+                (cmp_eq0[2*cmp_chunk+1] && cmp_lt0[2*cmp_chunk]);
+        end
+        for (cmp_chunk = 0; cmp_chunk < 2; cmp_chunk = cmp_chunk + 1) begin : g_cmp_quad
+            assign cmp_eq2[cmp_chunk] = cmp_eq1[2*cmp_chunk+1] && cmp_eq1[2*cmp_chunk];
+            assign cmp_lt2[cmp_chunk] = cmp_lt1[2*cmp_chunk+1] ||
+                (cmp_eq1[2*cmp_chunk+1] && cmp_lt1[2*cmp_chunk]);
+        end
+    endgenerate
+    assign cmp_equal = cmp_eq2[1] && cmp_eq2[0];
+    assign cmp_unsigned_lt = cmp_lt2[1] || (cmp_eq2[1] && cmp_lt2[0]);
+    assign cmp_signed_lt = (issue_src1_value_i[31] ^ issue_src2_value_i[31]) ?
+        issue_src1_value_i[31] : cmp_unsigned_lt;
+
     wire result_visible = result_valid_reg &&
         (!live_tag_valid_i || (result_rob_tag_reg == live_tag_i));
     assign exec_valid_o = result_visible;
@@ -224,12 +257,12 @@ module rv32i_alu #(
                 actual_next_pc = shared_sum & 32'hfffffffe;
                 calc_branch_target = actual_next_pc;
             end
-            `RV32IM_OP_BEQ: begin calc_is_branch = 1'b1; calc_branch_taken = (issue_src1_value_i == issue_src2_value_i); end
-            `RV32IM_OP_BNE: begin calc_is_branch = 1'b1; calc_branch_taken = (issue_src1_value_i != issue_src2_value_i); end
-            `RV32IM_OP_BLT: begin calc_is_branch = 1'b1; calc_branch_taken = ($signed(issue_src1_value_i) < $signed(issue_src2_value_i)); end
-            `RV32IM_OP_BGE: begin calc_is_branch = 1'b1; calc_branch_taken = ($signed(issue_src1_value_i) >= $signed(issue_src2_value_i)); end
-            `RV32IM_OP_BLTU: begin calc_is_branch = 1'b1; calc_branch_taken = (issue_src1_value_i < issue_src2_value_i); end
-            `RV32IM_OP_BGEU: begin calc_is_branch = 1'b1; calc_branch_taken = (issue_src1_value_i >= issue_src2_value_i); end
+            `RV32IM_OP_BEQ: begin calc_is_branch = 1'b1; calc_branch_taken = cmp_equal; end
+            `RV32IM_OP_BNE: begin calc_is_branch = 1'b1; calc_branch_taken = !cmp_equal; end
+            `RV32IM_OP_BLT: begin calc_is_branch = 1'b1; calc_branch_taken = cmp_signed_lt; end
+            `RV32IM_OP_BGE: begin calc_is_branch = 1'b1; calc_branch_taken = !cmp_signed_lt; end
+            `RV32IM_OP_BLTU: begin calc_is_branch = 1'b1; calc_branch_taken = cmp_unsigned_lt; end
+            `RV32IM_OP_BGEU: begin calc_is_branch = 1'b1; calc_branch_taken = !cmp_unsigned_lt; end
             `RV32IM_OP_LB,
             `RV32IM_OP_LH,
             `RV32IM_OP_LW,
@@ -270,8 +303,8 @@ module rv32i_alu #(
             end
             `RV32IM_OP_SUB: begin calc_value = shared_sum; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLL: begin calc_value = (SHIFT_IMPL == 0) ? (issue_src1_value_i << issue_src2_value_i[4:0]) : issue_src1_value_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SLT: begin calc_value = ($signed(issue_src1_value_i) < $signed(issue_src2_value_i)) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SLTU: begin calc_value = (issue_src1_value_i < issue_src2_value_i) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
+            `RV32IM_OP_SLT: begin calc_value = {31'd0, cmp_signed_lt}; calc_rd_we = 1'b1; end
+            `RV32IM_OP_SLTU: begin calc_value = {31'd0, cmp_unsigned_lt}; calc_rd_we = 1'b1; end
             `RV32IM_OP_XOR: begin calc_value = issue_src1_value_i ^ issue_src2_value_i; calc_rd_we = 1'b1; end
             `RV32IM_OP_SRL: begin calc_value = (SHIFT_IMPL == 0) ? (issue_src1_value_i >> issue_src2_value_i[4:0]) : issue_src1_value_i; calc_rd_we = 1'b1; end
             `RV32IM_OP_SRA: begin
