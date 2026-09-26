@@ -146,6 +146,12 @@ module rv32_dcache_nonblocking #(
     reg request_hit;
     reg [CACHE_ENTRY_WIDTH-1:0] request_hit_entry;
     reg [CACHE_ENTRY_WIDTH-1:0] request_victim_entry;
+    // A request either reads a hit line or snapshots a miss victim, never
+    // both. Sharing their address avoids inferring two 128-bit read ports.
+    // Keep the store-hit/refill write ports independent: they can overlap.
+    wire [CACHE_ENTRY_WIDTH-1:0] request_data_entry =
+        request_hit ? request_hit_entry : request_victim_entry;
+    wire [127:0] request_data_line = data_mem[request_data_entry];
     wire resp_slot_free = !resp_valid_reg || dcache_resp_ready_i;
     wire ack_slot_free = !ack_valid_reg || dcache_store_ack_ready_i;
 
@@ -483,8 +489,8 @@ module rv32_dcache_nonblocking #(
                     resp_valid_reg <= 1'b1;
                     resp_lsq_reg <= dcache_req_lsq_tag_i;
                     resp_addr_reg <= dcache_req_addr_i;
-                    resp_line_reg <= data_mem[request_hit_entry];
-                    resp_word_reg <= extract_value(data_mem[request_hit_entry],
+                    resp_line_reg <= request_data_line;
+                    resp_word_reg <= extract_value(request_data_line,
                                                    dcache_req_addr_i,
                                                    dcache_req_size_i,
                                                    dcache_req_unsigned_i);
@@ -494,7 +500,7 @@ module rv32_dcache_nonblocking #(
                         lru_way_mem[request_index] <= !request_hit_entry[0];
                 end else if (request_is_store && request_hit) begin
                     event_hit_o <= 1'b1;
-                    updated_line = merge_store(data_mem[request_hit_entry],
+                    updated_line = merge_store(request_data_line,
                                                dcache_req_wdata_i,
                                                dcache_req_mask_i);
                     data_mem[request_hit_entry] <= updated_line;
@@ -585,7 +591,7 @@ module rv32_dcache_nonblocking #(
                     mshr_lsq[free_index] <= dcache_req_lsq_tag_i;
                     mshr_victim_addr[free_index] <=
                         victim_line_address(tag_mem[request_victim_entry], request_index);
-                    mshr_victim_data[free_index] <= data_mem[request_victim_entry];
+                    mshr_victim_data[free_index] <= request_data_line;
                     mshr_victim_entry[free_index] <= request_victim_entry;
                     valid_bits[request_victim_entry] <= 1'b0;
                     dirty_bits[request_victim_entry] <= 1'b0;
