@@ -111,6 +111,27 @@ foreach ($source in $sources) {
     }
 }
 
+# Freeze all source/header inputs before compilation. A manifest is evidence
+# only for an unchanged build, not a later snapshot of possibly edited RTL.
+$manifestFiles = @($sources) + @('rtl/filelist.f') + @(
+    Get-ChildItem -LiteralPath rtl -Recurse -Filter '*.vh' -File |
+        ForEach-Object { (Resolve-Path -LiteralPath $_.FullName -Relative) -replace '^\.\\', '' }
+)
+$sourceHashes = [ordered]@{}
+foreach ($source in ($manifestFiles | Sort-Object -Unique)) {
+    $sourceHashes[$source.Replace('\', '/')] = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+}
+$configuration = [ordered]@{}
+foreach ($name in @('FeWidth', 'BeWidth', 'PhysRegs', 'RobEntries', 'RsEntries', 'LsqEntries',
+    'IntIssueWidth', 'CdbWidth', 'EnableCacheStats', 'IcacheMshrs', 'IcacheLines', 'IcacheWays',
+    'DcacheMshrs', 'DcacheLines', 'DcacheWays', 'DcacheIndexHash', 'DcacheRequestPipeline',
+    'RamSizeBytes', 'LegacySentinelHalt', 'MemoryLatency', 'IMemoryOutstanding',
+    'DMemoryOutstanding', 'FetchQueueDepth', 'CompletionDepth', 'MulImpl', 'ShiftImpl',
+    'PhysTagImpl', 'GenerationWidth', 'CheckpointImpl', 'StoreBufferedRetire',
+    'CompletionBypass', 'SerialBackend')) {
+    $configuration[$name] = Get-Variable -Name $name -ValueOnly
+}
+
 $oldPath = $env:PATH
 $oldShell = $env:SHELL
 $oldVerilatorRoot = $env:VERILATOR_ROOT
@@ -167,6 +188,26 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Verilator build failed with exit code $LASTEXITCODE"
     }
+    foreach ($source in $sourceHashes.Keys) {
+        if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $sourceHashes[$source]) {
+            throw "Source changed during build; executable is not a frozen candidate: $source"
+        }
+    }
+    $outputPath = [System.IO.Path]::GetFullPath((Join-Path $Mdir $Output))
+    if (-not (Test-Path -LiteralPath $outputPath -PathType Leaf)) {
+        $outputPath += '.exe'
+    }
+    if (-not (Test-Path -LiteralPath $outputPath -PathType Leaf)) {
+        throw "Build reported success but executable is missing: $outputPath"
+    }
+    [ordered]@{
+        format = 'verilator-frozen-build-v1'
+        parameters = $configuration
+        source_sha256 = $sourceHashes
+        executable = $outputPath
+        executable_sha256 = (Get-FileHash -LiteralPath $outputPath -Algorithm SHA256).Hash
+        verilator = $verilatorPath
+    } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $Mdir 'build_manifest.json') -Encoding utf8
 }
 finally {
     $env:PATH = $oldPath
