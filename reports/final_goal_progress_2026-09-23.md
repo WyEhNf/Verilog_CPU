@@ -108,3 +108,48 @@ P4 同容量改两路后，`rsort` 从 0.8793 提升到 1.0366，`vvadd` 从 0.8
 当前使用相同 P4/ROB32/PRF64/RS16/LSQ8、256 MiB 参数正在跑开启 cache sharing 的偏时序综合：`build/synth/p4_r32p64_lsq8_d1024_ram256m_cache_share_bb`。在其面积/时序完成前，不能沿用旧网表的 301.64 MHz 当作该合并版本成绩。
 
 第一次综合进程虽退出 0，但调用的 `-l synth.log` 与 Tcl 内部 `tee -o synth.log` 同名，使日志被两次写入而混杂，面积审计明确拒绝（找不到最后层级区段的顶层面积）；该次不作为面积证据。已用独立 `yosys_run.log` 重跑，Tcl 的 `synth.log` 只保留计价 stat。后续应审计新 stat 和合并后 manifest，再单独导出/跑时序；旧定向缓冲的报告索引不能直接套用新 JSON。
+
+## 2026-09-26：单数据读口与合并范围校验
+
+整机端口合并重跑已完成，历史宽选择器实验已计价逻辑 **26,783.022600 µm²**，比未合并版本增加 **168.267780 µm²**。但逐数组核对发现 `*/data_mem` 同时选择了 LSQ：写端口从 132 合并为 12；此前“未处理 LSQ”描述不正确。该次存储几何未变，但不能当作缓存限定实验；其 `area_audit.json` 已标记 **INVALID_SCOPE**，不计为当前候选的面积/时序成绩。当前选择器已改为带缓存模块名称后缀的四个精确模式。
+
+`tools/audit_synth.py` 在 `--cache-memory-share=1` 时自动核对 `memory_manifest_before_share.il`：内存身份、几何不得改变，非缓存数组读写端口不得改变，缓存合并不得增加端口或降至零。新增 2 项单元测试通过；历史宽选择器 manifest 被该校验明确拒绝，能复现上述 LSQ 范围错误。
+
+RTL 将命中读取与 miss 牺牲行快照共用一个 `request_data_line`，一次请求只能走其中一个分支；store-hit 与 refill 写入继续并发，不串行化。D-cache 数据数组变为 **1R**，再开启缓存限定的回写合并后为 **1R2W**。RTL 文件 SHA256 从 `D67D9046A6C65F14F1A67F8D4D54108C39D96EFB0F49C4665F6FC2CC3EDE1003` 更新为 `89F7124E6106A40FFFFCEAAEE1E9A05EBD9C7099C0BDABC1B808DF25EA3FF890`；前一份端口合并面积与 301.64 MHz 定向缓冲属于旧 RTL，不能拼到新版本。
+
+新 Verilator 可执行文件 `build/vlt/dcache_1r_p4_r32p64_lsq8_ram256m/cpu_core_image_vlt.exe` 构建完成，六项 benchmark 全过，周期数/退休数逐项与旧版相同，几何平均 **1.0991968369**；报告 `build/cpu2026/dcache_1r_ram256m_report.json`。单读口版通过 4 种综合后缓存网表随机/脏回写测试（显式断言 RD_PORTS=1）、原 8 组缓存 RTL 回归、256 MiB 末地址脏回写测试以及除 pi 外 **17/17** 仿真源码回归；对应报告 `build/cpu2026/simulator_mmio_dcache1r_ram256m_report.json`。
+
+新整机缓存限定综合正在独立目录 `build/synth/p4_r32p64_lsq8_ram256m_dcache1r_cache_share_scoped_bb` 运行；在其完整计价与新网表 STA 完成之前，不报告新 RTL 的面积/频率通过。`tools/test_final_basic.ps1` 新增 `-Executable` 模式，可把五项基础/半字/M-extension 程序用于同一个已冻结 Verilator 可执行文件，并要求完整 PASS 标志；硬件大小选项仅用于其 Icarus 构建模式。
+
+已用该 `-Executable` 模式在单读口版验证 **5/5**：vmul、vvadd、accumulate、halfword_smoke、m_isa_smoke 均通过。加上六项 benchmark、17 项仿真源码程序与末 RAM 地址回写，当前单读口修改已有整机正确性与 IPC 对照证据；pi 仍按用户要求冻结，所有存储完整计价/时序仍未完成。
+
+## 2026-09-26：单读口版面积/时序复测与精确导出
+
+缓存限定、单数据读口版的完整综合已经结束，范围校验通过，只合并 D-cache data/tag 的写端口，非缓存数组端口未改。已知标准单元面积 **26,593.147260 µm²**，比旧未合并双读口版的 26,614.754820 少 **21.607560 µm²**。仍有 150 个存储实例未计价，合计为空；报告 `build/synth/p4_r32p64_lsq8_ram256m_dcache1r_cache_share_scoped_bb/area_audit.json`。配置 IPC 仍以单读口版六项复测的 **1.0991968369** 为证。
+
+兼容行为 Verilog 重读路径导出后，未缓冲标准单元面积为 **28,173.094380 µm²**。同一新 JSON 的缓冲/时序结果如下；均非全芯片时序，仍有 139 个未表征存储边界。
+
+| 缓冲策略 | 已知逻辑加缓冲 µm² | 最差 slack ps | 局部 Fmax MHz |
+|---|---:|---:|---:|
+| 全局 16 | 34,235.10846 | +46.1726 | 304.21 |
+| 全局 64 | 29,259.42102 | -1828.7374 | 193.72 |
+| 定向 8、128 位内总线、第一轮 | 29,746.85958 | -938.2446 | 234.11 |
+| 定向 8、128 位内总线、第二轮 | 29,980.43118 | -359.1139 | 270.82 |
+
+上述逻辑加缓冲计价与对应频率属于同一新网表。不能把 26,593.15 与 304.21 直接拼成实现面积/频率；全局 16 留给存储的预算只有 **1,764.89154 µm²**。
+
+展开的兼容路径 manifest 有 **139 个逻辑存储实例、197,440 bit**，不是此前定义几何的 132 定义、187,064 bit；也不是合法映射后的 SRAM 宏数量/面积。`tools/estimate_local_sram_floor.py` 增加 `--boundary-manifest` 与显式同版本 `--logic-area-um2`，重复实例均计入，未知几何/计数不符拒绝；新增 2 项测试通过。用全局 16 的 known logic 计价、忽略端口适配等成本的本地 SRAM 情景为 **8,495.572815 µm²**（top3=7,132.302720，其余 38,720 bit 理想密度计价），不再沿用定义几何算出的 8,130.25；它仍不是严格下界或 FakeRAM 验收成绩。
+
+发现兼容导出重读行为数组会重建外围逻辑，已知面积比源综合多 **1,579.947120 µm²**。`synth/synth_bb.tcl` 新增保存 `cpu_core_mapped.il`，`synth/export_sta_json.tcl` 优先读取该已映射 RTLIL，并不再次重建/ABC 映射；缺少该文件时保留兼容路径。`tools/test_exact_sta_export.py` 通过：小型实际 Yosys 网表的单元类型计数与存储参数在精确导出前后相同，兼容路径仍可用。真实 CPU 正在 `build/synth/p4_dcache1r_scoped_exact_ram256m_bb` 重新生成精确源；尚未证明真实整机精确导出的面积一致或频率，存储端口合法化/适配成本亦不能由这项导出修复豁免。
+
+公开 [FakeRAM2.0](https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts/tree/master/tools/FakeRAM2.0) 提供模型生成工具，旧 [示例配置](https://raw.githubusercontent.com/The-OpenROAD-Project/FakeRAM2.0/main/example_input_file.cfg) 明确标记示例参数不真实。已向用户确认能否采用公开生成器加本地 ASAP7 参数的披露估算口径，或必须使用课程指定配置；未将该示例的面积/时序假设当作成绩。本地 ASAP7 sram_0p0 也不能未经多端口合法化就当作所需 SRAM。初始盘点还发现 BTB tag/target 的每项同步清零产生很多写端口；利用 valid 位屏蔽未初始化内容可能是下一步存储合法化方向，目前未改 RTL 或宣称收益。
+
+## 2026-09-26：精确 CPU 网表与定向缓冲复测完成
+
+`p4_dcache1r_scoped_exact_ram256m_bb` 源综合完成，已知层级逻辑 26,593.147260 µm²；从映射 RTLIL 精确导出、flatten/opt_clean 后为 25,189.647300 µm²（时序 2,743.081200）。层级清理会移除未观察逻辑，差额不是 RTL 面积优化收益，也不能把 toy 的导出一致性当作完整 CPU 形式等价。
+
+同一个精确 JSON：全局 fanout16 已计价逻辑含缓冲 30,858.351300，最差 slack +46.1726ps；全局64为 25,958.946420、-1773.7205ps。定向8/总线128的 v1/v2/v3/v4 依次为 26,433.088020/-938.2446ps、26,666.309700/-356.9176ps、26,704.276020/-3.1257ps、**26,730.520020/+31.3933ps**。v4 TNS/WNS=0，局部 Fmax **302.8523MHz**；组合含缓冲 23,987.438820、时序 2,743.081200，显式缓冲 1,540.872720（8,807 个）。面积与局部时序对应同一网表，尚有139个未计价、未表征存储边界，不能宣布完整频率或总面积通过。
+
+精确 manifest 重新计数也是139逻辑存储实例、197,440bit。本地理想 SRAM 情景为8,495.572815µm²，与v4相加为35,226.092835，但忽略多端口/适配/时序，既非FakeRAM成绩也非严格下界；正式总面积继续为null。IPC沿用同RTL冻结可执行文件的六项复测1.0991968369，pi仍冻结。
+
+导出工具新增 `--skip-maps`，同一JSON多轮扫描可省略重复TSV，不修改默认行为、网表或manifest；新增对照测试通过。`test_sta_flow.py`现9/9通过，`test_exact_sta_export.py`1/1通过。E盘仅余约0.09GB，本轮未删除用户测试或历史文件，未开启新大型整机编译。新报告草稿 `reports/current_candidate_2026-09-26.md` 汇总当前参数、逐项性能、同版本面积/时序和7组历史单变量敏感度，明确区分估算与验收。
