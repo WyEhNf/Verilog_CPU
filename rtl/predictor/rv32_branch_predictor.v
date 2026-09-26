@@ -4,7 +4,13 @@
 // 256-entry bimodal predictor plus a 64-entry direct-mapped BTB.
 // Predictor state changes only from committed branch feedback.
 /* verilator lint_off UNUSEDSIGNAL */
-module rv32_branch_predictor (
+module rv32_branch_predictor #(
+    // A bank stores the high index bits; its caller routes low-bit ownership.
+    // BANK_BITS=0 preserves the standalone full-table predictor interface.
+    parameter integer BANK_BITS = 0,
+    parameter integer BHT_ENTRIES = 256 >> BANK_BITS,
+    parameter integer BTB_ENTRIES = 64 >> BANK_BITS
+) (
     input  wire        clk_i,
     input  wire        reset_i,
 
@@ -30,15 +36,15 @@ module rv32_branch_predictor (
     output reg  [31:0] prediction_count_o,
     output reg  [31:0] correct_count_o
 );
-    reg [1:0] bht [0:255];
-    reg       btb_valid [0:63];
-    reg [23:0] btb_tag [0:63];
-    reg [31:0] btb_target [0:63];
-    reg [1:0] btb_kind [0:63];
+    reg [1:0] bht [0:BHT_ENTRIES-1];
+    reg       btb_valid [0:BTB_ENTRIES-1];
+    reg [23:0] btb_tag [0:BTB_ENTRIES-1];
+    reg [31:0] btb_target [0:BTB_ENTRIES-1];
+    reg [1:0] btb_kind [0:BTB_ENTRIES-1];
 
     wire [6:0] query_opcode = query_inst_i[6:0];
-    wire [7:0] query_bht_index = query_pc_i[9:2];
-    wire [5:0] query_btb_index = query_pc_i[7:2];
+    wire [7-BANK_BITS:0] query_bht_index = query_pc_i[9:2+BANK_BITS];
+    wire [5-BANK_BITS:0] query_btb_index = query_pc_i[7:2+BANK_BITS];
     wire query_btb_match = btb_valid[query_btb_index] &&
                            (btb_tag[query_btb_index] == query_pc_i[31:8]);
     wire [31:0] jal_imm = {{11{query_inst_i[31]}}, query_inst_i[31],
@@ -47,8 +53,8 @@ module rv32_branch_predictor (
     wire [31:0] branch_imm = {{19{query_inst_i[31]}}, query_inst_i[31],
                               query_inst_i[7], query_inst_i[30:25],
                               query_inst_i[11:8], 1'b0};
-    wire [7:0] feedback_bht_index = feedback_pc_i[9:2];
-    wire [5:0] feedback_btb_index = feedback_pc_i[7:2];
+    wire [7-BANK_BITS:0] feedback_bht_index = feedback_pc_i[9:2+BANK_BITS];
+    wire [5-BANK_BITS:0] feedback_btb_index = feedback_pc_i[7:2+BANK_BITS];
     wire feedback_btb_write = feedback_valid_i && feedback_taken_i &&
                              ((feedback_kind_i == `RV32IM_PRED_BRANCH) ||
                               (feedback_kind_i == `RV32IM_PRED_JALR));
@@ -56,8 +62,8 @@ module rv32_branch_predictor (
                                     {feedback_target_i[31:1], 1'b0} : feedback_target_i;
     integer i;
 
-    assign pred_bht_index_o = query_bht_index[5:0];
-    assign pred_btb_index_o = query_btb_index[3:0];
+    assign pred_bht_index_o = query_pc_i[7:2];
+    assign pred_btb_index_o = query_pc_i[5:2];
     assign pred_counter_o = bht[query_bht_index];
 
     always @* begin
@@ -107,9 +113,9 @@ module rv32_branch_predictor (
         if (reset_i) begin
             prediction_count_o <= 32'd0;
             correct_count_o <= 32'd0;
-            for (i = 0; i < 256; i = i + 1)
+            for (i = 0; i < BHT_ENTRIES; i = i + 1)
                 bht[i] <= 2'b10; // weakly taken
-            for (i = 0; i < 64; i = i + 1) begin
+            for (i = 0; i < BTB_ENTRIES; i = i + 1) begin
                 btb_valid[i] <= 1'b0;
             end
         end else if (feedback_valid_i) begin
