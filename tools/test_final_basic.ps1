@@ -5,7 +5,8 @@ param(
     [int]$RobEntries = 64,
     [int]$PhysRegs = 96,
     [int]$LsqEntries = 16,
-    [int]$DcacheLines = 512
+    [int]$DcacheLines = 512,
+    [string]$Executable = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,18 +41,31 @@ try {
         "-P", "cpu_core_image_tb.LEGACY_SENTINEL_HALT=0"
     )
     $output = "build/cpu2026/final_basic.vvp"
-    & iverilog -g2012 -I rtl -s cpu_core_image_tb @parameters -o $output @sources
-    if ($LASTEXITCODE -ne 0) { throw "Icarus P4 final basic compile failed" }
+    # With an existing executable, test that exact frozen CPU configuration;
+    # the hardware sizing options above apply only to the Icarus build mode.
+    if ($Executable) {
+        $executablePath = (Resolve-Path -LiteralPath $Executable).Path
+    } else {
+        & iverilog -g2012 -I rtl -s cpu_core_image_tb @parameters -o $output @sources
+        if ($LASTEXITCODE -ne 0) { throw "Icarus P4 final basic compile failed" }
+    }
 
     foreach ($case in $cases) {
         $imageDir = "build/cpu2026/final_basic/$($case.Name)"
         & python tools/make_image.py "tests/programs/$($case.Name).c" --arch rv32im `
             --exit-protocol mmio --memory-size 0x10000000 --out-dir $imageDir
         if ($LASTEXITCODE -ne 0) { throw "Image build failed: $($case.Name)" }
-        & vvp $output "+IMAGE=$imageDir/$($case.Name).image" "+TEST=$($case.Name)" `
-            "+EXPECTED=$($case.Expected)" +MAX_CYCLES=1000000
-        if ($LASTEXITCODE -ne 0) { throw "CPU basic program failed: $($case.Name)" }
+        $runArgs = @("+IMAGE=$imageDir/$($case.Name).image", "+TEST=$($case.Name)",
+                     "+EXPECTED=$($case.Expected)", "+MAX_CYCLES=1000000", "+CHECK_LSQ")
+        $runOutput = if ($Executable) { @(& $executablePath @runArgs 2>&1) }
+                     else { @(& vvp $output @runArgs 2>&1) }
+        $runOutput
+        if ($LASTEXITCODE -ne 0 -or
+            -not ($runOutput -match "PASS: JOIN-02 image=$($case.Name) return=$($case.Expected) ")) {
+            throw "CPU basic program failed: $($case.Name)"
+        }
     }
+    Write-Host "PASS: final basic MMIO programs=$($cases.Count)"
 }
 finally {
     $env:PATH = $oldPath

@@ -27,6 +27,10 @@ try {
                 if ([Convert]::ToInt32($shared.WR_PORTS, 2) -ne $expectedWrites) {
                     throw "$memory unexpected write-port count"
                 }
+                if ($memory -eq 'data_mem' -and
+                    [Convert]::ToInt32($shared.RD_PORTS, 2) -ne 1) {
+                    throw 'D-cache hit/victim reads must share one data read port'
+                }
             }
             & iverilog.exe -g2012 -DSYNTH_CACHE_FIXED -I rtl -s rv32_dcache_hash_tb `
                 -P rv32_dcache_hash_tb.CACHE_LINES=16 `

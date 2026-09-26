@@ -65,6 +65,34 @@ class BufferTests(unittest.TestCase):
             insert_buffer_trees(self.records(), {}, 1, "BUF")
 
 
+class ExportTests(unittest.TestCase):
+    def test_skip_maps_preserves_netlist_and_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = {"modules": {"cpu_core": {
+                "ports": {"a": {"direction": "input", "bits": [2]},
+                          "y": {"direction": "output", "bits": [3]}},
+                "netnames": {"a": {"bits": [2]}, "y": {"bits": [3]}},
+                "cells": {"inv": {"type": "INVx1_ASAP7_75t_R",
+                    "port_directions": {"A": "input", "Y": "output"},
+                    "connections": {"A": [2], "Y": [3]}}}}}}
+            source = root / "input.json"
+            source.write_text(json.dumps(fixture))
+            for stem, extra in (("normal", []), ("compact", ["--skip-maps"])):
+                result = subprocess.run([sys.executable,
+                    str(Path(__file__).with_name("yosys_json_to_sta_verilog.py")),
+                    str(source), str(root / (stem + ".v")), *extra],
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "normal.v").read_text(),
+                             (root / "compact.v").read_text())
+            self.assertEqual(json.loads((root / "normal.memories.json").read_text()),
+                             json.loads((root / "compact.memories.json").read_text()))
+            for suffix in ("cells.tsv", "nets.tsv"):
+                self.assertTrue((root / ("normal." + suffix)).exists())
+                self.assertFalse((root / ("compact." + suffix)).exists())
+
+
 class AreaTests(unittest.TestCase):
     def audit(self, with_memory, allow=False, unknown=False):
         with tempfile.TemporaryDirectory() as directory:
