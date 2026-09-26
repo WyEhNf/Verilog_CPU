@@ -102,6 +102,53 @@ module rv32i_alu #(
     reg shift_right;
     reg shift_arithmetic;
 
+    function [31:0] fast_add_sub;
+        input [31:0] lhs;
+        input [31:0] rhs;
+        input subtract;
+        reg [31:0] adjusted_rhs;
+        reg [7:0] g0, p0, g1, p1, g2, p2, g3, p3;
+        reg [8:0] carry;
+        reg [4:0] chunk_sum;
+        integer chunk;
+        begin
+            adjusted_rhs = rhs ^ {32{subtract}};
+            for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
+                chunk_sum = {1'b0, lhs[chunk*4 +: 4]} +
+                            {1'b0, adjusted_rhs[chunk*4 +: 4]};
+                g0[chunk] = chunk_sum[4];
+                p0[chunk] = &(lhs[chunk*4 +: 4] ^ adjusted_rhs[chunk*4 +: 4]);
+            end
+            for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
+                g1[chunk] = g0[chunk]; p1[chunk] = p0[chunk];
+                if (chunk >= 1) begin
+                    g1[chunk] = g0[chunk] | (p0[chunk] & g0[chunk-1]);
+                    p1[chunk] = p0[chunk] & p0[chunk-1];
+                end
+            end
+            for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
+                g2[chunk] = g1[chunk]; p2[chunk] = p1[chunk];
+                if (chunk >= 2) begin
+                    g2[chunk] = g1[chunk] | (p1[chunk] & g1[chunk-2]);
+                    p2[chunk] = p1[chunk] & p1[chunk-2];
+                end
+            end
+            for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
+                g3[chunk] = g2[chunk]; p3[chunk] = p2[chunk];
+                if (chunk >= 4) begin
+                    g3[chunk] = g2[chunk] | (p2[chunk] & g2[chunk-4]);
+                    p3[chunk] = p2[chunk] & p2[chunk-4];
+                end
+            end
+            carry[0] = subtract;
+            for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
+                carry[chunk+1] = g3[chunk] | (p3[chunk] & subtract);
+                fast_add_sub[chunk*4 +: 4] = lhs[chunk*4 +: 4] +
+                    adjusted_rhs[chunk*4 +: 4] + carry[chunk];
+            end
+        end
+    endfunction
+
     wire issue_is_shift = (issue_op_i == `RV32IM_OP_SLLI) ||
         (issue_op_i == `RV32IM_OP_SRLI) ||
         (issue_op_i == `RV32IM_OP_SRAI) ||
@@ -209,8 +256,7 @@ module rv32i_alu #(
             end
             default: begin end
         endcase
-        shared_sum = adder_lhs + (adder_subtract ? ~adder_rhs : adder_rhs) +
-            {{31{1'b0}}, adder_subtract};
+        shared_sum = fast_add_sub(adder_lhs, adder_rhs, adder_subtract);
         pc_plus_four = issue_pc_i + 32'd4;
 
         calc_value = 32'b0;
