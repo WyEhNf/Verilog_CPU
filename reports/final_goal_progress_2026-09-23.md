@@ -1,6 +1,6 @@
 # 最终要求对齐进度（2026-09-23）
 
-本页按 `docs/final_project_requirements.md` 的最终口径记录证据。所有下述 CPU-2026 数字均来自本地六程序代理测试，**不是** `testcases/perf_*` 官方几何平均，也没有 FakeRAM 面积，因此不能作为 Tier 3 达标证明。
+本页按 `docs/final_project_requirements.md` 的最终口径记录证据。历史记录将 CPU-2026 称为代理测试；2026-09-26 用户已确认按现有 benchmark 文件夹继续评测，当前 IPC 验收采用这六项的几何平均，不再等待 `testcases/perf_*`。完整 FakeRAM 面积及存储时序尚未验证，因此仍不能宣称 Tier 3 三项同时达标。下面历史记录中的“缺少官方 perf_*”不再是当前阻塞项。
 
 ## 已实现与直接验证
 
@@ -50,14 +50,61 @@ P4 同容量改两路后，`rsort` 从 0.8793 提升到 1.0366，`vvadd` 从 0.8
 - 从 LSQ16 的最差路径映射追踪到 LSQ 输出的 `dcache_req_addr[4]`：请求候选与地址选择约在 2.0 ns 才完成，随后 D-cache 的索引、命中和接收判定又串行消耗约 2.6 ns。原有非直通请求寄存级会损失过多 IPC；下一轮需优先缩短 LSQ 地址选择和 D-cache 判定之间的组合串联，而非继续优化 ROB→RS→ALU 路径。
 - 将 LSQ 请求地址随最老可发射候选的平衡选择树一并传递，省掉候选编号确定后的第二次动态数组读取，并使无效请求时地址不再受转发/恢复门控。LSQ8 五项基础程序、BE1/2/4 LSQ 单元测试、深度 1/2/4/8/16 各 3000 次随机危险/转发对照、六项 MMIO 代理程序均通过；六项代理周期数与前版逐项相同，几何平均 IPC **1.0991968369**。已计价逻辑面积从 **26,168.038200** 增至 **26,190.389340 µm²**，16 扇出缓冲下 Fmax 从 **248.49** 提至 **259.27 MHz**（周期 3856.98 ps），最差路径仍为 LSQ→D-cache，尚未达到 300 MHz。证据见 `build/cpu2026/pickaddr_lsq8_p4_r32p64_d1024_c16_mmio_report.json`、`build/synth/p4_r32p64_lsq8_d1024_cp1_hash1_pickaddr_bb/area_audit.json`、`build/timing/p4_r32p64_lsq8_d1024_cp1_hash1_pickaddr_bb/timing_300mhz_buf16.rpt`。标准单元 STA 仍有 139 个未表征存储边界，不能证明全芯片时序。
 - 同一地址树下，LSQ16 的黑盒综合已完成：已计价逻辑面积 **27,993.308400 µm²**、150 个存储实例未计价；见 `build/synth/p4_r32p64_d1024_cp1_hash1_pickaddr_bb/area_audit.json`。该配置的代理 IPC 尚沿用修改地址树前的 **1.121336**，不能把两者当作严格同版本成绩；其 STA 亦未完成。
-- 试将每个候选负载的旧存储覆盖并行计算并随候选树传递，LSQ BE1/2/4 单元测试、五种深度各 3000 次随机危险/转发对照、五项基础程序及六项代理程序均通过；但 LSQ8 代理几何平均 IPC **1.097703**，低于改前 **1.099197**，已计价逻辑面积升至 **26,263.478880 µm²**，16 扇出缓冲 Fmax 仅从 **259.27** 增至约 **260.95 MHz**（最差 slack -500.8023 ps）。该 RTL 实验已撤回，当前代码仍采用原转发掩码判定；实验记录保留在 `build/cpu2026/pickcover_lsq8_p4_r32p64_d1024_c16_mmio_report.json`、`build/synth/p4_r32p64_lsq8_d1024_cp1_hash1_pickcover_bb/area_audit.json`、`build/timing/p4_r32p64_lsq8_d1024_cp1_hash1_pickcover_bb/timing_300mhz_buf16.rpt`。
+- 试将每个候选负载的旧存储覆盖并行计算并随候选树传递，LSQ BE1/2/4 单元测试、五种深度各 3000 次随机危险/转发对照、五项基础程序及六项代理程序均通过。该次代理 IPC **1.097703** 使用 I/D outstanding=8/4，而旧 **1.099197** 使用 16/8，不能归因于 RTL 改动；后续匹配参数对照已确认差异来自测试配置。已计价逻辑面积升至 **26,263.478880 µm²**，16 扇出缓冲 Fmax 仅从 **259.27** 增至约 **260.95 MHz**（最差 slack -500.8023 ps）。由于很小的时序收益和面积增加，该 RTL 实验已撤回，当前代码仍采用原转发掩码判定；实验记录保留在 `build/cpu2026/pickcover_lsq8_p4_r32p64_d1024_c16_mmio_report.json`、`build/synth/p4_r32p64_lsq8_d1024_cp1_hash1_pickcover_bb/area_audit.json`、`build/timing/p4_r32p64_lsq8_d1024_cp1_hash1_pickcover_bb/timing_300mhz_buf16.rpt`。
 - 进一步保持原 LSQ8 RTL 不变，只将 `synth/synth_bb.tcl` 的 ABC 末端从面积导向 `map -a` 切为时序导向 `map`（显式设置 `ASAP7_ABC_DELAY_MAP=1`，默认仍是面积导向）。已计价逻辑面积由 **26,190.389340** 增为 **26,616.300300 µm²**；同样的 16 扇出缓冲及 ASAP7/OpenSTA 约束下，最差标准单元路径从 **3856.98** 缩到 **3590.14 ps**，Fmax 从 **259.27** 升为 **278.54 MHz**。见 `build/synth/p4_r32p64_lsq8_d1024_cp1_hash1_pickaddr_delaymap_bb/area_audit.json` 和 `build/timing/p4_r32p64_lsq8_d1024_cp1_hash1_pickaddr_delaymap_bb/timing_300mhz_buf16.rpt`。该局部 STA 仍有 139 个未表征存储边界，频率仍低于 300 MHz；并且新增映射面积压缩了未计价 SRAM 的剩余预算，不能据此宣称面积通过。代理 IPC 沿用相同 RTL 的 1.099197，不是从映射网表重新跑出的正式成绩。
 - 对上述偏时序映射再把手工缓冲扇出上限从 16 收紧至 8，插入缓冲器从 **34,793** 增到 **79,538** 个，单按 BUFx8 的 **0.17496 µm²/个** 就约 **13,915.97 µm²**；局部 Fmax 反而从 **278.54** 降到 **276.66 MHz**。见 `build/timing/p4_r32p64_lsq8_d1024_cp1_hash1_pickaddr_delaymap_bb/timing_300mhz_buf8.rpt`。因此继续靠全局加密这种手工缓冲既不改善频率也破坏面积预算。
+- 对偏时序映射的最差路径进一步定位：由 ROB 状态经 RS 选择到 ALU 分支重定向寄存器。把 ALU 的 32 位比较拆成并行 4 位比较及高低组归并后，随机 3000 对输入 × 8 种分支/SLT 操作、既有 ALU 测试、同配置五项基础程序均通过；六项 MMIO 代理程序在 **I/D outstanding=16/8**、20 周期统一内存下逐项周期数与改前完全一致，几何平均 IPC **1.0991968369**。已计价逻辑面积从 **26,616.300300** 降至 **26,612.509500 µm²**，16 扇出局部 Fmax 从 **278.54** 提至 **288.96 MHz**（周期 3460.74 ps，slack -127.4072 ps），但仍未达到 300 MHz。证据见 `build/cpu2026/cmp4_i16d8_lsq8_p4_r32p64_d1024_c16_mmio_report.json`、`build/synth/p4_r32p64_lsq8_d1024_cp1_hash1_cmp4_delaymap_bb/area_audit.json`、`build/timing/p4_r32p64_lsq8_d1024_cp1_hash1_cmp4_delaymap_bb/timing_300mhz_buf16.rpt`。一次误用 I/D outstanding=8/4 的代理对照为 IPC **1.097703**，与 16/8 结果不能混用；该差异来自测试内存并发参数，不是已否决覆盖位或新比较器造成的退化。
+- 在同一比较器架构下，将 ALU 的共享 32 位加减法改为 4 位组生成/传播及三级前缀进位；随机 **3000 对输入 × 11 种分支/SLT/加减操作**、既有 ALU 单元测试、五项基础程序全部通过。严格匹配 **I/D outstanding=16/8** 的六项 MMIO 代理程序亦全部通过，逐项周期数与修改前完全相同，几何平均 IPC **1.0991968369**；见 `build/cpu2026/cmp4_fastadd_i16d8_lsq8_p4_r32p64_d1024_c16_mmio_report.json`。已计价标准单元逻辑面积 **26,611.226460 µm²**；16 扇出缓冲的局部 ASAP7/OpenSTA 最差 slack **+46.1726 ps**、等效最小周期 **3287.16 ps / Fmax 304.21 MHz**，首次满足 300 MHz 的**已表征逻辑路径**约束。证据为 `build/synth/p4_r32p64_lsq8_d1024_cp1_hash1_cmp4_fastadd_delaymap_bb/area_audit.json`、`build/timing/p4_r32p64_lsq8_d1024_cp1_hash1_cmp4_fastadd_delaymap_bb/timing_300mhz_buf16.rpt`。**尚不能宣称官方 Tier 3**：150 个存储实例未计价、139 个存储时序边界未表征；本地缺少 FakeRAM 模型和官方 `testcases/perf_*`，代理 IPC 余量仅约 0.000697。
+- 使用 `tools/test_simulator_mmio.ps1` 将旧 CPU 仿真程序源码按 RV32IM 重新编译为 32 位 MMIO 退出版本，并用宿主机包装程序取得完整有符号返回值（同时核对其低 8 位与旧清单一致）。按先前要求暂不运行 `pi`；其余 **17/17** 程序在当前 Verilator 配置、20 周期统一内存、I/D outstanding=16/8 下通过，包含 `qsort`、`queens`、`superloop`、`tak` 等长程序。`expr` 的完整返回值为 **-198**、`naive` 为 **350**，若直接把旧清单低 8 位的 58/94 当作完整 MMIO 返回值会误判。此回归覆盖源码重编译版本，不等同于原 `.data` 二进制或尚未获得的正式正确性评测。
+- 用现有 `third_party/asap7/sram_0p0` 单端口 SRAM LIB 做了**仅供决策的乐观装箱情景**：已知逻辑 26,611.23 µm² 留给存储的 Tier 3 预算是 **9,388.77 µm²**；仅 D-cache data/tag、I-cache data 三块数组在忽略端口、适配器、冲突与时序时的最低宏面积合计约 **7,132.30 µm²**。若其余 **28,344 bit** 另按库中最佳位密度理想计价，情景存储面积约 **8,130.25 µm²**，只留约 **1,258.52 µm²** 给端口复制/适配/对齐浪费。D-cache data 是 2 读/4 写、tag 是 5 读/3 写，而该库宏仅有单地址读写接口；该情景**不是可实现映射，也不是严格数学下界或 FakeRAM 评分面积**（还忽略了跨数组装箱）。复现命令：`python tools/estimate_local_sram_floor.py build/synth/p4_r32p64_lsq8_d1024_cp1_hash1_cmp4_fastadd_delaymap_bb/area_audit.json`。
+- 试在同一 RTL/参数下关闭 `ENABLE_CACHE_STATS`，偏时序 Yosys 综合已计价逻辑面积仅从 **26,611.226460** 变为 **26,610.920280 µm²**，节省 **0.306180 µm²**，见 `build/synth/p4_r32p64_lsq8_d1024_cp1_hash1_fastadd_nostats_delaymap_bb/area_audit.json`。统计模块虽在层级日志中有约 495 µm² 的模块面积，但作为无外部观察用途的实例已被优化，不能将它误计为可再节省的 495 µm²。由于节省几乎为零，该变体未单独跑 IPC/STA，当前已验证的同配置三指标仍以上述统计开启版本为准。
+- 将同一 P4/ROB32/PRF64/RS16/LSQ8/D-cache1024×2/I-cache64×2/完成队列16 配置的外部 RAM 从先前显式指定的 1 MiB 修正为最终要求的 **256 MiB**。`rv32_memory_bridge_256m_tb` 验证最后一条 16 字节 RAM 行有效、越界地址不转发；`tools/test_ram_256m.ps1` 构建并运行 `tests/programs/ram_256m_last_word.c`，在 Verilator 20 周期模型下写 `0x0ffffffc`，用两条同组缓存行逼出脏写回，再从外部 RAM 重新读入，完整 32 位 MMIO 返回 **598**，trace 可见对 `0x0ffffff0` 的写回且 `d_wb=1`。六项 CPU-2026 MMIO 代理程序重新编译/运行后全部通过，逐项周期数与原 1 MiB 运行完全一致，几何平均 IPC **1.0991968369**；报告 `build/cpu2026/cmp4_fastadd_i16d8_lsq8_p4_r32p64_d1024_c16_mmio_ram256m_report.json`。相同 256 MiB 参数的 Yosys+ASAP7 偏时序黑盒综合已计价逻辑面积 **26,614.754820 µm²**，比 1 MiB 增 **3.528360 µm²**，仍有 **150** 个存储实例未计价；见 `build/synth/p4_r32p64_lsq8_d1024_cp1_hash1_cmp4_fastadd_delaymap_ram256m_bb/area_audit.json`。正式 FakeRAM 总面积、官方 `perf_*` 和存储时序仍待验证。
+- 同一 256 MiB 参数的平面逻辑重新导出并以 ASAP7 RVT TT 跑局部 OpenSTA；OpenSTA 2.0.17 的脚本改用其支持的 `-group_count` 和 `report_worst_slack`。16 扇出缓冲下最差已表征路径 slack **+46.1726 ps**，按 300 MHz 周期及 100 ps uncertainty 折算最小周期 **3287.1607 ps / Fmax 304.2139 MHz**，与旧 1 MiB 参数的最差逻辑路径到 4 位小数相同；`build/timing/p4_r32p64_lsq8_d1024_cp1_hash1_cmp4_fastadd_delaymap_ram256m_bb/timing_300mhz_buf16.rpt`。仍有 **139** 个无时序弧的存储边界，不能视为全芯片 300 MHz 证明。已知逻辑后剩余 Tier 3 存储/其他面积预算为 **9,385.245180 µm²**。
+- **不能直接拼接上面 26,614.75 µm² 与 304.21 MHz 当作同一实际网表的面积/频率成绩。** STA 导出流程将 Yosys 产生的存储端口外围逻辑重新映射，导出网表已有 **28,221.485400 µm²** 已知标准单元面积；为得到上述局部时序又插入 **34,822** 个 BUFx8，按 ASAP7 Liberty **0.17496 µm²/个** 即 **6,092.457120 µm²**。因此该手工缓冲的**已知逻辑加缓冲面积约 34,313.942520 µm²**，离 36,000 上限仅 **1,686.057480 µm²**，仍未包括任何 FakeRAM、其他存储成本或物理实现开销。导出面积见同目录 `sta_logic_area.log`，缓冲数量见 `memory_boundaries.json`；这不是官方面积算法，但说明当前自制时序修复流不能作为 Tier 3 同时达标的证明。
 - 官方 Tier 3 要求同一最终配置同时满足总面积 ≤36,000 µm²、`perf_*` 几何平均 IPC ≥1.0985、频率 ≥300 MHz；目前三项均未获得正式通过证据。
 - 现有 CPU 测试平台虽然让 I/D 请求共享同一存储数组，但接口有独立请求队列；评测器端口与带宽应在取得官方文件后逐项对齐。
 
 ## 下一步
 
 1. 针对当前紧凑候选完成正式面积计价；全 FF 面积不是 FakeRAM 计价。重点解决数据缓存和 ROB 的存储实现、端口合法性及组合逻辑成本。
-2. 目前同 RTL 的 LSQ8 代理 IPC 仅比 Tier 3 下限高约 0.000697；偏时序 ABC 映射使局部 Fmax 升至 278.54 MHz，但 LSQ→D-cache 路径仍差约 257 ps slack。下一步应针对该具体路径做有界的控制/访存分段或等价预计算，并同时复测 IPC；现有非直通 D-cache 请求寄存级会显著降低 IPC，不可直接采用。全局加密缓冲的面积/频率对照也已证明不是有效修复。
-3. 用正式 `perf_*` 与正确性程序集复测 32 位 MMIO 退出、所有指令和 256 MiB 地址空间，冻结同一配置后提交参数敏感度与架构探索报告。
+2. 当前 LSQ8 在 16/8 内存并发模型下的代理 IPC 仅比 Tier 3 下限高约 0.000697；经过偏时序映射、分组比较和前缀进位，局部已表征逻辑路径过 300 MHz，但未表征的缓存/队列 SRAM 时序仍待正式模型验证。下一步优先获得/接入合法 FakeRAM 宏、存储时序和官方测试，并扩大 IPC 余量；现有非直通 D-cache 请求寄存级会显著降低 IPC，不可直接采用。
+3. 用用户确认的 `CPU-2026-Benchmark` 六项及现有正确性程序集复测 32 位 MMIO 退出、所有指令和 256 MiB 地址空间（pi 仍冻结），冻结同一配置后提交参数敏感度与架构探索报告。
+
+## 2026-09-26：测试集确认与缓冲成本优化
+
+用户确认继续使用 benchmark 文件夹，保留 Tier 3 面积/频率门槛。256 MiB 当前配置的六项已全部通过，几何平均 IPC **1.0991968369**，高于 1.0985 约 **0.000697**；汇总 IPC 1.262038 不用于该门槛判断。当前仍待完成的是包括存储的面积与时序证据。
+
+收到确认后，重新编译并运行六项 benchmark，结果再次全部通过，逐项周期数与前次相同；新报告 `build/cpu2026/benchmark_confirmed_20260926_report.json`。测试配置为 20 周期、共享 RAM、I/D outstanding=16/8、256 MiB、MMIO 返回码 0。评测器内存配置校验与计数器解析的 5 项单元测试通过。
+
+在同一平面逻辑 JSON 上比较数据扇出缓冲，所有面积均包含显式缓冲，但不含 139 个未计价存储边界；频率仅为已表征标准单元路径的预布局估计。
+
+| 缓冲策略 | 缓冲器数 | 已知逻辑加缓冲 µm² | 局部 Fmax MHz |
+|---|---:|---:|---:|
+| 全局 16 | 34,822 | 34,313.94252 | 304.21 |
+| 全局 32 | 14,643 | 30,783.42468 | 255.75 |
+| 全局 64 | 6,239 | 29,313.06084 | 203.32 |
+| 全局 64 + 关键路径 16，第三轮 | 6,589 | 29,374.29684 | 251.80 |
+| 全局 64 + 关键路径 8，第四轮 | 7,203 | 29,481.72228 | 259.81 |
+| 全局 64 + 关键路径 4，第五轮 | 9,915 | 29,956.21380 | 259.63 |
+| 全局 64 + 关键路径 8 + 32 位内总线扩展 | 8,708 | 29,745.03708 | 277.89 |
+| 上述关键路径累计，第七轮 | 8,909 | 29,780.20404 | 287.60 |
+| 上述关键路径累计，第九轮 | 9,700 | 29,918.59740 | 299.15 |
+| 上述关键路径累计，第十轮 | 9,738 | 29,925.24588 | 301.64 |
+
+前几轮定向缓冲降低了成本但未过 300 MHz；继续累计关键路径后，第十轮已过局部标准单元路径的 300 MHz 约束，见下文。`tools/audit_sta_area.py` 现可显式输出未完成的局部面积审计：总面积和 SRAM 仍为 null，默认完整验收模式继续拒绝未计价存储。`tools/test_sta_flow.py` 的 7 项测试通过；`make b05 a06` 通过，新增 ALU 随机比较/加减与 256 MiB 桥接边界测试纳入对应单元目标。
+
+后续定向实验发现，单个位修复后，关键路径会转移到相似总线位；因此 `tools/yosys_json_to_sta_verilog.py` 增加可选 `--critical-bus-width`，仅从原始关键位一次扩展到限定宽度的总线，禁止递归别名扩张，默认关闭。新增边界/非递归测试后共 **8/8** STA 流测试通过。32 位内总线扩展版本 slack **-265.2072 ps**，局部 Fmax **277.89 MHz**，相对全局 16 节省已知标准单元面积约 **4,568.91 µm²**，但还差 300 MHz 且未计 SRAM，不能报成同时达标。相关结果位于同一 `fanout_sweep` 下的 `targeted64_8_v4`、`targeted64_4_v5`、`targeted64_8_bus32` 目录。
+
+`tools/test_simulator_mmio.ps1` 的镜像地址限制改为默认 **256 MiB**（可参数化），显式核对完整 32 位返回并输出结构化报告。当前 256 MiB Verilator 可执行文件重新通过除 pi 外的 **17/17** 源码重编译仿真程序，20 周期统一 RAM、I/D outstanding=16/8；`pi_included=false`，报告 `build/cpu2026/simulator_mmio_ram256m_20260926_report.json`。其中 `expr` 的无符号返回 4294967098 对应有符号 -198，`naive` 为 350。这是源码重编译回归，不替代原始二进制覆盖或冻结的 pi 测试。
+
+## 2026-09-26：低成本局部时序收敛与缓存端口合并
+
+同一平面 JSON 的 `targeted64_8_bus32_v10` 已得到最差 slack **+18.0891 ps**、TNS/WNS 为 0，局部等效 Fmax **301.6369 MHz**。确切已计价逻辑加缓冲面积 **29,925.24588 µm²**：组合含缓冲 **27,167.29308**、时序 **2,757.95280**，其中显式缓冲 **1,703.76048**（9,738 个）。相对全局 16 的 34,313.94252，节省 **4,388.69664 µm²**。面积与频率对应同一缓冲网表，但仍有 **139 个未计价、未表征存储边界**；36,000 的剩余预算 **6,074.75412 µm²**。本轮未改 RTL，IPC 沿用已复测的同 RTL 配置 1.0991968369，不能宣称完成 SRAM 面积/全芯片时序验收。
+
+缓存端口诊断通过 Yosys `memory_share` 合并同地址回填写入，1024 行两路 XOR D-cache：数据 **2R4W → 2R2W**，标签 **5R3W → 5R1W**；实际 store-hit 与回填写入可并发，不能继续当成单写端口。诊断前后 JSON 为 `build/dcache_ports_before.json`、`build/dcache_ports_after.json`。`synth/synth_bb.tcl` 加入可选 `ASAP7_CACHE_MEMORY_SHARE=1`，仅选择 `*/data_mem`、`*/tag_mem`，默认关闭，不处理 ROB/RS/LSQ 多写数组；记录合并前后 manifest。面积审计配置增加 `--cache-memory-share` 标记，避免与旧网表混用。
+
+`tools/test_cache_memory_share.ps1` 对合并后发射的固定参数 Verilog 网表进行仿真，四种 16 行、1/2 路、hash=0/1 配置全部通过；每项核对端口数、容量、宽度、读端口不变，并运行 500 次掩码随机写读、脏行回写地址/数据检查及 1024 字全量回读。综合后内部函数被消除，原内部函数直接调用仅在 RTL 模式保留，外部脏回写检查两种模式均保留。原 RTL 的 8 组 hash/容量/prefetch 回归也通过。这不是完整 CPU 综合后等价性或单端口 SRAM 合法化证明。
+
+当前使用相同 P4/ROB32/PRF64/RS16/LSQ8、256 MiB 参数正在跑开启 cache sharing 的偏时序综合：`build/synth/p4_r32p64_lsq8_d1024_ram256m_cache_share_bb`。在其面积/时序完成前，不能沿用旧网表的 301.64 MHz 当作该合并版本成绩。
+
+第一次综合进程虽退出 0，但调用的 `-l synth.log` 与 Tcl 内部 `tee -o synth.log` 同名，使日志被两次写入而混杂，面积审计明确拒绝（找不到最后层级区段的顶层面积）；该次不作为面积证据。已用独立 `yosys_run.log` 重跑，Tcl 的 `synth.log` 只保留计价 stat。后续应审计新 stat 和合并后 manifest，再单独导出/跑时序；旧定向缓冲的报告索引不能直接套用新 JSON。
