@@ -25,9 +25,15 @@ module rv32_dcache_hash_tb #(
     reg [3:0] random_mask;
     reg saw_victim_write = 0;
 
+`ifdef SYNTH_CACHE_FIXED
+    // Yosys emitted modules have fixed geometry and no parameter declarations.
+    // The runner must specialize the netlist to these same TB parameters.
+    rv32_dcache_nonblocking dut (
+`else
     rv32_dcache_nonblocking #(.CACHE_LINES(CACHE_LINES), .CACHE_WAYS(CACHE_WAYS),
         .INDEX_HASH(INDEX_HASH),
         .PREFETCH(PREFETCH), .TAG_WIDTH(16)) dut (
+`endif
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0),
         .dcache_req_valid_i(req_valid), .dcache_req_ready_o(req_ready),
         .dcache_req_is_load_i(req_load), .dcache_req_is_store_i(req_store),
@@ -108,8 +114,13 @@ module rv32_dcache_hash_tb #(
         reset = 0;
         for (trial = 0; trial < 1000; trial = trial + 1) begin
             random_address = $random(seed);
+`ifndef SYNTH_CACHE_FIXED
+            // Function hierarchy disappears in the synthesized module. Its
+            // inverse-address behavior is still checked externally below by
+            // the dirty victim address/data checks and complete memory sweep.
             inverse_address = dut.victim_line_address(random_address >> ($clog2(CACHE_LINES/CACHE_WAYS)+4), dut.cache_index(random_address));
             if (inverse_address !== {random_address[31:4], 4'b0}) $fatal(1, "index inversion failed");
+`endif
         end
         access_word(address_a, 1, 32'h89abcdef, 4'hf);
         access_word(address_a, 0, 0, 4'hf);

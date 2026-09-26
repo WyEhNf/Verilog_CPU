@@ -12,6 +12,7 @@ module rv32i_alu_compare_tb;
     wire [31:0] exec_value;
     integer seed, trial, operation;
     reg expected;
+    reg [31:0] expected_value;
 
     rv32i_alu dut (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0),
@@ -38,7 +39,7 @@ module rv32i_alu_compare_tb;
             if (trial % 32 == 0) rhs = lhs;
             if (trial % 32 == 1) begin lhs = 32'h80000000; rhs = 32'h7fffffff; end
             if (trial % 32 == 2) begin lhs = 0; rhs = 32'hffffffff; end
-            for (operation = 0; operation < 8; operation = operation + 1) begin
+            for (operation = 0; operation < 11; operation = operation + 1) begin
                 @(negedge clk);
                 issue_valid = 1'b1;
                 case (operation)
@@ -50,6 +51,9 @@ module rv32i_alu_compare_tb;
                     5: begin op = `RV32IM_OP_BGEU; expected = lhs >= rhs; end
                     6: begin op = `RV32IM_OP_SLT; expected = $signed(lhs) < $signed(rhs); end
                     7: begin op = `RV32IM_OP_SLTU; expected = lhs < rhs; end
+                    8: begin op = `RV32IM_OP_ADD; expected_value = lhs + rhs; end
+                    9: begin op = `RV32IM_OP_SUB; expected_value = lhs - rhs; end
+                    10: begin op = `RV32IM_OP_ADDI; expected_value = lhs + 32'h20; end
                 endcase
                 if (!issue_ready) $fatal(1, "ALU not ready trial=%0d op=%0d", trial, operation);
                 @(posedge clk); #1;
@@ -58,13 +62,16 @@ module rv32i_alu_compare_tb;
                     if (branch_taken !== expected || redirect_valid !== expected)
                         $fatal(1, "branch compare mismatch trial=%0d op=%0d lhs=%h rhs=%h expected=%b got=%b",
                             trial, operation, lhs, rhs, expected, branch_taken);
-                end else if (exec_value !== {31'b0, expected}) begin
+                end else if (operation < 8 && exec_value !== {31'b0, expected}) begin
                     $fatal(1, "SLT compare mismatch trial=%0d op=%0d lhs=%h rhs=%h expected=%b got=%h",
                         trial, operation, lhs, rhs, expected, exec_value);
+                end else if (operation >= 8 && exec_value !== expected_value) begin
+                    $fatal(1, "adder mismatch trial=%0d op=%0d lhs=%h rhs=%h expected=%h got=%h",
+                        trial, operation, lhs, rhs, expected_value, exec_value);
                 end
             end
         end
-        $display("PASS: ALU parallel compare 3000 pairs x 8 ops");
+        $display("PASS: ALU compare/add 3000 pairs x 11 ops");
         $finish;
     end
 endmodule
