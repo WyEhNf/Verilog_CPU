@@ -14,11 +14,30 @@ import re
 from pathlib import Path
 
 
+def physical_memories(manifest):
+    entries = []
+    for memory in manifest['memories']:
+        params = memory['parameters']
+        width, size, reads, writes = (
+            int(params[name], 2) for name in ('WIDTH', 'SIZE', 'RD_PORTS', 'WR_PORTS'))
+        if width <= 0 or size <= 0 or reads < 0 or writes < 0:
+            raise ValueError('invalid physical memory geometry')
+        entries.append(dict(cell=memory['instance'], width=width, size=size,
+                            bits=width * size, rd_ports=reads, wr_ports=writes))
+    if len(entries) != manifest['memory_boundaries']:
+        raise ValueError('physical memory boundary count mismatch')
+    return entries
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("audit", type=Path)
     parser.add_argument("--lib-dir", type=Path,
                         default=Path("third_party/asap7/sram_0p0/generated/LIB"))
+    parser.add_argument('--boundary-manifest', type=Path,
+                        help='use expanded physical instances instead of source definitions')
+    parser.add_argument('--logic-area-um2', type=float,
+                        help='explicit same-version known logic plus buffers for the scenario')
     args = parser.parse_args()
     audit = json.loads(args.audit.read_text(encoding="utf-8"))
     macros = []
@@ -50,12 +69,20 @@ def main():
                     best[new_width] = (cost, best[covered][1] + (macro[3],))
         return best[width]
 
-    memories = audit["memories"]["entries"]
+    memories = (physical_memories(json.loads(args.boundary_manifest.read_text(encoding='utf-8')))
+                if args.boundary_manifest else audit["memories"]["entries"])
     large = sorted(memories, key=lambda item: item["bits"], reverse=True)[:3]
     floor = sum(optimistic_footprint(int(m["size"]), int(m["width"]))[0] for m in large)
     remaining_bits = sum(int(m["bits"]) for m in memories) - sum(int(m["bits"]) for m in large)
     best_density = min(m[2] / (m[0] * m[1]) for m in macros)
-    logic = float(audit["area"]["known_standard_cell_um2"])
+    logic = (args.logic_area_um2 if args.logic_area_um2 is not None else
+             float(audit["area"]["known_standard_cell_um2"]))
+    if not math.isfinite(logic) or logic <= 0:
+        raise SystemExit('known logic area must be finite and positive')
+    print('memory_inventory_scope=' + ('expanded_logical_instances_not_macro_count' if args.boundary_manifest else
+                                       'definition_geometry_not_instance_total'))
+    print(f'memory_instances_or_definitions={len(memories)}')
+    print(f'memory_bits={sum(int(m["bits"]) for m in memories)}')
     print(f"known_logic_um2={logic:.6f}")
     print(f"tier3_storage_budget_um2={36000.0 - logic:.6f}")
     for memory in large:

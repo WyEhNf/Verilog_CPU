@@ -124,7 +124,10 @@ if {[info exists ::env(ASAP7_CACHE_MEMORY_SHARE)]} {
     }
     if {$::env(ASAP7_CACHE_MEMORY_SHARE) eq "1"} {
         tee -o $outdir/memory_manifest_before_share.il dump {t:$mem*}
-        memory_share */data_mem */tag_mem
+        # Match module suffixes too: LSQ and completion FIFO also contain
+        # data_mem/tag_mem and must not be selected by a name-only wildcard.
+        memory_share *rv32_dcache_nonblocking/data_mem *rv32_dcache_nonblocking/tag_mem \
+                     *rv32_icache_nonblocking/data_mem *rv32_icache_nonblocking/tag_mem
         opt_clean
     }
 }
@@ -161,4 +164,5 @@ tee -o $outdir/synth.log stat -liberty $libdir/asap7sc7p5t_INVBUF_RVT_TT_nldm_20
     -liberty $libdir/asap7sc7p5t_OA_RVT_TT_nldm_201020.lib \
     -liberty $libdir/asap7sc7p5t_SEQ_RVT_TT_nldm_201020.lib
 write_verilog -noattr $outdir/cpu_core_synth.v
+write_rtlil $outdir/cpu_core_mapped.il
 tee -o $outdir/stat_after_abc.log stat

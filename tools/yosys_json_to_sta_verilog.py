@@ -157,6 +157,8 @@ def main():
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--cell-map", type=Path)
     parser.add_argument("--net-map", type=Path)
+    parser.add_argument("--skip-maps", action="store_true",
+                        help="omit duplicate cell/net TSV maps for same-JSON buffering sweeps")
     parser.add_argument("--buffer-fanout", type=int, default=0)
     parser.add_argument("--buffer-cell", default="BUFx8_ASAP7_75t_R")
     parser.add_argument("--critical-report", type=Path, action="append", default=[],
@@ -299,6 +301,10 @@ def main():
     }
     manifest_path = args.manifest or args.output.with_suffix(".memories.json")
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    if args.skip_maps:
+        print("wrote {} cells ({} inserted buffers), {} memory boundaries, generic={}; maps omitted".format(
+            len(cell_records), buffer_stats["inserted"], len(memory_manifest), generic_types))
+        return
     cell_map_path = args.cell_map or args.output.with_suffix(".cells.tsv")
     cell_map_path.write_text(
         "index\tsta_instance\tyosys_instance\tcell_type\n" +

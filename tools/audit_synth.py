@@ -112,9 +112,40 @@ def parse_synth_log(path):
     }
 
 
+def validate_cache_memory_sharing(before, after):
+    """Reject geometry changes or port changes outside the two cache modules."""
+    original = {(m['module'], m['cell']): m for m in before}
+    current = {(m['module'], m['cell']): m for m in after}
+    if len(original) != len(before) or len(current) != len(after) or original.keys() != current.keys():
+        raise AuditError('cache sharing changed memory identities')
+    changes = []
+    for key, memory in current.items():
+        old = original[key]
+        if any(old[field] != memory[field] for field in ('width', 'size', 'abits')):
+            raise AuditError('cache sharing changed memory geometry: {}'.format(key))
+        cache = (key[0].endswith(('\\rv32_dcache_nonblocking', '\\rv32_icache_nonblocking'))
+                 or key[0] in ('rv32_dcache_nonblocking', 'rv32_icache_nonblocking'))
+        cache = cache and key[1] in ('data_mem', 'tag_mem')
+        ports_before = (old['rd_ports'], old['wr_ports'])
+        ports_after = (memory['rd_ports'], memory['wr_ports'])
+        if not cache and ports_before != ports_after:
+            raise AuditError('cache sharing touched non-cache memory ports: {}'.format(key))
+        if cache and (None in ports_before + ports_after or
+                      any(new < 1 or new > previous for previous, new in zip(ports_before, ports_after))):
+            raise AuditError('invalid shared cache port count: {}'.format(key))
+        if ports_before != ports_after:
+            changes.append({'module': key[0], 'cell': key[1],
+                            'before': list(ports_before), 'after': list(ports_after)})
+    return changes
+
+
 def build_report(args):
     synthesis = parse_synth_log(Path(args.synth_log))
     memories = parse_memory_dump(Path(args.memory_dump))
+    sharing_changes = []
+    if args.cache_memory_share:
+        before_path = Path(args.memory_dump).with_name('memory_manifest_before_share.il')
+        sharing_changes = validate_cache_memory_sharing(parse_memory_dump(before_path), memories)
     memory_bits = [entry["bits"] for entry in memories if entry["bits"] is not None]
     unknown_count = sum(
         entry["count"] for entry in synthesis["unknown_area_cells"]
@@ -131,6 +162,7 @@ def build_report(args):
         "format": "synth-area-audit-v1",
         "status": "COMPLETE" if complete else "INCOMPLETE",
         "profile": args.profile,
+        "cache_memory_sharing_changes": sharing_changes,
         "configuration": {
             "fe_width": args.fe_width,
             "be_width": args.be_width,

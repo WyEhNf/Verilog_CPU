@@ -25,16 +25,26 @@ foreach lib {
     read_liberty -lib -ignore_miss_func [file join $libdir $lib]
 }
 
-read_verilog [file join $indir cpu_core_synth.v]
+set direct_mapped [file exists [file join $indir cpu_core_mapped.il]]
+if {$direct_mapped} {
+    puts "STA input_mode=exact_mapped_rtlil"
+    read_rtlil [file join $indir cpu_core_mapped.il]
+} else {
+    puts "STA input_mode=behavioral_verilog_compatibility"
+    read_verilog [file join $indir cpu_core_synth.v]
+}
 hierarchy -check -top cpu_core
+if {!$direct_mapped} {
 yosys proc
 memory_dff
 memory_collect
+}
 flatten
 opt_clean
 # Re-reading Yosys' behavioral memory emission recreates generic priority and
 # port-selection logic around $mem_v2.  Map that glue back to ASAP7 cells so
 # the exported STA netlist contains no uncharacterized combinational cells.
+if {!$direct_mapped} {
 techmap
 opt
 dfflibmap -liberty [file join $libdir asap7sc7p5t_SEQ_RVT_TT_nldm_201020.lib]
@@ -42,6 +52,7 @@ opt
 abc -genlib [file join $libdir asap7_comb.genlib] \
     -script "+strash;scorr;dc2;dretime;strash;map -a"
 opt
+}
 tee -o [file join $outdir sta_logic_area.log] stat \
     -liberty [file join $libdir asap7sc7p5t_INVBUF_RVT_TT_nldm_201020.lib] \
     -liberty [file join $libdir asap7sc7p5t_SIMPLE_RVT_TT_nldm_201020.lib] \
