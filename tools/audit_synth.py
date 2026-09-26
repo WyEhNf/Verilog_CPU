@@ -158,6 +158,7 @@ def build_report(args):
             "phys_tag_impl": args.phys_tag_impl,
             "generation_width": args.generation_width,
             "checkpoint_impl": args.checkpoint_impl,
+            "cache_memory_share": bool(args.cache_memory_share),
         },
         "area": {
             "known_standard_cell_um2": known_area,
@@ -211,6 +212,8 @@ def main(argv=None):
     parser.add_argument("--phys-tag-impl", type=int, choices=(0, 1), default=0)
     parser.add_argument("--generation-width", type=int, default=8)
     parser.add_argument("--checkpoint-impl", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--cache-memory-share", type=int, choices=(0, 1), default=0,
+                        help="ASAP7_CACHE_MEMORY_SHARE setting used for this synthesis")
     parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args(argv)
 

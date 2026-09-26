@@ -3,10 +3,10 @@
 # Cache/predictor arrays stay as unmapped $mem cells (memory -nomap), so the
 # stat -liberty area below covers logic + flops only.  The missing piece for
 # the plan.md ENV-04 main metric is the ASAP7 SRAM macro area for those
-# arrays: the JOIN-06 report script must add it from the asap7_sram_0p0
-# macro library (fixed under third_party/asap7/sram_0p0/generated/LIB/),
-# matching each array size to the closest macro.  Register-based upper
-# bound: synth.tcl.
+# arrays must be added only after a legal SRAM implementation is assigned.
+# Closest-size macro pricing alone does not account for ports/adapters and
+# cannot establish the required FakeRAM total. Register-based upper bound:
+# synth.tcl.
 #
 # Usage: yosys -p "tcl synth/synth_bb.tcl <fe> <be> <phys_regs> <rob_entries> <outdir>"
 
@@ -114,6 +114,20 @@ opt
 # possible, then collect the exact geometry/ports without rewriting priority.
 memory_dff
 memory_collect
+# Opt-in cache-port consolidation. The generic memory_share pass is restricted
+# to cache data/tag arrays; ROB/RS/LSQ multi-write arrays remain untouched.
+# Same-address mutually exclusive refill ports may share one physical port,
+# but simultaneous store-hit/refill accesses still need separate data writes.
+if {[info exists ::env(ASAP7_CACHE_MEMORY_SHARE)]} {
+    if {$::env(ASAP7_CACHE_MEMORY_SHARE) ni {0 1}} {
+        error "ASAP7_CACHE_MEMORY_SHARE must be 0 or 1"
+    }
+    if {$::env(ASAP7_CACHE_MEMORY_SHARE) eq "1"} {
+        tee -o $outdir/memory_manifest_before_share.il dump {t:$mem*}
+        memory_share */data_mem */tag_mem
+        opt_clean
+    }
+}
 # Preserve the memory geometry and port counts before technology mapping.  The
 # post-run audit treats every one of these cells as unpriced until an SRAM,
 # banked/replicated macro implementation, or explicit standard-cell mapping is

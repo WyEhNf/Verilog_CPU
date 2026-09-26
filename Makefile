@@ -232,6 +232,8 @@ a05:
 a06:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32_memory_bridge_tb -o build/a06_memory_bridge.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/unit/rv32_memory_bridge_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a06_memory_bridge.vvp | findstr /C:"PASS: A-06 memory bridge"
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -I rtl -s rv32_memory_bridge_256m_tb -o build/a06_memory_bridge_256m.vvp rtl/memory/rv32_memory_bridge.v tb/unit/rv32_memory_bridge_256m_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/a06_memory_bridge_256m.vvp
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32_cache_stats_tb -o build/a06_cache_stats.vvp -c $(RTL_FILELIST) tb/unit/rv32_cache_stats_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a06_cache_stats.vvp | findstr /C:"PASS: A-06 cache statistics"
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/memory/rv32_memory_bridge.v
@@ -282,6 +284,8 @@ b05:
 	@$(OSS_ENV) "$(VVP)" -N build/b05.vvp | findstr /C:"PASS: B-05 ALU/branch/AGU"
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32i_alu_tb.SHIFT_IMPL=1 -s rv32i_alu_tb -o build/b05_iter_shift.vvp -c $(RTL_FILELIST) tb/unit/rv32i_alu_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b05_iter_shift.vvp | findstr /C:"PASS: B-05 ALU/branch/AGU"
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -I rtl -s rv32i_alu_compare_tb -o build/b05_compare_add.vvp rtl/rv32i_alu.v tb/unit/rv32i_alu_compare_tb.v
+	@$(OSS_ENV) "$(VVP)" -N build/b05_compare_add.vvp
 
 b06:
 	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32m_units_tb -o build/b06.vvp -c $(RTL_FILELIST) tb/unit/rv32m_units_tb.v

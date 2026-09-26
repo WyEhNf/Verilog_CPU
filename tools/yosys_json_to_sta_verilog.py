@@ -43,8 +43,11 @@ def decl(direction, name, width):
     return "  {}{} {};".format(direction, vector, ident(name))
 
 
-def insert_buffer_trees(cell_records, ports, max_fanout, buffer_cell):
+def insert_buffer_trees(cell_records, ports, max_fanout, buffer_cell, critical_bits=None,
+                        critical_fanout=16):
     """Bound data-pin fanout with balanced ASAP7 buffer trees."""
+    if max_fanout == 1 or critical_fanout < 2:
+        raise ValueError("buffer fanout must be zero (disabled) or at least two")
     if max_fanout <= 0:
         return {"inserted": 0, "buffered_nets": 0, "max_fanout": None,
                 "cell": buffer_cell}
@@ -74,15 +77,20 @@ def insert_buffer_trees(cell_records, ports, max_fanout, buffer_cell):
 
     inserted = 0
     buffered_nets = 0
+    critical_buffered_nets = 0
+    critical_bits = critical_bits or set()
     for source_bit, refs in sorted(sinks.items()):
-        if len(refs) <= max_fanout:
+        limit = min(max_fanout, critical_fanout) if source_bit in critical_bits else max_fanout
+        if len(refs) <= limit:
             continue
         buffered_nets += 1
+        if source_bit in critical_bits:
+            critical_buffered_nets += 1
         current_refs = refs
-        while len(current_refs) > max_fanout:
+        while len(current_refs) > limit:
             parent_refs = []
-            for offset in range(0, len(current_refs), max_fanout):
-                group = current_refs[offset:offset + max_fanout]
+            for offset in range(0, len(current_refs), limit):
+                group = current_refs[offset:offset + limit]
                 output_bit = next_bit
                 next_bit += 1
                 buffer = {
@@ -104,7 +112,41 @@ def insert_buffer_trees(cell_records, ports, max_fanout, buffer_cell):
         "buffered_nets": buffered_nets,
         "max_fanout": max_fanout,
         "cell": buffer_cell,
+        "critical_buffered_nets": critical_buffered_nets,
     }
+
+
+def select_critical_driver_bits(cell_records, report_text):
+    """Select original driver outputs on reported paths from this same JSON.
+
+Original cell indexes are stable across buffering variants because buffers are
+appended. Ignore appended buffer instances and all input pins in the report.
+"""
+    selected = set()
+    for index_text, pin in re.findall(r"\bu_(\d+)/([A-Za-z0-9_]+)", report_text):
+        index = int(index_text)
+        if index >= len(cell_records):
+            continue
+        cell = cell_records[index][2]
+        if cell.get("port_directions", {}).get(pin) != "output":
+            continue
+        selected.update(bit for bit in cell.get("connections", {}).get(pin, [])
+                        if isinstance(bit, int))
+    return selected
+
+
+def expand_critical_bus_bits(critical_bits, netnames, max_width):
+    """Select sibling bits of bounded-width buses touched by original paths.
+
+    Expand from the original selection only: recursive alias expansion can
+    accidentally select almost the entire design through overlapping vectors.
+    """
+    expanded = set(critical_bits)
+    for net in netnames.values():
+        bits = net.get("bits", [])
+        if 2 <= len(bits) <= max_width and critical_bits.intersection(bits):
+            expanded.update(bit for bit in bits if isinstance(bit, int))
+    return expanded
 
 
 def main():
@@ -117,6 +159,11 @@ def main():
     parser.add_argument("--net-map", type=Path)
     parser.add_argument("--buffer-fanout", type=int, default=0)
     parser.add_argument("--buffer-cell", default="BUFx8_ASAP7_75t_R")
+    parser.add_argument("--critical-report", type=Path, action="append", default=[],
+                        help="OpenSTA paths from this same input JSON; repeat to accumulate paths")
+    parser.add_argument("--critical-fanout", type=int, default=16)
+    parser.add_argument("--critical-bus-width", type=int, default=0,
+                        help="also buffer sibling bits on touched buses up to this width; 0 disables")
     args = parser.parse_args()
 
     data = json.loads(args.input.read_text(encoding="utf-8"))
@@ -168,8 +215,22 @@ def main():
             generic_types[cell_type] = generic_types.get(cell_type, 0) + 1
         cell_records.append((cell_name, cell_type, cell))
 
+    critical_bits = set()
+    for report in args.critical_report:
+        selected = select_critical_driver_bits(cell_records, report.read_text(encoding="utf-8"))
+        if not selected:
+            raise ValueError("critical report has no original output drivers: {}".format(report))
+        critical_bits.update(selected)
+    if args.critical_bus_width < 0:
+        raise ValueError("critical bus width must be nonnegative")
+    path_driver_count = len(critical_bits)
+    critical_bits = expand_critical_bus_bits(
+        critical_bits, module.get("netnames", {}), args.critical_bus_width)
+    if critical_bits and args.buffer_fanout < 2:
+        raise ValueError("critical buffering requires --buffer-fanout >= 2")
     buffer_stats = insert_buffer_trees(
-        cell_records, ports, args.buffer_fanout, args.buffer_cell)
+        cell_records, ports, args.buffer_fanout, args.buffer_cell,
+        critical_bits, args.critical_fanout)
 
     used_bits = set()
     for port in ports.values():
@@ -227,6 +288,13 @@ def main():
         "memory_boundaries": len(memory_manifest),
         "unhandled_generic_cell_types": generic_types,
         "buffer_tree": buffer_stats,
+        "critical_path_selection": {
+            "reports": [str(report) for report in args.critical_report],
+            "driver_bits": len(critical_bits),
+            "path_driver_bits": path_driver_count,
+            "bus_width_limit": args.critical_bus_width,
+            "fanout": args.critical_fanout if critical_bits else None,
+        },
         "memories": memory_manifest,
     }
     manifest_path = args.manifest or args.output.with_suffix(".memories.json")

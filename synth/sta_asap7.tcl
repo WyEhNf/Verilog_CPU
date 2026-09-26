@@ -4,7 +4,11 @@
 # full-chip closure until every boundary has a characterized implementation.
 # Usage: sta -no_splash -exit synth/sta_asap7.tcl
 
-set root [file normalize [file join [file dirname [info script]] ..]]
+if {[info exists ::env(STA_PROJECT_ROOT)]} {
+    set root [file normalize $::env(STA_PROJECT_ROOT)]
+} else {
+    set root [file normalize [file join [file dirname [info script]] ..]]
+}
 # Use the untouched characterized libraries for timing.  The area flow uses
 # normalized filtered copies, but those copies intentionally remove pg_pin
 # declarations and therefore generate millions of irrelevant power-pin
@@ -40,6 +44,13 @@ link_design cpu_core
 # previously interpreted as 3.333 ps, not the intended 3.333 ns.
 set_cmd_units -time ps -capacitance fF
 set period_ps [expr {1000000.0 / 300.0}]
+set path_count 50
+if {[info exists ::env(STA_PATH_COUNT)]} {
+    set path_count $::env(STA_PATH_COUNT)
+    if {![string is integer -strict $path_count] || $path_count < 1} {
+        error "STA_PATH_COUNT must be a positive integer"
+    }
+}
 create_clock -name core_clk -period $period_ps [get_ports clk]
 set_clock_uncertainty 100.0 [get_clocks core_clk]
 # Unspecified input arrival defaults to zero.  Avoid applying an input delay
@@ -50,8 +61,7 @@ set_load 1.0 [all_outputs]
 set report_header [open $report_file w]
 puts $report_header "AUDIT time_unit=ps capacitance_unit=fF clock_period_ps=$period_ps uncertainty_ps=100 output_load_fF=1"
 close $report_header
-report_units
-report_checks -path_delay max -fields {slew cap input_pin} -digits 4 -group_path_count 50 >> $report_file
-report_clock_min_period >> $report_file
+report_checks -path_delay max -fields {slew cap input_pin} -digits 4 -group_count $path_count >> $report_file
+report_worst_slack -digits 4 >> $report_file
 report_tns >> $report_file
 report_wns >> $report_file
