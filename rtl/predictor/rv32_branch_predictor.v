@@ -49,6 +49,11 @@ module rv32_branch_predictor (
                               query_inst_i[11:8], 1'b0};
     wire [7:0] feedback_bht_index = feedback_pc_i[9:2];
     wire [5:0] feedback_btb_index = feedback_pc_i[7:2];
+    wire feedback_btb_write = feedback_valid_i && feedback_taken_i &&
+                             ((feedback_kind_i == `RV32IM_PRED_BRANCH) ||
+                              (feedback_kind_i == `RV32IM_PRED_JALR));
+    wire [31:0] feedback_btb_target = (feedback_kind_i == `RV32IM_PRED_JALR) ?
+                                    {feedback_target_i[31:1], 1'b0} : feedback_target_i;
     integer i;
 
     assign pred_bht_index_o = query_bht_index[5:0];
@@ -106,9 +111,6 @@ module rv32_branch_predictor (
                 bht[i] <= 2'b10; // weakly taken
             for (i = 0; i < 64; i = i + 1) begin
                 btb_valid[i] <= 1'b0;
-                btb_tag[i] <= 24'd0;
-                btb_target[i] <= 32'd0;
-                btb_kind[i] <= `RV32IM_PRED_NONE;
             end
         end else if (feedback_valid_i) begin
             prediction_count_o <= prediction_count_o + 32'd1;
@@ -120,21 +122,24 @@ module rv32_branch_predictor (
                 if (feedback_taken_i) begin
                     if (bht[feedback_bht_index] != 2'b11)
                         bht[feedback_bht_index] <= bht[feedback_bht_index] + 2'b01;
-                    btb_valid[feedback_btb_index] <= 1'b1;
-                    btb_tag[feedback_btb_index] <= feedback_pc_i[31:8];
-                    btb_target[feedback_btb_index] <= feedback_target_i;
-                    btb_kind[feedback_btb_index] <= `RV32IM_PRED_BRANCH;
                 end else if (bht[feedback_bht_index] != 2'b00) begin
                     bht[feedback_bht_index] <= bht[feedback_bht_index] - 2'b01;
                 end
-            end else if (feedback_kind_i == `RV32IM_PRED_JALR) begin
-                if (feedback_taken_i) begin
-                    btb_valid[feedback_btb_index] <= 1'b1;
-                    btb_tag[feedback_btb_index] <= feedback_pc_i[31:8];
-                    btb_target[feedback_btb_index] <= {feedback_target_i[31:1], 1'b0};
-                    btb_kind[feedback_btb_index] <= `RV32IM_PRED_JALR;
-                end
             end
+            if (feedback_btb_write) begin
+                btb_valid[feedback_btb_index] <= 1'b1;
+            end
+        end
+    end
+
+    // Only valid bits need reset: every payload read is gated by a valid,
+    // matching tag and kind. A warm reset invalidates retained payload too.
+    // Branch/JALR allocations are exclusive and share one payload write port.
+    always @(posedge clk_i) begin
+        if (!reset_i && feedback_btb_write) begin
+            btb_tag[feedback_btb_index] <= feedback_pc_i[31:8];
+            btb_target[feedback_btb_index] <= feedback_btb_target;
+            btb_kind[feedback_btb_index] <= feedback_kind_i;
         end
     end
 endmodule
