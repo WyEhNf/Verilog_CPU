@@ -34,6 +34,9 @@ synth/abc_map_v1.ys
 synth/abc_map_probe_alu.ys
 synth/pre_abc_diag.tcl
 synth/synth_min.tcl
+.history_sta
+synth/dump_xnor.ys
+synth/help_timing.ys
 
 # Local copies of external research papers.  Keep links and citations in
 # docs, but do not vendor third-party PDFs into the implementation history.
@@ -44,6 +47,11 @@ synth/synth_min.tcl
 !/build/.gitkeep
 /reports/*
 !/reports/.gitkeep
+!/reports/architecture_exploration.md
+!/reports/parameter_sensitivity.md
+!/reports/current_candidate_2026-09-26.md
+!/reports/final_goal_progress_2026-09-23.md
+!/reports/strict_area_status_2026-09-26.md
 /.deps/*
 !/.deps/.gitkeep
 obj_dir/
