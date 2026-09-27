@@ -6,8 +6,7 @@
 // Supports the same 1/2/4-wide profiles as cpu_core, retaining BHT256/BTB64.
 /* verilator lint_off UNUSEDSIGNAL */
 module rv32_banked_predictor #(
-    parameter integer FE_WIDTH = 4,
-    parameter integer BANK_BITS = $clog2(FE_WIDTH)
+    parameter integer FE_WIDTH = 4
 ) (
     input wire clk_i, reset_i,
     input wire query_valid_i,
@@ -27,20 +26,29 @@ module rv32_banked_predictor #(
     input wire [31:0] feedback_pred_target_i,
     output reg [31:0] prediction_count_o, correct_count_o
 );
-    localparam [1:0] BANK_MASK = FE_WIDTH - 1;
+    localparam integer BANK_BITS = $clog2(FE_WIDTH);
+    localparam [1:0] BANK_MASK = (FE_WIDTH == 1) ? 2'b00 :
+                               ((FE_WIDTH == 2) ? 2'b01 : 2'b11);
     wire [1:0] base_bank = query_pc_i[3:2] & BANK_MASK;
     wire [1:0] feedback_bank = feedback_pc_i[3:2] & BANK_MASK;
     wire [FE_WIDTH-1:0] bank_taken, bank_hit;
     wire [FE_WIDTH*32-1:0] bank_target;
     wire [FE_WIDTH*2-1:0] bank_kind, bank_counter;
     genvar bank, lane;
+    initial begin
+        if (FE_WIDTH != 1 && FE_WIDTH != 2 && FE_WIDTH != 4) begin
+            $display("ERROR: banked predictor requires FE_WIDTH 1, 2, or 4");
+            $finish;
+        end
+    end
     generate
         for (bank = 0; bank < FE_WIDTH; bank = bank + 1) begin : g_bank
             localparam [1:0] BANK_NUMBER = bank;
             wire [1:0] offset = (BANK_NUMBER - base_bank) & BANK_MASK;
             wire [2:0] word_index = {1'b0, query_pc_i[3:2]} + {1'b0, offset};
             wire [31:0] pc = query_pc_i + {28'd0, offset, 2'b00};
-            wire [31:0] inst = query_line_i >> (word_index * 32);
+            wire [127:0] shifted_line = query_line_i >> (word_index * 32);
+            wire [31:0] inst = shifted_line[31:0];
             rv32_branch_predictor #(.BANK_BITS(BANK_BITS)) predictor (
                 .clk_i(clk_i), .reset_i(reset_i),
                 .query_valid_i(query_valid_i && word_index < 3'd4),

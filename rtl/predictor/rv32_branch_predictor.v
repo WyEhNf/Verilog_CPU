@@ -7,9 +7,7 @@
 module rv32_branch_predictor #(
     // A bank stores the high index bits; its caller routes low-bit ownership.
     // BANK_BITS=0 preserves the standalone full-table predictor interface.
-    parameter integer BANK_BITS = 0,
-    parameter integer BHT_ENTRIES = 256 >> BANK_BITS,
-    parameter integer BTB_ENTRIES = 64 >> BANK_BITS
+    parameter integer BANK_BITS = 0
 ) (
     input  wire        clk_i,
     input  wire        reset_i,
@@ -36,6 +34,8 @@ module rv32_branch_predictor #(
     output reg  [31:0] prediction_count_o,
     output reg  [31:0] correct_count_o
 );
+    localparam integer BHT_ENTRIES = 256 >> BANK_BITS;
+    localparam integer BTB_ENTRIES = 64 >> BANK_BITS;
     reg [1:0] bht [0:BHT_ENTRIES-1];
     reg       btb_valid [0:BTB_ENTRIES-1];
     reg [23:0] btb_tag [0:BTB_ENTRIES-1];
