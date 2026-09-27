@@ -112,19 +112,57 @@ def parse_synth_log(path):
     }
 
 
+def validate_cache_memory_sharing(before, after):
+    """Reject geometry changes or port changes outside the two cache modules."""
+    original = {(m['module'], m['cell']): m for m in before}
+    current = {(m['module'], m['cell']): m for m in after}
+    if len(original) != len(before) or len(current) != len(after) or original.keys() != current.keys():
+        raise AuditError('cache sharing changed memory identities')
+    changes = []
+    for key, memory in current.items():
+        old = original[key]
+        if any(old[field] != memory[field] for field in ('width', 'size', 'abits')):
+            raise AuditError('cache sharing changed memory geometry: {}'.format(key))
+        cache = (key[0].endswith(('\\rv32_dcache_nonblocking', '\\rv32_icache_nonblocking'))
+                 or key[0] in ('rv32_dcache_nonblocking', 'rv32_icache_nonblocking'))
+        cache = cache and key[1] in ('data_mem', 'tag_mem')
+        ports_before = (old['rd_ports'], old['wr_ports'])
+        ports_after = (memory['rd_ports'], memory['wr_ports'])
+        if not cache and ports_before != ports_after:
+            raise AuditError('cache sharing touched non-cache memory ports: {}'.format(key))
+        if cache and (None in ports_before + ports_after or
+                      any(new < 1 or new > previous for previous, new in zip(ports_before, ports_after))):
+            raise AuditError('invalid shared cache port count: {}'.format(key))
+        if ports_before != ports_after:
+            changes.append({'module': key[0], 'cell': key[1],
+                            'before': list(ports_before), 'after': list(ports_after)})
+    return changes
+
+
 def build_report(args):
     synthesis = parse_synth_log(Path(args.synth_log))
     memories = parse_memory_dump(Path(args.memory_dump))
+    sharing_changes = []
+    if args.cache_memory_share:
+        before_path = Path(args.memory_dump).with_name('memory_manifest_before_share.il')
+        sharing_changes = validate_cache_memory_sharing(parse_memory_dump(before_path), memories)
     memory_bits = [entry["bits"] for entry in memories if entry["bits"] is not None]
     unknown_count = sum(
         entry["count"] for entry in synthesis["unknown_area_cells"]
         if entry["count"] is not None)
-    complete = not synthesis["unknown_area_cells"] and not memories
+    # In the ff-reference flow memory_manifest.il records the source array
+    # shapes before memory_map; those arrays are subsequently implemented by
+    # standard cells and are already included in the final hierarchy area.
+    # They are unpriced black boxes only in the logic-blackbox profile.
+    complete = not synthesis["unknown_area_cells"] and (
+        args.profile == "ff-reference" or not memories)
+    known_area = synthesis["top_area_um2_known_cells_only"]
 
     return {
         "format": "synth-area-audit-v1",
         "status": "COMPLETE" if complete else "INCOMPLETE",
         "profile": args.profile,
+        "cache_memory_sharing_changes": sharing_changes,
         "configuration": {
             "fe_width": args.fe_width,
             "be_width": args.be_width,
@@ -132,13 +170,36 @@ def build_report(args):
             "rob_entries": args.rob_entries,
             "rs_entries": args.rs_entries,
             "lsq_entries": args.lsq_entries,
+            "dcache_lines": args.dcache_lines,
+            "dcache_index_hash": args.dcache_index_hash,
+            "dcache_request_pipeline": args.dcache_request_pipeline,
+            "dcache_ways": args.dcache_ways,
+            "icache_lines": args.icache_lines,
+            "icache_ways": args.icache_ways,
+            "ram_size_bytes": args.ram_size_bytes,
+            "legacy_sentinel_halt": bool(args.legacy_sentinel_halt),
             "cache_stats_enabled": bool(args.cache_stats),
+            "caches_enabled": bool(args.caches),
+            "predictor_enabled": bool(args.predictor),
+            "fetch_queue_depth": args.fetch_queue_depth,
+            "completion_depth": args.completion_depth,
+            "completion_bypass": bool(args.completion_bypass),
+            "serial_backend": bool(args.serial_backend),
             "mul_impl": args.mul_impl,
+            "shift_impl": args.shift_impl,
+            "phys_tag_impl": args.phys_tag_impl,
+            "generation_width": args.generation_width,
+            "checkpoint_impl": args.checkpoint_impl,
+            "cache_memory_share": bool(args.cache_memory_share),
         },
         "area": {
-            "known_standard_cell_um2": synthesis["top_area_um2_known_cells_only"],
-            "total_um2": None,
-            "note": "Known-area cells only; total remains null until every generic cell and memory has an implementation.",
+            "known_standard_cell_um2": known_area,
+            "total_um2": known_area if complete else None,
+            "note": (
+                "Complete standard-cell total; source memories were expanded by memory_map."
+                if complete and args.profile == "ff-reference" else
+                "Known-area cells only; total remains null until every generic cell and memory has an implementation."
+            ),
         },
         "unknown_area_cells": synthesis["unknown_area_cells"],
         "unknown_area_cell_instances": unknown_count,
@@ -164,7 +225,27 @@ def main(argv=None):
     parser.add_argument("--rs-entries", type=int, required=True)
     parser.add_argument("--lsq-entries", type=int, required=True)
     parser.add_argument("--cache-stats", type=int, choices=(0, 1), default=0)
-    parser.add_argument("--mul-impl", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--caches", type=int, choices=(0, 1), default=1)
+    parser.add_argument("--predictor", type=int, choices=(0, 1), default=1)
+    parser.add_argument("--fetch-queue-depth", type=int, default=16)
+    parser.add_argument("--completion-depth", type=int, default=4)
+    parser.add_argument("--completion-bypass", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--serial-backend", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--dcache-lines", type=int, default=256)
+    parser.add_argument("--dcache-index-hash", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--dcache-request-pipeline", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--dcache-ways", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--icache-lines", type=int, default=64)
+    parser.add_argument("--icache-ways", type=int, choices=(1, 2), default=2)
+    parser.add_argument("--ram-size-bytes", type=int, default=268435456)
+    parser.add_argument("--legacy-sentinel-halt", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--mul-impl", type=int, choices=(0, 1, 2), default=0)
+    parser.add_argument("--shift-impl", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--phys-tag-impl", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--generation-width", type=int, default=8)
+    parser.add_argument("--checkpoint-impl", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--cache-memory-share", type=int, choices=(0, 1), default=0,
+                        help="ASAP7_CACHE_MEMORY_SHARE setting used for this synthesis")
     parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args(argv)
 
