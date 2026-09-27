@@ -17,7 +17,12 @@ _start:
     jal     zero, .Lbss
 .Lmain:
     jal     ra, main
+#ifdef EXIT_MMIO
+    lui     t0, 0x80000
+    sw      a0, 0(t0)
+#else
     .word   0x0ff00513
+#endif
 .Lhalt_loop:
     jal     zero, .Lhalt_loop
     .size _start, .-_start

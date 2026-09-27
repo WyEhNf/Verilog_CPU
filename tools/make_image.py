@@ -32,7 +32,7 @@ def run(command, output=None):
         raise BuildError("command failed with status {}".format(exc.returncode))
 
 
-def parse_elf(path):
+def parse_elf(path, memory_size=MEMORY_SIZE):
     with open(path, "rb") as stream:
         blob = stream.read()
     if len(blob) < 52 or blob[:4] != b"\x7fELF" or blob[4:6] != b"\x01\x01":
@@ -54,8 +54,8 @@ def parse_elf(path):
         end = address + p_memsz
         if p_filesz > p_memsz or p_offset + p_filesz > len(blob):
             raise BuildError("invalid ELF load segment {}".format(index))
-        if end < address or end > MEMORY_SIZE:
-            raise BuildError("ELF segment exceeds 1 MiB: 0x{:08x}".format(end))
+        if end < address or end > memory_size:
+            raise BuildError("ELF segment exceeds RAM: 0x{:08x}".format(end))
         segments.append({
             "address": address,
             "file_size": p_filesz,
@@ -70,8 +70,8 @@ def parse_elf(path):
         if segment["address"] < previous_end:
             raise BuildError("overlapping ELF load segments")
         previous_end = segment["address"] + segment["memory_size"]
-    if entry >= MEMORY_SIZE:
-        raise BuildError("entry is outside 1 MiB")
+    if entry >= memory_size:
+        raise BuildError("entry is outside RAM")
     if not any(item["address"] <= entry < item["address"] + item["memory_size"] and item["flags"] & PF_X
                for item in segments):
         raise BuildError("entry is not in an executable segment")
@@ -99,7 +99,7 @@ def write_image(path, info):
                 stream.write("{}\n".format(" ".join("{:02X}".format(value) for value in data[offset:offset + 16])))
 
 
-def parse_image(path):
+def parse_image(path, memory_size=MEMORY_SIZE):
     memory = {}
     address = None
     with open(path, "r", encoding="ascii") as stream:
@@ -121,8 +121,8 @@ def parse_image(path):
                 if len(token) != 2:
                     raise BuildError("image token is not a byte on line {}".format(line_number))
                 value = int(token, 16)
-                if address >= MEMORY_SIZE:
-                    raise BuildError("image exceeds 1 MiB")
+                if address >= memory_size:
+                    raise BuildError("image exceeds RAM")
                 memory[address] = value
                 address += 1
     return memory
@@ -139,30 +139,48 @@ def digest(path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source")
+    parser.add_argument("--extra-source", action="append", default=[],
+                        help="additional C or assembly source (repeatable)")
+    parser.add_argument("--include", action="append", default=[],
+                        help="additional include directory (repeatable)")
+    parser.add_argument("--define", action="append", default=[],
+                        help="preprocessor definition (repeatable)")
     parser.add_argument("--arch", choices=("rv32i", "rv32im"), default="rv32i")
+    parser.add_argument("--exit-protocol", choices=("sentinel", "mmio"), default="sentinel")
+    parser.add_argument("--memory-size", type=lambda value: int(value, 0), default=MEMORY_SIZE,
+                        help="external RAM size in bytes (default: 1 MiB)")
     parser.add_argument("--abi", default="ilp32")
     parser.add_argument("--out-dir", default=None)
     parser.add_argument("--cc", default=None)
     parser.add_argument("--objdump", default=None)
     parser.add_argument("--objcopy", default=None)
     parser.add_argument("--readelf", default=None)
+    parser.add_argument("--linker-script", default=None,
+                        help="linker script (defaults to tools/link.ld)")
     args = parser.parse_args(argv)
     if args.abi != "ilp32":
         raise BuildError("only ilp32 is supported")
-    source = os.path.abspath(args.source)
-    if not os.path.isfile(source):
-        raise BuildError("source does not exist: {}".format(source))
+    if args.memory_size < 16 or args.memory_size > (1 << 28):
+        raise BuildError("memory size must be between 16 bytes and 256 MiB")
+    sources = [os.path.abspath(args.source)] + [os.path.abspath(item) for item in args.extra_source]
+    for source in sources:
+        if not os.path.isfile(source):
+            raise BuildError("source does not exist: {}".format(source))
+    source = sources[0]
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     stem = os.path.splitext(os.path.basename(source))[0]
     out_dir = os.path.abspath(args.out_dir or os.path.join(root, "build", "images", stem + "-" + args.arch))
     os.makedirs(out_dir, exist_ok=True)
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    linker_script = os.path.abspath(args.linker_script or os.path.join(script_dir, "link.ld"))
+    if not os.path.isfile(linker_script):
+        raise BuildError("linker script does not exist: {}".format(linker_script))
     prefix = os.environ.get("RISCV_PREFIX", "riscv-none-elf-")
     cc = args.cc or os.environ.get("RISCV_GCC", prefix + "gcc")
     objdump = args.objdump or os.environ.get("RISCV_OBJDUMP", prefix + "objdump")
     objcopy = args.objcopy or os.environ.get("RISCV_OBJCOPY", prefix + "objcopy")
     readelf = args.readelf or os.environ.get("RISCV_READELF", prefix + "readelf")
-    c_object = os.path.join(out_dir, stem + ".o")
+    source_objects = []
     startup_object = os.path.join(out_dir, "startup.o")
     runtime_object = os.path.join(out_dir, "runtime.o")
     elf = os.path.join(out_dir, stem + ".elf")
@@ -175,33 +193,47 @@ def main(argv=None):
     common = ["-march=" + args.arch, "-mabi=" + args.abi, "-mno-relax", "-ffreestanding", "-fno-builtin",
               "-fno-stack-protector", "-fno-pic", "-fno-pie", "-fno-asynchronous-unwind-tables",
               "-fno-unwind-tables", "-ffunction-sections", "-fdata-sections"]
-    run([cc] + common + ["-O2", "-c", source, "-o", c_object])
+    common += ["-I" + os.path.abspath(item) for item in args.include]
+    common += ["-D" + item for item in args.define]
+    if args.exit_protocol == "mmio":
+        common += ["-DEXIT_MMIO=1"]
+    for index, item in enumerate(sources):
+        object_stem = os.path.splitext(os.path.basename(item))[0]
+        object_path = os.path.join(out_dir, "source-{:02d}-{}.o".format(index, object_stem))
+        run([cc] + common + ["-O2", "-c", item, "-o", object_path])
+        source_objects.append(object_path)
     run([cc] + common + ["-c", os.path.join(script_dir, "startup.S"), "-o", startup_object])
     run([cc] + common + ["-O2", "-c", os.path.join(script_dir, "runtime.c"), "-o", runtime_object])
-    run([cc] + common + ["-nostdlib", "-nostartfiles", "-nodefaultlibs", "-Wl,-T," + os.path.join(script_dir, "link.ld"),
+    run([cc] + common + ["-nostdlib", "-nostartfiles", "-nodefaultlibs", "-Wl,-T," + linker_script,
                         "-Wl,-Map," + map_file, "-Wl,--gc-sections", "-Wl,--build-id=none",
-                        "-Wl,--no-warn-rwx-segments", startup_object, c_object, runtime_object, "-lgcc", "-o", elf])
+                        "-Wl,--no-warn-rwx-segments", startup_object] + source_objects +
+        [runtime_object, "-lgcc", "-o", elf])
     run([objcopy, "-O", "binary", "--gap-fill", "0", elf, binary])
     with open(dump, "w", encoding="utf-8") as stream:
         run([objdump, "-d", elf], output=stream)
     with open(readelf_file, "w", encoding="utf-8") as stream:
         run([readelf, "-h", "-l", "-S", elf], output=stream)
-    info = parse_elf(elf)
-    halt = halt_address(info)
+    info = parse_elf(elf, args.memory_size)
+    halt = halt_address(info) if args.exit_protocol == "sentinel" else None
     if info["entry"] != 0:
         raise BuildError("entry must be zero, got 0x{:08x}".format(info["entry"]))
-    if halt is None:
+    if args.exit_protocol == "sentinel" and halt is None:
         raise BuildError("HALT instruction 0x{:08x} is absent".format(HALT_WORD))
     write_image(image, info)
-    image_bytes = parse_image(image)
-    if image_bytes.get(halt) != HALT_BYTES[0]:
+    image_bytes = parse_image(image, args.memory_size)
+    if args.exit_protocol == "sentinel" and image_bytes.get(halt) != HALT_BYTES[0]:
         raise BuildError("generated image failed HALT round-trip")
-    files = {"source": source, "object": c_object, "startup_object": startup_object, "runtime_object": runtime_object,
+    files = {"source": source, "linker_script": linker_script,
+             "startup_object": startup_object, "runtime_object": runtime_object,
              "elf": elf, "binary": binary, "dump": dump, "readelf": readelf_file, "map": map_file, "image": image}
+    for index, object_path in enumerate(source_objects):
+        files["source_object_{}".format(index)] = object_path
     manifest_data = {
         "format": "verilog-cpu-image-v1", "arch": args.arch, "abi": args.abi,
-        "memory_size": MEMORY_SIZE, "entry": "0x{:08x}".format(info["entry"]),
-        "halt_word": "0x{:08x}".format(HALT_WORD), "halt_address": "0x{:08x}".format(halt),
+        "memory_size": args.memory_size, "entry": "0x{:08x}".format(info["entry"]),
+        "exit_protocol": args.exit_protocol,
+        "halt_word": "0x{:08x}".format(HALT_WORD) if halt is not None else None,
+        "halt_address": "0x{:08x}".format(halt) if halt is not None else None,
         "segments": [{"address": "0x{:08x}".format(s["address"]), "file_size": s["file_size"], "memory_size": s["memory_size"], "flags": s["flags"]}
                      for s in info["segments"]],
         "files": {key: {"path": os.path.basename(value), "sha256": digest(value)} for key, value in files.items()},
@@ -210,8 +242,9 @@ def main(argv=None):
         json.dump(manifest_data, stream, indent=2, sort_keys=True)
         stream.write("\n")
     print("generated {}".format(image))
-    print("entry=0x{:08x} halt=0x{:08x} segments={} high_water=0x{:08x}".format(
-        info["entry"], halt, len(info["segments"]), max(s["address"] + s["memory_size"] for s in info["segments"])))
+    print("entry=0x{:08x} exit={} segments={} high_water=0x{:08x}".format(
+        info["entry"], "0x{:08x}".format(halt) if halt is not None else "mmio",
+        len(info["segments"]), max(s["address"] + s["memory_size"] for s in info["segments"])))
     return 0
 
 

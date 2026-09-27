@@ -87,11 +87,15 @@ def build_adapter(reference_root: Path, output: Path, cxx: str | None = None) ->
     return output
 
 
-def run_adapter(executable: Path, image: Path, output: Path, max_cycles: int) -> None:
+def run_adapter(executable: Path, image: Path, output: Path, max_cycles: int,
+                max_records: int | None = None) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
+    command = [str(executable), "--input", str(image), "--output", str(output),
+               "--max-cycles", str(max_cycles)]
+    if max_records is not None:
+        command.extend(["--max-records", str(max_records)])
     completed = subprocess.run(
-        [str(executable), "--input", str(image), "--output", str(output),
-         "--max-cycles", str(max_cycles)],
+        command,
         capture_output=True,
         text=True,
     )
@@ -208,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reference-trace", type=Path, help="reference JSONL output path")
     parser.add_argument("--rtl-trace", type=Path, help="RTL CommitRecord JSONL to compare")
     parser.add_argument("--max-cycles", type=int, default=200_000_000)
+    parser.add_argument("--max-records", type=int,
+                        help="stop successfully after this many commits")
     parser.add_argument("--optional", action="store_true",
                         help="report unavailable reference API/compiler as a skip")
     args = parser.parse_args(argv)
@@ -222,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.reference_trace is None:
                 raise ReferenceTraceError("--image requires --reference-trace")
             run_adapter(executable, args.image.resolve(), args.reference_trace.resolve(),
-                        args.max_cycles)
+                        args.max_cycles, args.max_records)
             print(f"PASS: reference trace written to {args.reference_trace.resolve()}")
         if args.rtl_trace:
             if args.reference_trace is None:
