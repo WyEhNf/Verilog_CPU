@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+`include "rv32im_defs.vh"
 
 // JOIN-02 image runner.  The memory model loads an @address byte image and
 // the testbench checks only architectural termination and a0[7:0].
@@ -9,13 +10,44 @@ module cpu_core_image_tb #(
     parameter integer ROB_ENTRIES = 16,
     parameter integer RS_ENTRIES = 4,
     parameter integer LSQ_ENTRIES = 4,
-    parameter integer MUL_IMPL = 0
+    parameter integer INT_ISSUE_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
+    parameter integer CDB_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
+    parameter integer ENABLE_CACHE_STATS = 0,
+    parameter integer ENABLE_CACHES = 1,
+    parameter integer ICACHE_FAST_HIT = 1,
+    parameter integer ICACHE_COMBINATIONAL_HIT = 0,
+    parameter integer ICACHE_PREFETCH = 1,
+    parameter integer ICACHE_MSHRS = 8,
+    parameter integer ICACHE_LINES = 64,
+    parameter integer ICACHE_WAYS = 2,
+    parameter integer DCACHE_MSHRS = 4,
+    parameter integer DCACHE_LINES = 256,
+    parameter integer DCACHE_WAYS = 1,
+    parameter integer DCACHE_INDEX_HASH = 0,
+    parameter integer DCACHE_REQUEST_PIPELINE = 0,
+    parameter integer RAM_SIZE_BYTES = 1048576,
+    parameter integer LEGACY_SENTINEL_HALT = 1,
+    parameter integer MEMORY_LATENCY = 50,
+    parameter integer I_MEMORY_OUTSTANDING = 8,
+    parameter integer D_MEMORY_OUTSTANDING = 4,
+    parameter integer ENABLE_PREDICTOR = 1,
+    parameter integer FETCH_QUEUE_DEPTH = 16,
+    parameter integer MUL_IMPL = 0,
+    parameter integer SHIFT_IMPL = 0,
+    parameter integer PHYS_TAG_IMPL = 0,
+    parameter integer CHECKPOINT_IMPL = 0,
+    parameter integer STORE_BUFFERED_RETIRE = 1,
+    parameter integer COMPLETION_BYPASS = 0,
+    parameter integer SERIAL_BACKEND = 0,
+    parameter integer GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH,
+    parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
+                                         ((BE_WIDTH == 2) ? 8 : 16)
 );
     reg clk;
     reg reset;
     wire halted;
     wire error;
-    wire [7:0] return_value;
+    wire [31:0] return_value;
     wire [31:0] cycles;
     wire [31:0] instret;
 
@@ -64,7 +96,34 @@ module cpu_core_image_tb #(
         .ROB_ENTRIES(ROB_ENTRIES),
         .RS_ENTRIES(RS_ENTRIES),
         .LSQ_ENTRIES(LSQ_ENTRIES),
-        .MUL_IMPL(MUL_IMPL)
+        .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH),
+        .CDB_WIDTH(CDB_WIDTH),
+        .ENABLE_CACHE_STATS(ENABLE_CACHE_STATS),
+        .ENABLE_CACHES(ENABLE_CACHES),
+        .ICACHE_FAST_HIT(ICACHE_FAST_HIT),
+        .ICACHE_COMBINATIONAL_HIT(ICACHE_COMBINATIONAL_HIT),
+        .ICACHE_PREFETCH(ICACHE_PREFETCH),
+        .ICACHE_MSHRS(ICACHE_MSHRS),
+        .ICACHE_LINES(ICACHE_LINES),
+        .ICACHE_WAYS(ICACHE_WAYS),
+        .DCACHE_MSHRS(DCACHE_MSHRS),
+        .DCACHE_LINES(DCACHE_LINES),
+        .DCACHE_WAYS(DCACHE_WAYS),
+        .DCACHE_INDEX_HASH(DCACHE_INDEX_HASH),
+        .DCACHE_REQUEST_PIPELINE(DCACHE_REQUEST_PIPELINE),
+        .RAM_SIZE_BYTES(RAM_SIZE_BYTES),
+        .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT),
+        .ENABLE_PREDICTOR(ENABLE_PREDICTOR),
+        .FETCH_QUEUE_DEPTH(FETCH_QUEUE_DEPTH),
+        .MUL_IMPL(MUL_IMPL),
+        .SHIFT_IMPL(SHIFT_IMPL),
+        .PHYS_TAG_IMPL(PHYS_TAG_IMPL),
+        .CHECKPOINT_IMPL(CHECKPOINT_IMPL),
+        .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE),
+        .COMPLETION_BYPASS(COMPLETION_BYPASS),
+        .SERIAL_BACKEND(SERIAL_BACKEND),
+        .GENERATION_WIDTH(GENERATION_WIDTH),
+        .COMPLETION_DEPTH(COMPLETION_DEPTH)
     ) dut (
         .clk(clk), .reset(reset), .halted(halted), .error(error),
         .return_value(return_value), .cycles(cycles), .instret(instret),
@@ -82,7 +141,12 @@ module cpu_core_image_tb #(
         .mem_d_resp_error(mem_d_resp_error)
     );
 
-    rv32im_memory_model memory (
+    rv32im_memory_model #(
+        .MEMORY_SIZE(RAM_SIZE_BYTES),
+        .LATENCY(MEMORY_LATENCY),
+        .I_OUTSTANDING(I_MEMORY_OUTSTANDING),
+        .D_OUTSTANDING(D_MEMORY_OUTSTANDING)
+    ) memory (
         .clk_i(clk), .reset_i(reset),
         .i_req_valid_i(mem_i_req_valid), .i_req_ready_o(mem_i_req_ready),
         .i_req_line_addr_i(mem_i_req_line_addr), .i_req_id_i(mem_i_req_id),
@@ -104,6 +168,8 @@ module cpu_core_image_tb #(
     end
 
     initial begin
+        $display("EVAL_MEMORY: unified=1 latency=%0d i_outstanding=%0d d_outstanding=%0d line_bytes=16",
+                 MEMORY_LATENCY, I_MEMORY_OUTSTANDING, D_MEMORY_OUTSTANDING);
         expected_value = 0;
         max_cycles = 100000;
         max_no_retire_cycles = 100000;
@@ -145,68 +211,92 @@ module cpu_core_image_tb #(
         #1;
         if (watchdog_expired) begin
             $display("FAIL: JOIN-02 image=%0s no-retirement watchdog cycles=%0d instret=%0d stagnant=%0d", test_name, cycles, instret, no_retire_cycles);
-            $display("STATE: pc=%08x rob=%0d/%0d/%0d head_valid=%b head_ready=%b head_store=%b head_wait=%b head_sent=%b free=%0d rs=%0d lsq=%0d/%0d/%0d lsq_valid=%b lsq_store=%b lsq_addr=%b lsq_data=%b lsq_commit=%b lsq_sent=%b lsq_wait=%b dc_s0=%b dc_s1=%b dc_s2=%b dc_mshr=%b dc_ack=%b dc_resp=%b",
-                     dut.frontend.pc_reg,
-                     dut.backend.rob.head_reg, dut.backend.rob.tail_reg, dut.backend.rob.occupancy_reg,
-                     dut.backend.rob.valid_mem[dut.backend.rob.head_reg],
-                     dut.backend.rob.ready_mem[dut.backend.rob.head_reg],
-                     dut.backend.rob.store_mem[dut.backend.rob.head_reg],
-                     dut.backend.rob.store_wait_mem[dut.backend.rob.head_reg],
-                     dut.backend.rob.store_sent_mem[dut.backend.rob.head_reg],
-                     dut.backend.free_count, dut.backend.rs_occupancy,
-                     dut.backend.lsq.head_reg, dut.backend.lsq.tail_reg, dut.backend.lsq_occupancy,
-                     dut.backend.lsq.valid_mem[dut.backend.lsq.head_reg],
-                     dut.backend.lsq.store_mem[dut.backend.lsq.head_reg],
-                     dut.backend.lsq.addr_ready_mem[dut.backend.lsq.head_reg],
-                     dut.backend.lsq.data_ready_mem[dut.backend.lsq.head_reg],
-                     dut.backend.lsq.store_commit_mem[dut.backend.lsq.head_reg],
-                     dut.backend.lsq.request_sent_mem[dut.backend.lsq.head_reg],
-                     dut.backend.lsq.response_wait_mem[dut.backend.lsq.head_reg],
-                     dut.dcache.s0_valid, dut.dcache.s1_valid, dut.dcache.s2_valid,
-                     dut.dcache.mshr_valid, dut.dcache.store_ack_valid_reg,
-                     dut.dcache.resp_valid_reg);
-            $display("STATE: branch_pending=%b alu=%b mdu_pending=%b div_busy=%b div_result=%b completion=%0d/%0d/%0d prf_ready=%016x",
-                     dut.backend.branch_pending, dut.backend.g_alu[0].alu.result_valid_reg,
-                     dut.backend.mdu.pending_valid, dut.backend.mdu.divider.busy_reg,
-                     dut.backend.mdu.divider.result_valid_reg,
-                     dut.backend.completion.head_reg, dut.backend.completion.tail_reg,
-                     dut.backend.completion.count_reg, dut.backend.prf.ready);
+            $display("STATE: pc=%08x fetch_valid=%b fetch_ready=%b trace_ready=%b dreq=%b dresp=%b store_ack=%b",
+                     dut.frontend.pc_reg, dut.frontend.fetch_valid_o,
+                     dut.frontend.fetch_ready_i, dut.trace_ready,
+                     dut.dcache_req_valid, dut.dcache_resp_valid,
+                     dut.dcache_store_ack_valid);
+            $display("STATE_ICACHE: epoch=%0d req_valid=%b req_ready=%b req_pc=%08x resp_valid=%b mem_req_valid=%b mem_req_ready=%b mem_req_addr=%08x mem_req_id=%02x mem_resp_valid=%b mem_resp_ready=%b mem_resp_addr=%08x mem_resp_id=%02x resp_slot=%b prefetch_active=%b remaining=%0d",
+                     dut.frontend_epoch,
+                     dut.if_req_valid, dut.if_req_ready, dut.if_req_pc,
+                     dut.if_resp_valid,
+                     dut.ic_mem_req_valid, dut.ic_mem_req_ready,
+                     dut.ic_mem_req_line_addr, dut.ic_mem_req_id,
+                     dut.ic_mem_resp_valid, dut.ic_mem_resp_ready,
+                     dut.ic_mem_resp_line_addr, dut.ic_mem_resp_id,
+                     dut.g_cached_memory.g_nonblocking_icache.icache.resp_valid_reg,
+                     dut.g_cached_memory.g_nonblocking_icache.icache.prefetch_active,
+                     dut.g_cached_memory.g_nonblocking_icache.icache.prefetch_remaining);
+            for (diag_slot = 0; diag_slot < ICACHE_MSHRS; diag_slot = diag_slot + 1)
+                if (dut.g_cached_memory.g_nonblocking_icache.icache.mshr_valid[diag_slot])
+                    $display("STATE_ICACHE_MSHR: slot=%0d sent=%b prefetch=%b pc=%08x line=%08x demand_epoch=%0d txn_epoch=%0d",
+                             diag_slot,
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_sent[diag_slot],
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_prefetch[diag_slot],
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_pc[diag_slot],
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_line[diag_slot],
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_demand_epoch[diag_slot],
+                             dut.g_cached_memory.g_nonblocking_icache.icache.mshr_txn_epoch[diag_slot]);
+            $display("STATE_BACKEND: rob=%0d rs=%0d lsq=%0d issue=%b branch_pending=%b branch_tag=%04x recovery_accept=%b mdu_busy=%b commit=%b redirect=%b",
+                     dut.perf_rob_occupancy, dut.perf_rs_occupancy,
+                     dut.perf_lsq_occupancy, dut.perf_issue_valid,
+                     dut.perf_branch_pending,
+                     dut.g_ooo_backend.backend.branch_pending_tag,
+                     dut.g_ooo_backend.backend.rob_recovery_accept,
+                     dut.perf_mdu_busy,
+                     dut.commit_valid, dut.redirect_valid);
+            $display("STATE_ROB: head=%0d tail=%0d completion_head=%0d completion_tail=%0d completion_count=%0d",
+                     dut.g_ooo_backend.backend.rob.head_reg,
+                     dut.g_ooo_backend.backend.rob.tail_reg,
+                     dut.g_ooo_backend.backend.completion.head_reg,
+                     dut.g_ooo_backend.backend.completion.tail_reg,
+                     dut.g_ooo_backend.backend.completion.count_reg);
+            $display("STATE_RENAME: rat_x1=%0d free=%b ready=%b producer_tag=%04x free_count=%0d",
+                     dut.g_ooo_backend.backend.rename.rat[1],
+                     dut.g_ooo_backend.backend.rename.free_bitmap[
+                         dut.g_ooo_backend.backend.rename.rat[1]],
+                     dut.g_ooo_backend.backend.prf.ready[
+                         dut.g_ooo_backend.backend.rename.rat[1]],
+                     dut.g_ooo_backend.backend.phys_tag_mem[
+                         dut.g_ooo_backend.backend.rename.rat[1]],
+                     dut.g_ooo_backend.backend.free_count);
             for (diag_slot = 0; diag_slot < ROB_ENTRIES; diag_slot = diag_slot + 1)
-                if (dut.backend.rob.valid_mem[diag_slot])
-                    $display("ROB[%0d] gen=%0h ready=%b pc=%08x inst=%08x rd=%0d oldp=%0d newp=%0d store=%b wait=%b sent=%b",
-                             diag_slot, dut.backend.rob.generation_mem[diag_slot],
-                             dut.backend.rob.ready_mem[diag_slot], dut.backend.rob.pc_mem[diag_slot],
-                             dut.backend.rob.inst_mem[diag_slot], dut.backend.rob.rd_mem[diag_slot],
-                             dut.backend.rob.old_phys_mem[diag_slot], dut.backend.rob.new_phys_mem[diag_slot],
-                             dut.backend.rob.store_mem[diag_slot], dut.backend.rob.store_wait_mem[diag_slot],
-                             dut.backend.rob.store_sent_mem[diag_slot]);
-            for (diag_slot = 0; diag_slot < RS_ENTRIES; diag_slot = diag_slot + 1) begin
-                if (dut.backend.rs.valid_mem[diag_slot])
-                    $display("RS[%0d] rob=%04x pc=%08x op=%0d src1=%b/%04x src2=%b/%04x phys=%0d age=%0d",
-                             diag_slot, dut.backend.rs.rob_tag_mem[diag_slot],
-                             dut.backend.rs.pc_mem[diag_slot], dut.backend.rs.op_mem[diag_slot],
-                             dut.backend.rs.src1_ready_mem[diag_slot], dut.backend.rs.src1_tag_mem[diag_slot],
-                             dut.backend.rs.src2_ready_mem[diag_slot], dut.backend.rs.src2_tag_mem[diag_slot],
-                             dut.backend.rs.phys_rd_mem[diag_slot], dut.backend.rs.age_mem[diag_slot]);
-            end
-            for (diag_slot = 0; diag_slot < LSQ_ENTRIES; diag_slot = diag_slot + 1) begin
-                if (dut.backend.lsq.valid_mem[diag_slot])
-                    $display("LSQ[%0d] gen=%0h rob=%04x load=%b store=%b addr=%b/%08x data=%b sent=%b wait=%b complete=%b commit=%b ack=%b",
-                             diag_slot, dut.backend.lsq.generation_mem[diag_slot],
-                             dut.backend.lsq.rob_tag_mem[diag_slot], dut.backend.lsq.load_mem[diag_slot],
-                             dut.backend.lsq.store_mem[diag_slot], dut.backend.lsq.addr_ready_mem[diag_slot],
-                             dut.backend.lsq.addr_mem[diag_slot], dut.backend.lsq.data_ready_mem[diag_slot],
-                             dut.backend.lsq.request_sent_mem[diag_slot], dut.backend.lsq.response_wait_mem[diag_slot],
-                             dut.backend.lsq.complete_mem[diag_slot], dut.backend.lsq.store_commit_mem[diag_slot],
-                             dut.backend.lsq.store_ack_mem[diag_slot]);
-            end
-            for (diag_slot = 0; diag_slot < 16; diag_slot = diag_slot + 1)
-                if (dut.backend.completion.valid_mem[diag_slot])
-                    $display("CDBQ[%0d] tag=%04x live=%b phys=%0d value=%08x",
-                             diag_slot, dut.backend.completion.tag_mem[diag_slot],
-                             dut.backend.completion.live_mem[diag_slot],
-                             dut.backend.completion.phys_mem[diag_slot],
-                             dut.backend.completion.value_mem[diag_slot]);
+                if (dut.g_ooo_backend.backend.rob.valid_mem[diag_slot])
+                    $display("STATE_ROB_ENTRY: slot=%0d ready=%b pc=%08x inst=%08x gen=%0d",
+                             diag_slot,
+                             dut.g_ooo_backend.backend.rob.ready_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rob.pc_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rob.inst_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rob.generation_mem[diag_slot]);
+            $display("STATE_LSQ: head=%0d tail=%0d",
+                     dut.g_ooo_backend.backend.lsq.head_reg,
+                     dut.g_ooo_backend.backend.lsq.tail_reg);
+            for (diag_slot = 0; diag_slot < LSQ_ENTRIES; diag_slot = diag_slot + 1)
+                if (dut.g_ooo_backend.backend.lsq.valid_mem[diag_slot])
+                    $display("STATE_LSQ_ENTRY: slot=%0d load=%b store=%b addr_ready=%b data_ready=%b sent=%b wait=%b complete=%b committed=%b ack=%b addr=%08x rob_tag=%04x gen=%0d",
+                             diag_slot,
+                             dut.g_ooo_backend.backend.lsq.load_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.store_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.addr_ready_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.data_ready_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.request_sent_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.response_wait_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.complete_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.store_commit_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.store_ack_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.addr_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.rob_tag_mem[diag_slot],
+                             dut.g_ooo_backend.backend.lsq.generation_mem[diag_slot]);
+            for (diag_slot = 0; diag_slot < RS_ENTRIES; diag_slot = diag_slot + 1)
+                if (dut.g_ooo_backend.backend.rs.valid_mem[diag_slot])
+                    $display("STATE_RS_ENTRY: slot=%0d op=%0d src1_ready=%b src2_ready=%b tag=%04x src1_tag=%04x src2_tag=%04x",
+                             diag_slot,
+                             dut.g_ooo_backend.backend.rs.op_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rs.src1_ready_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rs.src2_ready_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rs.rob_tag_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rs.src1_tag_mem[diag_slot],
+                             dut.g_ooo_backend.backend.rs.src2_tag_mem[diag_slot]);
             finish_code = 1;
         end else if (error) begin
             $display("FAIL: JOIN-02 image=%0s architectural error cycles=%0d instret=%0d", test_name, cycles, instret);
@@ -214,16 +304,77 @@ module cpu_core_image_tb #(
         end else if (!halted) begin
             $display("FAIL: JOIN-02 image=%0s timeout cycles=%0d instret=%0d limit=%0d", test_name, cycles, instret, max_cycles);
             finish_code = 1;
-        end else if (return_value !== expected_value[7:0]) begin
-            $display("FAIL: JOIN-02 image=%0s return=%0d expected=%0d cycles=%0d instret=%0d", test_name, return_value, expected_value[7:0], cycles, instret);
+        end else if ((LEGACY_SENTINEL_HALT == 0) &&
+                     (!memory.mmio_exit_valid ||
+                      (memory.mmio_exit_code !== return_value))) begin
+            $display("FAIL: JOIN-02 image=%0s MMIO exit missing/mismatched valid=%b bus_code=%08x cpu_code=%08x",
+                     test_name, memory.mmio_exit_valid, memory.mmio_exit_code, return_value);
+            finish_code = 1;
+        end else if (return_value !== expected_value[31:0]) begin
+            $display("FAIL: JOIN-02 image=%0s return=%0d expected=%0d cycles=%0d instret=%0d", test_name, return_value, expected_value, cycles, instret);
             finish_code = 1;
         end else begin
             $display("PASS: JOIN-02 image=%0s return=%0d cycles=%0d instret=%0d", test_name, return_value, cycles, instret);
+        end
+        if (ENABLE_CACHE_STATS != 0) begin
+            $display("PERF: fe_empty=%0d be_stall=%0d no_commit=%0d commit_active=%0d issue=%0d rob_full=%0d rs_full=%0d lsq_full=%0d branch_pending=%0d mdu_busy=%0d",
+                     dut.perf_frontend_empty_cycles, dut.perf_backend_stall_cycles,
+                     dut.perf_no_commit_cycles, dut.perf_commit_active_cycles,
+                     dut.perf_issue_count, dut.perf_rob_full_cycles,
+                     dut.perf_rs_full_cycles, dut.perf_lsq_full_cycles,
+                     dut.perf_branch_pending_cycles, dut.perf_mdu_busy_cycles);
+            $display("PERF_CACHE: i_req=%0d i_hit=%0d i_miss=%0d i_refill=%0d i_stall=%0d d_req=%0d d_hit=%0d d_miss=%0d d_refill=%0d d_wb=%0d d_stall=%0d i_mem=%0d d_mem_read=%0d d_mem_write=%0d",
+                     dut.perf_i_requests, dut.perf_i_hits, dut.perf_i_misses,
+                     dut.perf_i_refills, dut.perf_i_stalls, dut.perf_d_requests,
+                     dut.perf_d_hits, dut.perf_d_misses, dut.perf_d_refills,
+                     dut.perf_d_writebacks, dut.perf_d_stalls,
+                     dut.perf_i_mem_requests, dut.perf_d_mem_reads,
+                     dut.perf_d_mem_writes);
+            $display("PERF_PRED: resolved=%0d correct=%0d mispredict=%0d",
+                     dut.pred_count, dut.pred_correct,
+                     dut.pred_count - dut.pred_correct);
         end
         if (trace_file != 0)
             $fclose(trace_file);
         $finish(finish_code);
     end
+
+    generate if (SERIAL_BACKEND == 0) begin : g_lsq_integrity_check
+        integer live_count, offset, slot_index;
+        reg ring_error;
+        reg previous_recovery;
+        reg [31:0] previous_recovery_tag;
+        always @(posedge clk) begin
+            if (!reset && $test$plusargs("CHECK_LSQ")) begin
+                live_count = 0;
+                ring_error = 1'b0;
+                for (offset = 0; offset < LSQ_ENTRIES; offset = offset + 1) begin
+                    slot_index = (dut.g_ooo_backend.backend.lsq.head_reg + offset) % LSQ_ENTRIES;
+                    if (dut.g_ooo_backend.backend.lsq.valid_mem[slot_index]) live_count = live_count + 1;
+                    if (dut.g_ooo_backend.backend.lsq.valid_mem[slot_index] !=
+                        (offset < dut.g_ooo_backend.backend.lsq.occupancy_reg)) ring_error = 1'b1;
+                end
+                if (ring_error || live_count != dut.g_ooo_backend.backend.lsq.occupancy_reg) begin
+                    $display("FAIL: LSQ ring invariant cycle=%0d head=%0d tail=%0d count=%0d live=%0d previous_recovery=%b tag=%x",
+                             cycles, dut.g_ooo_backend.backend.lsq.head_reg,
+                             dut.g_ooo_backend.backend.lsq.tail_reg,
+                             dut.g_ooo_backend.backend.lsq.occupancy_reg, live_count,
+                             previous_recovery, previous_recovery_tag);
+                    for (offset = 0; offset < LSQ_ENTRIES; offset = offset + 1)
+                        $display("LSQ_RING: slot=%0d valid=%b load=%b store=%b reported=%b committed=%b rob=%x",
+                                 offset, dut.g_ooo_backend.backend.lsq.valid_mem[offset],
+                                 dut.g_ooo_backend.backend.lsq.load_mem[offset],
+                                 dut.g_ooo_backend.backend.lsq.store_mem[offset],
+                                 dut.g_ooo_backend.backend.lsq.load_reported_mem[offset],
+                                 dut.g_ooo_backend.backend.lsq.store_commit_mem[offset],
+                                 dut.g_ooo_backend.backend.lsq.rob_tag_mem[offset]);
+                    $finish(1);
+                end
+            end
+            previous_recovery <= dut.g_ooo_backend.backend.rob_recovery_accept;
+            previous_recovery_tag <= dut.g_ooo_backend.backend.branch_pending_tag;
+        end
+    end endgenerate
 
     always @(posedge clk) begin
         if (trace_file != 0) begin
@@ -248,51 +399,66 @@ module cpu_core_image_tb #(
             end
         end
         if (trace_enable && (cycles != 0) && ((cycles % 500) == 0))
-            $display("TRACE: periodic cycles=%0d instret=%0d pc=%08x rob_head=%0d rob_tail=%0d rob_occ=%0d rob_tag=%04x rob_ready=%b rob_store=%b rob_wait=%b rob_sent=%b free_count=%0d restore=%b rs_occ=%0d lsq_head=%0d lsq_tail=%0d lsq_occ=%0d lsq_tag=%04x lsq_valid=%b lsq_store=%b lsq_addr=%b lsq_data=%b lsq_commit=%b lsq_sent=%b lsq_ack=%b lsq_ackvalid=%b lsq_commitready=%b fetch_valid=%b fetch_ready=%b trace_ready=%b", cycles, instret, dut.frontend.pc_reg, dut.backend.rob.head_reg, dut.backend.rob.tail_reg, dut.backend.rob.occupancy_reg, dut.backend.rob.generation_mem[dut.backend.rob.head_reg], dut.backend.rob.ready_mem[dut.backend.rob.head_reg], dut.backend.rob.store_mem[dut.backend.rob.head_reg], dut.backend.rob.store_wait_mem[dut.backend.rob.head_reg], dut.backend.rob.store_sent_mem[dut.backend.rob.head_reg], dut.backend.free_count, dut.backend.rob_checkpoint_restore_valid, dut.backend.rs_occupancy, dut.backend.lsq.head_reg, dut.backend.lsq.tail_reg, dut.backend.lsq_occupancy, dut.backend.lsq.rob_tag_mem[dut.backend.lsq.head_reg], dut.backend.lsq.valid_mem[dut.backend.lsq.head_reg], dut.backend.lsq.store_mem[dut.backend.lsq.head_reg], dut.backend.lsq.addr_ready_mem[dut.backend.lsq.head_reg], dut.backend.lsq.data_ready_mem[dut.backend.lsq.head_reg], dut.backend.lsq.store_commit_mem[dut.backend.lsq.head_reg], dut.backend.lsq.request_sent_mem[dut.backend.lsq.head_reg], dut.backend.lsq.store_ack_mem[dut.backend.lsq.head_reg], dut.backend.lsq.store_ack_valid_o, dut.backend.rob_store_commit_ready, dut.frontend.fetch_valid_o, dut.frontend.fetch_ready_i, dut.backend.trace_ready_o);
-        if (trace_enable && (dut.backend.lsq_occupancy != 0) && !dut.backend.lsq.valid_mem[dut.backend.lsq.head_reg])
-            $display("TRACE: LSQ_INVALID_HEAD cycles=%0d head=%0d tail=%0d occ=%0d robhead=%0d robocc=%0d allocfire=%b alloccount=%0d popvalid=%b storeack=%b", cycles, dut.backend.lsq.head_reg, dut.backend.lsq.tail_reg, dut.backend.lsq_occupancy, dut.backend.rob.head_reg, dut.backend.rob.occupancy_reg, dut.backend.lsq_alloc_fire, dut.backend.lsq_alloc_count, dut.backend.lsq_store_ack_valid, dut.dcache_store_ack_valid);
-        if (trace_enable && (cycles >= 2985) && (cycles < 3020))
-            $display("TRACE: LSQ_WINDOW cycles=%0d head=%0d tail=%0d occ=%0d validhead=%b allocfire=%b alloccount=%0d alloccalc=%0d popcalc=%0d recovery=%b", cycles, dut.backend.lsq.head_reg, dut.backend.lsq.tail_reg, dut.backend.lsq_occupancy, dut.backend.lsq.valid_mem[dut.backend.lsq.head_reg], dut.backend.lsq_alloc_fire, dut.backend.lsq_alloc_count, dut.backend.lsq.alloc_count_calc, dut.backend.lsq.pop_count_calc, dut.backend.lsq.recovery_valid_i);
+            $display("TRACE: periodic cycles=%0d instret=%0d pc=%08x fetch_valid=%b fetch_ready=%b trace_ready=%b",
+                     cycles, instret, dut.frontend.pc_reg, dut.frontend.fetch_valid_o,
+                     dut.frontend.fetch_ready_i, dut.trace_ready);
         if (trace_enable && dut.commit_valid)
             $display("TRACE: pc=%08x inst=%08x rd=%0d we=%b value=%08x store=%b", dut.commit_pc,
                      dut.commit_inst, dut.commit_rd, dut.commit_rd_we,
                      dut.commit_value, dut.commit_is_store);
         if (trace_enable && dut.dcache_req_valid)
-            $display("TRACE: dreq load=%b store=%b addr=%08x mask=%04x data=%08x ready=%b", dut.dcache_req_load,
+            $display("TRACE: cycle=%0d dreq load=%b store=%b addr=%08x mask=%04x data=%08x ready=%b", cycles, dut.dcache_req_load,
                      dut.dcache_req_store, dut.dcache_req_addr, dut.dcache_req_mask,
                      dut.dcache_req_wdata[31:0], dut.dcache_req_ready);
+        if (trace_enable && dut.mem_i_req_valid)
+            $display("TRACE: cycle=%0d mem-i line=%08x id=%02x ready=%b", cycles,
+                     dut.mem_i_req_line_addr, dut.mem_i_req_id,
+                     dut.mem_i_req_ready);
+        if (trace_enable && dut.mem_i_resp_valid)
+            $display("TRACE: cycle=%0d mem-i response line=%08x id=%02x error=%b ready=%b", cycles,
+                     dut.mem_i_resp_line_addr, dut.mem_i_resp_id,
+                     dut.mem_i_resp_error, dut.mem_i_resp_ready);
         if (trace_enable && dut.mem_d_req_valid)
-            $display("TRACE: mem-d write=%b line=%08x id=%02x ready=%b", dut.mem_d_req_write,
+            $display("TRACE: cycle=%0d mem-d write=%b line=%08x id=%02x ready=%b", cycles, dut.mem_d_req_write,
                      dut.mem_d_req_line_addr, dut.mem_d_req_id, dut.mem_d_req_ready);
         if (trace_enable && dut.mem_d_resp_valid)
-            $display("TRACE: mem-d response line=%08x id=%02x error=%b ready=%b", dut.mem_d_resp_line_addr,
+            $display("TRACE: cycle=%0d mem-d response line=%08x id=%02x error=%b ready=%b", cycles, dut.mem_d_resp_line_addr,
                      dut.mem_d_resp_id, dut.mem_d_resp_error, dut.mem_d_resp_ready);
         if (trace_enable && dut.dcache_store_ack_valid)
-            $display("TRACE: dcache store-ack lsq=%04x error=%b", dut.dcache_store_ack_lsq_tag, dut.dcache_store_ack_error);
+            $display("TRACE: cycle=%0d dcache store-ack lsq=%04x error=%b", cycles, dut.dcache_store_ack_lsq_tag, dut.dcache_store_ack_error);
         if (trace_enable && dut.dcache_resp_valid)
-            $display("TRACE: dcache load-resp lsq=%04x addr=%08x value=%08x error=%b", dut.dcache_resp_lsq_tag,
+            $display("TRACE: cycle=%0d dcache load-resp lsq=%04x addr=%08x value=%08x error=%b", cycles, dut.dcache_resp_lsq_tag,
                      dut.dcache_resp_addr, dut.dcache_resp_word, dut.dcache_resp_error);
-        if (trace_enable && (dut.dcache.s0_valid || dut.dcache.s1_valid || dut.dcache.s2_valid || dut.dcache.mshr_valid || dut.dcache.store_ack_valid_reg))
-            $display("TRACE: dcstate s0=%b/%b s1=%b/%b s2=%b/%b hit=%b mshr=%b ack=%b resp=%b", dut.dcache.s0_valid,
-                     dut.dcache.s0_store, dut.dcache.s1_valid, dut.dcache.s1_store, dut.dcache.s2_valid,
-                     dut.dcache.s2_store, dut.dcache.s2_hit, dut.dcache.mshr_valid, dut.dcache.store_ack_valid_reg,
-                     dut.dcache.resp_valid_reg);
-        if (trace_enable && (dut.redirect_valid || dut.backend.rob_recovery_accept || dut.backend.branch_pending))
-            $display("TRACE: control redirect=%b pc=%08x epoch=%0d recovery=%b pending=%b frontend_pc=%08x epoch=%0d", dut.redirect_valid,
-                     dut.redirect_pc, dut.redirect_epoch, dut.backend.rob_recovery_accept, dut.backend.branch_pending,
-                     dut.frontend.pc_reg, dut.frontend.epoch_reg);
-        if (trace_enable && dut.backend.branch_pending)
-            $display("TRACE: rob pending_tag=%04x head=%0d tail=%0d occ=%0d headpc=%08x headinst=%08x commit=%b ctag=%04x cval=%08x ready=%b valid=%b rstore=%b swait=%b ssent=%b recovery=%b completion=%b/%04x rsocc=%0d lsqhead=%0d lsqtail=%0d lsqocc=%0d rv=%b rtag=%04x rhead=%0d rocc=%0d lsqv=%b lsqs=%b lsqa=%b lsqd=%b lsqc=%b lqtag=%04x lqreq=%b lqwait=%b cand=%b svalid=%b sready=%b", dut.backend.branch_pending_tag,
-                     dut.backend.rob.head_reg, dut.backend.rob.tail_reg, dut.backend.rob.occupancy_reg,
-                     dut.backend.rob.pc_mem[dut.backend.rob.head_reg], dut.backend.rob.inst_mem[dut.backend.rob.head_reg],
-                     dut.backend.rob_commit_valid, dut.backend.rob_commit_tag, dut.backend.rob_commit_value,
-                     dut.backend.rob.ready_mem[dut.backend.rob.head_reg], dut.backend.rob.valid_mem[dut.backend.rob.head_reg],
-                     dut.backend.rob.store_mem[dut.backend.rob.head_reg], dut.backend.rob.store_wait_mem[dut.backend.rob.head_reg], dut.backend.rob.store_sent_mem[dut.backend.rob.head_reg], dut.backend.rob.recovery_found,
-                     dut.backend.rob_completion_valid, dut.backend.rob_completion_tag, dut.backend.rs_occupancy, dut.backend.lsq.head_reg, dut.backend.lsq.tail_reg, dut.backend.lsq_occupancy, dut.backend.lsq.recovery_valid_i, dut.backend.lsq.recovery_tag_i, dut.backend.lsq.recovery_head_i, dut.backend.lsq.recovery_occupancy_i,
-                     dut.backend.lsq.valid_mem[dut.backend.lsq.head_reg], dut.backend.lsq.store_mem[dut.backend.lsq.head_reg],
-                     dut.backend.lsq.addr_ready_mem[dut.backend.lsq.head_reg], dut.backend.lsq.data_ready_mem[dut.backend.lsq.head_reg],
-                     dut.backend.lsq.store_commit_mem[dut.backend.lsq.head_reg], dut.backend.lsq.rob_tag_mem[dut.backend.lsq.head_reg], dut.backend.lsq.request_sent_mem[dut.backend.lsq.head_reg], dut.backend.lsq.response_wait_mem[dut.backend.lsq.head_reg], dut.backend.lsq.candidate_found,
-                     dut.backend.rob_store_commit_valid, dut.backend.rob_store_commit_ready);
+        if (trace_enable && (dut.dcache_debug_s0_valid || dut.dcache_debug_s1_valid ||
+            dut.dcache_debug_s2_valid || dut.dcache_debug_mshr_valid || dut.dcache_debug_ack_valid))
+            $display("TRACE: dcstate s0=%b/%b s1=%b/%b s2=%b/%b hit=%b mshr=%b ack=%b resp=%b",
+                     dut.dcache_debug_s0_valid, dut.dcache_debug_s0_store,
+                     dut.dcache_debug_s1_valid, dut.dcache_debug_s1_store,
+                     dut.dcache_debug_s2_valid, dut.dcache_debug_s2_store,
+                     dut.dcache_debug_s2_hit, dut.dcache_debug_mshr_valid,
+                     dut.dcache_debug_ack_valid, dut.dcache_debug_resp_valid);
+        if (trace_enable && dut.redirect_valid)
+            $display("TRACE: control redirect=%b pc=%08x epoch=%0d frontend_pc=%08x frontend_epoch=%0d alu_tags=%h alu_valid=%b alu_flush=%b branch_tag=%h rob_head=%0d rat1=%0d free1=%b reclaim1=%b",
+                     dut.redirect_valid, dut.redirect_pc, dut.redirect_epoch,
+                     dut.frontend.pc_reg, dut.frontend.epoch_reg,
+                     dut.g_ooo_backend.backend.alu_exec_tag,
+                     dut.g_ooo_backend.backend.alu_exec_valid,
+                     dut.g_ooo_backend.backend.alu_flush_r,
+                     dut.g_ooo_backend.backend.branch_pending_tag,
+                     dut.g_ooo_backend.backend.rob_head,
+                     dut.g_ooo_backend.backend.rename.rat[1],
+                     dut.g_ooo_backend.backend.rename.free_bitmap[
+                         dut.g_ooo_backend.backend.rename.rat[1]],
+                     dut.g_ooo_backend.backend.rob_recovery_reclaim_bitmap[
+                         dut.g_ooo_backend.backend.rename.rat[1]]);
+        if (trace_enable && !dut.g_ooo_backend.backend.branch_pending &&
+            (|(dut.g_ooo_backend.backend.alu_exec_valid &
+               dut.g_ooo_backend.backend.alu_exec_redirect_valid)))
+            $display("TRACE: branch capture tags=%h valid=%b redirect=%b rob_head=%0d",
+                     dut.g_ooo_backend.backend.alu_exec_tag,
+                     dut.g_ooo_backend.backend.alu_exec_valid,
+                     dut.g_ooo_backend.backend.alu_exec_redirect_valid,
+                     dut.g_ooo_backend.backend.rob_head);
     end
 
 endmodule

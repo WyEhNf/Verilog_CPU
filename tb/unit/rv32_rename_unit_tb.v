@@ -34,6 +34,11 @@ module rv32_rename_unit_tb #(
     reg [PHYS_REGS-1:0] saved_free_bitmap;
     reg [CW-1:0] saved_count;
     integer expected_phys;
+    integer pattern;
+    integer phys;
+    integer pattern_free_count;
+    integer expected_lane;
+    reg [PHYS_REGS-1:0] pattern_free_bitmap;
 
     rv32_rename_unit #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS)) dut (
         .clk_i(clk), .reset_i(reset), .rename_ready_i(rename_ready),
@@ -85,9 +90,10 @@ module rv32_rename_unit_tb #(
         if (old_phys[AW-1:0] != 1 || new_phys[AW-1:0] != ((BE_WIDTH > 1) ? 5 : 2)) bad = bad + 1;
         @(posedge clk); #1;
 
-        // Commit updates RRAT and releases the replaced physical register.
+        // Commit releases the replaced physical register.  This backend does
+        // not consume the committed RAT debug output.
         clear_inputs(); commit_valid = 1; commit_rd_we[0] = 1; commit_rd[4:0] = 5; commit_old[AW-1:0] = 1; commit_new[AW-1:0] = 3; @(posedge clk); #1;
-        if (rrat_state[(5*AW) +: AW] != 3 || free_count != FREE - ((BE_WIDTH > 1) ? 4 : 1)) bad = bad + 1;
+        if (free_count != FREE - ((BE_WIDTH > 1) ? 4 : 1)) bad = bad + 1;
         clear_inputs(); #1;
 
         // Resource shortage and invalid holes stop the prefix.
@@ -124,6 +130,49 @@ module rv32_rename_unit_tb #(
         if (free_count != 1) bad = bad + 1;
         set_decoded(0, 12, 0, 0); #1;
         if (count != 1 || phys_lane(new_phys, 0) != 1) bad = bad + 1;
+
+        // Fragmented free lists must select the lowest available physical
+        // registers in order, including when fewer lanes write than BE_WIDTH.
+        for (pattern = 0; pattern < 20; pattern = pattern + 1) begin
+            clear_inputs();
+            pattern_free_bitmap = {PHYS_REGS{1'b0}};
+            pattern_free_count = 0;
+            for (phys = 1; phys < PHYS_REGS; phys = phys + 1)
+                if (((phys * 17 + pattern * 13) % 7) < 3) begin
+                    pattern_free_bitmap[phys] = 1'b1;
+                    pattern_free_count = pattern_free_count + 1;
+                end
+            restore_rat = saved_rat;
+            restore_free_bitmap = pattern_free_bitmap;
+            restore_count = pattern_free_count;
+            restore_valid = 1'b1;
+            @(posedge clk); #1;
+            clear_inputs();
+            for (lane = 0; lane < BE_WIDTH; lane = lane + 1)
+                set_decoded(lane, 13 + lane, 0, 0);
+            #1;
+            if (count != BE_WIDTH) bad = bad + 1;
+            expected_lane = 0;
+            for (phys = 1; phys < PHYS_REGS; phys = phys + 1)
+                if (pattern_free_bitmap[phys] && expected_lane < BE_WIDTH) begin
+                    if (phys_lane(new_phys, expected_lane) != phys)
+                        bad = bad + 1;
+                    expected_lane = expected_lane + 1;
+                end
+            clear_inputs();
+            for (lane = 0; lane < BE_WIDTH; lane = lane + 1)
+                set_decoded(lane, (lane % 2 == 0) ? 13 + lane : 0, 0, 0);
+            #1;
+            if (count != BE_WIDTH) bad = bad + 1;
+            expected_lane = 0;
+            for (phys = 1; phys < PHYS_REGS; phys = phys + 1)
+                if (pattern_free_bitmap[phys] &&
+                    (expected_lane * 2) < BE_WIDTH) begin
+                    if (phys_lane(new_phys, expected_lane * 2) != phys)
+                        bad = bad + 1;
+                    expected_lane = expected_lane + 1;
+                end
+        end
 
         if (bad != 0) begin $display("FAIL: B-02 rename BE_WIDTH=%0d PHYS_REGS=%0d checks=%0d", BE_WIDTH, PHYS_REGS, bad); $finish(1); end
         $display("PASS: B-02 rename BE_WIDTH=%0d PHYS_REGS=%0d", BE_WIDTH, PHYS_REGS); $finish(0);

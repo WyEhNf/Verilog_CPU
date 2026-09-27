@@ -12,6 +12,9 @@ module rv32im_decoder_tb;
     wire [31:0] imm;
     wire [1:0] mem_size;
     wire [3:0] mem_base_mask;
+    wire legacy_legal, legacy_serialize;
+    wire [`RV32IM_OP_WIDTH-1:0] legacy_op;
+    wire [`RV32IM_CLASS_WIDTH-1:0] legacy_class;
     integer tests;
 
     rv32im_decoder dut (
@@ -22,6 +25,10 @@ module rv32im_decoder_tb;
         .is_jump_o(is_jump), .is_serialize_o(is_serialize),
         .mem_size_o(mem_size), .mem_unsigned_o(mem_unsigned),
         .mem_base_mask_o(mem_base_mask), .jalr_clear_lsb_o(jalr_clear_lsb)
+    );
+    rv32im_decoder #(.LEGACY_SENTINEL_HALT(1)) legacy_dut (
+        .inst_i(inst), .legal_o(legacy_legal), .op_o(legacy_op),
+        .class_o(legacy_class), .is_serialize_o(legacy_serialize)
     );
 
     task check_op;
@@ -70,10 +77,19 @@ module rv32im_decoder_tb;
         if (!is_load || mem_size != `RV32IM_MEM_BYTE || mem_unsigned || mem_base_mask != 4'b0001) begin $display("FAIL: LB controls"); $finish(1); end
         check_op(32'h0030c183, `RV32IM_OP_LBU, 32'h00000003);
         if (!mem_unsigned || mem_size != `RV32IM_MEM_BYTE) begin $display("FAIL: LBU controls"); $finish(1); end
+        check_op(32'h00209183, `RV32IM_OP_LH, 32'h00000002);
+        if (!is_load || mem_unsigned || mem_size != `RV32IM_MEM_HALF ||
+            mem_base_mask != 4'b0011) begin $display("FAIL: LH controls"); $finish(1); end
+        check_op(32'h0020d183, `RV32IM_OP_LHU, 32'h00000002);
+        if (!is_load || !mem_unsigned || mem_size != `RV32IM_MEM_HALF ||
+            mem_base_mask != 4'b0011) begin $display("FAIL: LHU controls"); $finish(1); end
         check_op(32'h0040a183, `RV32IM_OP_LW, 32'h00000004);
         if (mem_size != `RV32IM_MEM_WORD || mem_base_mask != 4'b1111) begin $display("FAIL: LW controls"); $finish(1); end
         check_op(32'hfe308fa3, `RV32IM_OP_SB, 32'hffffffff);
         if (!is_store || mem_base_mask != 4'b0001) begin $display("FAIL: SB controls"); $finish(1); end
+        check_op(32'h00309123, `RV32IM_OP_SH, 32'h00000002);
+        if (!is_store || mem_size != `RV32IM_MEM_HALF ||
+            mem_base_mask != 4'b0011) begin $display("FAIL: SH controls"); $finish(1); end
         check_op(32'h0030a423, `RV32IM_OP_SW, 32'h00000008);
         if (mem_base_mask != 4'b1111) begin $display("FAIL: SW controls"); $finish(1); end
 
@@ -107,17 +123,21 @@ module rv32im_decoder_tb;
         check_op(32'h0220e1b3, `RV32IM_OP_REM, 32'd0);
         check_op(32'h0220f1b3, `RV32IM_OP_REMU, 32'd0);
 
-        check_op(32'h0ff00513, `RV32IM_OP_HALT, 32'd0);
-        if (!is_serialize || class_id != `RV32IM_CLASS_HALT) begin $display("FAIL: HALT controls"); $finish(1); end
+        check_op(32'h0ff00513, `RV32IM_OP_ADDI, 32'd255);
+        if (is_serialize || class_id != `RV32IM_CLASS_INT || !rd_we ||
+            rd != 5'd10 || rs1 != 5'd0) begin
+            $display("FAIL: final decoder misclassified legal ADDI"); $finish(1);
+        end
+        if (!legacy_legal || legacy_op != `RV32IM_OP_HALT ||
+            legacy_class != `RV32IM_CLASS_HALT || !legacy_serialize) begin
+            $display("FAIL: optional legacy HALT controls"); $finish(1);
+        end
 
         check_illegal(32'h0000100f); // FENCE.I
         check_illegal(32'h00000073); // ECALL
         check_illegal(32'h02109093); // invalid SLLI funct7
         check_illegal(32'h2010d193); // invalid right shift funct7
         check_illegal(32'h0020a063); // reserved branch funct3
-        check_illegal(32'h00009183); // LH unsupported
-        check_illegal(32'h0000d183); // LHU unsupported
-        check_illegal(32'h00309123); // SH unsupported
         check_illegal(32'hffffffff);
 
         $display("PASS: A-01 decoder %0d directed vectors", tests);

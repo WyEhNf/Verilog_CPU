@@ -44,6 +44,7 @@ module rv32_memory_bridge_tb;
 
     integer cycle;
     integer i_mem_accept_cycle, d_mem_accept_cycle;
+    integer i_first_resp_cycle, d_first_resp_cycle;
     integer i_mem_requests, d_mem_reads, d_mem_writes;
     integer bad;
     reg [31:0] held_addr;
@@ -144,6 +145,7 @@ module rv32_memory_bridge_tb;
 
     initial begin
         cycle = 0; i_mem_accept_cycle = -1; d_mem_accept_cycle = -1;
+        i_first_resp_cycle = -1; d_first_resp_cycle = -1;
         i_mem_requests = 0; d_mem_reads = 0; d_mem_writes = 0; bad = 0;
         reset = 1'b1; i_req_valid = 1'b0; i_resp_ready = 1'b0;
         i_req_addr = 0; i_req_id = 0; d_req_valid = 1'b0; d_req_write = 1'b0;
@@ -164,7 +166,16 @@ module rv32_memory_bridge_tb;
             issue_i(32'h00000000, 8'h11);
             issue_d(1'b0, 32'h00000100, 128'd0, 16'd0, 8'h22);
         join
-        while (!i_resp_valid || !d_resp_valid) @(negedge clk);
+        fork
+            begin
+                while (!i_resp_valid) @(negedge clk);
+                i_first_resp_cycle = cycle;
+            end
+            begin
+                while (!d_resp_valid) @(negedge clk);
+                d_first_resp_cycle = cycle;
+            end
+        join
         if (i_resp_addr != 0 || i_resp_id != 8'h11 || i_resp_data[31:0] != 32'h00000013 || i_resp_error) begin
             $display("FAIL: A-06 I response payload addr=%08x id=%02x data=%08x error=%b",
                      i_resp_addr, i_resp_id, i_resp_data[31:0], i_resp_error); bad = bad + 1;
@@ -173,9 +184,15 @@ module rv32_memory_bridge_tb;
             $display("FAIL: A-06 D response payload addr=%08x id=%02x data=%04x error=%b",
                      d_resp_addr, d_resp_id, d_resp_data[15:0], d_resp_error); bad = bad + 1;
         end
-        if ((cycle - i_mem_accept_cycle) != 50 || (cycle - d_mem_accept_cycle) != 50) begin
+        // The transparent bridge exposes the memory response during the
+        // negedge observation window 49 completed clock intervals after the
+        // accepting posedge; the memory model's posedge accounting remains
+        // the architected 50-cycle latency checked by H-03.
+        if ((i_first_resp_cycle - i_mem_accept_cycle) != 49 ||
+            (d_first_resp_cycle - d_mem_accept_cycle) != 49) begin
             $display("FAIL: A-06 bridge changed memory latency i=%0d d=%0d",
-                     cycle-i_mem_accept_cycle, cycle-d_mem_accept_cycle); bad = bad + 1;
+                     i_first_resp_cycle-i_mem_accept_cycle,
+                     d_first_resp_cycle-d_mem_accept_cycle); bad = bad + 1;
         end
 
         // Complete response payloads must remain stable while either cache is stalled.

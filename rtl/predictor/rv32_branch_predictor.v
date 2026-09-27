@@ -1,10 +1,14 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// 64-entry bimodal predictor plus a 16-entry direct-mapped BTB.
+// 256-entry bimodal predictor plus a 64-entry direct-mapped BTB.
 // Predictor state changes only from committed branch feedback.
 /* verilator lint_off UNUSEDSIGNAL */
-module rv32_branch_predictor (
+module rv32_branch_predictor #(
+    // A bank stores the high index bits; its caller routes low-bit ownership.
+    // BANK_BITS=0 preserves the standalone full-table predictor interface.
+    parameter integer BANK_BITS = 0
+) (
     input  wire        clk_i,
     input  wire        reset_i,
 
@@ -30,26 +34,36 @@ module rv32_branch_predictor (
     output reg  [31:0] prediction_count_o,
     output reg  [31:0] correct_count_o
 );
-    reg [1:0] bht [0:63];
-    reg       btb_valid [0:15];
-    reg [25:0] btb_tag [0:15];
-    reg [31:0] btb_target [0:15];
-    reg [1:0] btb_kind [0:15];
+    localparam integer BHT_ENTRIES = 256 >> BANK_BITS;
+    localparam integer BTB_ENTRIES = 64 >> BANK_BITS;
+    reg [1:0] bht [0:BHT_ENTRIES-1];
+    reg       btb_valid [0:BTB_ENTRIES-1];
+    reg [23:0] btb_tag [0:BTB_ENTRIES-1];
+    reg [31:0] btb_target [0:BTB_ENTRIES-1];
+    reg [1:0] btb_kind [0:BTB_ENTRIES-1];
 
     wire [6:0] query_opcode = query_inst_i[6:0];
-    wire [5:0] query_bht_index = query_pc_i[7:2];
-    wire [3:0] query_btb_index = query_pc_i[5:2];
+    wire [7-BANK_BITS:0] query_bht_index = query_pc_i[9:2+BANK_BITS];
+    wire [5-BANK_BITS:0] query_btb_index = query_pc_i[7:2+BANK_BITS];
     wire query_btb_match = btb_valid[query_btb_index] &&
-                           (btb_tag[query_btb_index] == query_pc_i[31:6]);
+                           (btb_tag[query_btb_index] == query_pc_i[31:8]);
     wire [31:0] jal_imm = {{11{query_inst_i[31]}}, query_inst_i[31],
                            query_inst_i[19:12], query_inst_i[20],
                            query_inst_i[30:21], 1'b0};
-    wire [5:0] feedback_bht_index = feedback_pc_i[7:2];
-    wire [3:0] feedback_btb_index = feedback_pc_i[5:2];
+    wire [31:0] branch_imm = {{19{query_inst_i[31]}}, query_inst_i[31],
+                              query_inst_i[7], query_inst_i[30:25],
+                              query_inst_i[11:8], 1'b0};
+    wire [7-BANK_BITS:0] feedback_bht_index = feedback_pc_i[9:2+BANK_BITS];
+    wire [5-BANK_BITS:0] feedback_btb_index = feedback_pc_i[7:2+BANK_BITS];
+    wire feedback_btb_write = feedback_valid_i && feedback_taken_i &&
+                             ((feedback_kind_i == `RV32IM_PRED_BRANCH) ||
+                              (feedback_kind_i == `RV32IM_PRED_JALR));
+    wire [31:0] feedback_btb_target = (feedback_kind_i == `RV32IM_PRED_JALR) ?
+                                    {feedback_target_i[31:1], 1'b0} : feedback_target_i;
     integer i;
 
-    assign pred_bht_index_o = query_bht_index;
-    assign pred_btb_index_o = query_btb_index;
+    assign pred_bht_index_o = query_pc_i[7:2];
+    assign pred_btb_index_o = query_pc_i[5:2];
     assign pred_counter_o = bht[query_bht_index];
 
     always @* begin
@@ -67,6 +81,11 @@ module rv32_branch_predictor (
                     if (bht[query_bht_index][1] && pred_btb_hit_o) begin
                         pred_taken_o = 1'b1;
                         pred_target_o = btb_target[query_btb_index];
+                    end else if (!pred_btb_hit_o && branch_imm[31]) begin
+                        // Backward-taken/forward-not-taken gives a cold loop a
+                        // useful target before its first BTB allocation.
+                        pred_taken_o = 1'b1;
+                        pred_target_o = query_pc_i + branch_imm;
                     end
                 end
                 7'b1101111: begin
@@ -94,13 +113,10 @@ module rv32_branch_predictor (
         if (reset_i) begin
             prediction_count_o <= 32'd0;
             correct_count_o <= 32'd0;
-            for (i = 0; i < 64; i = i + 1)
+            for (i = 0; i < BHT_ENTRIES; i = i + 1)
                 bht[i] <= 2'b10; // weakly taken
-            for (i = 0; i < 16; i = i + 1) begin
+            for (i = 0; i < BTB_ENTRIES; i = i + 1) begin
                 btb_valid[i] <= 1'b0;
-                btb_tag[i] <= 26'd0;
-                btb_target[i] <= 32'd0;
-                btb_kind[i] <= `RV32IM_PRED_NONE;
             end
         end else if (feedback_valid_i) begin
             prediction_count_o <= prediction_count_o + 32'd1;
@@ -112,21 +128,24 @@ module rv32_branch_predictor (
                 if (feedback_taken_i) begin
                     if (bht[feedback_bht_index] != 2'b11)
                         bht[feedback_bht_index] <= bht[feedback_bht_index] + 2'b01;
-                    btb_valid[feedback_btb_index] <= 1'b1;
-                    btb_tag[feedback_btb_index] <= feedback_pc_i[31:6];
-                    btb_target[feedback_btb_index] <= feedback_target_i;
-                    btb_kind[feedback_btb_index] <= `RV32IM_PRED_BRANCH;
                 end else if (bht[feedback_bht_index] != 2'b00) begin
                     bht[feedback_bht_index] <= bht[feedback_bht_index] - 2'b01;
                 end
-            end else if (feedback_kind_i == `RV32IM_PRED_JALR) begin
-                if (feedback_taken_i) begin
-                    btb_valid[feedback_btb_index] <= 1'b1;
-                    btb_tag[feedback_btb_index] <= feedback_pc_i[31:6];
-                    btb_target[feedback_btb_index] <= {feedback_target_i[31:1], 1'b0};
-                    btb_kind[feedback_btb_index] <= `RV32IM_PRED_JALR;
-                end
             end
+            if (feedback_btb_write) begin
+                btb_valid[feedback_btb_index] <= 1'b1;
+            end
+        end
+    end
+
+    // Only valid bits need reset: every payload read is gated by a valid,
+    // matching tag and kind. A warm reset invalidates retained payload too.
+    // Branch/JALR allocations are exclusive and share one payload write port.
+    always @(posedge clk_i) begin
+        if (!reset_i && feedback_btb_write) begin
+            btb_tag[feedback_btb_index] <= feedback_pc_i[31:8];
+            btb_target[feedback_btb_index] <= feedback_btb_target;
+            btb_kind[feedback_btb_index] <= feedback_kind_i;
         end
     end
 endmodule

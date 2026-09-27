@@ -13,6 +13,8 @@ module rv32_lsq_tb #(
     reg [ROB_TAG_WIDTH-1:0] recovery_tag;
     reg [4:0] recovery_head;
     reg [15:0] recovery_occupancy;
+    reg [BE_WIDTH-1:0] retire_valid;
+    reg [BE_WIDTH*ROB_TAG_WIDTH-1:0] retire_rob_tag;
     reg [BE_WIDTH-1:0] alloc_valid, alloc_load, alloc_store, alloc_addr_valid, alloc_data_valid, alloc_unsigned;
     reg [BE_WIDTH*ROB_TAG_WIDTH-1:0] alloc_rob;
     reg [BE_WIDTH*2-1:0] alloc_size;
@@ -48,13 +50,18 @@ module rv32_lsq_tb #(
     wire [TAG_WIDTH-1:0] alloc_tag0;
     wire [CW-1:0] occupancy;
     integer bad;
+    integer recovery_request_kind;
     reg [15:0] st_tag, st_tag2, st_tag3, st_tag4, st_tag5, st_tag6, unknown_tag;
     reg [TAG_WIDTH-1:0] last_alloc_tag;
+    reg seen_load_valid;
+    reg [ROB_TAG_WIDTH-1:0] seen_load_rob;
+    reg [31:0] seen_load_value;
 
     assign alloc_tag0 = alloc_tag[0 +: TAG_WIDTH];
     rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(ENTRIES), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(ROB_TAG_WIDTH)) dut (
         .clk_i(clk), .reset_i(reset), .flush_i(flush), .recovery_valid_i(recovery_valid),
         .recovery_tag_i(recovery_tag), .recovery_head_i(recovery_head), .recovery_occupancy_i(recovery_occupancy),
+        .retire_valid_i(retire_valid), .retire_rob_tag_i(retire_rob_tag),
         .alloc_valid_i(alloc_valid), .alloc_ready_o(alloc_ready),
         .alloc_fire_o(alloc_fire), .alloc_count_o(alloc_count), .alloc_lsq_tag_o(alloc_tag), .alloc_is_load_i(alloc_load),
         .alloc_is_store_i(alloc_store), .alloc_rob_tag_i(alloc_rob), .alloc_size_i(alloc_size), .alloc_unsigned_i(alloc_unsigned),
@@ -79,6 +86,34 @@ module rv32_lsq_tb #(
 
     initial begin clk = 0; forever #5 clk = ~clk; end
 
+    // Loads may complete past an older committed store before that store's
+    // cache acknowledgement.  Remember consumed pulses so the directed
+    // checks accept both the old head-only timing and the out-of-order
+    // completion timing while still checking the exact ROB tag and value.
+    always @(posedge clk) begin
+        if (reset) begin
+            seen_load_valid <= 1'b0;
+            seen_load_rob <= {ROB_TAG_WIDTH{1'b0}};
+            seen_load_value <= 32'd0;
+        end else if (load_valid && load_ready) begin
+            seen_load_valid <= 1'b1;
+            seen_load_rob <= load_rob;
+            seen_load_value <= load_value;
+        end
+    end
+
+    function observed_load;
+        input [ROB_TAG_WIDTH-1:0] expected_rob;
+        input [31:0] expected_value;
+        begin
+            observed_load = (load_valid && (load_rob == expected_rob) &&
+                             (load_value == expected_value)) ||
+                            (seen_load_valid &&
+                             (seen_load_rob == expected_rob) &&
+                             (seen_load_value == expected_value));
+        end
+    endfunction
+
     task clear_inputs;
         begin
             alloc_valid = 0; alloc_load = 0; alloc_store = 0; alloc_addr_valid = 0; alloc_data_valid = 0; alloc_unsigned = 0;
@@ -88,6 +123,7 @@ module rv32_lsq_tb #(
             dreq_ready = 1; dresp_valid = 0; dresp_line_valid = 1; dresp_error = 0; dresp_tag = 0; dresp_addr = 0;
             dresp_word = 0; dresp_line = 0; dack_valid = 0; dack_error = 0; dack_tag = 0; load_ready = 1; store_ack_ready = 1;
             recovery_valid = 0; recovery_tag = 0; recovery_head = 0; recovery_occupancy = 0;
+            retire_valid = 0; retire_rob_tag = 0;
         end
     endtask
 
@@ -134,7 +170,7 @@ module rv32_lsq_tb #(
             alloc_one(1, 0, 16'h0202, 32'h00000100, 0, 1, 0, 0);
             if (dreq_valid) bad = bad + 1;
             commit_store(16'h0101, st_tag);
-            if (!load_valid || load_value != 32'h00000080) bad = bad + 1;
+            if (!observed_load(16'h0202, 32'h00000080)) bad = bad + 1;
         end
         // Signed load must sign extend the forwarded byte.
         alloc_one(0, 1, 16'h0303, 32'h00000110, 0, 0, 32'h00000080, 4'h1);
@@ -142,7 +178,7 @@ module rv32_lsq_tb #(
             st_tag2 = last_alloc_tag;
             alloc_one(1, 0, 16'h0404, 32'h00000110, 0, 0, 0, 0);
             commit_store(16'h0303, st_tag2);
-            if (!load_valid || load_value != 32'hffffff80) bad = bad + 1;
+            if (!observed_load(16'h0404, 32'hffffff80)) bad = bad + 1;
         end
         // Partial forwarding leaves a cache request for the uncovered bytes.
         alloc_one(0, 1, 16'h0505, 32'h00000201, 0, 0, 32'h000000aa, 4'h1);
@@ -153,7 +189,7 @@ module rv32_lsq_tb #(
             dresp_tag = dreq_lsq; dresp_line = 128'h00000000000000000000000011223344; dresp_line_valid = 1;
             @(posedge clk); #1; dresp_valid = 1; @(posedge clk); #1; dresp_valid = 0;
             commit_store(16'h0505, st_tag3);
-            if (!load_valid || load_value != 32'h1122aa44) bad = bad + 1;
+            if (!observed_load(16'h0606, 32'h1122aa44)) bad = bad + 1;
         end
         // Multiple older stores merge by byte and the youngest overlapping
         // store wins.  Only the two uncovered bytes are requested from cache.
@@ -174,7 +210,7 @@ module rv32_lsq_tb #(
         commit_store(16'h0610, st_tag4);
         commit_store(16'h0611, st_tag5);
         commit_store(16'h0612, st_tag6);
-        if (!load_valid || load_value != 32'h443322aa) bad = bad + 1;
+        if (!observed_load(16'h0613, 32'h443322aa)) bad = bad + 1;
 
         // Halfword forwarding keeps access-relative data and sign extension.
         alloc_one(0, 1, 16'h0620, 32'h00000222, 1, 0,
@@ -183,7 +219,7 @@ module rv32_lsq_tb #(
         alloc_one(1, 0, 16'h0621, 32'h00000222, 1, 0, 0, 0);
         if (dreq_valid) bad = bad + 1;
         commit_store(16'h0620, st_tag4);
-        if (!load_valid || load_value != 32'hffff80ff) bad = bad + 1;
+        if (!observed_load(16'h0621, 32'hffff80ff)) bad = bad + 1;
 
         // An unknown older store blocks a younger load until its address is known.
         alloc_valid[0] = 1; alloc_store[0] = 1; alloc_data_valid[0] = 1; alloc_addr_valid[0] = 0; alloc_rob[15:0] = 16'h0707;
@@ -195,7 +231,7 @@ module rv32_lsq_tb #(
             @(posedge clk); #1; clear_inputs();
             if (dreq_valid) bad = bad + 1;
             commit_store(16'h0707, unknown_tag);
-            if (!load_valid || load_value != 32'h00000055) bad = bad + 1;
+            if (!observed_load(16'h0808, 32'h00000055)) bad = bad + 1;
             flush = 1; @(posedge clk); #1; flush = 0; clear_inputs();
             if (occupancy != 0) bad = bad + 1;
         end
@@ -240,6 +276,60 @@ module rv32_lsq_tb #(
         if (!load_valid || load_value != 32'h89abcdef || occupancy != 1) bad = bad + 1;
         @(posedge clk); #1; clear_inputs();
         if (occupancy != 0) bad = bad + 1;
+        // A retired load can remain behind an unacknowledged committed store.
+        // After ROB wrap, slot-only age makes it appear younger than a new
+        // branch. Keep the retired prefix; kill reported-but-unretired loads
+        // only when they are actually younger than that branch.
+        reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0; #1;
+        alloc_one(0, 1, 16'h0101, 32'h00000700, 2, 0, 32'hdeadbeef, 4'hf);
+        commit_rob = 16'h0101; commit_valid = 1;
+        @(posedge clk); #1; commit_valid = 0;
+        @(posedge clk); #1;
+        alloc_one(1, 0, 16'h0109, 32'h00000700, 2, 0, 0, 0);
+        alloc_one(1, 0, 16'h0119, 32'h00000700, 2, 0, 0, 0);
+        alloc_one(1, 0, 16'h0129, 32'h00000700, 2, 0, 0, 0);
+        repeat (5) begin @(posedge clk); #1; end
+        if (occupancy != 4 || !dut.load_reported_mem[1] || !dut.load_reported_mem[3]) bad = bad + 1;
+        retire_valid[0] = 1; retire_rob_tag[0 +: ROB_TAG_WIDTH] = 16'h0209;
+        @(posedge clk); #1; clear_inputs();
+        if (dut.retired_mem[1]) begin
+            $display("FAIL: retirement accepted a different ROB generation");
+            bad = bad + 1;
+        end
+        retire_valid[0] = 1; retire_rob_tag[0 +: ROB_TAG_WIDTH] = 16'h0109;
+        @(posedge clk); #1; clear_inputs();
+        recovery_valid = 1; recovery_tag = 16'h0121; recovery_head = 2; recovery_occupancy = 32;
+        @(posedge clk); #1; clear_inputs();
+        if (occupancy != 3 || dut.head_reg != 0 || dut.tail_reg != 3 ||
+            !dut.valid_mem[0] || !dut.valid_mem[1] || !dut.valid_mem[2] || dut.valid_mem[3]) begin
+            $display("FAIL: retired-load recovery prefix corrupted count=%0d head=%0d tail=%0d", occupancy, dut.head_reg, dut.tail_reg);
+            bad = bad + 1;
+        end
+        // The recovery branch cannot record a fresh request handshake.
+        // Hold an older load / committed store until recovery ends, then
+        // issue exactly once. A request pipeline must not capture duplicates.
+        for (recovery_request_kind = 0; recovery_request_kind < 2;
+             recovery_request_kind = recovery_request_kind + 1) begin
+            reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0;
+            alloc_one(recovery_request_kind == 0, recovery_request_kind == 1,
+                      16'h0001, 32'h00000800, 2, 0, 32'h12345678, 4'hf);
+            dreq_ready = 0;
+            if (recovery_request_kind == 1) begin
+                commit_rob = 16'h0001; commit_valid = 1;
+                @(posedge clk); #1; commit_valid = 0;
+            end
+            recovery_valid = 1; recovery_tag = 16'h0011;
+            recovery_head = 0; recovery_occupancy = 3; dreq_ready = 1;
+            #1;
+            if (dreq_valid) begin
+                $display("FAIL: fresh request on recovery kind=%0d", recovery_request_kind);
+                bad = bad + 1;
+            end
+            @(posedge clk); #1; recovery_valid = 0; #1;
+            if (!dreq_valid || dreq_addr != 32'h00000800) bad = bad + 1;
+            @(posedge clk); #1;
+            if (dreq_valid || !dut.request_sent_mem[0] || !dut.response_wait_mem[0]) bad = bad + 1;
+        end
         if (bad != 0) begin $display("FAIL: B-08 LSQ BE_WIDTH=%0d checks=%0d", BE_WIDTH, bad); $finish(1); end
         $display("PASS: B-08 LSQ BE_WIDTH=%0d", BE_WIDTH); $finish(0);
     end

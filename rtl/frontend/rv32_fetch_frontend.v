@@ -94,8 +94,14 @@ module rv32_fetch_frontend #(
 
     assign current_epoch_o = epoch_reg;
     assign frozen_o = frozen_reg;
-    assign if_req_valid_o = !reset_i && !frozen_reg && !stop_i && !error_i && !req_pending_reg;
-    assign if_req_pc_o = pc_reg;
+    // A consumed response determines the next predicted PC combinationally.
+    // Reuse that same edge to launch the next cache lookup, eliminating the
+    // otherwise mandatory idle cycle between warm line requests.
+    wire response_can_chain = if_resp_valid_i && if_resp_ready_o &&
+                              !freeze_after_response && !stop_i && !error_i;
+    assign if_req_valid_o = !reset_i && !frozen_reg && !stop_i && !error_i &&
+                            (!req_pending_reg || response_can_chain);
+    assign if_req_pc_o = response_can_chain ? next_pc_comb : pc_reg;
     assign if_req_epoch_o = epoch_reg;
     assign if_resp_ready_o = !reset_i && !redirect_valid_i && response_live && queue_space;
 
@@ -199,16 +205,20 @@ module rv32_fetch_frontend #(
                 tail_reg <= {PTR_WIDTH{1'b0}};
                 count_reg <= 0;
             end else begin
-                if (req_fire)
-                    req_pending_reg <= 1'b1;
                 if (resp_fire) begin
-                    req_pending_reg <= 1'b0;
                     pc_reg <= next_pc_comb;
                     if (freeze_after_response || stop_i || error_i)
                         frozen_reg <= 1'b1;
                 end
                 if (stop_i || error_i)
                     frozen_reg <= 1'b1;
+
+                case ({req_fire, resp_fire})
+                    2'b10: req_pending_reg <= 1'b1;
+                    2'b01: req_pending_reg <= 1'b0;
+                    2'b11: req_pending_reg <= 1'b1;
+                    default: req_pending_reg <= req_pending_reg;
+                endcase
 
                 if (resp_fire) begin
                     for (i = 0; i < FE_WIDTH; i = i + 1) begin

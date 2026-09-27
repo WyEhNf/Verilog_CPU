@@ -1,14 +1,19 @@
 rtl/rv32im_decoder.v
 rtl/predictor/rv32_branch_predictor.v
+rtl/predictor/rv32_banked_predictor.v
 rtl/cache/rv32_icache.v
+rtl/cache/rv32_icache_nonblocking.v
 rtl/cache/rv32_dcache.v
+rtl/cache/rv32_dcache_nonblocking.v
 rtl/cache/rv32_cache_stats.v
 rtl/memory/rv32_memory_bridge.v
+rtl/memory/rv32_uncached_memory.v
 rtl/frontend/rv32_fetch_frontend.v
 rtl/rv32i_alu.v
 rtl/rv32m_multiplier.v
 rtl/rv32m_multiplier_radix4.v
 rtl/rv32m_divider.v
+rtl/rv32m_mdu_iterative.v
 rtl/rv32_physical_register_file.v
 rtl/rv32_rename_unit.v
 rtl/backend/rv32_rob.v
@@ -17,6 +22,7 @@ rtl/backend/rv32m_mdu_reservation_station.v
 rtl/backend/rv32_completion_network.v
 rtl/backend/rv32_lsq.v
 rtl/backend/rv32_backend_joint.v
+rtl/backend/rv32_serial_backend.v
 rtl/common/rv32im_tag_compare.v
 rtl/common/rv32im_fifo.v
 rtl/common/rv32im_skid_buffer.v

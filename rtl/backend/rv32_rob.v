@@ -11,7 +11,11 @@ module rv32_rob #(
     parameter integer SLOT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES),
     parameter integer GENERATION_WIDTH = `RV32IM_ROB_GENERATION_WIDTH,
     parameter integer TAG_WIDTH = 1 + 2 + SLOT_WIDTH + GENERATION_WIDTH,
-    parameter integer CHECKPOINT_WIDTH = 1024
+    parameter integer CHECKPOINT_WIDTH = 1024,
+    parameter integer CHECKPOINT_IMPL = 0,
+    // 1 retires a store after admission into the committed LSQ/store buffer;
+    // 0 preserves the precise legacy behavior of waiting for cache ack.
+    parameter integer STORE_BUFFERED_RETIRE = 1
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -83,12 +87,16 @@ module rv32_rob #(
 
     output reg                          halted_o,
     output reg                          error_o,
-    output reg  [7:0]                   return_value_o,
+    output reg  [31:0]                  return_value_o,
     output wire [SLOT_WIDTH-1:0]        head_o,
     output wire [SLOT_WIDTH-1:0]        tail_o,
     output wire [((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1))-1:0] occupancy_o,
     output wire [ROB_ENTRIES-1:0]       entry_valid_o,
-    output wire [(ROB_ENTRIES*GENERATION_WIDTH)-1:0] entry_generation_o
+    output wire [(ROB_ENTRIES*GENERATION_WIDTH)-1:0] entry_generation_o,
+    output wire [(ROB_ENTRIES*PHYS_ADDR_WIDTH)-1:0] entry_new_phys_o,
+    output wire [ROB_ENTRIES-1:0] entry_rd_we_o,
+    output wire [(ROB_ENTRIES*5)-1:0] entry_rd_o,
+    output wire [(ROB_ENTRIES*PHYS_ADDR_WIDTH)-1:0] entry_old_phys_o
 );
     localparam integer COUNT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1);
     localparam integer ALLOC_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
@@ -142,8 +150,6 @@ module rv32_rob #(
     integer commit_slot;
     integer younger_age;
     integer recovery_slot;
-    integer reclaim_slot;
-    integer reclaim_age;
     reg recovery_found;
     reg prefix_open;
     reg commit_break;
@@ -211,6 +217,46 @@ module rv32_rob #(
             assign entry_valid_o[entry_index] = valid_mem[entry_index];
             assign entry_generation_o[(entry_index*GENERATION_WIDTH) +: GENERATION_WIDTH] =
                 generation_mem[entry_index];
+            assign entry_new_phys_o[(entry_index*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] =
+                new_phys_mem[entry_index];
+            assign entry_rd_we_o[entry_index] = rd_we_mem[entry_index];
+            assign entry_rd_o[(entry_index*5) +: 5] = rd_mem[entry_index];
+            assign entry_old_phys_o[(entry_index*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] =
+                old_phys_mem[entry_index];
+        end
+    endgenerate
+
+    // Decode killed destinations in parallel. Counting distinct bits after
+    // the OR reduction preserves duplicate-destination handling without a
+    // serial bitmap lookup/update and increment chain across ROB_ENTRIES.
+    localparam integer RECLAIM_COUNT_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1);
+    localparam integer RECLAIM_LEAVES = 2 ** ((PHYS_REGS <= 1) ? 0 : $clog2(PHYS_REGS));
+    wire [ROB_ENTRIES-1:0] reclaim_eligible;
+    wire [PHYS_REGS-1:0] reclaim_bitmap;
+    wire [RECLAIM_COUNT_WIDTH-1:0] reclaim_count_tree [1:2*RECLAIM_LEAVES-1];
+    genvar reclaim_entry, reclaim_phys, reclaim_match, reclaim_node;
+    generate
+        for (reclaim_entry = 0; reclaim_entry < ROB_ENTRIES; reclaim_entry = reclaim_entry + 1) begin : g_reclaim_age
+            wire [SLOT_WIDTH-1:0] relative_age = reclaim_entry - head_reg;
+            assign reclaim_eligible[reclaim_entry] = recovery_found && valid_mem[reclaim_entry] &&
+                rd_we_mem[reclaim_entry] && (relative_age > chosen_age) && (relative_age < occupancy_reg);
+        end
+        for (reclaim_phys = 0; reclaim_phys < RECLAIM_LEAVES; reclaim_phys = reclaim_phys + 1) begin : g_reclaim_phys
+            if (reclaim_phys > 0 && reclaim_phys < PHYS_REGS) begin : g_register
+                wire [ROB_ENTRIES-1:0] destination_matches;
+                for (reclaim_match = 0; reclaim_match < ROB_ENTRIES; reclaim_match = reclaim_match + 1) begin : g_match
+                    assign destination_matches[reclaim_match] = reclaim_eligible[reclaim_match] &&
+                        (new_phys_mem[reclaim_match] == reclaim_phys);
+                end
+                assign reclaim_bitmap[reclaim_phys] = |destination_matches;
+                assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys] = |destination_matches;
+            end else begin : g_zero
+                if (reclaim_phys == 0) assign reclaim_bitmap[0] = 1'b0;
+                assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys] = 0;
+            end
+        end
+        for (reclaim_node = 1; reclaim_node < RECLAIM_LEAVES; reclaim_node = reclaim_node + 1) begin : g_reclaim_sum
+            assign reclaim_count_tree[reclaim_node] = reclaim_count_tree[2*reclaim_node] + reclaim_count_tree[2*reclaim_node+1];
         end
     endgenerate
 
@@ -275,26 +321,15 @@ module rv32_rob #(
         recovery_rd_we_o = 1'b0;
         recovery_rd_o = 5'b0;
         recovery_new_phys_o = {PHYS_ADDR_WIDTH{1'b0}};
-        recovery_reclaim_bitmap_o = {PHYS_REGS{1'b0}};
-        recovery_reclaim_count_o = 0;
+        recovery_reclaim_bitmap_o = reclaim_bitmap;
+        recovery_reclaim_count_o = reclaim_count_tree[1];
         if (recovery_found) begin
             redirect_pc_o = recovery_pc_i[0 +: 32];
-            checkpoint_restore_o = checkpoint_mem[chosen_slot];
+            if (CHECKPOINT_IMPL == 0)
+                checkpoint_restore_o = checkpoint_mem[chosen_slot];
             recovery_rd_we_o = rd_we_mem[chosen_slot];
             recovery_rd_o = rd_mem[chosen_slot];
             recovery_new_phys_o = new_phys_mem[chosen_slot];
-            for (reclaim_slot = 0; reclaim_slot < ROB_ENTRIES; reclaim_slot = reclaim_slot + 1) begin
-                reclaim_age = reclaim_slot - head_reg;
-                if (reclaim_age < 0) reclaim_age = reclaim_age + ROB_ENTRIES;
-                if (valid_mem[reclaim_slot] && (reclaim_age > chosen_age) &&
-                    (reclaim_age < occupancy_reg) && rd_we_mem[reclaim_slot] &&
-                    (new_phys_mem[reclaim_slot] != 0) &&
-                    (new_phys_mem[reclaim_slot] < PHYS_REGS) &&
-                    !recovery_reclaim_bitmap_o[new_phys_mem[reclaim_slot]]) begin
-                    recovery_reclaim_bitmap_o[new_phys_mem[reclaim_slot]] = 1'b1;
-                    recovery_reclaim_count_o = recovery_reclaim_count_o + 1'b1;
-                end
-            end
         end
 
         commit_valid_o = {BE_WIDTH{1'b0}};
@@ -339,17 +374,31 @@ module rv32_rob #(
                         commit_tag_o[(commit_lane*TAG_WIDTH) +: TAG_WIDTH] = make_tag(commit_slot, generation_mem[commit_slot]);
                         commit_old_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = old_phys_mem[commit_slot];
                         commit_new_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = new_phys_mem[commit_slot];
-                        // Stores must become the actual ROB head before the
-                        // cache side effect is issued/acknowledged. If a store
-                        // appears behind another commit in this bundle, stop
-                        // here and retry it as lane zero next cycle.
+                        // Stores must become the actual ROB head before they
+                        // enter the committed portion of the LSQ.  Admission
+                        // to that queue is the retirement point; the LSQ then
+                        // retains and drains the store like a store buffer.
+                        // A store behind another lane is retried as lane zero
+                        // because there is one store-admission port.
                         if (store_mem[commit_slot]) begin
-                            if (commit_lane == 0)
-                                commit_valid_o[commit_lane] = store_wait_mem[commit_slot];
+                            if (commit_lane == 0) begin
+                                if ((STORE_BUFFERED_RETIRE != 0) &&
+                                    !((store_addr_mem[commit_slot] == 32'h80000000) &&
+                                      (store_mask_mem[commit_slot] == 4'hf)))
+                                    // Admission is recorded in store_sent_mem
+                                    // on the preceding edge.  Retire from that
+                                    // registered state to avoid a ROB<->LSQ
+                                    // combinational ready/tag loop.
+                                    commit_valid_o[commit_lane] = store_sent_mem[commit_slot];
+                                else
+                                    commit_valid_o[commit_lane] = store_wait_mem[commit_slot];
+                            end
                             else
                                 commit_valid_o[commit_lane] = 1'b0;
                         end
-                        if (commit_lane == 0 && store_mem[commit_slot] && !store_wait_mem[commit_slot] && !store_sent_mem[commit_slot]) begin
+                        if (commit_lane == 0 && store_mem[commit_slot] &&
+                            !store_sent_mem[commit_slot] &&
+                            ((STORE_BUFFERED_RETIRE != 0) || !store_wait_mem[commit_slot])) begin
                             store_commit_valid_o = 1'b1;
                             store_commit_tag_o = make_tag(commit_slot, generation_mem[commit_slot]);
                             store_commit_addr_o = store_addr_mem[commit_slot];
@@ -363,7 +412,10 @@ module rv32_rob #(
                             // HALT/error are precise terminal events.  A wide
                             // commit bundle must not expose younger lanes after
                             // either reaches the architectural head.
-                            if (halt_mem[commit_slot] || error_mem[commit_slot])
+                            if (halt_mem[commit_slot] || error_mem[commit_slot] ||
+                                (store_mem[commit_slot] &&
+                                 (store_addr_mem[commit_slot] == 32'h80000000) &&
+                                 (store_mask_mem[commit_slot] == 4'hf)))
                                 commit_break = 1'b1;
                         end else commit_break = 1'b1;
                     end else begin
@@ -459,9 +511,14 @@ module rv32_rob #(
                 if (commit_valid_o[commit_lane] && commit_ready_i) begin
                     commit_slot = head_reg + commit_lane;
                     if (commit_slot >= ROB_ENTRIES) commit_slot = commit_slot - ROB_ENTRIES;
-                    if (halt_mem[commit_slot]) begin
+                    if (store_mem[commit_slot] &&
+                        (store_addr_mem[commit_slot] == 32'h80000000) &&
+                        (store_mask_mem[commit_slot] == 4'hf)) begin
                         halted_o <= 1'b1;
-                        return_value_o <= value_mem[commit_slot][7:0];
+                        return_value_o <= store_data_mem[commit_slot];
+                    end else if (halt_mem[commit_slot]) begin
+                        halted_o <= 1'b1;
+                        return_value_o <= value_mem[commit_slot];
                     end
                     if (error_mem[commit_slot]) error_o <= 1'b1;
                     valid_mem[commit_slot] <= 1'b0;
@@ -494,7 +551,8 @@ module rv32_rob #(
                     rd_we_mem[alloc_slot] <= alloc_rd_we_i[alloc_lane];
                     old_phys_mem[alloc_slot] <= alloc_old_phys_i[(alloc_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
                     new_phys_mem[alloc_slot] <= alloc_new_phys_i[(alloc_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
-                    checkpoint_mem[alloc_slot] <= alloc_checkpoint_i[(alloc_lane*CHECKPOINT_WIDTH) +: CHECKPOINT_WIDTH];
+                    if (CHECKPOINT_IMPL == 0)
+                        checkpoint_mem[alloc_slot] <= alloc_checkpoint_i[(alloc_lane*CHECKPOINT_WIDTH) +: CHECKPOINT_WIDTH];
                 end
             end
             head_reg <= advance_slot(head_reg, (commit_ready_i ? pop_count : 0));

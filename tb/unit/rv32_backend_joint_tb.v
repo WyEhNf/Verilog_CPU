@@ -2,7 +2,8 @@
 `include "rv32im_defs.vh"
 
 module rv32_backend_joint_tb #(
-    parameter integer BE_WIDTH = 1
+    parameter integer BE_WIDTH = 1,
+    parameter integer STORE_BUFFERED_RETIRE = 0
 );
     initial $display("B09_TB_START");
     initial begin
@@ -51,7 +52,7 @@ module rv32_backend_joint_tb #(
     wire [TAGW-1:0] commit_tag;
     wire redirect_valid, halted, error;
     wire [31:0] redirect_pc;
-    wire [7:0] return_value;
+    wire [31:0] return_value;
     integer bad, commit_count;
     reg redirect_seen, younger_commit_seen;
     reg [31:0] redirect_pc_seen;
@@ -62,7 +63,7 @@ module rv32_backend_joint_tb #(
     integer i;
 
     assign req_ready = 1'b1;
-    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(64), .ROB_ENTRIES(8), .RS_ENTRIES(4), .LSQ_ENTRIES(4), .TAG_WIDTH(TAGW)) dut (
+    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(64), .ROB_ENTRIES(8), .RS_ENTRIES(4), .LSQ_ENTRIES(4), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .TAG_WIDTH(TAGW)) dut (
         .clk_i(clk), .reset_i(reset), .flush_i(flush), .trace_valid_i(trace_valid), .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst), .trace_op_i(trace_op), .trace_imm_i(trace_imm), .trace_rd_i(trace_rd), .trace_rs1_i(trace_rs1), .trace_rs2_i(trace_rs2), .trace_rd_we_i(trace_rd_we), .trace_rs1_used_i(trace_rs1_used), .trace_rs2_used_i(trace_rs2_used), .trace_is_load_i(trace_load), .trace_is_store_i(trace_store), .trace_is_branch_i(trace_branch), .trace_is_halt_i(trace_halt), .trace_is_error_i(trace_error), .trace_mem_size_i(trace_size), .trace_mem_unsigned_i(trace_unsigned), .trace_store_data_i(trace_store_data), .trace_pred_taken_i(trace_pred_taken), .trace_pred_target_i(trace_pred_target), .trace_pred_kind_i(trace_pred_kind), .dcache_req_valid_o(req_valid), .dcache_req_ready_i(req_ready), .dcache_req_is_load_o(req_load), .dcache_req_is_store_o(req_store), .dcache_req_addr_o(req_addr), .dcache_req_size_o(req_size), .dcache_req_unsigned_o(req_unsigned), .dcache_req_mask_o(req_mask), .dcache_req_wdata_o(req_wdata), .dcache_req_rob_tag_o(req_rob_tag), .dcache_req_lsq_tag_o(req_lsq_tag), .dcache_resp_valid_i(resp_valid), .dcache_resp_ready_o(), .dcache_resp_lsq_tag_i(resp_lsq_tag), .dcache_resp_addr_i(resp_addr), .dcache_resp_line_data_i(resp_line), .dcache_resp_word_data_i(resp_word), .dcache_resp_line_valid_i(resp_line_valid), .dcache_resp_error_i(resp_error), .dcache_store_ack_valid_i(store_ack_valid), .dcache_store_ack_lsq_tag_i(store_ack_lsq_tag), .dcache_store_ack_error_i(store_ack_error), .commit_ready_i(commit_ready), .commit_valid_o(commit_valid), .commit_pc_o(commit_pc), .commit_inst_o(commit_inst), .commit_rd_o(commit_rd), .commit_rd_we_o(commit_rd_we), .commit_value_o(commit_value), .commit_is_store_o(commit_store), .commit_store_addr_o(commit_store_addr), .commit_store_mask_o(commit_store_mask), .commit_store_data_o(commit_store_data), .commit_tag_o(commit_tag), .redirect_valid_o(redirect_valid), .redirect_pc_o(redirect_pc), .halted_o(halted), .error_o(error), .return_value_o(return_value)
     );
     initial begin clk = 0; forever #5 clk = ~clk; end
@@ -147,11 +148,16 @@ module rv32_backend_joint_tb #(
     task release_held_load_with_mul;
         begin
             while (!held_load_valid) begin @(posedge clk); #1; end
-            while (!dut.mdu.gen_wallace_multiplier.multiplier.s2_valid) begin @(posedge clk); #1; end
+            // Hold the multiplier result for one edge while the delayed load
+            // response enters the LSQ.  This creates simultaneous producer
+            // handshakes independent of the multiplier's pipeline depth.
+            force dut.mdu_completion_ready = 1'b0;
             @(negedge clk);
             resp_valid=1'b1; resp_error=inject_load_error; resp_lsq_tag=held_load_lsq_tag;
             resp_addr=held_load_addr; resp_line_valid=1'b1; resp_line=held_load_line; resp_word=held_load_word;
             held_load_valid=1'b0;
+            @(posedge clk); #1;
+            release dut.mdu_completion_ready;
         end
     endtask
 
@@ -249,11 +255,17 @@ module rv32_backend_joint_tb #(
         send_inst(32'h28, `RV32IM_OP_BEQ, 8, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0);
         send_inst(32'h2c, `RV32IM_OP_ADDI, 99, 9, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0);
         expect_commit(32'h28, 0, 0);
-        if (!redirect_seen || redirect_pc_seen !== 32'h30 || younger_commit_seen) bad=bad+1;
+        if (!redirect_seen || redirect_pc_seen !== 32'h30 || younger_commit_seen) begin
+            $display("BRANCH_RECOVERY_FAIL seen=%b pc=%h younger=%b", redirect_seen, redirect_pc_seen, younger_commit_seen);
+            bad=bad+1;
+        end
         // HALT is precise at the ROB head and captures the computed value.
         send_inst(32'h30, `RV32IM_OP_ADD, 0, 0, 4, 0, 0, 1, 0, 0, 0, 0, 1, 0);
         expect_commit(32'h30, 10, 0);
-        if (!halted || error || return_value != 8'd10) bad=bad+1;
+        if (!halted || error || return_value != 8'd10) begin
+            $display("HALT_FAIL halted=%b error=%b return=%0d", halted, error, return_value);
+            bad=bad+1;
+        end
 
         // Load response errors survive the completion network and become
         // architecturally visible only when the load reaches the ROB head.
@@ -261,10 +273,10 @@ module rv32_backend_joint_tb #(
         commit_ready=0; inject_load_error=1;
         send_mem(32'h50, `RV32IM_OP_LW, 32'h60, 10, 1, 0, `RV32IM_MEM_WORD, 0, 0);
         expect_commit(32'h50, 0, 1);
-        if (error) bad=bad+1;
+        if (error) begin $display("LOAD_ERROR_EARLY_FAIL"); bad=bad+1; end
         commit_ready=1;
         expect_commit(32'h50, 0, 1);
-        if (!error) bad=bad+1;
+        if (!error) begin $display("LOAD_ERROR_MISSING_FAIL"); bad=bad+1; end
 
         // Store acknowledgement errors follow the separate visibility
         // handshake and become precise when the store retires.
@@ -272,12 +284,12 @@ module rv32_backend_joint_tb #(
         commit_ready=0; inject_store_error=1;
         send_mem(32'h54, `RV32IM_OP_SW, 32'h64, 0, 0, 1, `RV32IM_MEM_WORD, 0, 128'h55);
         expect_commit(32'h54, 0, 0);
-        if (error) bad=bad+1;
+        if (error) begin $display("STORE_ERROR_EARLY_FAIL"); bad=bad+1; end
         commit_ready=1;
         expect_commit(32'h54, 0, 0);
-        if (!error) bad=bad+1;
+        if (!error) begin $display("STORE_ERROR_MISSING_FAIL"); bad=bad+1; end
 
-        // Force a three-stage MUL result and an LSQ load result into the
+        // Force a MUL result and an LSQ load result into the
         // completion network on the same cycle. Both must be accepted and
         // retain their ROB order through the single-lane CDB.
         reset=1; inject_store_error=0; defer_load_response=0; held_load_valid=0; completion_collision_seen=0; clear_trace(); @(posedge clk); #1; reset=0; #1;
@@ -293,7 +305,7 @@ module rv32_backend_joint_tb #(
         defer_load_response=0;
         expect_commit(32'h68, 32'h34, 1);
         expect_commit(32'h6c, 42, 1);
-        if (!completion_collision_seen) bad=bad+1;
+        if (!completion_collision_seen) begin $display("COMPLETION_COLLISION_FAIL"); bad=bad+1; end
 
         // Recover a non-head JALR that writes a destination.  The restored
         // RAT must keep the branch's new mapping, and the free list must not
@@ -314,7 +326,10 @@ module rv32_backend_joint_tb #(
         redirect_seen=0;
         i=0;
         while (!redirect_seen && i<100) begin @(posedge clk); #1; i=i+1; end
-        if (!redirect_seen || redirect_pc_seen !== 32'h88) bad=bad+1;
+        if (!redirect_seen || redirect_pc_seen !== 32'h88) begin
+            $display("JALR_RECOVERY_FAIL seen=%b pc=%h", redirect_seen, redirect_pc_seen);
+            bad=bad+1;
+        end
         if (dut.rename.rat[23] !== recovery_branch_phys) begin
             $display("RECOVERY_BRANCH_MAP_FAIL rat=%0d expected=%0d", dut.rename.rat[23], recovery_branch_phys);
             bad=bad+1;

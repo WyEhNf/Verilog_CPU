@@ -72,8 +72,11 @@ module rv32_reservation_station_tb #(
         end
         // Generation-qualified wakeup: an unrelated/stale tag must not wake.
         clear_inputs(); alloc_entry(0, 16'h0301, 20, 0, 1); src1_tag[0 +: TAGW] = 16'h0401; @(posedge clk); #1; clear_inputs(); wake_valid[0] = 1; wake_tag[0 +: TAGW] = 16'h0501; wake_value[31:0] = 66; @(posedge clk); #1; clear_inputs(); if (issue_valid != 0) begin $display("ERROR: stale issue=%b occ=%0d", issue_valid, occupancy); bad = bad + 1; end
-        // Exact matching wakeup issues the entry, then flush removes a younger entry.
-        wake_valid[0] = 1; wake_tag[0 +: TAGW] = 16'h0401; wake_value[31:0] = 77; @(posedge clk); #1; clear_inputs(); if (!issue_valid[0]) begin $display("ERROR: exact issue=%b occ=%0d", issue_valid, occupancy); bad = bad + 1; end @(posedge clk); #1;
+        // An exact matching wakeup is available to issue in the same cycle;
+        // the accepting edge consumes it instead of adding an idle cycle.
+        wake_valid[0] = 1; wake_tag[0 +: TAGW] = 16'h0401; wake_value[31:0] = 77; #1;
+        if (!issue_valid[0] || issue_src1[31:0] != 77) begin $display("ERROR: exact bypass issue=%b value=%0d occ=%0d", issue_valid, issue_src1[31:0], occupancy); bad = bad + 1; end
+        @(posedge clk); #1; clear_inputs();
         reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0;
         clear_inputs(); alloc_entry(0, 16'h0601, 30, 1, 1); @(posedge clk); #1; clear_inputs(); flush_valid = 1; flush_mask = {ENTRIES{1'b1}}; @(posedge clk); #1; clear_inputs(); if (occupancy != 0) bad = bad + 1;
 

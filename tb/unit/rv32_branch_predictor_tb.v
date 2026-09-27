@@ -14,6 +14,7 @@ module rv32_branch_predictor_tb;
     reg [31:0] feedback_pc, feedback_target, feedback_pred_target;
     reg [1:0] feedback_kind;
     wire [31:0] prediction_count, correct_count;
+    integer slot;
 
     rv32_branch_predictor dut (
         .clk_i(clk), .reset_i(reset), .query_valid_i(query_valid),
@@ -99,11 +100,12 @@ module rv32_branch_predictor_tb;
         query(32'h100, 32'h00208463);
         if (pred_counter != 2'b00) begin $display("FAIL: strongly-not-taken saturation"); $finish(1); end
 
-        // BHT aliases at +0x100, while BTB aliases at +0x40 and must reject old tags.
+        // The enlarged BHT aliases at +0x400, while the 64-entry BTB aliases
+        // at +0x100 and must reject old tags.
         train(32'h204, `RV32IM_PRED_BRANCH, 1'b1, 32'h280, 1'b0, 32'h208);
-        query(32'h304, 32'h00208463);
+        query(32'h604, 32'h00208463);
         if (pred_counter != 2'b11 || pred_btb_hit) begin $display("FAIL: BHT/BTB alias behavior counter=%b hit=%b", pred_counter, pred_btb_hit); $finish(1); end
-        train(32'h244, `RV32IM_PRED_BRANCH, 1'b1, 32'h2c0, 1'b0, 32'h248);
+        train(32'h304, `RV32IM_PRED_BRANCH, 1'b1, 32'h380, 1'b0, 32'h308);
         query(32'h204, 32'h00208463);
         if (pred_btb_hit) begin $display("FAIL: direct-mapped BTB tag replacement"); $finish(1); end
 
@@ -124,6 +126,59 @@ module rv32_branch_predictor_tb;
         if (prediction_count != 8 || correct_count != 2) begin
             $display("FAIL: prediction statistics count=%0d correct=%0d", prediction_count, correct_count);
             $finish(1);
+        end
+
+        // Warm reset must invalidate every retained payload, suppress feedback
+        // on the reset edge, and restore the BHT and statistics.
+        @(negedge clk);
+        reset = 1'b1;
+        feedback_valid = 1'b1;
+        feedback_taken = 1'b1;
+        feedback_kind = `RV32IM_PRED_JALR;
+        feedback_pc = 32'h500;
+        feedback_target = 32'hdeadbeef;
+        @(negedge clk);
+        reset = 1'b0;
+        feedback_valid = 1'b0;
+        if (prediction_count !== 0 || correct_count !== 0) begin
+            $display("FAIL: warm-reset statistics"); $finish(1);
+        end
+        for (slot = 0; slot < 64; slot = slot + 1) begin
+            query(32'h500 + slot * 4, 32'h000080e7);
+            if (pred_btb_hit !== 1'b0 || pred_taken !== 1'b0 ||
+                pred_target !== query_pc + 4 || pred_counter !== 2'b10) begin
+                $display("FAIL: warm-reset invalid entry slot=%0d", slot); $finish(1);
+            end
+        end
+
+        // Four-state simulation: uninitialized SRAM payload is deliberately
+        // unknown. It must not leak through valid=0 for branches or JALR.
+        for (slot = 0; slot < 64; slot = slot + 1) begin
+            dut.btb_tag[slot] = 24'bx;
+            dut.btb_target[slot] = 32'bx;
+            dut.btb_kind[slot] = 2'bx;
+        end
+        for (slot = 0; slot < 64; slot = slot + 1) begin
+            query(32'h500 + slot * 4, 32'h00208463);
+            if (pred_btb_hit !== 1'b0 || pred_taken !== 1'b0 ||
+                pred_target !== query_pc + 4) begin
+                $display("FAIL: poisoned forward branch slot=%0d", slot); $finish(1);
+            end
+            query(32'h500 + slot * 4, 32'h000080e7);
+            if (pred_btb_hit !== 1'b0 || pred_taken !== 1'b0 ||
+                pred_target !== query_pc + 4) begin
+                $display("FAIL: poisoned JALR slot=%0d", slot); $finish(1);
+            end
+            query(32'h500 + slot * 4, 32'hfe208ee3); // BEQ -4, cold backward branch
+            if (pred_btb_hit !== 1'b0 || pred_taken !== 1'b1 ||
+                pred_target !== query_pc - 4) begin
+                $display("FAIL: poisoned backward branch slot=%0d", slot); $finish(1);
+            end
+        end
+        train(32'h500, `RV32IM_PRED_JALR, 1'b1, 32'h601, 1'b0, 32'h504);
+        query(32'h500, 32'h000080e7);
+        if (pred_taken !== 1'b1 || pred_btb_hit !== 1'b1 || pred_target !== 32'h600) begin
+            $display("FAIL: allocate after poisoned warm reset"); $finish(1);
         end
         $display("PASS: A-02 bimodal predictor and BTB");
         $finish(0);

@@ -1,7 +1,9 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-module rv32i_alu_tb;
+module rv32i_alu_tb #(
+    parameter integer SHIFT_IMPL = 0
+);
     localparam integer TAGW = `RV32IM_ROB_TAG_WIDTH_DEFAULT;
     localparam integer PAW = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT;
     localparam integer EW = `RV32IM_EPOCH_WIDTH;
@@ -28,7 +30,7 @@ module rv32i_alu_tb;
     reg [TAGW-1:0] live_tag;
     integer bad;
 
-    rv32i_alu dut (
+    rv32i_alu #(.SHIFT_IMPL(SHIFT_IMPL)) dut (
         .clk_i(clk), .reset_i(reset), .flush_i(flush), .issue_valid_i(issue_valid), .issue_ready_o(issue_ready),
         .issue_op_i(issue_op), .issue_pc_i(issue_pc), .issue_imm_i(issue_imm), .issue_src1_value_i(issue_src1),
         .issue_src2_value_i(issue_src2), .issue_store_data_i(issue_store_data), .issue_phys_rd_i(issue_phys_rd),
@@ -53,7 +55,11 @@ module rv32i_alu_tb;
         begin
             while (!issue_ready) @(posedge clk);
             issue_op = op; issue_pc = pc; issue_imm = imm; issue_src1 = s1; issue_src2 = s2; issue_valid = 1; @(posedge clk); #1; issue_valid = 0; #1;
-            if (!exec_valid || exec_value !== expected || exec_rd_we !== rdwe) bad = bad + 1;
+            while (!exec_valid) begin @(posedge clk); #1; end
+            if (!exec_valid || exec_value !== expected || exec_rd_we !== rdwe) begin
+                $display("ERROR: ALU op=%0d expected=%h got=%h valid=%b rdwe=%b", op, expected, exec_value, exec_valid, exec_rd_we);
+                bad = bad + 1;
+            end
             @(posedge clk); #1;
         end
     endtask
