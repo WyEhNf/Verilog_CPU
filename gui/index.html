@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RV32IM Microarchitecture Lab</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="noise"></div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark"><i></i><i></i><i></i></div>
+      <div>
+        <div class="eyebrow">VERILOG CPU · LIVE LAB</div>
+        <h1>RV32IM Microarchitecture</h1>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="frozen"><span>冻结</span> Pi · LH/LHU/SH</div>
+      <div id="connection" class="connection"><i></i> GUI 就绪</div>
+      <button id="stopButton" class="button ghost" disabled>停止</button>
+      <button id="runButton" class="button primary"><span>▶</span> 启动演示</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="control-panel panel">
+      <div class="panel-heading">
+        <div><span class="step">01</span><h2>配置实验</h2></div>
+        <button id="resetView" class="icon-button" title="恢复面积预设">↺</button>
+      </div>
+
+      <label class="field-label" for="profileSelect">架构预设</label>
+      <select id="profileSelect" class="select"></select>
+      <p id="profileDescription" class="field-help"></p>
+      <div id="areaBadge" class="area-badge">
+        <span>ASAP7 最终面积</span><strong>1,423.33</strong><small>µm²</small>
+      </div>
+
+      <div class="section-title"><span>测试程序</span><button id="toggleTests" class="text-button">全部测试</button></div>
+      <div id="testList" class="test-list"></div>
+
+      <div class="section-title"><span>参数矩阵</span><button id="toggleParams" class="text-button">展开</button></div>
+      <div id="parameterGrid" class="parameter-grid collapsed"></div>
+
+      <div class="section-title"><span>可视化节奏</span></div>
+      <div class="compact-fields">
+        <label>采样周期
+          <select id="traceInterval" class="select small">
+            <option value="1">每周期</option><option value="5">5 周期</option>
+            <option value="25" selected>25 周期</option><option value="100">100 周期</option>
+            <option value="500">500 周期</option>
+          </select>
+        </label>
+        <label>播放延迟
+          <select id="delayMs" class="select small">
+            <option value="0">最快</option><option value="5">5 ms</option>
+            <option value="10" selected>10 ms</option><option value="30">30 ms</option>
+            <option value="80">80 ms</option>
+          </select>
+        </label>
+      </div>
+    </aside>
+
+    <section class="main-stage">
+      <div class="hero panel">
+        <div class="panel-heading inline">
+          <div><span class="step">02</span><h2>数据通路</h2></div>
+          <div id="runStatus" class="status-pill idle"><i></i><span>等待启动</span></div>
+        </div>
+        <div id="datapath" class="datapath">
+          <div class="unit" data-unit="fetch"><span class="unit-index">F</span><strong>FETCH</strong><small id="fetchDetail">PC —</small></div>
+          <div class="wire"><i></i></div>
+          <div class="unit" data-unit="decode"><span class="unit-index">D</span><strong>DECODE</strong><small id="decodeDetail">valid —</small></div>
+          <div class="wire"><i></i></div>
+          <div class="unit featured" data-unit="backend"><span class="unit-index">B</span><strong id="backendTitle">SERIAL</strong><small id="backendDetail">stage —</small></div>
+          <div class="wire"><i></i></div>
+          <div class="unit" data-unit="execute"><span class="unit-index">X</span><strong>ALU / MDU</strong><small id="executeDetail">idle</small></div>
+          <div class="wire"><i></i></div>
+          <div class="unit" data-unit="commit"><span class="unit-index">C</span><strong>COMMIT</strong><small id="commitDetail">0 retired</small></div>
+          <div class="memory-unit" data-unit="memory"><span>↕</span><strong>MEMORY</strong><small id="memoryDetail">idle</small></div>
+        </div>
+      </div>
+
+      <div class="metrics">
+        <article class="metric panel"><span>周期</span><strong id="metricCycles">0</strong><small>cycles</small></article>
+        <article class="metric panel"><span>退休指令</span><strong id="metricInstret">0</strong><small>instret</small></article>
+        <article class="metric panel"><span>IPC</span><strong id="metricIpc">0.000</strong><small>inst / cycle</small></article>
+        <article class="metric panel"><span>当前 PC</span><strong id="metricPc">0x00000000</strong><small id="metricEpoch">epoch 0</small></article>
+        <article class="metric panel accent"><span>返回值</span><strong id="metricReturn">—</strong><small id="metricExpected">expected —</small></article>
+      </div>
+
+      <div class="detail-grid">
+        <article class="panel backend-panel">
+          <div class="panel-heading inline">
+            <div><span class="step">03</span><h2>后端状态</h2></div>
+            <span id="backendMode" class="micro-tag">SERIAL</span>
+          </div>
+          <div id="serialView" class="serial-view">
+            <div id="stageRail" class="stage-rail"></div>
+            <div class="operand-grid">
+              <div><span>指令</span><strong id="serialInst">0x00000000</strong></div>
+              <div><span>操作码</span><strong id="serialOp">—</strong></div>
+              <div><span>rs1 / 数据</span><strong id="serialRs1">— / 0x00000000</strong></div>
+              <div><span>rs2 / 数据</span><strong id="serialRs2">— / 0x00000000</strong></div>
+              <div><span>rd / 结果</span><strong id="serialRd">— / 0x00000000</strong></div>
+              <div><span>乘除单元</span><strong id="serialMdu">空闲</strong></div>
+            </div>
+          </div>
+          <div id="oooView" class="ooo-view hidden">
+            <div class="queue-grid">
+              <div class="queue"><div><span>ROB</span><b id="robText">0 / 0</b></div><progress id="robProgress" value="0" max="1"></progress><small id="robPointers">head 0 · tail 0</small></div>
+              <div class="queue"><div><span>RS</span><b id="rsText">0 / 0</b></div><progress id="rsProgress" value="0" max="1"></progress><small>reservation station</small></div>
+              <div class="queue"><div><span>LSQ</span><b id="lsqText">0 / 0</b></div><progress id="lsqProgress" value="0" max="1"></progress><small>load / store queue</small></div>
+              <div class="queue"><div><span>完成队列</span><b id="completionText">0 / 0</b></div><progress id="completionProgress" value="0" max="1"></progress><small id="freePhys">free physical —</small></div>
+            </div>
+            <div class="signal-row"><span id="dispatchSignal">DISPATCH</span><span id="issueSignal">ISSUE</span><span id="cdbSignal">CDB</span><span id="branchSignal">BRANCH</span><span id="mduSignal">MDU</span></div>
+          </div>
+        </article>
+
+        <article class="panel event-panel">
+          <div class="panel-heading inline">
+            <div><span class="step">04</span><h2>提交时间线</h2></div>
+            <span id="eventCount" class="micro-tag">0 EVENTS</span>
+          </div>
+          <div class="timeline-head"><span>周期</span><span>PC</span><span>指令</span><span>写回</span></div>
+          <div id="timeline" class="timeline"><div class="empty-state">启动测试后显示退休指令</div></div>
+        </article>
+      </div>
+
+      <div class="bottom-grid">
+        <article class="panel register-panel">
+          <div class="panel-heading inline">
+            <div><span class="step">05</span><h2>架构寄存器</h2></div>
+            <span class="micro-tag">x0—x31</span>
+          </div>
+          <div id="registers" class="registers"></div>
+        </article>
+        <article class="panel console-panel">
+          <div class="panel-heading inline">
+            <div><span class="step">06</span><h2>仿真控制台</h2></div>
+            <button id="clearLog" class="text-button">清空</button>
+          </div>
+          <pre id="console"><span class="muted">等待运行…</span></pre>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
