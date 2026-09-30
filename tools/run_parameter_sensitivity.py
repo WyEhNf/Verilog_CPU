@@ -67,6 +67,7 @@ def digest(path):
 def source_hashes():
     paths = list((ROOT / "rtl").rglob("*.v")) + list((ROOT / "rtl").rglob("*.vh"))
     paths += [ROOT / name for name in (
+        ".deps/RISC-V-CPU-2026/scripts/ram/sram_fakeram.sv",
         "rtl/filelist.f", "tb/models/rv32im_memory_model.v",
         "tb/integration/cpu_core_image_tb.v", "tools/build_join02_verilator.ps1",
         "tools/run_cpu2026.py", "tools/run_parameter_sensitivity.py")]

@@ -102,6 +102,7 @@ if ($rtlFiles.Count -eq 0) {
 }
 
 $sources = @($rtlFiles) + @(
+    ".deps/RISC-V-CPU-2026/scripts/ram/sram_fakeram.sv",
     "tb/models/rv32im_memory_model.v",
     "tb/integration/cpu_core_image_tb.v"
 )
@@ -146,6 +147,7 @@ try {
         "--timing",
         "-Wno-fatal",
         "--language", "1364-2005",
+        "+1800-2017ext+sv",
         "-Irtl",
         "--top-module", "cpu_core_image_tb",
         "--Mdir", $Mdir,
