@@ -3,7 +3,8 @@ module rv32_dcache_hash_tb #(
     parameter integer INDEX_HASH = 1,
     parameter integer CACHE_LINES = 64,
     parameter integer CACHE_WAYS = 1,
-    parameter integer PREFETCH = 1
+    parameter integer PREFETCH = 1,
+    parameter integer TAG_SRAM = 0
 );
     reg clk = 0, reset = 1;
     always #5 clk = ~clk;
@@ -32,7 +33,7 @@ module rv32_dcache_hash_tb #(
 `else
     rv32_dcache_nonblocking #(.CACHE_LINES(CACHE_LINES), .CACHE_WAYS(CACHE_WAYS),
         .INDEX_HASH(INDEX_HASH),
-        .PREFETCH(PREFETCH), .TAG_WIDTH(16)) dut (
+        .PREFETCH(PREFETCH), .TAG_WIDTH(16), .TAG_SRAM(TAG_SRAM)) dut (
 `endif
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0),
         .dcache_req_valid_i(req_valid), .dcache_req_ready_o(req_ready),
@@ -141,7 +142,7 @@ module rv32_dcache_hash_tb #(
         // store-buffer forwarded value.
         for (trial = 0; trial < 1024; trial = trial + 1)
             access_word(trial*4, 0, 0, 4'hf);
-        $display("PASS: D-cache hash=%0d lines=%0d ways=%0d prefetch=%0d", INDEX_HASH, CACHE_LINES, CACHE_WAYS, PREFETCH);
+        $display("PASS: D-cache tag_sram=%0d hash=%0d lines=%0d ways=%0d prefetch=%0d", TAG_SRAM, INDEX_HASH, CACHE_LINES, CACHE_WAYS, PREFETCH);
         $finish;
     end
 endmodule
