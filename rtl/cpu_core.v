@@ -25,6 +25,8 @@ module cpu_core #(
     parameter integer DCACHE_WAYS = 1,
     parameter integer DCACHE_INDEX_HASH = 0,
     parameter integer DCACHE_REQUEST_PIPELINE = 0,
+    parameter integer DCACHE_STORE_MERGE_DELAY = 0,
+    parameter integer DCACHE_TAG_SRAM = 0,
     parameter integer RAM_SIZE_BYTES = 268435456,
     parameter integer LEGACY_SENTINEL_HALT = 0,
     parameter integer ENABLE_PREDICTOR = 1,
@@ -454,7 +456,8 @@ module cpu_core #(
     rv32_dcache_nonblocking #(
         .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS),
         .CACHE_LINES(DCACHE_LINES), .CACHE_WAYS(DCACHE_WAYS),
-        .INDEX_HASH(DCACHE_INDEX_HASH)
+        .INDEX_HASH(DCACHE_INDEX_HASH), .STORE_MERGE_DELAY(DCACHE_STORE_MERGE_DELAY),
+        .TAG_SRAM(DCACHE_TAG_SRAM)
     ) dcache (
         // LSQ generations reject wrong-path responses while retaining older
         // loads across a redirect.  The cache itself has no ROB-age context.

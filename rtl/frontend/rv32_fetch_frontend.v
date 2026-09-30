@@ -79,7 +79,6 @@ module rv32_fetch_frontend #(
     integer b;
     integer j;
     integer k;
-    integer out_index;
     integer write_index;
     integer word_index;
     reg [31:0] next_pc_comb;
@@ -91,6 +90,34 @@ module rv32_fetch_frontend #(
     wire queue_space = (count_reg + bundle_count <= FQ_DEPTH);
     wire response_live = (if_resp_epoch_i == epoch_reg) &&
                          (if_resp_line_addr_i == {if_resp_pc_i[31:4], 4'b0000});
+
+    // Decode the queue head once, before selecting any packet bits. Four
+    // dynamic array reads otherwise map to binary mux trees whose head bits
+    // directly drive thousands of gates. Rotating the one-hot row selection
+    // implements exactly head+lane modulo FQ_DEPTH, without another cycle.
+    wire [FQ_DEPTH-1:0] head_row_select;
+    wire [FE_WIDTH*PACKET_WIDTH-1:0] queue_read_packets;
+    genvar read_row, read_lane;
+    generate
+        for (read_row = 0; read_row < FQ_DEPTH; read_row = read_row + 1) begin : g_head_decode
+            localparam [PTR_WIDTH-1:0] ROW = read_row;
+            assign head_row_select[read_row] = (head_reg == ROW);
+        end
+        for (read_lane = 0; read_lane < FE_WIDTH; read_lane = read_lane + 1) begin : g_packet_read
+            reg [PACKET_WIDTH-1:0] packet;
+            integer row;
+            always @* begin
+                packet = {PACKET_WIDTH{1'b0}};
+                for (row = 0; row < FQ_DEPTH; row = row + 1)
+                    packet = packet |
+                        ({PACKET_WIDTH{head_row_select[(row+FQ_DEPTH-read_lane)%FQ_DEPTH]}} &
+                         `RV32IM_FETCH_PACKET_PACK(fq_pc[row], fq_inst[row],
+                            fq_pred_taken[row], fq_pred_target[row], fq_pred_kind[row],
+                            fq_pred_btb_hit[row], fq_epoch[row]));
+            end
+            assign queue_read_packets[read_lane*PACKET_WIDTH +: PACKET_WIDTH] = packet;
+        end
+    endgenerate
 
     assign current_epoch_o = epoch_reg;
     assign frozen_o = frozen_reg;
@@ -149,16 +176,10 @@ module rv32_fetch_frontend #(
         fetch_packet_o = {(FE_WIDTH*PACKET_WIDTH){1'b0}};
         deq_count = 0;
         for (j = 0; j < FE_WIDTH; j = j + 1) begin
-            out_index = head_reg + j;
-            if (out_index >= FQ_DEPTH)
-                out_index = out_index - FQ_DEPTH;
             if (j < count_reg) begin
                 fetch_valid_o[j] = 1'b1;
                 fetch_packet_o[j*PACKET_WIDTH +: PACKET_WIDTH] =
-                    `RV32IM_FETCH_PACKET_PACK(fq_pc[out_index], fq_inst[out_index],
-                                               fq_pred_taken[out_index], fq_pred_target[out_index],
-                                               fq_pred_kind[out_index], fq_pred_btb_hit[out_index],
-                                               fq_epoch[out_index]);
+                    queue_read_packets[j*PACKET_WIDTH +: PACKET_WIDTH];
             end
             if ((j < count_reg) && (deq_count == j) && fetch_ready_i[j])
                 deq_count = deq_count + 1;
