@@ -1,5 +1,21 @@
 # 当前候选实现与验证状态（2026-09-26）
 
+最新源码已实施ROB提交读口并行化，未改变四发射和ROB32/PRF48/RS8/LSQ8容量；新6/5/17/边界及lint/unit/matrix通过，六项周期精确不变、IPC0.9558133327368818。新全局默认ABC和完整顺序证明正在执行，下面45,928.134894µm²/23.560269654649MHz不再冒称此ROB改动后的结果。详见 `reports/rob_parallel_read_2026-10-01.md`；三项Tier3仍未达到，pi冻结。
+
+07:01–07:03当前工作树最新四发射/ROB32/PRF48/RS8/LSQ8、TAG1/I128/D1024候选已完整默认ABC计价 **45,928.134894µm²**；独立--require-current VERIFIED、输入差异0、未计价/未展开0，37个真实SRAM宏和AXI均计入。配对该同一构建IPC **0.9558133327368818**，6/5/17/边界通过、pi冻结；同一网表完整SRAM时序 **23.560269654649MHz**、遗漏存储边界0，不沿用旧版本频率。面积仍超36,000上限9,928.134894µm²，IPC未达1.0985，频率未达300MHz，Tier3尚未完成。完整证据见 `reports/latest_total_area_2026-09-30.md` 顶部。下方其它参数和较旧阶段的“当前/待测”按历史记录保留。
+
+后续当前cache管线已启用TAG1单拍store ownership ACK与store query/data-write重叠；metadata-only脏miss须补读victim，不伪造多端口、不读X输出。PRF64/RS16正式IPC0.9636108214058166，6/5/17/边界、四态12组、随机hash32组、lint/unit/matrix通过；小幅+0.412964%不等于达标，新cache源码面积/时序另行运行，旧PPA不可沿用。详见 `reports/dcache_store_query_pipeline_2026-10-01.md`。
+
+2026-10-01最新完整PPA与源码边界以 `reports/latest_total_area_2026-09-30.md` 为准。重构前默认I64为59,445.084949µm²/0.982501248/17.228326MHz，TAG1/I128为51,314.351394µm²/0.959647822/25.615369MHz，均全部片上SRAM计入。工作树随后已实施one-hot取指读口，14组顺序等价和6/5/17/边界及lint/unit/matrix通过，六项周期精确不变，新完整综合仍在运行；不能沿用旧冻结面积/频率。详细新RTL证据见 `reports/frontend_onehot_2026-10-01.md`。下文“当前”“待测”属于之前阶段记录。
+
+2026-10-01后续当前候选：正式AXI顶层默认采用DCACHE_STORE_MERGE_DELAY=16，完整覆盖的未offer RFO行local fill，部分写仍读原行，脏victim先写回；修复ready waiter被复用MSHR覆盖，并锁定背压发送槽。冻结构建 `build/vlt/course_axi_storemerge16_fixed_20261001` 的benchmark6/6、basic5/5、simulator17/17、256MiB边界及lint/unit/matrix通过，IPC GEOMEAN=0.982501248101083。面积重新计价已启动于 `build/synth/course_axi_storemerge16_fixed_classic_20261001`，新源码完整频率未测，不沿用下文旧网表数值。pi冻结，Tier3仍未达到。
+
+2026-10-01最新版本边界：当前 I/D-cache 数据均已接入课程同步1RW SRAM。真实 AXI 顶层的全局经典 ABC 映射已完整计价为64,740.978349µm²（组合42,662.771279554、时序16,230.456000、SRAM5,847.751069），未计价与未展开均为0，但不是默认ABC成绩；同版本默认opt/标准ABC已启动。最新六项正式AXI benchmark IPC GEOMEAN=0.980736877，6/6 benchmark、5/5 basic、17/17 simulator及边界测试通过，pi仍冻结。此前D-cache SRAM/I-cache FF版本的默认全局综合已完成：62,953.004372µm²，同网表完整频率8.108054608MHz；这两个旧版数值不能沿用到当前I-cache SRAM版本。详见 `reports/latest_total_area_2026-09-30.md`。Tier3尚未达到；后文旧版状态保留为历史记录。
+
+2026-09-30最新更新：工作树已迁移非阻塞D-cache数据到课程同步1RW SRAM，并加入真实共享32-bit AXI4-Lite 顶层。冻结构建 `build/vlt/course_axi_p4_r32p64_ctx` 在官方20周期逐word内存和退出B握手口径下，六项benchmark IPC GEOMEAN=0.982319982（6/6正确）；基础/半字/M 5/5、17/17仿真、256MiB脏回写边界测试通过，pi仍冻结。完整保留核心边界的整机面积65,968.760732µm²，含AXI与16个FakeRAM宏，未计价叶实例0；全局opt重新映射仍在进行。旧本地双line端口模型的1.0986481457856145不是正式AXI IPC；下列148,169.833200µm²属于迁移前全FF参考，不代表新版面积。见 `reports/latest_total_area_2026-09-30.md` 与 `reports/dcache_sram_integration_2026-09-30.md`。Tier3尚未达到。
+
+2026-09-30更新：同一四发射RTL完整面积148,169.833200µm²，组合90,802.198800、时序57,367.634400、实际SRAM宏0，未计价叶实例0。使用课程r28原始库、完整数组展开、经典面积映射和课程汇总函数；详细证据见 `reports/latest_total_area_2026-09-30.md`。下文26,722.501020µm²为历史已计价逻辑小计，305.19MHz为历史局部频率，均不能作为当前完整成绩。Tier3未达到。
+
 这是项目报告草稿和证据索引，不是 Tier 3 已验收声明。用户已指定使用 `CPU-2026-Benchmark` 继续测评；pi 按要求冻结。SRAM 定价、存储端口合法化及完整存储路径时序尚未验收。
 
 本轮工作树已更新为分 bank 共享预测表版本。下方原单读口和BTB单写口候选作为冻结对照保留；最新版本证据见“分 bank 共享预测表候选”一节，不能将旧面积/频率直接拼到新 RTL。

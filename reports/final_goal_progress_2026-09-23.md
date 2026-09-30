@@ -1,6 +1,22 @@
 # 最终要求对齐进度（2026-09-23）
 
-本页按 `docs/final_project_requirements.md` 的最终口径记录证据。历史记录将 CPU-2026 称为代理测试；2026-09-26 用户已确认按现有 benchmark 文件夹继续评测，当前 IPC 验收采用这六项的几何平均，不再等待 `testcases/perf_*`。完整 FakeRAM 面积及存储时序尚未验证，因此仍不能宣称 Tier 3 三项同时达标。下面历史记录中的“缺少官方 perf_*”不再是当前阻塞项。
+后续ROB读口实际重构：各lane并行head+lane、共享one-hot packet读取，四发射/ROB32/PRF48/RS8/LSQ8和全部握手/恢复/终止规则保留。make b03及lint/unit/matrix、新6/5/17/边界通过，六项周期精确不变、IPC0.9558133327368818，pi冻结。完整参数化顺序等价矩阵及当前配置优先证明仍运行；新完整CPU默认ABC已启动。下面已完成45,928.134894/23.560269654649属于ROB改动前冻结版本；不能宣称新面积/频率或Tier3通过。详见 `reports/rob_parallel_read_2026-10-01.md`。
+
+07:01–07:03当前源码完整PPA审计完成：最新one-hot前端 + store ACK/tag-write重叠管线、四发射ROB32/PRF48/RS8/LSQ8、TAG1/I128/D1024的默认ABC **45,928.134894 µm²**，组合27,589.413240、时序10,513.054800、SRAM7,825.666854。383,242个实际叶实例/37个宏，未计价/未展开0、最终check0、独立--require-current VERIFIED，当前输入差异0。与其同一冻结构建配对IPC **0.9558133327368818**，6/5/17/边界通过，pi冻结；同一网表完整SRAM时序 **23.560269654649 MHz**、42.4443359375 ns，遗漏存储边界0。三项均未达Tier3，不把其它参数的IPC/频率拼接。证据见 `reports/latest_total_area_2026-09-30.md` 顶部，下面待测状态保留为历史记录。
+
+06:36完整审计更新：one-hot前端/PRF48/RS8/旧store管线的同版本完整PPA已完成 **45,947.628354µm² / IPC0.9519069653774248 / 22.323472346363MHz**，全部逻辑与37个实际SRAM宏计价/时序，无未计价实例/遗漏存储边界，独立VERIFIED。与同参数旧前端相比总面积降0.448947%、IPC精确不变，但整机频率变差，不能凭孤立模块收益宣称提频。最新store管线又改变cache源码，正在独立计价；最新IPC0.9558133327368818不能配用这份旧cache面积/频率。三项Tier3仍未达到，证据见 `reports/latest_total_area_2026-09-30.md` 顶部。
+
+2026-10-01后续cache管线进展：在one-hot前端基础上，TAG1 store同边沿所有权ACK和下一store tag查询/data-write重叠已实现；脏victim在metadata-only查询后必须另做合法同步data读取。四发射PRF64/RS16同资源IPC从0.9596478218888492→0.9634821054970533→0.9636108214058166（最新+0.412964%），各项退休数不变，三组6/5/17/边界通过，最新四态12组、hash32组、lint/unit/matrix通过，旧实现负例实际失败。仍低于TAG0基线和Tier3要求，新cache源码的完整面积/时序尚待独立计价，不沿用更早46,154.839314µm²/24.993288MHz。PRF48/RS8组合版也已通过6/5/17/边界、IPC约0.955813333，独立默认ABC真实运行中。详见 `reports/dcache_store_query_pipeline_2026-10-01.md`；pi冻结。
+
+本页按 `docs/final_project_requirements.md` 的最终口径记录证据。历史记录将 CPU-2026 称为代理测试；2026-09-26 用户已确认按现有 benchmark 文件夹继续评测，当前 IPC 验收采用这六项的几何平均，不再等待 `testcases/perf_*`。完整FakeRAM面积和全存储时序现已实际核验，三项未达标而不是仍缺测量。下面历史记录中的“缺少官方 perf_*”不再是当前阻塞项。
+
+## 2026-10-01：完整PPA与取指读口的实际改进
+
+三份实际AXI冻结配置的默认ABC/ASAP7 r28完整结果：I64普通标签59,445.084949µm²、IPC0.982501248101083、17.228325790333MHz；I128普通标签60,619.503366µm²、IPC1.0015073214787、14.720680831488MHz；I128同步标签SRAM/并行bank51,314.351394µm²、IPC0.959647821888849、25.615369221533MHz。每行均同一参数与冻结构建、完整网表和全部SRAM计价/时序，无未计价叶实例或遗漏存储边界。三组均6/5/17/边界通过，pi冻结。没有任何组达到Tier3。
+
+本轮依据TAG1完整关键路径，已实际重构取指队列读口：共享one-hot解码/掩码归并，保持时序语义和容量不变。14组FE/FQ完整顺序等价证明全部通过；新真实AXI构建6/5/17/边界及lint/unit/matrix通过，六项benchmark的cycle/instret精确不变。孤立前端默认ABC实测面积1654.509240→1505.399580µm²、完整周期24.26171875→3.9931640625ns，属于局部证据，不能作为CPU面积或频率。新整机审计 `D:/CPU2026AreaAudits/frontend_onehot_tagbanks_i128_standard_20261001` 尚在运行；以上三份旧冻结数值不冒称此新版本。详见 `reports/frontend_onehot_2026-10-01.md`、`reports/latest_total_area_2026-09-30.md`。
+
+PRF48/RS8、保留ROB32的TAG1/I128缩参变体现已完成同配置PPA：**46,154.839314µm² / IPC0.9519069653774248 / 24.993287935369MHz**，6/5/17/边界通过、独立VERIFIED、未计价/未展开/遗漏存储边界0。相同源码/默认ABC下比TAG1大资源版减少10.054716%面积、损失0.806635% IPC，仍未达三项门槛。这是读口重构前冻结源码，新组合版本已另行启动构建与测试/计价。下一步核对新完整网表面积与路径转移，同时改善正式共享20cycle/word内存下的IPC，目标仍为同一配置≤36,000µm²、≥1.0985、≥300MHz。
 
 ## 已实现与直接验证
 
@@ -179,3 +195,64 @@ RTL 将命中读取与 miss 牺牲行快照共用一个 `request_data_line`，�
 源hash：banked module `A1FB8C7FED84CB105B62CE977641B2107545B887DEBDAED568C725FA165CF4DD`，standalone module `3FD7F97B57A18061DE3D04E367793AE0488D3CEB193EDED79B25BB5879FF1E79`，CPU `D7F1F11AF9AD641F728F2F386E0DBEB821887BB14BB44D6A6CC34317D9795D22`。项目原非致命warning lint通过，严格单模块lint暴露有意空pin和1/2宽度2-bit selector样式警告，未当作严格无警告结果。最终bank对照2项、独立payload2项、sharing审计2项、STA9项再次通过。
 
 仅删本轮新PCH 260,290,682bytes，可重建。时序循环于v3后因C盘<65MB安全中止，未因观察超时重启；确认终止后对buf64/v1/v2三份本轮中间netlist做ZIP归档且流式SHA256一致验证，才移除原未压缩文件，归档可恢复。保留报告/manifest/源JSON/最终v4，继续v4后通过，无用户文件/测试删除。最新报告明确前一冻结版与本轮分bank版，不宣称Tier3完成。
+# 2026-09-30：官方模型取得与当前RTL完整面积核算
+
+已按用户指定克隆课程框架，commit54fc150ffc290f52aa024209ffb9a29d43856f6d；取得sram_fakeram原模块、0.0419904µm²/bit计价模型和时序生成器，无需再等待模型文件。核对Dockerfile后下载其指定ASAP7 r28五份原始RVT TT库，commit f970bd3c3292b79ae4d022a3ec80533534614066，替换本轮计价输入中的旧版库。
+
+当前bankedpred四发射RTL未实例化框架SRAM，因此所有普通数组均实际展开为标准单元。20个模块完整映射并按实际实例汇总，加入课程TIE单元后总面积148,169.833200µm²（组合90,802.198800、时序57,367.634400、实际SRAM宏0），叶实例1,436,411，未计价叶/未展开存储均0。课程area_report、独立Decimal累加及Yosys统计一致；综合源、仿真冻结源与最终网表哈希均核对通过。证据目录build/synth/bankedpred_p4_r32p64_lsq8_course_r28_full_20260930，报告reports/latest_total_area_2026-09-30.md。
+
+默认ABC优化耗时较长，终止该自建任务及验证过归属的孤立ABC进程，保留准备阶段及旧清单后改用经典面积映射，完整重做映射。本结果保留层级，区别于框架默认flattened opt模式，不冒充其精确成绩；采用的库和课程计价规则真实、所有成本已展开。未修改RTL，pi继续冻结，无新IPC或完整频率结论。
+
+面积超过Tier3上限112,169.833200µm²，目标保持未完成。主要成本D-cache93,770.147339、后端42,742.290600、I-cache6,429.721680µm²。下一优先方向为实际接入合法同步1RW Cache数据/标签宏，并优化后端多端口状态；接入后按同一配置重新验证正确性、IPC、完整面积和频率。
+
+## 2026-09-30后续：真实D-cache SRAM与完整课程opt流水
+
+非阻塞D-cache数据现实际实例化课程原版1024×128/G8同步1RW SRAM；refill优先仲裁、掩码写、同步命中响应/dirty victim旁路与背压捕获均已实现，命中一周期延迟保持。16/16随机参数组合和四态定向协议测试通过。仿真编译自动引入官方SV，不污染RTL filelist、不自声明保留名称stub；Makefile、GUI和参数扫描依赖也已更新。make lint、unit、matrix通过。
+
+冻结模型 `build/vlt/dcache_sram_p4_r32p64_lsq8_ram256m` 在持久工作区重新构建，并通过6/6 benchmark、5/5基础/半字/M、17/17仿真（pi冻结）和256MiB末地址脏回写。IPC GEOMEAN=1.0986481457856145，比旧版少0.0005486911，六项累计多60cycle、各项instret不变。IPC仍略高于Tier3下限，但余量仅0.000148，不代表其它两项达标。
+
+新入口 `tools/run_course_sram_area.py` 已运行课程原版绑定/库/汇总函数，默认synth -noabc -flatten及默认ABC；完整映射其它普通数组。准备网表已经直接核对到16个1024×8宏，绑定宏面积和5,503.765712µm²，尚不能与旧标准单元小计拼接。当前运行 `build/synth/dcache_sram_p4_course_opt_20260930` 已完成elaborate/prepare、进入ABC映射，父进程及ABC子进程确认活跃，未因等待超时重启。Windows合并SCL转换的引用失败后按Yosys内置策略回退原Liberty读取，最终仍需按实际库/叶实例完整核验，不隐藏该工具警告。
+
+新增完整频率入口 `tools/run_course_full_timing.py`，读取同一最终网表和所有SRAM/标准单元库，使用WSL OpenSTA3.1.0与原版课程timing.tcl。端口更正：真实cpu_core为clk/reset，实际AXI student_top为clock/reset，只有测试fixture使用clk_i/reset_i。此段为接入阶段历史记录，后续完整PPA结果如下；不沿用历史局部305.19MHz。
+
+## 2026-09-30 真实 AXI 整机完整 PPA 与功能回归
+
+上一轮完成完整分层面积审计；本轮完成正式内存17项程序重测及同网表完整时序，均属于实际进展。Tier3目标不缩小，pi继续按用户要求冻结。
+
+| 指标 | 同一冻结AXI配置的实测 | Tier3要求 | 状态 |
+|---|---:|---:|---|
+| 完整分层网表面积（含FakeRAM与AXI） | 65,968.760732µm² | ≤36,000 | 未达到 |
+| 官方逐word20周期内存，六项IPC GEOMEAN | 0.982319982 | ≥1.0985 | 未达到 |
+| 同一完整分层网表含SRAM路径频率 | 6.650574MHz | ≥300 | 未达到 |
+
+CPU核心实际课程opt面积62,994.367832µm²，新增AXI适配器2,974.392900µm²。583,462个叶实例全部计价，16个1024×8宏计5,503.765712µm²，外部256MiB不计；课程函数、独立Decimal、Yosys统计及重读映射检查通过。最终网表SHA256 `145e0cc1fa2e574a1279379594bd4603ab14fb4b62a86fb8c3a68ae8db78e4c6`。同一网表完整STA最小周期150.362956ns，遗漏存储边界0，不以旧305.19MHz局部结果代替。
+
+正式RAM采用原版sim.cpp：共享32-bit AR/R，独立AW/W/B，FIFO16，延迟20/word；MMIO退出在B握手。原驱动只添加一行不修改状态的退休数输出，逐字验证其它内容相同。旧本地双128-bit line端口1.0986481457856145仅为历史对照，不是本次正式IPC。此前仿真suite因旧PowerShell JSON含BOM未执行，运行器改为utf-8-sig并完整重跑，正式模型下5/5基础/半字/M、17/17仿真（pi除外）、6/6benchmark和256MiB末地址脏回写均通过。保持全32bit返回值比较。
+
+真实AXI顶层全局opt/标准ABC映射的原任务仍在运行：`build/synth/course_axi_p4_opt_20260930`。没有因观察超时重启，没有将分层面积冒充其完成结果。本轮不改其冻结RTL，先扩展AXI构建器以显式-G参数保存独立manifest，开始RS16→8、PRF64→48的隔离IPC实验；禁止覆盖已有冻结构建目录。后续实际Cache标签/I-cache SRAM和后端优化须重新构建、测正式IPC及完整PPA，不能跨配置拼分。
+
+最差路径包含NAND2xp33驱动5,269个负载、另一个NAND2xp33驱动1,369个负载；这是完整存储实现的真实高扇出问题。默认无-constr的ABC脚本仅做逻辑映射，不包含buffer/upsize/dnsize；不能把延迟目标3.333ns当作300MHz已达成的证据。下一步应减少FF标签/选择控制的扇出与多端口成本，并针对正式word总线下refill/RFO开销改进IPC。详细证据 `reports/latest_total_area_2026-09-30.md`、`reports/dcache_sram_integration_2026-09-30.md`。
+
+正式AXI缩参实验已完成：RS8的IPC0.975261310（-0.71857%），PRF48为0.982246787（-0.00745%），RS8+PRF48为0.975209518（-0.72384%），ROB16为0.917830295（-6.56504%）。每组全部6项通过、镜像与退休数一致；联合组及ROB16各通过5/5基础/半字/M。因ROB缩容显著损害rsort，当前优先评估保留ROB32的PRF48/RS8组合。变体PPA未测，不假定缩参面积收益；测量表和manifest索引见 `reports/parameter_sensitivity.md`。默认RTL仍保持原冻结配置，原全局映射任务持续运行。
+
+## 2026-10-01 最新整机面积核验
+
+上一版D-cache SRAM/I-cache FF的全局默认opt已完成：62,953.004372µm²，完整同网表STA8.108054608MHz，正式AXI IPC0.982319982。源码归档在 `build/synth/course_axi_p4_opt_20260930/source_snapshot/`，不能沿用到当前RTL。
+
+当前I-cache数据也已迁移到实际同步1RW SRAM，保持1cycle hit、空闲/写周期返回值保持和refill优先的单端口仲裁；四种容量/way配置的四态测试通过。最新冻结构建 `build/vlt/course_axi_idata_sram_p4_20260930/` 在原课程AXI驱动下benchmark6/6、basic5/5、simulator17/17及256MiB边界通过，pi未运行，benchmark IPC GEOMEAN0.980736877。
+
+当前RTL的完整全局经典ABC面积计价已完成：64,740.978349µm²，组合42,662.771279554、时序16,230.456000、SRAM5,847.751069，643,612个叶实例，未计价/未展开0，映射后重读检查0问题。17个SRAM宏（I-cache64×128一个，D-cache1024×8十六个）按课程原版模型和实际实例计入。证据 `build/synth/course_axi_idata_sram_p4_classic_v2_20261001/area_audit.json`，网表SHA256 `2f28fec23014bd61ac0142615383a1fdfe67277ea3863a0bac08617fca126a68`。完整当前RTL计价不等于默认ABC成绩；不能直接把不同ABC脚本的面积差归因于RTL变化。
+
+同版本默认opt/标准ABC已启动，目录 `build/synth/course_axi_idata_sram_p4_opt_20261001/`。新适配器可复用经逐输入哈希、准确脚本文本及阶段输出哈希验证的elaboration/prepare，ABC映射必须重做；清单记录复用目录、源清单、prepared.il及阶段标记哈希。全部综合输入使用不可变source_snapshot，允许开发但不污染运行中的冻结候选。本轮只执行面积核验和审计工具/报告更新，不改CPU RTL或运行pi。默认面积和最新网表完整频率仍待完成；Tier3目标保持未达成。
+
+## 2026-10-01：有界 store 合并实现与正确性修复
+
+本次目标续跑重新完整读取目标文件；上一轮实际完成经典面积、默认ABC启动和审计报告，为progress。确认默认ABC原进程PID8848仍存活，继续原任务，不因输出缓冲或观察超时重启。
+
+实现可参数化DCACHE_STORE_MERGE_DELAY，在未offer RFO前利用完整16byte覆盖local fill，部分写超时仍正常读原行，脏victim先写回，保持同步1RW端口仲裁和flush中已承接store。对背压请求锁定发送槽，避免更低索引新eligible事务改变valid/address/id。发现并修复MSHR复用时新回填覆盖旧ready waiter：只能更新尚未ready的waiter，覆盖local fill和外部fill三条路径。新增测试修复前expected33333333实际ffffffff、修复后通过，证据 `build/dcache_storemerge_waiter_reuse_{before,after}_20261001.log`。
+
+窗口扫描0/16/32/64的正式IPC为0.980736877/0.982501248/0.981486317/0.979051374，16约+0.18%，不夸大为主要IPC瓶颈已解决。默认课程top选16，cpu_core独立默认仍0并支持显式参数透传。修复版无-G默认构建 `build/vlt/course_axi_storemerge16_fixed_20261001` 全部38个冻结输入与当前源码匹配，在课程原驱动下6/5/17/边界通过，六项总472599instret/402126cycles，评分GEOMEAN精确0.982501248101083；不使用aggregate1.175251041替代GEOMEAN。`make lint unit matrix`和1/2way×0/16/32窗口四态测试通过，含部分字节、dirty WB、held offer、ready waiter复用与发送槽稳定性。pi未运行。
+
+新源码完整经典ABC计价启动于 `build/synth/course_axi_storemerge16_fixed_classic_20261001`，不可变snapshot保护进行中的候选；未完成，不借用旧总面积或频率。此前I/D数据SRAM但无store合并的默认ABC仍在映射。当前总目标三项尚未同时满足，保持active，下一步需提升更大幅度正式IPC并优化FF标签/高扇出和后端多端口成本。
+
+进一步完成同修复版源码的I-cache1/2/4KiB正式扫描：GEOMEAN0.982501248101083/1.0015073214787/1.0028589324347514，2KiB约+1.93446%，4KiB仅再增约0.135%，主要收益在towers。2KiB候选 `build/vlt/course_axi_storemerge16_i128_20261001`（显式-GICACHE_LINES=128）完整6/5/17/边界通过，4KiB只完成六benchmark，pi未运行；默认课程top仍1KiB/16窗口。2KiBPPA已启动，因E盘剩余1.6GB选择C盘独立输出目录 `C:/Users/admin/AppData/Local/CPU2026AreaAudits/course_axi_storemerge16_i128_classic_20261001`，日志仍在项目 `build/course_axi_storemerge16_i128_area_20261001.log`。没有删除旧证据或重启其它活跃映射任务，不借用旧PPA声称2KiB达标。三项门槛仍未同时达到。

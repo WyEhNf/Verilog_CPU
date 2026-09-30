@@ -1,5 +1,76 @@
 # 参数敏感度报告（进行中）
 
+07:01–07:03最新同参数store管线对照已完成完整PPA：四发射ROB32/PRF48/RS8/LSQ8、TAG1/I128/D1024、one-hot前端，旧store管线45,947.628354µm²/IPC0.9519069653774248/22.323472346363MHz；新ACK/tag-write重叠45,928.134894µm²/IPC0.9558133327368818/23.560269654649MHz。最新面积独立--require-current VERIFIED，未计价/未展开0、全部37个实际宏计入，两组各6/5/17/边界通过；各自频率来自其同一完整网表，全部SRAM参与、遗漏存储边界0。详见 `reports/latest_total_area_2026-09-30.md`；均未达Tier3。
+
+2026-10-01后续同资源管线实验：最新TAG1/I128、ROB32/PRF64/RS16基线0.9596478218888492；仅store ACK旁路0.9634821054970533；再允许tag/data-write重叠0.9636108214058166。实际三套6/5/17/边界回归，全部退休472599不变，总周期421340/420907/420810。小幅改善不等于解决IPC问题；新源码不沿用下面旧冻结PPA，见 `reports/dcache_store_query_pipeline_2026-10-01.md`。
+
+## 2026-10-01：同步标签SRAM与资源缩参的新实测
+
+同一重构前冻结源码、默认ABC/2 ns目标、四发射ROB32/PRF64/RS16/LSQ8、I-cache2KiB和D-cache16KiB，仅DCACHE_TAG_SRAM从0变1：完整面积60,619.503366→51,314.351394µm²，真实计入新增标签副本（37个宏而非17个），降低约15.35%；正式六项IPC1.0015073214787→0.959647821888849（退化约4.18%）；完整频率14.720680831488→25.615369221533MHz。两组均真实AXI/20cycle逐word内存，不混用旧line模型。全部仍未达Tier3。
+
+在TAG1/I128基线上显式-GPHYS_REGS=48/-GRS_ENTRIES=8，保留ROB32，六项IPC为0.9519069653774248（相对TAG1基线-0.806635%），总周期428879、退休数472599，6/5/17/边界通过。逐项周期median10906、multiply12170、qsort168969、rsort224788、towers5861、vvadd6185。冻结构建 `D:/CPU2026Builds/tagbanks_i128_r32p48rs8_20261001`；各suite报告 `build/cpu2026/tagbanks_i128_r32p48rs8_*_20261001.json`。独立默认ABC完整面积已完成 **46,154.839314µm²**，组合27,816.700860、时序10,512.471600、SRAM7,825.666854；相比同源码PRF64/RS16减少5,159.512080µm²（10.054716%），没有跨源码/容量/ABC方式推算。389,527个实际叶实例、37个宏，未计价/未展开0、VERIFIED。完整频率24.993287935369MHz、最小周期40.0107421875ns，包含全部SRAM。证据 `D:/CPU2026AreaAudits/tagbanks_i128_r32p48rs8_standard_20261001`，不是后续one-hot读口结果，仍未达Tier3。
+
+后续工作树已实际实施取指队列one-hot读口；14组FE1/2/4×合法FQ2/4/8/16/32完整顺序等价证明全部通过，新TAG1/I128四套整机回归通过、benchmark周期/退休数逐项不变。孤立前端结构诊断与整机评分明确分开，见 `reports/frontend_onehot_2026-10-01.md`。当前新读口总面积/频率仍待同版本完整综合。
+
+## 2026-10-01：正式 AXI 下的 store 合并窗口
+
+后续I-cache容量扫描使用同一修复版源码、16周期store窗口，仅以-G改变ICACHE_LINES。1/2/4KiB六项IPC分别0.982501248101083/1.0015073214787/1.0028589324347514，总周期402126/401467/401392、退休数均472599；2KiB相对1KiB +1.93446%，4KiB +2.07203%。towers周期从5826降至5194/5153，rsort从203689降至203662/203628，另四项完全相同。2KiB优先保留，不为再翻倍仅约0.135%的相对IPC收益直接选择4KiB。2KiB已通过benchmark6/6、basic5/5、simulator17/17和256MiB边界；4KiB目前仅benchmark6/6。
+
+容量候选证据 `build/vlt/course_axi_storemerge16_i{128,256}_20261001`、`build/cpu2026/course_axi_storemerge16_i{128,256}_benchmark_20261001_report.json`；2KiB其余三个suite报告同前缀。当前课程top源码默认仍1KiB/16窗口，2KiB以-G128冻结，不把候选结果当作默认结果。2KiB完整经典ABC面积运行于 `C:/Users/admin/AppData/Local/CPU2026AreaAudits/course_axi_storemerge16_i128_classic_20261001`，因E盘容量不足将该轮输出存至C盘，仍保存完整来源和哈希。该候选面积/频率未完成。
+
+固定四发射、ROB32/PRF64/RS16/LSQ8、I/D数据实际SRAM和其余参数，通过 `-GDCACHE_STORE_MERGE_DELAY` 比较0/16/32/64周期。外部仍为课程原版32-bit共享AXI、20cycle/word，不改变镜像、初值、退出或计数口径。该实验不替代下文9月30日、I-cache数据仍为FF时的资源扫描。
+
+| 合并窗口 | 六项总周期 | IPC GEOMEAN | 相对窗口0 |
+|---|---:|---:|---:|
+| 0，关闭 | 402,073 | 0.980736877 | — |
+| 16 | 402,126 | 0.982501248 | +0.17990% |
+| 32 | 402,817 | 0.981486317 | +0.07642% |
+| 64 | 404,461 | 0.979051374 | -0.17186% |
+
+各项退休数均为7062/27637/139606/289966/3803/4525，总472,599；IPC按六项几何平均，16窗口虽累计总周期略增但几何平均提高，不能用aggregate IPC代替评分口径。16/32窗口分别通过6 benchmark、5 basic、17 simulator及256MiB边界；0/64窗口只完成六项benchmark。pi未运行。
+
+16窗口逐项周期：median10666、multiply12074、qsort163834、rsort203689、towers5826、vvadd6037。窗口0周期为10630/12122/163866/203528/5863/6064。32窗口为10732/12054/163834/204343/5822/6032，64窗口为10749/12054/163866/205906/5859/6027。更长窗口延误部分行RFO，抵消完整行合并收益，因此没有仅凭“合并更多”采用64。
+
+上述扫描在waiter复用修复之前执行；后续修复后的实际默认16窗口构建 `build/vlt/course_axi_storemerge16_fixed_20261001` 完整重跑6/5/17/边界，周期与16窗口扫描逐项一致，GEOMEAN精确值0.982501248101083。原扫描及修复版各自保留manifest/报告，不宣称其它窗口已经用修复后源码全部重跑。修复消除完成waiter被复用MSHR错误覆盖的问题，专门四态测试修复前失败、修复后通过。
+
+证据：`build/cpu2026/course_axi_storemerge{0,16,32,64}_benchmark_20261001_report.json`、各自 `build/vlt/course_axi_storemerge*_20261001/build_manifest.json`；修复版 `course_axi_storemerge16_fixed_{benchmark,basic,simulator,boundary}_20261001_report.json`。新增合并窗口的面积/完整频率未测，不能拼接此前64,740.978349µm²或旧默认62,953.004372µm²。
+
+## 2026-09-30：正式 AXI 内存下的四发射资源敏感度
+
+本节采用冻结的课程AXI顶层、原版sim.cpp共享32-bit AR/R与独立AW/W/B、FIFO16、20cycle/word、256MiB RAM及MMIO写B握手退出。六个当前授权benchmark的程序镜像SHA完全相同；每组动态退休472,599条，各项退休数一致；IPC取六项几何平均，不是累计退休/周期。pi冻结。
+
+除下表明确变量外固定默认四发射：FE/BE/INTissue/CDB4、ROB32、PRF64、RS16、LSQ8、Icache1KiB/2way、Dcache16KiB/2way/hash1、I/D MSHR8/4、AXI READ_LINES16/WRITE_LINES8/WORD_QUEUE64。全部RTL、头文件、课程驱动与filelist哈希一致；参数通过显式Verilator `-G` 覆盖保存于各构建manifest，默认RTL未更改。新构建器拒绝覆盖已冻结目录。
+
+| 配置变化 | 总周期 | IPC GEOMEAN | 相对基线 |
+|---|---:|---:|---:|
+| 基线：ROB32、PRF64、RS16 | 401,980 | 0.982319982 | — |
+| 单参数：RS16→8 | 409,396 | 0.975261310 | -0.71857% |
+| 单参数：PRF64→48 | 402,071 | 0.982246787 | -0.00745% |
+| 联合：RS8 + PRF48 | 409,463 | 0.975209518 | -0.72384% |
+| 单参数：ROB32→16 | 457,464 | 0.917830295 | -6.56504% |
+
+| 测试周期 | 基线 | RS8 | PRF48 | RS8+PRF48 | ROB16 |
+|---|---:|---:|---:|---:|---:|
+| median | 10,630 | 10,659 | 10,630 | 10,659 | 11,088 |
+| multiply | 12,119 | 12,178 | 12,119 | 12,178 | 12,658 |
+| qsort | 163,866 | 164,452 | 163,866 | 164,452 | 175,719 |
+| rsort | 203,492 | 210,235 | 203,583 | 210,302 | 245,735 |
+| towers | 5,809 | 5,771 | 5,809 | 5,771 | 5,858 |
+| vvadd | 6,064 | 6,101 | 6,064 | 6,101 | 6,406 |
+
+五组各六项基准全部通过；RS8+PRF48及ROB16还各通过5/5基础、半字、M操作测试。基线正式内存17/17仿真（pi除外）与256MiB末地址脏回写通过；不能将基线全部回归自动外推到缩参变体。
+
+结论：先对PRF48和RS8进行**实际面积/时序核算**，性能损失很小；ROB16明显损害rsort及整体IPC，当前先保留ROB32。联合实验实测，不将单参数收益简单相加。这五组均低于Tier3 IPC1.0985，缩容不是达标方案本身，还需降低正式总线下的访存开销。当前仅基线具有完整分层PPA：65,968.760732µm²/6.650574MHz；其它变体没有完整面积或频率证据，不能借用基线数值。
+
+证据：`build/vlt/course_axi_p4_r32p64_ctx/`、`course_axi_rs8_20260930/`、`course_axi_phys48_20260930/`、`course_axi_rs8_phys48_20260930/`、`course_axi_rob16_20260930/` 各自的 `build_manifest.json`；`build/cpu2026/course_axi_benchmark_report.json` 和 `course_axi_{rs8,phys48,rs8_phys48,rob16}_20260930_report.json`。复现例如：
+
+```powershell
+& tools/build_course_verilator.ps1 -Mdir build/vlt/NEW_PROFILE -Parameters @{ RS_ENTRIES = 8; PHYS_REGS = 48 }
+python tools/run_course_axi_tests.py --build build/vlt/NEW_PROFILE --suite benchmark --report build/cpu2026/NEW_PROFILE.json
+```
+
+以下为旧本地双line端口模型的历史实验，不与本节正式AXI结果混合。
+
 > 历史记录：本文以旧版六程序汇总 IPC 作为代理指标。最终验收采用 `testcases/perf_*` 的几何平均及 FakeRAM 总面积；最新探索见 `reports/final_goal_progress_2026-09-23.md`。
 
 状态：**未完成最终交付**。缓存容量/索引以及整数发射宽度、物理寄存器数、ROB/RS/LSQ 深度、D-MSHR 已有隔离实验；完整 FE/BE 宽度、更多参数范围、CDB/完成队列等仍需扫描。联合配置实验与单参数实验分开报告。
