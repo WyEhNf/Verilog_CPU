@@ -12,6 +12,7 @@ module rv32_lsq #(
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer ROB_TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
+    parameter integer STORE_ADMISSION_BYPASS = 0,
     parameter integer SLOT_WIDTH = (LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES),
     parameter integer GENERATION_WIDTH = (TAG_WIDTH > (SLOT_WIDTH + 3)) ?
                                           (TAG_WIDTH - SLOT_WIDTH - 3) : 1,
@@ -336,6 +337,11 @@ module rv32_lsq #(
     wire [31:0] store_forward_data [0:LSQ_ENTRIES-1];
     wire [3:0] tree_forward_mask;
     wire [31:0] tree_forward_data;
+    // This is an architectural admission, not speculative store execution.
+    // Only the exact ROB tag with ready address/data can obtain ready below.
+    // Recovery cannot record a fresh cache request on its trimming edge.
+    wire store_admission_fire = store_commit_valid_i && store_commit_ready_o &&
+        !reset_i && !flush_i && !recovery_valid_i;
     genvar age_slot;
     generate
         for (age_slot = 0; age_slot < LSQ_ENTRIES; age_slot = age_slot + 1) begin : g_entry_age
@@ -390,7 +396,9 @@ module rv32_lsq #(
                   !complete_mem[request_slot] && !(|older_hazard)) ||
                  (store_mem[request_slot] && addr_ready_mem[request_slot] &&
                   data_ready_mem[request_slot] &&
-                  store_commit_mem[request_slot] &&
+                  (store_commit_mem[request_slot] ||
+                   ((STORE_ADMISSION_BYPASS != 0) && store_admission_fire &&
+                    (commit_slot_select == request_slot))) &&
                   !request_sent_mem[request_slot]));
         end
     endgenerate

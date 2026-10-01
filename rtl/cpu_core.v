@@ -10,6 +10,10 @@ module cpu_core #(
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer RS_ENTRIES = 8,
     parameter integer LSQ_ENTRIES = 8,
+    parameter integer LSQ_STORE_ADMISSION_BYPASS = 0,
+    parameter integer EARLY_STORE_ADDRESS = 0,
+    parameter integer ASAP7_FANOUT_BUFFERS = 0,
+    parameter integer ROB_CONTROL_REGISTER_BANKS = 0,
     parameter integer INT_ISSUE_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer CDB_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer ENABLE_CACHE_STATS = 0,
@@ -25,14 +29,20 @@ module cpu_core #(
     parameter integer DCACHE_WAYS = 1,
     parameter integer DCACHE_INDEX_HASH = 0,
     parameter integer DCACHE_REQUEST_PIPELINE = 0,
+    parameter integer DCACHE_STORE_MERGE_DELAY = 0,
+    parameter integer DCACHE_TAG_SRAM = 0,
+    parameter integer DCACHE_STATIC_UPDATES = 0,
     parameter integer RAM_SIZE_BYTES = 268435456,
     parameter integer LEGACY_SENTINEL_HALT = 0,
     parameter integer ENABLE_PREDICTOR = 1,
+    parameter integer PREDICTOR_DIRECT_BRANCH_TARGET = 0,
+    parameter integer PREDICTOR_HISTORY_BITS = 6,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
     parameter integer SHIFT_IMPL = 0,
     parameter integer PHYS_TAG_IMPL = 0,
     parameter integer CHECKPOINT_IMPL = 0,
+    parameter integer RAT_RECOVERY_IMPL = 0,
     parameter integer STORE_BUFFERED_RETIRE = 1,
     parameter integer COMPLETION_BYPASS = 0,
     parameter integer SERIAL_BACKEND = 0,
@@ -79,6 +89,16 @@ module cpu_core #(
         GENERATION_WIDTH;
 
     initial begin
+        if ((EARLY_STORE_ADDRESS != 0 && EARLY_STORE_ADDRESS != 1) ||
+            (RAT_RECOVERY_IMPL != 0 && RAT_RECOVERY_IMPL != 1)) begin
+            $display("ERROR: invalid early store address or RAT recovery implementation");
+            $finish(1);
+        end
+        if (PREDICTOR_DIRECT_BRANCH_TARGET == 2 &&
+            (SERIAL_BACKEND != 0 || ENABLE_PREDICTOR == 0)) begin
+            $display("ERROR: indexed-history predictor requires enabled OoO predictor metadata");
+            $finish;
+        end
         if ((DCACHE_REQUEST_PIPELINE != 0) && (DCACHE_REQUEST_PIPELINE != 1)) begin
             $display("ERROR: invalid DCACHE_REQUEST_PIPELINE; expected 0 or 1");
             $finish;
@@ -117,6 +137,10 @@ module cpu_core #(
     wire [3:0] redirect_epoch;
     wire branch_feedback_valid, branch_feedback_taken, branch_feedback_pred_taken;
     wire [31:0] branch_feedback_pc, branch_feedback_target, branch_feedback_pred_target;
+    wire [15:0] branch_feedback_metadata;
+    wire [7:0] branch_recovery_history;
+    wire [FE_WIDTH*16-1:0] pred_metadata_bus, fetch_pred_metadata;
+    wire [BE_WIDTH*16-1:0] trace_pred_metadata;
     wire [1:0] branch_feedback_kind;
 
     wire [FE_WIDTH-1:0] pred_taken_bus, pred_btb_hit_bus;
@@ -157,9 +181,15 @@ module cpu_core #(
     genvar predictor_lane;
     generate
         if (ENABLE_PREDICTOR != 0) begin : g_banked_predictor
-            rv32_banked_predictor #(.FE_WIDTH(FE_WIDTH)) predictor (
+            rv32_banked_predictor #(.FE_WIDTH(FE_WIDTH), .DIRECT_BRANCH_TARGET(PREDICTOR_DIRECT_BRANCH_TARGET),
+                .HISTORY_BITS(PREDICTOR_HISTORY_BITS)) predictor (
                 .clk_i(clk), .reset_i(reset), .query_valid_i(if_resp_valid),
                 .query_pc_i(if_resp_pc), .query_line_i(if_resp_line_data),
+                .query_accept_i(if_resp_valid && if_resp_ready && !if_resp_error &&
+                    !redirect_valid && !halted && !error),
+                .effective_pred_taken_i(pred_taken_bus),
+                .recovery_valid_i(redirect_valid), .recovery_history_i(branch_recovery_history),
+                .pred_metadata_o(pred_metadata_bus),
                 .pred_taken_o(pred_taken_raw_bus), .pred_target_o(pred_target_raw_bus),
                 .pred_kind_o(pred_kind_raw_bus), .pred_btb_hit_o(pred_btb_hit_raw_bus),
                 .pred_bht_index_o(pred_bht_index_bus), .pred_btb_index_o(pred_btb_index_bus),
@@ -168,9 +198,11 @@ module cpu_core #(
                 .feedback_taken_i(branch_feedback_taken), .feedback_target_i(branch_feedback_target),
                 .feedback_pred_taken_i(branch_feedback_pred_taken),
                 .feedback_pred_target_i(branch_feedback_pred_target),
+                .feedback_metadata_i(branch_feedback_metadata),
                 .prediction_count_o(pred_count), .correct_count_o(pred_correct)
             );
         end else begin : g_no_predictor
+            assign pred_metadata_bus = {FE_WIDTH*16{1'b0}};
             assign pred_taken_raw_bus = {FE_WIDTH{1'b0}};
             assign pred_target_raw_bus = {FE_WIDTH*32{1'b0}};
             assign pred_kind_raw_bus = {FE_WIDTH*2{1'b0}};
@@ -268,7 +300,8 @@ module cpu_core #(
         end
     end
 
-    rv32_fetch_frontend #(.FE_WIDTH(FE_WIDTH), .FQ_DEPTH(FETCH_QUEUE_DEPTH)) frontend (
+    rv32_fetch_frontend #(.FE_WIDTH(FE_WIDTH), .FQ_DEPTH(FETCH_QUEUE_DEPTH),
+        .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2)) frontend (
         .clk_i(clk), .reset_i(reset), .redirect_valid_i(redirect_valid),
         .redirect_pc_i(redirect_pc), .redirect_epoch_i(redirect_epoch),
         .stop_i(halted), .error_i(error), .if_req_valid_o(if_req_valid),
@@ -279,6 +312,7 @@ module cpu_core #(
         .if_resp_epoch_i(if_resp_epoch), .if_resp_error_i(if_resp_error),
         .if_resp_pred_taken_i(pred_taken_bus), .if_resp_pred_target_i(pred_target_bus),
         .if_resp_pred_kind_i(pred_kind_bus), .if_resp_pred_btb_hit_i(pred_btb_hit_bus),
+        .if_resp_pred_metadata_i(pred_metadata_bus), .fetch_pred_metadata_o(fetch_pred_metadata),
         .fetch_valid_o(fetch_valid), .fetch_ready_i(fetch_ready),
         .fetch_packet_o(fetch_packet), .current_epoch_o(frontend_epoch),
         .frozen_o(frontend_frozen), .event_fetch_o(frontend_event_fetch),
@@ -454,7 +488,8 @@ module cpu_core #(
     rv32_dcache_nonblocking #(
         .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS),
         .CACHE_LINES(DCACHE_LINES), .CACHE_WAYS(DCACHE_WAYS),
-        .INDEX_HASH(DCACHE_INDEX_HASH)
+        .INDEX_HASH(DCACHE_INDEX_HASH), .STORE_MERGE_DELAY(DCACHE_STORE_MERGE_DELAY),
+        .TAG_SRAM(DCACHE_TAG_SRAM), .STATIC_UPDATES(DCACHE_STATIC_UPDATES)
     ) dcache (
         // LSQ generations reject wrong-path responses while retaining older
         // loads across a redirect.  The cache itself has no ROB-age context.
@@ -647,10 +682,13 @@ module cpu_core #(
     generate
         for (decode_lane = 0; decode_lane < BE_WIDTH; decode_lane = decode_lane + 1) begin : g_decode
             if (decode_lane < FE_WIDTH) begin : g_has_frontend_lane
+                assign trace_pred_metadata[decode_lane*16 +: 16] =
+                    fetch_pred_metadata[decode_lane*16 +: 16];
                 assign trace_valid[decode_lane] = fetch_valid[decode_lane];
                 assign trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH] =
                     fetch_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH];
             end else begin : g_no_frontend_lane
+                assign trace_pred_metadata[decode_lane*16 +: 16] = 16'b0;
                 assign trace_valid[decode_lane] = 1'b0;
                 assign trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH] =
                     {PACKET_WIDTH{1'b0}};
@@ -717,6 +755,8 @@ module cpu_core #(
     wire perf_branch_pending, perf_mdu_busy;
     assign commit_ready = 1'b1;
     generate if (SERIAL_BACKEND != 0) begin : g_serial_backend
+    assign branch_feedback_metadata = 16'b0;
+    assign branch_recovery_history = 8'b0;
     rv32_serial_backend #(.BE_WIDTH(BE_WIDTH), .SHIFT_IMPL(SHIFT_IMPL),
         .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
@@ -758,7 +798,7 @@ module cpu_core #(
     assign perf_branch_pending = 1'b0;
     assign perf_mdu_busy = 1'b0;
     end else begin : g_ooo_backend
-    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
+    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),
@@ -790,6 +830,8 @@ module cpu_core #(
          .branch_feedback_pc_o(branch_feedback_pc), .branch_feedback_kind_o(branch_feedback_kind),
          .branch_feedback_taken_o(branch_feedback_taken), .branch_feedback_target_o(branch_feedback_target),
          .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target),
+         .trace_pred_metadata_i(trace_pred_metadata), .branch_feedback_metadata_o(branch_feedback_metadata),
+         .branch_recovery_history_o(branch_recovery_history),
          .perf_rob_occupancy_o(perf_rob_occupancy), .perf_rs_occupancy_o(perf_rs_occupancy),
          .perf_lsq_occupancy_o(perf_lsq_occupancy), .perf_issue_valid_o(perf_issue_valid),
          .perf_branch_pending_o(perf_branch_pending), .perf_mdu_busy_o(perf_mdu_busy)
