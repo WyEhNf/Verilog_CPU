@@ -4,7 +4,8 @@ module rv32_dcache_hash_tb #(
     parameter integer CACHE_LINES = 64,
     parameter integer CACHE_WAYS = 1,
     parameter integer PREFETCH = 1,
-    parameter integer TAG_SRAM = 0
+    parameter integer TAG_SRAM = 0,
+    parameter integer STATIC_UPDATES = 0
 );
     reg clk = 0, reset = 1;
     always #5 clk = ~clk;
@@ -20,7 +21,11 @@ module rv32_dcache_hash_tb #(
     wire [127:0] mem_data, mem_resp_data;
     wire [15:0] mem_mask;
     wire [7:0] mem_id, mem_resp_id;
-    reg [7:0] reference [0:4095];
+    // Directed conflicts use up to three full cache-capacity strides. Keep
+    // reference/real memory in range for every legal cache geometry instead
+    // of reading X beyond the original 4KiB small-cache fixture.
+    localparam integer MEMORY_BYTES = (CACHE_LINES*64 < 4096) ? 4096 : CACHE_LINES*64;
+    reg [7:0] reference [0:MEMORY_BYTES-1];
     integer seed, trial, byte_index;
     reg [31:0] address_a, address_b, address_c, random_address, random_data, inverse_address;
     reg [3:0] random_mask;
@@ -33,7 +38,8 @@ module rv32_dcache_hash_tb #(
 `else
     rv32_dcache_nonblocking #(.CACHE_LINES(CACHE_LINES), .CACHE_WAYS(CACHE_WAYS),
         .INDEX_HASH(INDEX_HASH),
-        .PREFETCH(PREFETCH), .TAG_WIDTH(16), .TAG_SRAM(TAG_SRAM)) dut (
+        .PREFETCH(PREFETCH), .TAG_WIDTH(16), .TAG_SRAM(TAG_SRAM),
+        .STATIC_UPDATES(STATIC_UPDATES)) dut (
 `endif
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0),
         .dcache_req_valid_i(req_valid), .dcache_req_ready_o(req_ready),
@@ -50,7 +56,7 @@ module rv32_dcache_hash_tb #(
         .mem_resp_valid_i(mem_resp_valid), .mem_resp_ready_o(mem_resp_ready), .mem_resp_line_addr_i(mem_resp_addr),
         .mem_resp_data_i(mem_resp_data), .mem_resp_id_i(mem_resp_id), .mem_resp_error_i(mem_error)
     );
-    rv32im_memory_model #(.MEMORY_SIZE(4096), .LATENCY(3)) memory (
+    rv32im_memory_model #(.MEMORY_SIZE(MEMORY_BYTES), .LATENCY(3)) memory (
         .clk_i(clk), .reset_i(reset), .i_req_valid_i(1'b0), .i_req_line_addr_i(32'b0),
         .i_req_id_i(8'b0), .i_resp_ready_i(1'b1),
         .d_req_valid_i(mem_valid), .d_req_ready_o(mem_ready), .d_req_write_i(mem_write),
@@ -102,7 +108,7 @@ module rv32_dcache_hash_tb #(
 
     initial begin
         seed = 32'h7543bc12;
-        for (byte_index = 0; byte_index < 4096; byte_index = byte_index + 1) reference[byte_index] = 0;
+        for (byte_index = 0; byte_index < MEMORY_BYTES; byte_index = byte_index + 1) reference[byte_index] = 0;
         address_a = CACHE_LINES*16 + (INDEX_HASH ? 16 : 0);
         address_b = CACHE_LINES*32 + (INDEX_HASH ? 32 : 0);
         address_c = CACHE_LINES*48 + (INDEX_HASH ? 48 : 0);

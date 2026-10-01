@@ -2,6 +2,7 @@
 `include "rv32im_defs.vh"
 module rv32_banked_predictor_tb;
     parameter integer WIDTH = 4;
+    parameter integer DIRECT_BRANCH_TARGET = 0;
     reg clk = 0;
     always #5 clk = ~clk;
     reg reset, qvalid, fvalid, ftaken, fptaken;
@@ -14,7 +15,7 @@ module rv32_banked_predictor_tb;
     wire [WIDTH*6-1:0] bi, ref_bi;
     wire [WIDTH*4-1:0] ti, ref_ti;
     wire [31:0] count, correct;
-    rv32_banked_predictor #(.FE_WIDTH(WIDTH)) dut (
+    rv32_banked_predictor #(.FE_WIDTH(WIDTH), .DIRECT_BRANCH_TARGET(DIRECT_BRANCH_TARGET)) dut (
         .clk_i(clk), .reset_i(reset), .query_valid_i(qvalid), .query_pc_i(pc), .query_line_i(line),
         .pred_taken_o(taken), .pred_btb_hit_o(hit), .pred_target_o(predicted_target),
         .pred_kind_o(kind), .pred_counter_o(counter), .pred_bht_index_o(bi), .pred_btb_index_o(ti),
@@ -26,7 +27,7 @@ module rv32_banked_predictor_tb;
         wire [2:0] word_index = {1'b0, pc[3:2]} + lane;
         wire [31:0] query_pc = pc + lane * 32'd4;
         wire [31:0] inst = line >> (word_index * 32);
-        rv32_branch_predictor reference (
+        rv32_branch_predictor #(.DIRECT_BRANCH_TARGET(DIRECT_BRANCH_TARGET)) reference (
             .clk_i(clk), .reset_i(reset), .query_valid_i(qvalid && word_index < 4),
             .query_pc_i(query_pc), .query_inst_i(inst), .pred_taken_o(ref_taken[lane]),
             .pred_btb_hit_o(ref_hit[lane]), .pred_target_o(ref_target[lane*32 +: 32]),
@@ -80,7 +81,7 @@ module rv32_banked_predictor_tb;
             #1; compare;
             @(posedge clk); #1; compare;
         end
-        $display("PASS: banked predictor width=%0d 4000 cycles exact replicated-reference comparison", WIDTH);
+        $display("PASS: banked predictor width=%0d direct=%0d 4000 cycles exact replicated-reference comparison", WIDTH, DIRECT_BRANCH_TARGET);
         $finish(0);
     end
     initial begin #50000; $display("FAIL: banked predictor timeout"); $finish(1); end

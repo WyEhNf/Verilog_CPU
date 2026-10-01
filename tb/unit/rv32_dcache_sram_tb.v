@@ -3,7 +3,8 @@
 module rv32_dcache_sram_tb #(
     parameter integer MERGE_DELAY = 0,
     parameter integer CACHE_WAYS = 1,
-    parameter integer TAG_SRAM = 0
+    parameter integer TAG_SRAM = 0,
+    parameter integer STATIC_UPDATES = 0
 );
     reg clk = 0, reset = 1, flush = 0;
     always #5 clk = ~clk;
@@ -50,7 +51,8 @@ module rv32_dcache_sram_tb #(
     end
     rv32_dcache_nonblocking #(.CACHE_LINES(16), .CACHE_WAYS(CACHE_WAYS),
         .MSHR_ENTRIES(4), .PREFETCH(0), .TAG_WIDTH(16),
-        .STORE_MERGE_DELAY(MERGE_DELAY), .TAG_SRAM(TAG_SRAM)) dut (
+        .STORE_MERGE_DELAY(MERGE_DELAY), .TAG_SRAM(TAG_SRAM),
+        .STATIC_UPDATES(STATIC_UPDATES)) dut (
         .clk_i(clk), .reset_i(reset), .flush_i(flush),
         .dcache_req_valid_i(req_valid), .dcache_req_ready_o(req_ready),
         .dcache_req_is_load_i(req_load), .dcache_req_is_store_i(req_store),

@@ -1,5 +1,10 @@
 `timescale 1ns/1ps
-module rv32_axi_lite_bridge_tb;
+module rv32_axi_lite_bridge_tb #(
+    parameter integer RESPONSE_FIFO_DEPTH = 0,
+    parameter integer READ_LINES = 16,
+    parameter integer WRITE_LINES = 8,
+    parameter integer WORD_QUEUE = 4
+);
     reg clock = 0, reset = 1;
     always #5 clock = ~clock;
     reg iv = 0, dv = 0, dw = 0;
@@ -18,7 +23,8 @@ module rv32_axi_lite_bridge_tb;
     integer cycle = 0, i_received = 0, d_reads_received = 0, d_writes_received = 0;
     wire ore = d_reads_received >= 2 && cycle % 7 != 0;
     wire dsr = cycle % 6 != 0;
-    rv32_axi_lite_bridge #(.READ_LINES(16), .WRITE_LINES(8), .WORD_QUEUE(4)) dut (
+    rv32_axi_lite_bridge #(.READ_LINES(READ_LINES), .WRITE_LINES(WRITE_LINES),
+        .WORD_QUEUE(WORD_QUEUE), .RESPONSE_FIFO_DEPTH(RESPONSE_FIFO_DEPTH)) dut (
         .clock(clock), .reset(reset), .i_req_valid(iv), .i_req_ready(ir), .i_req_addr(ia), .i_req_id(iid),
         .i_resp_valid(ov), .i_resp_ready(ore), .i_resp_addr(oa), .i_resp_data(od), .i_resp_id(oid), .i_resp_error(oe),
         .d_req_valid(dv), .d_req_ready(dr), .d_req_write(dw), .d_req_addr(da), .d_req_data(dd),
@@ -138,7 +144,7 @@ module rv32_axi_lite_bridge_tb;
                 end
                 pending[dsid] <= 0;
             end
-            if (dut.rq_count > 4 || dut.wq_count > 4) $fatal(1, "word FIFO overflow");
+            if (dut.rq_count > WORD_QUEUE || dut.wq_count > WORD_QUEUE) $fatal(1, "word FIFO overflow");
         end
     end
     task send_i;
