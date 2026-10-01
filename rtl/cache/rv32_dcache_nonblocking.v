@@ -15,6 +15,8 @@ module rv32_dcache_nonblocking #(
     parameter integer INDEX_HASH = 0,
     parameter integer STORE_MERGE_DELAY = 0,
     parameter integer TAG_SRAM = 0,
+    // 0: legacy dynamic writes; 1: flat static enables; 2: functional state banks.
+    parameter integer STATIC_UPDATES = 0,
     parameter integer CACHE_SETS = CACHE_LINES / CACHE_WAYS,
     parameter integer CACHE_INDEX_WIDTH = $clog2(CACHE_SETS),
     parameter integer CACHE_TAG_WIDTH = 32 - 4 - CACHE_INDEX_WIDTH
@@ -65,10 +67,15 @@ module rv32_dcache_nonblocking #(
     output reg                      event_writeback_o,
     output reg                      event_stall_o
 );
-    reg [CACHE_LINES-1:0] valid_bits;
-    reg [CACHE_LINES-1:0] dirty_bits;
+    // Shared read views have exactly one selected implementation as their
+    // owner. Bank outputs must not share a procedural driver with legacy FFs.
+    wire [CACHE_LINES-1:0] valid_bits;
+    wire [CACHE_LINES-1:0] dirty_bits;
+    reg [CACHE_LINES-1:0] legacy_valid_bits;
+    reg [CACHE_LINES-1:0] legacy_dirty_bits;
     reg [CACHE_TAG_WIDTH-1:0] tag_mem [0:CACHE_LINES-1];
-    reg [CACHE_SETS-1:0] lru_way_mem;
+    wire [CACHE_SETS-1:0] lru_way_mem;
+    reg [CACHE_SETS-1:0] legacy_lru_way_mem;
     localparam integer CACHE_ENTRY_WIDTH = $clog2(CACHE_LINES);
 
     reg mshr_valid [0:MSHR_ENTRIES-1];
@@ -89,7 +96,8 @@ module rv32_dcache_nonblocking #(
     reg [1:0] mshr_size [0:MSHR_ENTRIES-1];
     reg mshr_unsigned [0:MSHR_ENTRIES-1];
     reg [15:0] mshr_mask [0:MSHR_ENTRIES-1];
-    reg [127:0] mshr_wdata [0:MSHR_ENTRIES-1];
+    wire [127:0] mshr_wdata [0:MSHR_ENTRIES-1];
+    reg [127:0] legacy_mshr_wdata [0:MSHR_ENTRIES-1];
     reg [TAG_WIDTH-1:0] mshr_lsq [0:MSHR_ENTRIES-1];
     reg [31:0] mshr_victim_addr [0:MSHR_ENTRIES-1];
     reg [127:0] mshr_victim_data [0:MSHR_ENTRIES-1];
@@ -689,6 +697,181 @@ module rv32_dcache_nonblocking #(
     integer line_index;
     integer waiter_index;
     reg [127:0] updated_line;
+
+    // Encode precisely the existing request priority before any wide state
+    // write. The alternate implementation decodes a word/byte enable once,
+    // rather than nesting a global request enable around dynamic vector writes.
+    reg [3:0] static_request_action;
+    always @* begin
+        static_request_action = 4'd0;
+        if (request_fire) begin
+            if (request_is_load && request_hit)
+                static_request_action = 4'd1;
+            else if (request_is_store && request_hit)
+                static_request_action = 4'd2;
+            else if (request_is_load && matching_found &&
+                     mshr_store[matching_index] && matching_store_covers_load)
+                static_request_action = 4'd3;
+            else if (request_is_load && matching_found && matching_prefetch)
+                static_request_action = 4'd4;
+            else if (request_is_load && matching_found)
+                static_request_action = 4'd5;
+            else if (request_is_store && matching_found && matching_prefetch)
+                static_request_action = 4'd6;
+            else if (request_is_store && matching_found && mshr_store[matching_index])
+                static_request_action = 4'd7;
+            else
+                static_request_action = 4'd8;
+        end
+    end
+    wire static_prefetch_allocate = (static_request_action == 4'd8) &&
+        (PREFETCH != 0) && request_is_load && second_free_found &&
+        !prefetch_cache_hit && !prefetch_line_present && !prefetch_index_conflict &&
+        (prefetch_index != request_index) &&
+        !(valid_bits[prefetch_victim_entry] && dirty_bits[prefetch_victim_entry]);
+
+    genvar update_group, update_row, update_set, update_mshr, update_byte;
+    generate if (STATIC_UPDATES == 0) begin : g_legacy_updates
+        assign valid_bits = legacy_valid_bits;
+        assign dirty_bits = legacy_dirty_bits;
+        assign lru_way_mem = legacy_lru_way_mem;
+        for (update_mshr = 0; update_mshr < MSHR_ENTRIES; update_mshr = update_mshr + 1) begin : g_data_view
+            assign mshr_wdata[update_mshr] = legacy_mshr_wdata[update_mshr];
+        end
+    end else if (STATIC_UPDATES == 1) begin : g_static_updates
+        localparam integer GROUP_ROWS = 16;
+        localparam integer GROUP_COUNT = CACHE_LINES / GROUP_ROWS;
+        reg [CACHE_LINES-1:0] static_valid_bits, static_dirty_bits;
+        reg [CACHE_SETS-1:0] static_lru_way_mem;
+        reg [127:0] static_mshr_wdata [0:MSHR_ENTRIES-1];
+        assign valid_bits = static_valid_bits;
+        assign dirty_bits = static_dirty_bits;
+        assign lru_way_mem = static_lru_way_mem;
+        // These are distinct address-qualified Boolean functions, not aliases
+        // or external buffer cells. Retaining the decoder boundaries bounds
+        // each group's metadata write fanout without adding a pipeline cycle.
+        (* keep = 1 *) wire [GROUP_COUNT-1:0] miss_group, prefetch_group;
+        (* keep = 1 *) wire [GROUP_COUNT-1:0] store_group, local_group, refill_group;
+        (* keep = 1 *) wire [GROUP_ROWS-1:0] miss_row, prefetch_row, store_row;
+        (* keep = 1 *) wire [GROUP_ROWS-1:0] local_row, refill_row;
+        wire [CACHE_ENTRY_WIDTH-1:0] local_entry = mshr_victim_entry[local_fill_index];
+        wire [CACHE_ENTRY_WIDTH-1:0] refill_entry = mshr_victim_entry[response_index];
+        for (update_group = 0; update_group < GROUP_COUNT; update_group = update_group + 1) begin : g_group
+            assign miss_group[update_group] = (static_request_action == 4'd8) &&
+                (request_victim_entry / GROUP_ROWS == update_group);
+            assign prefetch_group[update_group] = static_prefetch_allocate &&
+                (prefetch_victim_entry / GROUP_ROWS == update_group);
+            assign store_group[update_group] = (static_request_action == 4'd2) &&
+                (request_hit_entry / GROUP_ROWS == update_group);
+            assign local_group[update_group] = local_array_write &&
+                (local_entry / GROUP_ROWS == update_group);
+            assign refill_group[update_group] = refill_array_write &&
+                (refill_entry / GROUP_ROWS == update_group);
+        end
+        for (update_row = 0; update_row < GROUP_ROWS; update_row = update_row + 1) begin : g_low_row
+            assign miss_row[update_row] = (request_victim_entry[3:0] == update_row);
+            assign prefetch_row[update_row] = (prefetch_victim_entry[3:0] == update_row);
+            assign store_row[update_row] = (request_hit_entry[3:0] == update_row);
+            assign local_row[update_row] = (local_entry[3:0] == update_row);
+            assign refill_row[update_row] = (refill_entry[3:0] == update_row);
+        end
+        for (update_row = 0; update_row < CACHE_LINES; update_row = update_row + 1) begin : g_metadata
+            wire miss_clear = miss_group[update_row / GROUP_ROWS] && miss_row[update_row % GROUP_ROWS];
+            wire prefetch_clear = prefetch_group[update_row / GROUP_ROWS] && prefetch_row[update_row % GROUP_ROWS];
+            wire store_dirty = store_group[update_row / GROUP_ROWS] && store_row[update_row % GROUP_ROWS];
+            wire local_install = local_group[update_row / GROUP_ROWS] && local_row[update_row % GROUP_ROWS];
+            wire refill_install = refill_group[update_row / GROUP_ROWS] && refill_row[update_row % GROUP_ROWS];
+            always @(posedge clk_i) begin
+                if (reset_i) begin
+                    static_valid_bits[update_row] <= 1'b0;
+                    // Preserve the original no-reset dirty-bit semantics.
+                end else begin
+                    // Later original nonblocking assignments win: refill,
+                    // then local fill, then prefetch/miss, then store hit.
+                    if (refill_install) begin
+                        static_valid_bits[update_row] <= 1'b1;
+                        static_dirty_bits[update_row] <= mshr_store[response_index];
+                    end else if (local_install) begin
+                        static_valid_bits[update_row] <= 1'b1;
+                        static_dirty_bits[update_row] <= 1'b1;
+                    end else if (prefetch_clear || miss_clear) begin
+                        static_valid_bits[update_row] <= 1'b0;
+                        static_dirty_bits[update_row] <= 1'b0;
+                    end else if (store_dirty)
+                        static_dirty_bits[update_row] <= 1'b1;
+                end
+            end
+        end
+        for (update_set = 0; update_set < CACHE_SETS; update_set = update_set + 1) begin : g_lru
+            always @(posedge clk_i) begin
+                if (reset_i) static_lru_way_mem[update_set] <= 1'b0;
+                else if (CACHE_WAYS == 2) begin
+                    if (static_prefetch_allocate && prefetch_index == update_set)
+                        static_lru_way_mem[update_set] <= !prefetch_victim_entry[0];
+                    else if (static_request_action == 4'd8 && request_index == update_set)
+                        static_lru_way_mem[update_set] <= !request_victim_entry[0];
+                    else if ((static_request_action == 4'd1 || static_request_action == 4'd2) &&
+                             request_index == update_set)
+                        static_lru_way_mem[update_set] <= !request_hit_entry[0];
+                end
+            end
+        end
+        for (update_mshr = 0; update_mshr < MSHR_ENTRIES; update_mshr = update_mshr + 1) begin : g_mshr_data
+            assign mshr_wdata[update_mshr] = static_mshr_wdata[update_mshr];
+            (* keep = 1 *) wire write_zero = static_prefetch_allocate && second_free_index == update_mshr;
+            (* keep = 1 *) wire write_word =
+                ((static_request_action == 4'd8) && free_index == update_mshr) ||
+                ((static_request_action == 4'd6) && matching_index == update_mshr);
+            (* keep = 1 *) wire merge_word = (static_request_action == 4'd7) && matching_index == update_mshr;
+            for (update_byte = 0; update_byte < 16; update_byte = update_byte + 1) begin : g_byte
+                (* keep = 1 *) wire write_byte = write_word || (merge_word && core_req_mask[update_byte]);
+                always @(posedge clk_i) begin
+                    if (reset_i) static_mshr_wdata[update_mshr][update_byte*8 +: 8] <= 8'd0;
+                    else if (write_zero) static_mshr_wdata[update_mshr][update_byte*8 +: 8] <= 8'd0;
+                    else if (write_byte)
+                        static_mshr_wdata[update_mshr][update_byte*8 +: 8] <= core_req_wdata[update_byte*8 +: 8];
+                end
+            end
+        end
+    end else begin : g_banked_updates
+        localparam integer GROUP_ROWS = 16;
+        localparam integer GROUP_SETS = GROUP_ROWS / CACHE_WAYS;
+        localparam integer GROUP_COUNT = CACHE_LINES / GROUP_ROWS;
+        wire [CACHE_ENTRY_WIDTH-1:0] local_entry = mshr_victim_entry[local_fill_index];
+        wire [CACHE_ENTRY_WIDTH-1:0] refill_entry = mshr_victim_entry[response_index];
+        // These modules own the actual state and its address-qualified write
+        // logic. No extra cycle, buffer-cell stub or replacement SRAM is used.
+        for (update_group = 0; update_group < GROUP_COUNT; update_group = update_group + 1) begin : g_metadata
+            rv32_dcache_metadata_bank #(
+                .CACHE_LINES(CACHE_LINES), .CACHE_WAYS(CACHE_WAYS),
+                .GROUP_ROWS(GROUP_ROWS), .GROUP_ID(update_group),
+                .ENTRY_WIDTH(CACHE_ENTRY_WIDTH), .SET_WIDTH(CACHE_INDEX_WIDTH)
+            ) state_bank (
+                .clk_i(clk_i), .reset_i(reset_i),
+                .refill_valid_i(refill_array_write), .refill_entry_i(refill_entry),
+                .refill_dirty_i(mshr_store[response_index]),
+                .local_valid_i(local_array_write), .local_entry_i(local_entry),
+                .miss_valid_i(static_request_action == 4'd8), .miss_entry_i(request_victim_entry),
+                .prefetch_valid_i(static_prefetch_allocate), .prefetch_entry_i(prefetch_victim_entry),
+                .store_hit_i(static_request_action == 4'd2), .hit_entry_i(request_hit_entry),
+                .hit_valid_i(static_request_action == 4'd1 || static_request_action == 4'd2),
+                .request_set_i(request_index), .prefetch_set_i(prefetch_index),
+                .valid_o(valid_bits[update_group*GROUP_ROWS +: GROUP_ROWS]),
+                .dirty_o(dirty_bits[update_group*GROUP_ROWS +: GROUP_ROWS]),
+                .lru_o(lru_way_mem[update_group*GROUP_SETS +: GROUP_SETS])
+            );
+        end
+        for (update_mshr = 0; update_mshr < MSHR_ENTRIES; update_mshr = update_mshr + 1) begin : g_mshr_data
+            rv32_dcache_mshr_data_bank #(.MSHR_ID(update_mshr)) state_bank (
+                .clk_i(clk_i), .reset_i(reset_i), .request_action_i(static_request_action),
+                .prefetch_allocate_i(static_prefetch_allocate), .second_free_i(second_free_index[2:0]),
+                .free_i(free_index[2:0]), .matching_i(matching_index[2:0]),
+                .write_mask_i(core_req_mask), .write_data_i(core_req_wdata),
+                .data_o(mshr_wdata[update_mshr])
+            );
+        end
+    end endgenerate
+
     always @(posedge clk_i) begin
         if (reset_i) begin
             resp_valid_reg <= 1'b0;
@@ -706,8 +889,10 @@ module rv32_dcache_nonblocking #(
             event_refill_o <= 1'b0;
             event_writeback_o <= 1'b0;
             event_stall_o <= 1'b0;
-            valid_bits <= {CACHE_LINES{1'b0}};
-            lru_way_mem <= {CACHE_SETS{1'b0}};
+            if (STATIC_UPDATES == 0) begin
+                legacy_valid_bits <= {CACHE_LINES{1'b0}};
+                legacy_lru_way_mem <= {CACHE_SETS{1'b0}};
+            end
             for (reset_index = 0; reset_index < MSHR_ENTRIES; reset_index = reset_index + 1) begin
                 mshr_valid[reset_index] <= 1'b0;
                 mshr_sent[reset_index] <= 1'b0;
@@ -720,7 +905,7 @@ module rv32_dcache_nonblocking #(
                 mshr_size[reset_index] <= 2'd0;
                 mshr_unsigned[reset_index] <= 1'b0;
                 mshr_mask[reset_index] <= 16'd0;
-                mshr_wdata[reset_index] <= 128'd0;
+                if (STATIC_UPDATES == 0) legacy_mshr_wdata[reset_index] <= 128'd0;
                 mshr_lsq[reset_index] <= {TAG_WIDTH{1'b0}};
                 mshr_victim_addr[reset_index] <= 32'd0;
                 mshr_victim_data[reset_index] <= 128'd0;
@@ -787,13 +972,13 @@ module rv32_dcache_nonblocking #(
                     resp_unsigned_reg <= core_req_unsigned;
                     resp_line_valid_reg <= 1'b1;
                     resp_error_reg <= 1'b0;
-                    if (CACHE_WAYS == 2)
-                        lru_way_mem[request_index] <= !request_hit_entry[0];
+                    if (STATIC_UPDATES == 0 && CACHE_WAYS == 2)
+                        legacy_lru_way_mem[request_index] <= !request_hit_entry[0];
                 end else if (request_is_store && request_hit) begin
                     event_hit_o <= 1'b1;
-                    dirty_bits[request_hit_entry] <= 1'b1;
-                    if (CACHE_WAYS == 2)
-                        lru_way_mem[request_index] <= !request_hit_entry[0];
+                    if (STATIC_UPDATES == 0) legacy_dirty_bits[request_hit_entry] <= 1'b1;
+                    if (STATIC_UPDATES == 0 && CACHE_WAYS == 2)
+                        legacy_lru_way_mem[request_index] <= !request_hit_entry[0];
                     ack_valid_reg <= !(bypass_store_ack && dcache_store_ack_ready_i);
                     ack_lsq_reg <= core_req_lsq_tag;
                     ack_error_reg <= 1'b0;
@@ -848,7 +1033,7 @@ module rv32_dcache_nonblocking #(
                     mshr_size[matching_index] <= core_req_size;
                     mshr_unsigned[matching_index] <= 1'b0;
                     mshr_mask[matching_index] <= core_req_mask;
-                    mshr_wdata[matching_index] <= core_req_wdata;
+                    if (STATIC_UPDATES == 0) legacy_mshr_wdata[matching_index] <= core_req_wdata;
                     mshr_lsq[matching_index] <= core_req_lsq_tag;
                     mshr_merge_delay[matching_index] <= MERGE_DELAY;
                 end else if (request_is_store && matching_found &&
@@ -857,10 +1042,11 @@ module rv32_dcache_nonblocking #(
                     // the refill.  Later bytes override earlier bytes while
                     // every LSQ entry retains its own completion ack.
                     event_miss_o <= 1'b1;
-                    mshr_wdata[matching_index] <=
-                        merge_store(mshr_wdata[matching_index],
-                                    core_req_wdata,
-                                    core_req_mask);
+                    if (STATIC_UPDATES == 0)
+                        legacy_mshr_wdata[matching_index] <=
+                            merge_store(mshr_wdata[matching_index],
+                                        core_req_wdata,
+                                        core_req_mask);
                     mshr_mask[matching_index] <= mshr_mask[matching_index] |
                                                  core_req_mask;
                 end else begin
@@ -878,7 +1064,7 @@ module rv32_dcache_nonblocking #(
                     mshr_size[free_index] <= core_req_size;
                     mshr_unsigned[free_index] <= core_req_unsigned;
                     mshr_mask[free_index] <= request_is_store ? core_req_mask : 16'd0;
-                    mshr_wdata[free_index] <= core_req_wdata;
+                    if (STATIC_UPDATES == 0) legacy_mshr_wdata[free_index] <= core_req_wdata;
                     mshr_lsq[free_index] <= core_req_lsq_tag;
                     mshr_victim_addr[free_index] <=
                         victim_line_address(request_tags[(request_victim_entry % CACHE_WAYS)*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH], request_index);
@@ -892,10 +1078,12 @@ module rv32_dcache_nonblocking #(
                         end
                     end
                     mshr_victim_entry[free_index] <= request_victim_entry;
-                    valid_bits[request_victim_entry] <= 1'b0;
-                    dirty_bits[request_victim_entry] <= 1'b0;
-                    if (CACHE_WAYS == 2)
-                        lru_way_mem[request_index] <= !request_victim_entry[0];
+                    if (STATIC_UPDATES == 0) begin
+                        legacy_valid_bits[request_victim_entry] <= 1'b0;
+                        legacy_dirty_bits[request_victim_entry] <= 1'b0;
+                    end
+                    if (STATIC_UPDATES == 0 && CACHE_WAYS == 2)
+                        legacy_lru_way_mem[request_index] <= !request_victim_entry[0];
 
                     // Store streams already expose every committed address
                     // to the cache.  Prefetching after a store miss wastes a
@@ -920,15 +1108,17 @@ module rv32_dcache_nonblocking #(
                         mshr_size[second_free_index] <= `RV32IM_MEM_WORD;
                         mshr_unsigned[second_free_index] <= 1'b1;
                         mshr_mask[second_free_index] <= 16'd0;
-                        mshr_wdata[second_free_index] <= 128'd0;
+                        if (STATIC_UPDATES == 0) legacy_mshr_wdata[second_free_index] <= 128'd0;
                         mshr_lsq[second_free_index] <= {TAG_WIDTH{1'b0}};
                         mshr_victim_addr[second_free_index] <= 32'd0;
                         mshr_victim_data[second_free_index] <= 128'd0;
                         mshr_victim_entry[second_free_index] <= prefetch_victim_entry;
-                        valid_bits[prefetch_victim_entry] <= 1'b0;
-                        dirty_bits[prefetch_victim_entry] <= 1'b0;
-                        if (CACHE_WAYS == 2)
-                            lru_way_mem[prefetch_index] <= !prefetch_victim_entry[0];
+                        if (STATIC_UPDATES == 0) begin
+                            legacy_valid_bits[prefetch_victim_entry] <= 1'b0;
+                            legacy_dirty_bits[prefetch_victim_entry] <= 1'b0;
+                        end
+                        if (STATIC_UPDATES == 0 && CACHE_WAYS == 2)
+                            legacy_lru_way_mem[prefetch_index] <= !prefetch_victim_entry[0];
                     end
                 end
                 if (request_is_store) begin
@@ -948,8 +1138,10 @@ module rv32_dcache_nonblocking #(
                 // contents. Stores were acknowledged on ownership transfer;
                 // local completion installs dirty data, never a second ack.
                 mshr_valid[local_fill_index] <= 1'b0;
-                valid_bits[mshr_victim_entry[local_fill_index]] <= 1'b1;
-                dirty_bits[mshr_victim_entry[local_fill_index]] <= 1'b1;
+                if (STATIC_UPDATES == 0) begin
+                    legacy_valid_bits[mshr_victim_entry[local_fill_index]] <= 1'b1;
+                    legacy_dirty_bits[mshr_victim_entry[local_fill_index]] <= 1'b1;
+                end
                 if (TAG_SRAM == 0)
                     tag_mem[mshr_victim_entry[local_fill_index]] <=
                         mshr_addr[local_fill_index][31:CACHE_INDEX_WIDTH+4];
@@ -1030,8 +1222,10 @@ module rv32_dcache_nonblocking #(
                     end
                     if (!mem_resp_error_i && response_matches) begin
                         line_index = mshr_victim_entry[response_index];
-                        valid_bits[line_index] <= 1'b1;
-                        dirty_bits[line_index] <= 1'b1;
+                        if (STATIC_UPDATES == 0) begin
+                            legacy_valid_bits[line_index] <= 1'b1;
+                            legacy_dirty_bits[line_index] <= 1'b1;
+                        end
                         if (TAG_SRAM == 0)
                             tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
                         event_refill_o <= 1'b1;
@@ -1040,10 +1234,10 @@ module rv32_dcache_nonblocking #(
                     mshr_valid[response_index] <= 1'b0;
                     if (!mem_resp_error_i && response_matches) begin
                         line_index = mshr_victim_entry[response_index];
-                        valid_bits[line_index] <= 1'b1;
+                        if (STATIC_UPDATES == 0) legacy_valid_bits[line_index] <= 1'b1;
                         if (TAG_SRAM == 0)
                             tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
-                        dirty_bits[line_index] <= 1'b0;
+                        if (STATIC_UPDATES == 0) legacy_dirty_bits[line_index] <= 1'b0;
                         event_refill_o <= 1'b1;
                     end
                 end else begin
@@ -1061,10 +1255,10 @@ module rv32_dcache_nonblocking #(
                     end
                     if (!mem_resp_error_i && response_matches) begin
                         line_index = mshr_victim_entry[response_index];
-                        valid_bits[line_index] <= 1'b1;
+                        if (STATIC_UPDATES == 0) legacy_valid_bits[line_index] <= 1'b1;
                         if (TAG_SRAM == 0)
                             tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
-                        dirty_bits[line_index] <= 1'b0;
+                        if (STATIC_UPDATES == 0) legacy_dirty_bits[line_index] <= 1'b0;
                         event_refill_o <= 1'b1;
                     end
                     resp_valid_reg <= 1'b1;
@@ -1090,6 +1284,7 @@ module rv32_dcache_nonblocking #(
             ((CACHE_WAYS != 1) && (CACHE_WAYS != 2)) ||
             STORE_MERGE_DELAY < 0 || STORE_MERGE_DELAY > 255 ||
             (TAG_SRAM != 0 && TAG_SRAM != 1) ||
+            (STATIC_UPDATES < 0 || STATIC_UPDATES > 2) ||
             (CACHE_LINES % CACHE_WAYS != 0) ||
             CACHE_LINES > 4096 ||
             ((CACHE_LINES & (CACHE_LINES - 1)) != 0)) begin

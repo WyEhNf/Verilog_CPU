@@ -11,7 +11,8 @@
 module rv32_fetch_frontend #(
     parameter integer FE_WIDTH = `RV32IM_FE_WIDTH_DEFAULT,
     parameter integer FQ_DEPTH = 16,
-    parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH
+    parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH,
+    parameter integer PREDICTOR_META = 0
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -37,6 +38,8 @@ module rv32_fetch_frontend #(
     input  wire [FE_WIDTH*32-1:0]       if_resp_pred_target_i,
     input  wire [FE_WIDTH*2-1:0]        if_resp_pred_kind_i,
     input  wire [FE_WIDTH-1:0]          if_resp_pred_btb_hit_i,
+    input  wire [FE_WIDTH*16-1:0]       if_resp_pred_metadata_i,
+    output reg  [FE_WIDTH*16-1:0]       fetch_pred_metadata_o,
 
     output reg  [FE_WIDTH-1:0]          fetch_valid_o,
     input  wire [FE_WIDTH-1:0]           fetch_ready_i,
@@ -64,6 +67,7 @@ module rv32_fetch_frontend #(
     reg [1:0] fq_pred_kind [0:FQ_DEPTH-1];
     reg fq_pred_btb_hit [0:FQ_DEPTH-1];
     reg [EPOCH_WIDTH-1:0] fq_epoch [0:FQ_DEPTH-1];
+    reg [15:0] fq_pred_metadata [0:FQ_DEPTH-1];
 
     reg [FE_WIDTH-1:0] bundle_pred_taken;
     reg [FE_WIDTH-1:0] bundle_pred_btb_hit;
@@ -97,6 +101,7 @@ module rv32_fetch_frontend #(
     // implements exactly head+lane modulo FQ_DEPTH, without another cycle.
     wire [FQ_DEPTH-1:0] head_row_select;
     wire [FE_WIDTH*PACKET_WIDTH-1:0] queue_read_packets;
+    wire [FE_WIDTH*16-1:0] queue_read_metadata;
     genvar read_row, read_lane;
     generate
         for (read_row = 0; read_row < FQ_DEPTH; read_row = read_row + 1) begin : g_head_decode
@@ -105,17 +110,24 @@ module rv32_fetch_frontend #(
         end
         for (read_lane = 0; read_lane < FE_WIDTH; read_lane = read_lane + 1) begin : g_packet_read
             reg [PACKET_WIDTH-1:0] packet;
+            reg [15:0] metadata;
             integer row;
             always @* begin
                 packet = {PACKET_WIDTH{1'b0}};
-                for (row = 0; row < FQ_DEPTH; row = row + 1)
+                metadata = 16'b0;
+                for (row = 0; row < FQ_DEPTH; row = row + 1) begin
                     packet = packet |
                         ({PACKET_WIDTH{head_row_select[(row+FQ_DEPTH-read_lane)%FQ_DEPTH]}} &
                          `RV32IM_FETCH_PACKET_PACK(fq_pc[row], fq_inst[row],
                             fq_pred_taken[row], fq_pred_target[row], fq_pred_kind[row],
                             fq_pred_btb_hit[row], fq_epoch[row]));
+                    if (PREDICTOR_META != 0)
+                        metadata = metadata | ({16{head_row_select[(row+FQ_DEPTH-read_lane)%FQ_DEPTH]}} &
+                            fq_pred_metadata[row]);
+                end
             end
             assign queue_read_packets[read_lane*PACKET_WIDTH +: PACKET_WIDTH] = packet;
+            assign queue_read_metadata[read_lane*16 +: 16] = metadata;
         end
     endgenerate
 
@@ -174,12 +186,14 @@ module rv32_fetch_frontend #(
     always @* begin
         fetch_valid_o = {FE_WIDTH{1'b0}};
         fetch_packet_o = {(FE_WIDTH*PACKET_WIDTH){1'b0}};
+        fetch_pred_metadata_o = {FE_WIDTH*16{1'b0}};
         deq_count = 0;
         for (j = 0; j < FE_WIDTH; j = j + 1) begin
             if (j < count_reg) begin
                 fetch_valid_o[j] = 1'b1;
                 fetch_packet_o[j*PACKET_WIDTH +: PACKET_WIDTH] =
                     queue_read_packets[j*PACKET_WIDTH +: PACKET_WIDTH];
+                fetch_pred_metadata_o[j*16 +: 16] = queue_read_metadata[j*16 +: 16];
             end
             if ((j < count_reg) && (deq_count == j) && fetch_ready_i[j])
                 deq_count = deq_count + 1;
@@ -211,6 +225,7 @@ module rv32_fetch_frontend #(
                 fq_pred_kind[k] <= `RV32IM_PRED_NONE;
                 fq_pred_btb_hit[k] <= 1'b0;
                 fq_epoch[k] <= {EPOCH_WIDTH{1'b0}};
+                fq_pred_metadata[k] <= 16'b0;
             end
         end else begin
             event_fetch_o <= (deq_count != 0);
@@ -254,6 +269,8 @@ module rv32_fetch_frontend #(
                             fq_pred_kind[write_index] <= bundle_pred_kind[i*2 +: 2];
                             fq_pred_btb_hit[write_index] <= bundle_pred_btb_hit[i];
                             fq_epoch[write_index] <= bundle_epoch;
+                            fq_pred_metadata[write_index] <= (PREDICTOR_META != 0) ?
+                                if_resp_pred_metadata_i[i*16 +: 16] : 16'b0;
                         end
                     end
                     tail_reg <= tail_reg + bundle_count;

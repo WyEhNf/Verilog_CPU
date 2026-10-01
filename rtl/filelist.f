@@ -4,6 +4,7 @@ rtl/predictor/rv32_banked_predictor.v
 rtl/cache/rv32_icache.v
 rtl/cache/rv32_icache_nonblocking.v
 rtl/cache/rv32_dcache.v
+rtl/cache/rv32_dcache_control_banks.v
 rtl/cache/rv32_dcache_nonblocking.v
 rtl/cache/rv32_cache_stats.v
 rtl/memory/rv32_memory_bridge.v
@@ -21,6 +22,8 @@ rtl/backend/rv32_reservation_station.v
 rtl/backend/rv32m_mdu_reservation_station.v
 rtl/backend/rv32_completion_network.v
 rtl/backend/rv32_lsq.v
+rtl/backend/rv32_store_address_select.v
+rtl/backend/rv32_rat_recovery.v
 rtl/backend/rv32_backend_joint.v
 rtl/backend/rv32_serial_backend.v
 rtl/common/rv32im_tag_compare.v
@@ -28,4 +31,6 @@ rtl/common/rv32im_fifo.v
 rtl/common/rv32im_skid_buffer.v
 rtl/common/rv32im_prefix_alloc.v
 rtl/common/rv32im_priority_select.v
+rtl/common/rv32_asap7_fanout.v
+rtl/common/rv32_control_register_bank.v
 rtl/cpu_core.v

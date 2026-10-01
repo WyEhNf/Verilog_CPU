@@ -11,6 +11,7 @@ module rv32_reservation_station #(
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
     parameter integer WAKE_WIDTH = BE_WIDTH,
     parameter integer STORE_DATA_WIDTH = 32,
+    parameter integer METADATA_WIDTH = 1,
     parameter integer SLOT_WIDTH = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES),
     parameter integer AGE_WIDTH = 32
 ) (
@@ -29,6 +30,7 @@ module rv32_reservation_station #(
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] alloc_src2_tag_i,
     input  wire [BE_WIDTH-1:0]           alloc_src2_ready_i,
     input  wire [(BE_WIDTH*STORE_DATA_WIDTH)-1:0] alloc_store_data_i,
+    input  wire [(BE_WIDTH*METADATA_WIDTH)-1:0] alloc_metadata_i,
     output wire                         alloc_ready_o,
     output reg  [BE_WIDTH-1:0]           alloc_fire_o,
     output reg  [((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))-1:0] alloc_count_o,
@@ -46,12 +48,18 @@ module rv32_reservation_station #(
     output reg  [(BE_WIDTH*32)-1:0]      issue_src1_value_o,
     output reg  [(BE_WIDTH*32)-1:0]      issue_src2_value_o,
     output reg  [(BE_WIDTH*STORE_DATA_WIDTH)-1:0] issue_store_data_o,
+    output reg  [(BE_WIDTH*METADATA_WIDTH)-1:0] issue_metadata_o,
     output reg  [(BE_WIDTH*SLOT_WIDTH)-1:0] issue_slot_o,
 
     input  wire                         flush_valid_i,
     input  wire [ENTRIES-1:0]            flush_kill_mask_i,
     output wire [ENTRIES-1:0]            entry_valid_o,
     output wire [(ENTRIES*TAG_WIDTH)-1:0] entry_rob_tag_o,
+    // A read-only view of the existing base operand, including CDB bypass.
+    // Store address probing does not consume an issue slot or dequeue work.
+    output wire [ENTRIES-1:0]            entry_base_ready_o,
+    output wire [(ENTRIES*32)-1:0]       entry_base_value_o,
+    output wire [(ENTRIES*METADATA_WIDTH)-1:0] entry_metadata_o,
     output wire [((ENTRIES <= 1) ? 1 : $clog2(ENTRIES + 1))-1:0] occupancy_o
 );
     localparam integer COUNT_WIDTH = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES + 1);
@@ -70,6 +78,9 @@ module rv32_reservation_station #(
     reg [TAG_WIDTH-1:0] src2_tag_mem [0:ENTRIES-1];
     reg src2_ready_mem [0:ENTRIES-1];
     reg [STORE_DATA_WIDTH-1:0] store_data_mem [0:ENTRIES-1];
+    // Opaque dispatch information follows the same allocation, selection and
+    // recovery ownership as the operands. Invalid entry payload is undefined.
+    reg [METADATA_WIDTH-1:0] metadata_mem [0:ENTRIES-1];
     reg [AGE_WIDTH-1:0] age_mem [0:ENTRIES-1];
     reg src1_ready_effective [0:ENTRIES-1];
     reg [31:0] src1_value_effective [0:ENTRIES-1];
@@ -106,6 +117,11 @@ module rv32_reservation_station #(
         for (entry_index = 0; entry_index < ENTRIES; entry_index = entry_index + 1) begin : g_entry_state
             assign entry_valid_o[entry_index] = valid_mem[entry_index];
             assign entry_rob_tag_o[(entry_index*TAG_WIDTH) +: TAG_WIDTH] = rob_tag_mem[entry_index];
+            assign entry_base_ready_o[entry_index] = valid_mem[entry_index] &&
+                target_live_mem[entry_index] && src1_ready_effective[entry_index] &&
+                !flush_valid_i;
+            assign entry_base_value_o[(entry_index*32) +: 32] = src1_value_effective[entry_index];
+            assign entry_metadata_o[(entry_index*METADATA_WIDTH) +: METADATA_WIDTH] = metadata_mem[entry_index];
             assign ready_candidates[entry_index] = valid_mem[entry_index] &&
                 target_live_mem[entry_index] && src1_ready_effective[entry_index] &&
                 src2_ready_effective[entry_index];
@@ -189,6 +205,7 @@ module rv32_reservation_station #(
         issue_src1_value_o = {(BE_WIDTH*32){1'b0}};
         issue_src2_value_o = {(BE_WIDTH*32){1'b0}};
         issue_store_data_o = {(BE_WIDTH*STORE_DATA_WIDTH){1'b0}};
+        issue_metadata_o = {(BE_WIDTH*METADATA_WIDTH){1'b0}};
         issue_slot_o = {(BE_WIDTH*SLOT_WIDTH){1'b0}};
         for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
             for (slot = 0; slot < ENTRIES; slot = slot + 1) begin
@@ -201,6 +218,7 @@ module rv32_reservation_station #(
                     issue_src1_value_o[(lane*32) +: 32] = issue_src1_value_o[(lane*32) +: 32] | src1_value_effective[slot];
                     issue_src2_value_o[(lane*32) +: 32] = issue_src2_value_o[(lane*32) +: 32] | src2_value_effective[slot];
                     issue_store_data_o[(lane*STORE_DATA_WIDTH) +: STORE_DATA_WIDTH] = issue_store_data_o[(lane*STORE_DATA_WIDTH) +: STORE_DATA_WIDTH] | store_data_mem[slot];
+                    issue_metadata_o[(lane*METADATA_WIDTH) +: METADATA_WIDTH] = issue_metadata_o[(lane*METADATA_WIDTH) +: METADATA_WIDTH] | metadata_mem[slot];
                     issue_slot_o[(lane*SLOT_WIDTH) +: SLOT_WIDTH] = issue_slot_o[(lane*SLOT_WIDTH) +: SLOT_WIDTH] | slot[SLOT_WIDTH-1:0];
                 end
             end
@@ -296,6 +314,7 @@ module rv32_reservation_station #(
                     src2_tag_mem[alloc_slot] <= alloc_src2_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH];
                     src2_ready_mem[alloc_slot] <= alloc_src2_ready_i[lane];
                     store_data_mem[alloc_slot] <= alloc_store_data_i[(lane*STORE_DATA_WIDTH) +: STORE_DATA_WIDTH];
+                    metadata_mem[alloc_slot] <= alloc_metadata_i[(lane*METADATA_WIDTH) +: METADATA_WIDTH];
                     age_mem[alloc_slot] <= age_counter + lane;
                 end
             end
