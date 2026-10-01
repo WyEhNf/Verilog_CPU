@@ -20,6 +20,63 @@ def sha256(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def expand_stat_census(statistics, top='student_top'):
+    """Check every Yosys module census, including preserved functional hierarchy.
+
+    Yosys 0.68 reports physical leaves in num_cells, but its type dictionary
+    also contains functional submodule instance entries. Do not simply discard
+    those entries: expand all reachable modules with their real multiplicities
+    and require the complete global dictionary to match leaves plus hierarchy.
+    """
+    modules = {name.removeprefix('\\'): row
+               for name, row in statistics['modules'].items()}
+    assert len(modules) == len(statistics['modules']), 'Ambiguous module names'
+    assert top in modules, 'Missing statistics top'
+    memo = {}
+
+    def checked_counts(row):
+        raw = row['num_cells_by_type']
+        assert all(type(value) is int and value > 0 for value in raw.values()), \
+            'Invalid cell multiplicity'
+        return Counter(raw)
+
+    def visit(kind, ancestors=()):
+        assert kind not in ancestors, 'Recursive statistics hierarchy'
+        if kind in memo:
+            return memo[kind]
+        row = modules[kind]
+        direct = checked_counts(row)
+        direct_leaves, direct_modules = Counter(), Counter()
+        leaves, hierarchy = Counter(), Counter()
+        assert row['num_memories'] == row['num_memory_bits'] == row['num_processes'] == 0, \
+            'Unmapped module objects'
+        for child, count in direct.items():
+            normalized = child.removeprefix('\\')
+            if normalized not in modules:
+                direct_leaves[child] += count
+                leaves[child] += count
+                continue
+            direct_modules[child] += count
+            hierarchy[child] += count
+            nested_leaves, nested_hierarchy = visit(normalized, ancestors + (kind,))
+            leaves.update({name: value * count for name, value in nested_leaves.items()})
+            hierarchy.update({name: value * count for name, value in nested_hierarchy.items()})
+        assert sum(direct_leaves.values()) == row['num_cells'], 'Module leaf total mismatch'
+        assert sum(direct_modules.values()) == row['num_submodules'], 'Module instance total mismatch'
+        memo[kind] = leaves, hierarchy
+        return memo[kind]
+
+    leaves, hierarchy = visit(top)
+    assert set(memo) == set(modules), 'Unreachable functional statistics module'
+    design = statistics['design']
+    assert checked_counts(design) == leaves + hierarchy, 'Global expanded type census mismatch'
+    assert sum(leaves.values()) == design['num_cells'], 'Global leaf total mismatch'
+    assert sum(hierarchy.values()) == design['num_submodules'], 'Global instance total mismatch'
+    assert design['num_memories'] == design['num_memory_bits'] == design['num_processes'] == 0, \
+        'Unmapped design objects'
+    return leaves, hierarchy
+
+
 def verify(directory, require_current=False):
     if not __debug__:
         raise ValueError('Verification requires Python assertions; do not use -O')
@@ -54,9 +111,11 @@ def verify(directory, require_current=False):
     for name, expected in marker['output_sha256'].items():
         assert sha256(out / name) == expected, 'Mapped output changed: ' + name
     assert marker['output_sha256']['mapped.v'] == audit['netlist_sha256'], 'Netlist mismatch'
-    stat = json.loads((out / 'stat.json').read_text())['design']
+    statistics = json.loads((out / 'stat.json').read_text())
+    stat = statistics['design']
+    stat_leaves, stat_hierarchy = expand_stat_census(statistics)
     counts = Counter(audit['leaf_counts'])
-    assert dict(counts) == stat['num_cells_by_type'], 'Leaf census mismatch'
+    assert counts == stat_leaves, 'Leaf census mismatch'
     assert sum(counts.values()) == stat['num_cells'] == audit['leaf_instances']
     assert stat['num_memories'] == stat['num_memory_bits'] == 0
     prices, sequential = {}, set()
@@ -96,7 +155,10 @@ def verify(directory, require_current=False):
     return {'status': 'VERIFIED', 'directory': str(out), 'settings': manifest['settings'],
             'area': {key: str(value) for key, value in components.items()},
             'leaf_instances': sum(counts.values()), 'sram_instances': sum(instances.values()),
+            'functional_hierarchy_instances': sum(stat_hierarchy.values()),
             'netlist_sha256': audit['netlist_sha256'], 'changed_current_inputs': current_changes,
+            'verifier_sha256': sha256(__file__),
+            'stat_census_method': 'Recursive functional-module expansion; full leaf and hierarchy type/total equality',
             'method': 'Actual final leaf counts times unmodified raw Liberty areas, independent Decimal arithmetic'}
 
 
