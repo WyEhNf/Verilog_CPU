@@ -13,6 +13,8 @@ module rv32_rob #(
     parameter integer TAG_WIDTH = 1 + 2 + SLOT_WIDTH + GENERATION_WIDTH,
     parameter integer CHECKPOINT_WIDTH = 1024,
     parameter integer CHECKPOINT_IMPL = 0,
+    parameter integer ASAP7_FANOUT_BUFFERS = 0,
+    parameter integer ROB_CONTROL_REGISTER_BANKS = 0,
     // 1 retires a store after admission into the committed LSQ/store buffer;
     // 0 preserves the precise legacy behavior of waiting for cache ack.
     parameter integer STORE_BUFFERED_RETIRE = 1
@@ -89,6 +91,7 @@ module rv32_rob #(
     output reg                          error_o,
     output reg  [31:0]                  return_value_o,
     output wire [SLOT_WIDTH-1:0]        head_o,
+    output wire [6*SLOT_WIDTH-1:0]      head_domains_o,
     output wire [SLOT_WIDTH-1:0]        tail_o,
     output wire [((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1))-1:0] occupancy_o,
     output wire [ROB_ENTRIES-1:0]       entry_valid_o,
@@ -130,6 +133,29 @@ module rv32_rob #(
     reg [CHECKPOINT_WIDTH-1:0] checkpoint_mem [0:ROB_ENTRIES-1];
 
     reg [SLOT_WIDTH-1:0] head_reg;
+    wire [SLOT_WIDTH-1:0] head_next;
+    wire [5*SLOT_WIDTH-1:0] head_views;
+    wire [SLOT_WIDTH-1:0] head_read_index = head_views[0 +: SLOT_WIDTH];
+    wire [SLOT_WIDTH-1:0] head_recovery_index = head_views[SLOT_WIDTH +: SLOT_WIDTH];
+    wire [SLOT_WIDTH-1:0] head_commit_index = head_views[2*SLOT_WIDTH +: SLOT_WIDTH];
+    wire [SLOT_WIDTH-1:0] head_update_index = head_views[3*SLOT_WIDTH +: SLOT_WIDTH];
+    generate
+        if (ROB_CONTROL_REGISTER_BANKS != 0) begin : g_head_register_banks
+            rv32_control_register_bank #(.WIDTH(SLOT_WIDTH), .LEAVES(5), .ENABLED(1)) local_heads(
+                .clk_i(clk_i), .reset_i(reset_i), .update_en_i(1'b1),
+                .value_i(head_next), .replicas_o(head_views));
+            rv32_control_register_bank #(.WIDTH(SLOT_WIDTH), .LEAVES(6), .ENABLED(1)) exported_heads(
+                .clk_i(clk_i), .reset_i(reset_i), .update_en_i(1'b1),
+                .value_i(head_next), .replicas_o(head_domains_o));
+        end else if (ASAP7_FANOUT_BUFFERS != 0) begin : g_head_fanout
+            rv32_asap7_fanout #(.WIDTH(SLOT_WIDTH), .LEAVES(5), .ENABLED(1)) tree(
+                .signal_i(head_reg), .replicas_o(head_views));
+            assign head_domains_o = {6{head_reg}};
+        end else begin : g_head_wires
+            assign head_views = {5{head_reg}};
+            assign head_domains_o = {6{head_reg}};
+        end
+    endgenerate
     reg [SLOT_WIDTH-1:0] tail_reg;
     reg [COUNT_WIDTH-1:0] occupancy_reg;
     reg [3:0] epoch_reg;
@@ -154,6 +180,115 @@ module rv32_rob #(
     reg prefix_open;
     reg commit_break;
     reg [GENERATION_WIDTH-1:0] next_generation;
+    initial begin
+        if ((ROB_CONTROL_REGISTER_BANKS != 0 && ROB_CONTROL_REGISTER_BANKS != 1) ||
+            (ROB_CONTROL_REGISTER_BANKS != 0 && ASAP7_FANOUT_BUFFERS != 0))
+            $fatal(1, "invalid or conflicting ROB control-register configuration");
+    end
+
+    // Every open commit lane has already accepted all preceding lanes, so
+    // its row is head+lane, not a mux address dependent on pop_count. Decode
+    // the head once and read each full, access-relative packet in parallel.
+    // The ordered prefix below still controls which packets are observable.
+    localparam integer COMMIT_READ_WIDTH = 8 + GENERATION_WIDTH + 5 +
+        5*32 + 4 + 2*PHYS_ADDR_WIDTH;
+    wire [ROB_ENTRIES-1:0] head_row_select;
+    localparam integer READ_GROUPS = 4;
+    localparam integer READ_GROUP_WIDTH = (COMMIT_READ_WIDTH + READ_GROUPS - 1) / READ_GROUPS;
+    wire [ROB_ENTRIES*BE_WIDTH*READ_GROUPS-1:0] head_read_select;
+    wire [ROB_ENTRIES-1:0] next_head_row_select;
+    function [COMMIT_READ_WIDTH-1:0] read_mask;
+        input [READ_GROUPS-1:0] selections;
+        integer bit_id;
+        begin
+            for (bit_id = 0; bit_id < COMMIT_READ_WIDTH; bit_id = bit_id + 1)
+                read_mask[bit_id] = selections[bit_id / READ_GROUP_WIDTH];
+        end
+    endfunction
+    wire [COMMIT_READ_WIDTH-1:0] head_packet [0:BE_WIDTH-1];
+    wire head_valid [0:BE_WIDTH-1], head_ready [0:BE_WIDTH-1];
+    wire head_store [0:BE_WIDTH-1], head_halt [0:BE_WIDTH-1];
+    wire head_error [0:BE_WIDTH-1], head_store_wait [0:BE_WIDTH-1];
+    wire head_store_sent [0:BE_WIDTH-1], head_rd_we [0:BE_WIDTH-1];
+    wire [GENERATION_WIDTH-1:0] head_generation [0:BE_WIDTH-1];
+    wire [4:0] head_rd [0:BE_WIDTH-1];
+    wire [31:0] head_pc [0:BE_WIDTH-1], head_inst [0:BE_WIDTH-1];
+    wire [31:0] head_value [0:BE_WIDTH-1], head_store_addr [0:BE_WIDTH-1];
+    wire [3:0] head_store_mask [0:BE_WIDTH-1];
+    wire [31:0] head_store_data [0:BE_WIDTH-1];
+    wire [PHYS_ADDR_WIDTH-1:0] head_old_phys [0:BE_WIDTH-1];
+    wire [PHYS_ADDR_WIDTH-1:0] head_new_phys [0:BE_WIDTH-1];
+    genvar head_row, read_lane, read_group;
+    generate
+        if (ROB_CONTROL_REGISTER_BANKS != 0 && ROB_ENTRIES >= BE_WIDTH) begin : g_read_register_banks
+            wire [ROB_ENTRIES*BE_WIDTH*READ_GROUPS-1:0] registered_head_rows;
+            // Register the next decoded head on the SAME edge as head_reg.
+            // The read path therefore sees the current head with no extra
+            // pipeline latency. Each lane/chunk has real bounded-fanout FFs.
+            rv32_control_register_bank #(.WIDTH(ROB_ENTRIES),
+                .LEAVES(BE_WIDTH*READ_GROUPS), .ENABLED(1), .RESET_VALUE(1)) rows(
+                .clk_i(clk_i), .reset_i(reset_i), .update_en_i(1'b1),
+                .value_i(next_head_row_select), .replicas_o(registered_head_rows));
+        end
+        for (head_row = 0; head_row < ROB_ENTRIES; head_row = head_row + 1) begin : g_head_decode
+            assign head_row_select[head_row] = (head_read_index == head_row);
+            assign next_head_row_select[head_row] = (head_next == head_row);
+            if (ROB_CONTROL_REGISTER_BANKS != 0 && ROB_ENTRIES >= BE_WIDTH) begin : g_row_registers
+                for (read_lane = 0; read_lane < BE_WIDTH; read_lane = read_lane + 1) begin : g_lane
+                    for (read_group = 0; read_group < READ_GROUPS; read_group = read_group + 1) begin : g_group
+                        assign head_read_select[(head_row*BE_WIDTH+read_lane)*READ_GROUPS+read_group] =
+                            g_read_register_banks.registered_head_rows[
+                                (read_lane*READ_GROUPS+read_group)*ROB_ENTRIES+head_row];
+                    end
+                end
+            end else if (ASAP7_FANOUT_BUFFERS != 0 && ROB_ENTRIES >= BE_WIDTH) begin : g_row_fanout
+                rv32_asap7_fanout #(.WIDTH(1), .LEAVES(BE_WIDTH*READ_GROUPS), .ENABLED(1)) tree(
+                    .signal_i(head_row_select[head_row]),
+                    .replicas_o(head_read_select[head_row*BE_WIDTH*READ_GROUPS +: BE_WIDTH*READ_GROUPS]));
+            end else begin : g_row_wires
+                assign head_read_select[head_row*BE_WIDTH*READ_GROUPS +: BE_WIDTH*READ_GROUPS] =
+                    {BE_WIDTH*READ_GROUPS{head_row_select[head_row]}};
+            end
+        end
+        for (read_lane = 0; read_lane < BE_WIDTH; read_lane = read_lane + 1) begin : g_commit_read
+            if (ROB_ENTRIES >= BE_WIDTH) begin : g_parallel
+                reg [COMMIT_READ_WIDTH-1:0] packet;
+                integer row;
+                always @* begin
+                    packet = {COMMIT_READ_WIDTH{1'b0}};
+                    for (row = 0; row < ROB_ENTRIES; row = row + 1) begin
+                        packet = packet | (read_mask(head_read_select[
+                            (((row+ROB_ENTRIES-read_lane)%ROB_ENTRIES)*BE_WIDTH+read_lane)*READ_GROUPS +: READ_GROUPS]) &
+                            {valid_mem[row], ready_mem[row], store_mem[row], halt_mem[row],
+                             error_mem[row], store_wait_mem[row], store_sent_mem[row],
+                             generation_mem[row], rd_we_mem[row], rd_mem[row], pc_mem[row],
+                             inst_mem[row], value_mem[row], store_addr_mem[row],
+                             store_mask_mem[row], store_data_mem[row], old_phys_mem[row],
+                             new_phys_mem[row]});
+                    end
+                end
+                assign head_packet[read_lane] = packet;
+            end else begin : g_narrow_depth
+                // Preserve the original single-wrap indexing semantics for
+                // the exceptional configuration with more lanes than rows.
+                wire [31:0] offset = head_read_index + read_lane;
+                wire [31:0] row_index = (offset >= ROB_ENTRIES) ? offset-ROB_ENTRIES : offset;
+                assign head_packet[read_lane] =
+                    {valid_mem[row_index], ready_mem[row_index], store_mem[row_index],
+                     halt_mem[row_index], error_mem[row_index], store_wait_mem[row_index],
+                     store_sent_mem[row_index], generation_mem[row_index], rd_we_mem[row_index],
+                     rd_mem[row_index], pc_mem[row_index], inst_mem[row_index], value_mem[row_index],
+                     store_addr_mem[row_index], store_mask_mem[row_index], store_data_mem[row_index],
+                     old_phys_mem[row_index], new_phys_mem[row_index]};
+            end
+            assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane],
+                    head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane],
+                    head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane],
+                    head_rd[read_lane], head_pc[read_lane], head_inst[read_lane], head_value[read_lane],
+                    head_store_addr[read_lane], head_store_mask[read_lane], head_store_data[read_lane],
+                    head_old_phys[read_lane], head_new_phys[read_lane]} = head_packet[read_lane];
+        end
+    endgenerate
 
     function [SLOT_WIDTH-1:0] advance_slot;
         input [SLOT_WIDTH-1:0] start;
@@ -171,6 +306,11 @@ module rv32_rob #(
             advance_slot = p[SLOT_WIDTH-1:0];
         end
     endfunction
+
+    // Recovery holds the architectural head exactly as in the legacy ROB.
+    // All real replicated state uses this same transition, including stalls.
+    assign head_next = recovery_accept_o ? head_reg :
+        advance_slot(head_update_index, (commit_ready_i ? pop_count : 0));
 
     function [TAG_WIDTH-1:0] make_tag;
         input integer slot;
@@ -206,7 +346,7 @@ module rv32_rob #(
         end
     endfunction
 
-    assign head_o = head_reg;
+    assign head_o = head_views[4*SLOT_WIDTH +: SLOT_WIDTH];
     assign tail_o = tail_reg;
     assign occupancy_o = occupancy_reg;
     assign alloc_ready_o = (alloc_count_o != 0) && !recovery_accept_o;
@@ -237,7 +377,7 @@ module rv32_rob #(
     genvar reclaim_entry, reclaim_phys, reclaim_match, reclaim_node;
     generate
         for (reclaim_entry = 0; reclaim_entry < ROB_ENTRIES; reclaim_entry = reclaim_entry + 1) begin : g_reclaim_age
-            wire [SLOT_WIDTH-1:0] relative_age = reclaim_entry - head_reg;
+            wire [SLOT_WIDTH-1:0] relative_age = reclaim_entry - head_recovery_index;
             assign reclaim_eligible[reclaim_entry] = recovery_found && valid_mem[reclaim_entry] &&
                 rd_we_mem[reclaim_entry] && (relative_age > chosen_age) && (relative_age < occupancy_reg);
         end
@@ -302,7 +442,7 @@ module rv32_rob #(
             // A generation-qualified ROB tag already carries its slot.  Use
             // that slot directly and compare only the BE_WIDTH candidates.
             recovery_slot = recovery_tag_i[(recovery_lane*TAG_WIDTH) + SLOT_LSB +: SLOT_WIDTH];
-            age = recovery_slot - head_reg;
+            age = recovery_slot - head_recovery_index;
             if (age < 0) age = age + ROB_ENTRIES;
             if (recovery_valid_i[recovery_lane] &&
                 tag_matches(recovery_tag_i[(recovery_lane*TAG_WIDTH) +: TAG_WIDTH], recovery_slot) &&
@@ -356,66 +496,66 @@ module rv32_rob #(
         if (!recovery_found && !halted_o && !error_o) begin
             for (commit_lane = 0; commit_lane < BE_WIDTH; commit_lane = commit_lane + 1) begin
                 if (!commit_break) begin
-                    commit_slot = head_reg + pop_count;
+                    commit_slot = head_commit_index + commit_lane;
                     if (commit_slot >= ROB_ENTRIES) commit_slot = commit_slot - ROB_ENTRIES;
-                    if (valid_mem[commit_slot] && ready_mem[commit_slot]) begin
+                    if (head_valid[commit_lane] && head_ready[commit_lane]) begin
                         commit_valid_o[commit_lane] = 1'b1;
-                        commit_rd_we_o[commit_lane] = rd_we_mem[commit_slot];
-                        commit_rd_o[(commit_lane*5) +: 5] = rd_mem[commit_slot];
-                        commit_pc_o[(commit_lane*32) +: 32] = pc_mem[commit_slot];
-                        commit_inst_o[(commit_lane*32) +: 32] = inst_mem[commit_slot];
-                        commit_value_o[(commit_lane*32) +: 32] = value_mem[commit_slot];
-                        commit_is_store_o[commit_lane] = store_mem[commit_slot];
-                        commit_store_addr_o[(commit_lane*32) +: 32] = store_addr_mem[commit_slot];
+                        commit_rd_we_o[commit_lane] = head_rd_we[commit_lane];
+                        commit_rd_o[(commit_lane*5) +: 5] = head_rd[commit_lane];
+                        commit_pc_o[(commit_lane*32) +: 32] = head_pc[commit_lane];
+                        commit_inst_o[(commit_lane*32) +: 32] = head_inst[commit_lane];
+                        commit_value_o[(commit_lane*32) +: 32] = head_value[commit_lane];
+                        commit_is_store_o[commit_lane] = head_store[commit_lane];
+                        commit_store_addr_o[(commit_lane*32) +: 32] = head_store_addr[commit_lane];
                         commit_store_mask_o[(commit_lane*16) +: 16] =
-                            line_mask_from_relative(store_mask_mem[commit_slot], store_addr_mem[commit_slot]);
+                            line_mask_from_relative(head_store_mask[commit_lane], head_store_addr[commit_lane]);
                         commit_store_data_o[(commit_lane*128) +: 128] =
-                            line_data_from_relative(store_data_mem[commit_slot], store_addr_mem[commit_slot]);
-                        commit_tag_o[(commit_lane*TAG_WIDTH) +: TAG_WIDTH] = make_tag(commit_slot, generation_mem[commit_slot]);
-                        commit_old_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = old_phys_mem[commit_slot];
-                        commit_new_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = new_phys_mem[commit_slot];
+                            line_data_from_relative(head_store_data[commit_lane], head_store_addr[commit_lane]);
+                        commit_tag_o[(commit_lane*TAG_WIDTH) +: TAG_WIDTH] = make_tag(commit_slot, head_generation[commit_lane]);
+                        commit_old_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = head_old_phys[commit_lane];
+                        commit_new_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = head_new_phys[commit_lane];
                         // Stores must become the actual ROB head before they
                         // enter the committed portion of the LSQ.  Admission
                         // to that queue is the retirement point; the LSQ then
                         // retains and drains the store like a store buffer.
                         // A store behind another lane is retried as lane zero
                         // because there is one store-admission port.
-                        if (store_mem[commit_slot]) begin
+                        if (head_store[commit_lane]) begin
                             if (commit_lane == 0) begin
                                 if ((STORE_BUFFERED_RETIRE != 0) &&
-                                    !((store_addr_mem[commit_slot] == 32'h80000000) &&
-                                      (store_mask_mem[commit_slot] == 4'hf)))
+                                    !((head_store_addr[commit_lane] == 32'h80000000) &&
+                                      (head_store_mask[commit_lane] == 4'hf)))
                                     // Admission is recorded in store_sent_mem
                                     // on the preceding edge.  Retire from that
                                     // registered state to avoid a ROB<->LSQ
                                     // combinational ready/tag loop.
-                                    commit_valid_o[commit_lane] = store_sent_mem[commit_slot];
+                                    commit_valid_o[commit_lane] = head_store_sent[commit_lane];
                                 else
-                                    commit_valid_o[commit_lane] = store_wait_mem[commit_slot];
+                                    commit_valid_o[commit_lane] = head_store_wait[commit_lane];
                             end
                             else
                                 commit_valid_o[commit_lane] = 1'b0;
                         end
-                        if (commit_lane == 0 && store_mem[commit_slot] &&
-                            !store_sent_mem[commit_slot] &&
-                            ((STORE_BUFFERED_RETIRE != 0) || !store_wait_mem[commit_slot])) begin
+                        if (commit_lane == 0 && head_store[commit_lane] &&
+                            !head_store_sent[commit_lane] &&
+                            ((STORE_BUFFERED_RETIRE != 0) || !head_store_wait[commit_lane])) begin
                             store_commit_valid_o = 1'b1;
-                            store_commit_tag_o = make_tag(commit_slot, generation_mem[commit_slot]);
-                            store_commit_addr_o = store_addr_mem[commit_slot];
+                            store_commit_tag_o = make_tag(commit_slot, head_generation[commit_lane]);
+                            store_commit_addr_o = head_store_addr[commit_lane];
                             store_commit_mask_o = line_mask_from_relative(
-                                store_mask_mem[commit_slot], store_addr_mem[commit_slot]);
+                                head_store_mask[commit_lane], head_store_addr[commit_lane]);
                             store_commit_data_o = line_data_from_relative(
-                                store_data_mem[commit_slot], store_addr_mem[commit_slot]);
+                                head_store_data[commit_lane], head_store_addr[commit_lane]);
                         end
                         if (commit_valid_o[commit_lane]) begin
                             pop_count = pop_count + 1;
                             // HALT/error are precise terminal events.  A wide
                             // commit bundle must not expose younger lanes after
                             // either reaches the architectural head.
-                            if (halt_mem[commit_slot] || error_mem[commit_slot] ||
-                                (store_mem[commit_slot] &&
-                                 (store_addr_mem[commit_slot] == 32'h80000000) &&
-                                 (store_mask_mem[commit_slot] == 4'hf)))
+                            if (head_halt[commit_lane] || head_error[commit_lane] ||
+                                (head_store[commit_lane] &&
+                                 (head_store_addr[commit_lane] == 32'h80000000) &&
+                                 (head_store_mask[commit_lane] == 4'hf)))
                                 commit_break = 1'b1;
                         end else commit_break = 1'b1;
                     end else begin
@@ -448,7 +588,7 @@ module rv32_rob #(
             // Keep the branch itself and all older entries; kill strict young entries.
             branch_age = chosen_age;
             for (reset_slot = 0; reset_slot < ROB_ENTRIES; reset_slot = reset_slot + 1) begin
-                younger_age = reset_slot - head_reg;
+                younger_age = reset_slot - head_update_index;
                 if (younger_age < 0) younger_age = younger_age + ROB_ENTRIES;
                 if (valid_mem[reset_slot] && (younger_age > branch_age) && (younger_age < occupancy_reg)) begin
                     valid_mem[reset_slot] <= 1'b0;
@@ -464,7 +604,7 @@ module rv32_rob #(
             for (complete_lane = 0; complete_lane < BE_WIDTH; complete_lane = complete_lane + 1) begin
                 if (completion_valid_i[complete_lane] && completion_done_i[complete_lane]) begin
                     for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
-                        age = slot_index - head_reg;
+                        age = slot_index - head_update_index;
                         if (age < 0) age = age + ROB_ENTRIES;
                         if ((age <= branch_age) &&
                             tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index)) begin
@@ -504,23 +644,23 @@ module rv32_rob #(
                 end
             end
             if (store_commit_valid_o && store_commit_ready_i) begin
-                store_sent_mem[head_reg] <= 1'b1;
+                store_sent_mem[head_commit_index] <= 1'b1;
             end
             // Precise architectural side effects occur only on popped head entries.
             for (commit_lane = 0; commit_lane < BE_WIDTH; commit_lane = commit_lane + 1) begin
                 if (commit_valid_o[commit_lane] && commit_ready_i) begin
-                    commit_slot = head_reg + commit_lane;
+                    commit_slot = head_commit_index + commit_lane;
                     if (commit_slot >= ROB_ENTRIES) commit_slot = commit_slot - ROB_ENTRIES;
-                    if (store_mem[commit_slot] &&
-                        (store_addr_mem[commit_slot] == 32'h80000000) &&
-                        (store_mask_mem[commit_slot] == 4'hf)) begin
+                    if (head_store[commit_lane] &&
+                        (head_store_addr[commit_lane] == 32'h80000000) &&
+                        (head_store_mask[commit_lane] == 4'hf)) begin
                         halted_o <= 1'b1;
-                        return_value_o <= store_data_mem[commit_slot];
-                    end else if (halt_mem[commit_slot]) begin
+                        return_value_o <= head_store_data[commit_lane];
+                    end else if (head_halt[commit_lane]) begin
                         halted_o <= 1'b1;
-                        return_value_o <= value_mem[commit_slot];
+                        return_value_o <= head_value[commit_lane];
                     end
-                    if (error_mem[commit_slot]) error_o <= 1'b1;
+                    if (head_error[commit_lane]) error_o <= 1'b1;
                     valid_mem[commit_slot] <= 1'b0;
                     ready_mem[commit_slot] <= 1'b0;
                     store_wait_mem[commit_slot] <= 1'b0;
@@ -555,7 +695,7 @@ module rv32_rob #(
                         checkpoint_mem[alloc_slot] <= alloc_checkpoint_i[(alloc_lane*CHECKPOINT_WIDTH) +: CHECKPOINT_WIDTH];
                 end
             end
-            head_reg <= advance_slot(head_reg, (commit_ready_i ? pop_count : 0));
+            head_reg <= head_next;
             tail_reg <= advance_slot(tail_reg, allocation_count);
             occupancy_reg <= occupancy_reg - (commit_ready_i ? pop_count : 0) + allocation_count;
         end

@@ -52,6 +52,10 @@ module rv32_reservation_station #(
     input  wire [ENTRIES-1:0]            flush_kill_mask_i,
     output wire [ENTRIES-1:0]            entry_valid_o,
     output wire [(ENTRIES*TAG_WIDTH)-1:0] entry_rob_tag_o,
+    // A read-only view of the existing base operand, including CDB bypass.
+    // Store address probing does not consume an issue slot or dequeue work.
+    output wire [ENTRIES-1:0]            entry_base_ready_o,
+    output wire [(ENTRIES*32)-1:0]       entry_base_value_o,
     output wire [((ENTRIES <= 1) ? 1 : $clog2(ENTRIES + 1))-1:0] occupancy_o
 );
     localparam integer COUNT_WIDTH = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES + 1);
@@ -106,6 +110,10 @@ module rv32_reservation_station #(
         for (entry_index = 0; entry_index < ENTRIES; entry_index = entry_index + 1) begin : g_entry_state
             assign entry_valid_o[entry_index] = valid_mem[entry_index];
             assign entry_rob_tag_o[(entry_index*TAG_WIDTH) +: TAG_WIDTH] = rob_tag_mem[entry_index];
+            assign entry_base_ready_o[entry_index] = valid_mem[entry_index] &&
+                target_live_mem[entry_index] && src1_ready_effective[entry_index] &&
+                !flush_valid_i;
+            assign entry_base_value_o[(entry_index*32) +: 32] = src1_value_effective[entry_index];
             assign ready_candidates[entry_index] = valid_mem[entry_index] &&
                 target_live_mem[entry_index] && src1_ready_effective[entry_index] &&
                 src2_ready_effective[entry_index];
