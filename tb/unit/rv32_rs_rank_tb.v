@@ -3,12 +3,15 @@
 // selector. Arbitrary ages include ties and wrap values, not just FIFO order.
 module rv32_rs_rank_tb #(
     parameter integer BE_WIDTH = 2,
-    parameter integer ENTRIES = 4
+    parameter integer ENTRIES = 4,
+    parameter integer AGE_WIDTH = 8,
+    parameter integer WAKE_WIDTH = BE_WIDTH
 );
     localparam integer SW = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES);
-    reg [BE_WIDTH-1:0] wake_valid, issue_ready;
-    reg [BE_WIDTH*16-1:0] wake_tag;
-    reg [BE_WIDTH*32-1:0] wake_value;
+    reg [WAKE_WIDTH-1:0] wake_valid;
+    reg [BE_WIDTH-1:0] issue_ready;
+    reg [WAKE_WIDTH*16-1:0] wake_tag;
+    reg [WAKE_WIDTH*32-1:0] wake_value;
     wire [BE_WIDTH-1:0] issue_valid;
     wire [BE_WIDTH*SW-1:0] issue_slot;
     wire [BE_WIDTH*32-1:0] issue_src1, issue_src2, issue_pc, issue_store;
@@ -20,7 +23,7 @@ module rv32_rs_rank_tb #(
     integer trial, slot, lane, wake, best, seed;
     reg [31:0] best_age;
 
-    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(ENTRIES)) dut (
+    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(ENTRIES), .AGE_WIDTH(AGE_WIDTH), .WAKE_WIDTH(WAKE_WIDTH), .WAKE_MUX_IMPL(1), .ALLOC_STATIC_WRITE(1)) dut (
         .clk_i(1'b0), .reset_i(1'b0), .alloc_valid_i({BE_WIDTH{1'b0}}),
         .flush_valid_i(1'b0), .flush_kill_mask_i({ENTRIES{1'b0}}),
         .wake_valid_i(wake_valid), .wake_tag_i(wake_tag), .wake_value_i(wake_value),
@@ -36,7 +39,7 @@ module rv32_rs_rank_tb #(
         for (trial = 0; trial < 3000; trial = trial + 1) begin
             wake_valid = $random(seed);
             issue_ready = $random(seed);
-            for (wake = 0; wake < BE_WIDTH; wake = wake + 1) begin
+            for (wake = 0; wake < WAKE_WIDTH; wake = wake + 1) begin
                 wake_tag[wake*16 +: 16] = wake*2+1;
                 wake_value[wake*32 +: 32] = $random(seed);
             end
@@ -59,7 +62,7 @@ module rv32_rs_rank_tb #(
                 r2[slot] = dut.src2_ready_mem[slot];
                 v1[slot] = dut.src1_value_mem[slot];
                 v2[slot] = dut.src2_value_mem[slot];
-                for (wake = 0; wake < BE_WIDTH; wake = wake + 1) begin
+                for (wake = 0; wake < WAKE_WIDTH; wake = wake + 1) begin
                     if (!r1[slot] && wake_valid[wake] &&
                         dut.src1_tag_mem[slot] == wake_tag[wake*16 +: 16] && dut.src1_tag_mem[slot][0]) begin
                         r1[slot] = 1;

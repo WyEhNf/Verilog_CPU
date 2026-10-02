@@ -2,10 +2,11 @@
 
 module rv32_reservation_station_tb #(
     parameter integer BE_WIDTH = 1,
-    parameter integer ENTRIES = 4
+    parameter integer ENTRIES = 4,
+    parameter integer AGE_WIDTH = 8
 );
     localparam integer OPW = 6;
-    localparam integer TAGW = 16;
+    localparam integer TAGW = 17;
     localparam integer PAW = 6;
     localparam integer SW = $clog2(ENTRIES);
     localparam integer ACW = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
@@ -35,9 +36,13 @@ module rv32_reservation_station_tb #(
     reg [ENTRIES-1:0] flush_mask;
     wire [CW-1:0] occupancy;
     integer bad;
+    integer batch, wl, sl, chosen, best, consumed, wraps;
+    reg [AGE_WIDTH-1:0] model_age, before_age, selected_age;
+    reg [AGE_WIDTH-1:0] model_entry_age [0:ENTRIES-1];
+    reg [ENTRIES-1:0] model_selected, model_consumed;
     reg [TAGW-1:0] tag0, tag1, stale_tag;
 
-    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(ENTRIES)) dut (
+    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(ENTRIES), .TAG_WIDTH(TAGW), .AGE_WIDTH(AGE_WIDTH), .WAKE_MUX_IMPL(1), .ALLOC_STATIC_WRITE(1)) dut (
         .clk_i(clk), .reset_i(reset), .alloc_valid_i(alloc_valid), .alloc_op_i(alloc_op), .alloc_pc_i(alloc_pc), .alloc_rob_tag_i(alloc_tag), .alloc_target_live_i(target_live), .alloc_phys_rd_i(alloc_phys), .alloc_src1_value_i(src1_value), .alloc_src1_tag_i(src1_tag), .alloc_src1_ready_i(src1_ready), .alloc_src2_value_i(src2_value), .alloc_src2_tag_i(src2_tag), .alloc_src2_ready_i(src2_ready), .alloc_store_data_i(alloc_store), .alloc_ready_o(alloc_ready), .alloc_fire_o(alloc_fire), .alloc_count_o(alloc_count), .wake_valid_i(wake_valid), .wake_tag_i(wake_tag), .wake_value_i(wake_value), .issue_ready_i(issue_ready), .issue_valid_o(issue_valid), .issue_op_o(issue_op), .issue_pc_o(issue_pc), .issue_rob_tag_o(issue_tag), .issue_phys_rd_o(issue_phys), .issue_src1_value_o(issue_src1), .issue_src2_value_o(issue_src2), .issue_store_data_o(issue_store), .issue_slot_o(issue_slot), .flush_valid_i(flush_valid), .flush_kill_mask_i(flush_mask), .occupancy_o(occupancy)
     );
     initial begin clk = 0; forever #5 clk = ~clk; end
@@ -101,6 +106,62 @@ module rv32_reservation_station_tb #(
         if (!issue_valid[0] || issue_src1[31:0] != 51) bad = bad + 1;
         @(posedge clk); #1; clear_inputs();
 
+        // Reach at least two age wraps by real accepted allocations. No
+        // force, deposits into DUT state, or assumed output ordering.
+        wraps = 0;
+        if (AGE_WIDTH <= 8) begin
+            clear_inputs(); reset=1; @(posedge clk); #1; reset=0;
+            model_age=0;
+            for (batch=0; batch<(2*(1<<AGE_WIDTH)/BE_WIDTH+3); batch=batch+1) begin
+                clear_inputs(); issue_ready=0;
+                for (wl=0; wl<BE_WIDTH; wl=wl+1) begin
+                    alloc_entry(wl, 17'h01001+wl*2, batch*16+wl, 1, 1);
+                    alloc_store[wl*32 +: 32]=(batch*16+wl)^32'h5aa51234;
+                    model_entry_age[wl]=model_age+wl;
+                end
+                #1;
+                if (alloc_fire !== {BE_WIDTH{1'b1}} || alloc_count != BE_WIDTH)
+                    $fatal(1,"Natural-wrap allocation prefix failed batch=%0d",batch);
+                before_age=model_age; model_age=model_age+BE_WIDTH;
+                if (model_age<before_age) wraps=wraps+1;
+                @(posedge clk); #1; clear_inputs(); issue_ready=0; #1;
+                if (dut.age_counter !== model_age || occupancy != BE_WIDTH)
+                    $fatal(1,"Natural-wrap counter/occupancy mismatch batch=%0d",batch);
+                for (wl=0; wl<BE_WIDTH; wl=wl+1)
+                    if (dut.age_mem[wl] !== model_entry_age[wl])
+                        $fatal(1,"Stored allocation age mismatch batch=%0d slot=%0d",batch,wl);
+                model_selected=0; model_consumed=0; consumed=0;
+                for (wl=0; wl<BE_WIDTH; wl=wl+1) begin
+                    best=-1; selected_age={AGE_WIDTH{1'b1}};
+                    for (sl=0; sl<BE_WIDTH; sl=sl+1)
+                        if (!model_selected[sl] && (best<0 || model_entry_age[sl]<selected_age)) begin
+                            best=sl; selected_age=model_entry_age[sl];
+                        end
+                    model_selected[best]=1;
+                    if (!issue_valid[wl] || issue_slot[wl*SW +: SW] !== best[SW-1:0] ||
+                        issue_pc[wl*32 +: 32] !== (batch*16+best) ||
+                        issue_src1[wl*32 +: 32] !== (batch*16+best+1) ||
+                        issue_src2[wl*32 +: 32] !== (batch*16+best+2) ||
+                        issue_store[wl*32 +: 32] !== ((batch*16+best)^32'h5aa51234))
+                        $fatal(1,"Wrapped numeric priority/payload mismatch batch=%0d lane=%0d",batch,wl);
+                    if (wl%2==0) begin
+                        issue_ready[wl]=1; model_consumed[best]=1; consumed=consumed+1;
+                    end
+                end
+                @(posedge clk); #1; clear_inputs(); issue_ready=0; #1;
+                if (occupancy != BE_WIDTH-consumed || dut.age_counter !== model_age)
+                    $fatal(1,"Partial issue changed age or occupancy");
+                for (sl=0; sl<BE_WIDTH; sl=sl+1)
+                    if (dut.valid_mem[sl] !== !model_consumed[sl])
+                        $fatal(1,"Backpressure consumed wrong wrapped-priority slot");
+                flush_valid=1; flush_mask={ENTRIES{1'b1}}; alloc_valid={BE_WIDTH{1'b1}};
+                @(posedge clk); #1; clear_inputs();
+                if (occupancy != 0 || dut.age_counter !== model_age)
+                    $fatal(1,"Flush must kill entries and preserve age despite allocation inputs");
+            end
+            if (wraps<2) $fatal(1,"Natural age wrap coverage insufficient");
+        end
+        $display("PASS age-width sequential AGE_WIDTH=%0d wraps=%0d",AGE_WIDTH,wraps);
         if (bad != 0) begin $display("FAIL: B-04 RS BE_WIDTH=%0d ENTRIES=%0d checks=%0d", BE_WIDTH, ENTRIES, bad); $finish(1); end
         $display("PASS: B-04 RS BE_WIDTH=%0d ENTRIES=%0d", BE_WIDTH, ENTRIES); $finish(0);
     end
