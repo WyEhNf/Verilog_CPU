@@ -1,0 +1,14 @@
+{
+  "version": "dcache_metadata_geometry_20261003",
+  "source_manifest": "F:\\CPU2026Candidates\\dcache_metadata_geometry_20261003\\candidate_manifest.json",
+  "source_sha256": {
+    "rtl/cache/rv32_dcache_control_banks.v": "95bd1c85f417e22b4af56b963b4ad3159e051baca9888a2e30f15a3cb2677aea",
+    "rtl/cache/rv32_dcache_nonblocking.v": "05091f47249c3d05c383e6d7a803c128f78fc1b8fc30a624d89195e3f4ac080f",
+    "tb/unit/rv32_dcache_hash_tb.v": "cc98d339b533aba7099a0e46df8c8fca4b0340edeedb8dd6f78443ffe1a08480",
+    "tb/unit/rv32_dcache_sram_tb.v": "a8f1905607cd2c4829194a12a97f89491a27959b0f942b3118f54fb4b163bab1",
+    "tools/probe_localized_component.py": "8e40040b0e02714758d14c15316f82812c732f5b72a24bb29441194171aeee19",
+    "tools/test_dcache_local_metadata.py": "a55f22d509a13f557e825c79e328c15a33b0effcf967fd6d6e38d8cff689c09b"
+  },
+  "description": "Prepare an isolated 16-versus-64-row Cache metadata-bank experiment.\n\nOnly bank geometry changes; actual data/tag SRAM, request sequencing and bank\nlogic are preserved. Keep the main and already-measured CPU sources frozen.\n",
+  "configuration": {}
+}
