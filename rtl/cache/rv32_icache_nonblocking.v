@@ -7,6 +7,7 @@
 module rv32_icache_nonblocking #(
     parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH,
     parameter integer MSHR_ENTRIES = 4,
+    parameter integer REFILL_PROTECT_PENDING_HIT = 1,
     parameter integer NEXT_LINE_PREFETCH = 1,
     parameter integer PREFETCH_DISTANCE = 3,
     parameter integer CACHE_LINES = 64,
@@ -52,7 +53,6 @@ module rv32_icache_nonblocking #(
 );
     reg [CACHE_LINES-1:0] valid_bits;
     reg [CACHE_TAG_WIDTH-1:0] tag_mem [0:CACHE_LINES-1];
-    reg [127:0] data_mem [0:CACHE_LINES-1];
     reg lru_mem [0:CACHE_SETS-1];
 
     function [CACHE_ENTRY_WIDTH-1:0] cache_entry;
@@ -76,6 +76,10 @@ module rv32_icache_nonblocking #(
     reg [31:0] resp_pc_reg;
     reg [31:0] resp_line_reg;
     reg [127:0] resp_data_reg;
+    // A synchronous hit and its metadata become valid after the same edge.
+    // Capture the macro result before idle/write makes rdata undefined.
+    reg resp_from_sram;
+    wire [127:0] data_rdata;
     reg [EPOCH_WIDTH-1:0] resp_epoch_reg;
     reg resp_error_reg;
 
@@ -299,7 +303,9 @@ module rv32_icache_nonblocking #(
         mem_resp_line_addr_i[CACHE_SET_WIDTH+3:4];
     wire [CACHE_ENTRY_WIDTH-1:0] refill_way0 = cache_entry(refill_set, 0);
     wire [CACHE_ENTRY_WIDTH-1:0] refill_way1 = cache_entry(refill_set, 1);
-    wire refill_conflicts_with_hit = request_fire && request_hit &&
+    // Protect a pending hit even when a refill owns the single SRAM port.
+    wire refill_conflicts_with_hit = (REFILL_PROTECT_PENDING_HIT != 0) &&
+                                     if_req_valid_i && request_hit &&
                                      (request_set == refill_set);
     wire [CACHE_ENTRY_WIDTH-1:0] refill_entry =
                               (CACHE_WAYS == 1) ? refill_way0 :
@@ -309,13 +315,28 @@ module rv32_icache_nonblocking #(
                                 cache_entry(refill_set, !request_entry[0]) :
                                 cache_entry(refill_set, lru_mem[refill_set]))));
 
+    // Do not derive arbitration from mem_resp_ready_o: response-slot logic
+    // itself uses request_fire for same-cycle prefetch promotion.
+    wire refill_array_candidate = mem_resp_valid_i && response_target_found &&
+                                   response_matches && !mem_resp_error_i;
+    wire refill_array_write = !reset_i && refill_array_candidate && mem_resp_ready_o;
+    wire hit_array_read = request_fire && request_hit &&
+                          (if_req_epoch_i == current_epoch_i);
+    sram_fakeram #(.DEPTH(CACHE_LINES), .WIDTH(128), .WRITE_GRANULARITY(128)) data_array (
+        .clk(clk_i), .en(!reset_i && (refill_array_write || hit_array_read)),
+        .we(refill_array_write), .wmask(1'b1),
+        .addr(refill_array_write ? refill_entry : request_entry),
+        .wdata(mem_resp_data_i), .rdata(data_rdata)
+    );
+
     assign if_req_ready_o = !reset_i && response_slot_free &&
+                            !(refill_array_candidate && request_hit) &&
                             !request_would_conflict &&
                             (request_hit || request_match_found || free_found);
     assign if_resp_valid_o = response_live;
     assign if_resp_pc_o = resp_pc_reg;
     assign if_resp_line_addr_o = resp_line_reg;
-    assign if_resp_line_data_o = resp_data_reg;
+    assign if_resp_line_data_o = resp_from_sram ? data_rdata : resp_data_reg;
     assign if_resp_epoch_o = resp_epoch_reg;
     assign if_resp_error_o = resp_error_reg;
 
@@ -333,6 +354,7 @@ module rv32_icache_nonblocking #(
     always @(posedge clk_i) begin
         if (reset_i) begin
             resp_valid_reg <= 1'b0;
+            resp_from_sram <= 1'b0;
             resp_pc_reg <= 32'd0;
             resp_line_reg <= 32'd0;
             resp_data_reg <= 128'd0;
@@ -364,6 +386,9 @@ module rv32_icache_nonblocking #(
                 mshr_txn_epoch[reset_index] <= {EPOCH_WIDTH{1'b0}};
             end
         end else begin
+            resp_from_sram <= 1'b0;
+            if (resp_from_sram && resp_valid_reg)
+                resp_data_reg <= data_rdata;
             event_request_o <= request_fire;
             event_hit_o <= 1'b0;
             event_miss_o <= 1'b0;
@@ -399,7 +424,7 @@ module rv32_icache_nonblocking #(
                         resp_valid_reg <= 1'b1;
                         resp_pc_reg <= if_req_pc_i;
                         resp_line_reg <= request_line;
-                        resp_data_reg <= data_mem[request_entry];
+                        resp_from_sram <= 1'b1;
                         resp_epoch_reg <= if_req_epoch_i;
                         resp_error_reg <= 1'b0;
                         if (CACHE_WAYS == 2)
@@ -478,7 +503,6 @@ module rv32_icache_nonblocking #(
                     valid_bits[refill_entry] <= 1'b1;
                     tag_mem[refill_entry] <=
                         mem_resp_line_addr_i[31:CACHE_SET_WIDTH+4];
-                    data_mem[refill_entry] <= mem_resp_data_i;
                     if (CACHE_WAYS == 2)
                         lru_mem[refill_set] <= ~refill_entry[0];
                 end
