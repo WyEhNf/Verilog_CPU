@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 from verify_course_axi_area import sha256, verify
+from audit_timing_identity import verify_standalone_cache
 
 
 def prepared_registers(path):
@@ -42,19 +43,40 @@ def main():
     parser.add_argument('--identity', type=Path, required=True)
     parser.add_argument('--printed-cell', required=True)
     parser.add_argument('--outdir', type=Path, required=True)
+    parser.add_argument('--standalone-cache', action='store_true',
+                        help='Diagnostic only: verify a completed actual standalone Cache, never CPU PPA')
     args = parser.parse_args()
     directory = args.directory.resolve()
-    checked = verify(directory)
-    preparation = json.loads((directory / 'prepare.done.json').read_text())
-    if sha256(directory / 'prepared.il') != preparation['output_sha256']['prepared.il']:
-        raise SystemExit('Prepared register-identity snapshot changed')
     identities = json.loads(args.identity.read_text())
+    if args.standalone_cache:
+        checked = verify_standalone_cache(directory)
+        if not identities.get('standalone_cache_diagnostic') or not identities.get('not_a_cpu_result'):
+            raise SystemExit('Standalone control tracing requires the verified standalone identity route')
+        # The completed identity replay retains the exact original pre-ABC
+        # script and dump. Verify every input to that proof of physical names;
+        # do not accept a user-picked register map or weaken the CPU verifier.
+        for name, expected in identities['input_sha256'].items():
+            if sha256(Path(name)) != expected:
+                raise SystemExit('Standalone identity input changed: ' + name)
+        prepared = args.identity.resolve().parent / 'prepared.il'
+        if str(prepared) not in identities['input_sha256']:
+            raise SystemExit('Standalone identity did not freeze its original pre-ABC register dump')
+        preparation_inputs = [directory.parent / 'report.json', prepared]
+        if args.outdir.exists():
+            raise SystemExit('Choose a fresh standalone control diagnostic directory')
+    else:
+        checked = verify(directory)
+        preparation = json.loads((directory / 'prepare.done.json').read_text())
+        prepared = directory / 'prepared.il'
+        if sha256(prepared) != preparation['output_sha256']['prepared.il']:
+            raise SystemExit('Prepared register-identity snapshot changed')
+        preparation_inputs = [prepared, directory / 'prepare.done.json']
     if (not identities['complete_physical_wiring_identical'] or
             identities['netlist_sha256'] != checked['netlist_sha256']):
         raise SystemExit('Printed identity does not refer to this complete physical graph')
     identified = next(row for row in identities['rows'] if row['printed'] == args.printed_cell)
     model = json.loads((directory / 'design.json').read_text())['modules']['student_top']
-    registers = prepared_registers(directory / 'prepared.il')
+    registers = prepared_registers(prepared)
     cells = model['cells']
     chosen = cells[identified['original']]
     if chosen['type'] != identified['cell_type'] or chosen['connections'] != identified['connections']:
@@ -117,9 +139,11 @@ def main():
     result = dict(status='COMPLETE', diagnostic_only=True, not_a_module_area_sum=True,
                   physical_cell=identified, netlist_sha256=checked['netlist_sha256'],
                   upstream=trace(inputs, True), downstream=trace(outputs, False),
+                  not_a_cpu_result=bool(args.standalone_cache),
+                  standalone_cache_diagnostic=bool(args.standalone_cache),
                   input_sha256={str(path.resolve()): sha256(path) for path in (
-                      directory / 'design.json', directory / 'prepared.il',
-                      directory / 'prepare.done.json', args.identity, Path(__file__))})
+                      directory / 'design.json', *preparation_inputs, args.identity,
+                      Path(__file__), Path(__file__).with_name('audit_timing_identity.py'))})
     args.outdir.mkdir(parents=True, exist_ok=True)
     (args.outdir / 'control_cone.json').write_text(json.dumps(result, indent=2) + '\n')
     for direction in ('upstream', 'downstream'):

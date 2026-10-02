@@ -1,4 +1,8 @@
-"""Measure a complete actual standalone D-cache or ROB, never a CPU score.
+"""Measure actual Cache/ROB after resolving children before naming the root.
+
+This repair keeps failed probe directories intact. It changes only diagnostic
+root naming, not candidate RTL, validation, ABC, libraries, timing or pricing.
+These complete standalone components are never a CPU score.
 
 Freeze the candidate controller, original SRAM validator/model, default ABC
 and five raw ASAP7 libraries. Retain every Cache port and physical SRAM. Rename
@@ -31,7 +35,7 @@ def main():
     args = parser.parse_args()
     out, candidate = args.outdir.resolve(), args.candidate_root.resolve()
     if out.exists():
-        raise SystemExit('Choose a fresh standalone Cache PPA directory')
+        raise SystemExit('Choose a fresh recovered component PPA directory')
     libs = sorted((ROOT/'.deps/course_asap7_r28/lib').glob('*.lib'))
     if len(libs) != 5 or sum('_SEQ_' in lib.name for lib in libs) != 1:
         raise SystemExit('Exactly five original course libraries required')
@@ -41,7 +45,7 @@ def main():
         ('rtl/backend/rv32_rob.v', 'rtl/common/rv32_control_register_bank.v',
          'rtl/common/rv32_asap7_fanout.v'))]
     names = component_sources + [Path(name) for name in (
-        'rtl/rv32im_defs.vh', 'tools/probe_dcache_registered_index.py',
+        'rtl/rv32im_defs.vh', 'tools/probe_component_recovered.py',
         'tools/run_course_sram_area.py', 'tools/run_course_full_timing.py',
         'tools/verify_course_axi_area.py')]
     names += [path.relative_to(ROOT) for path in [
@@ -109,8 +113,11 @@ def main():
                 quote(saved('.deps/RISC-V-CPU-2026/scripts/ram/sram_fakeram.sv')),
             'chparam '+' '.join(f'-set {key} {value}' for key, value in parameters.items())+
                 ' '+root_module,
-            'rename '+root_module+' student_top',
-            'hierarchy -check -top student_top', 'proc', 'memory_collect',
+            # Resolve every parameterized child before renaming. Yosys may
+            # reprocess the root AST when state-bank children first become
+            # available, recreating its original parameterized name.
+            'hierarchy -check -top '+root_module,
+            'rename -top student_top', 'proc', 'memory_collect',
             'write_json '+quote(case/'elaborated.json')])
         elaborated = json.loads((case/'elaborated.json').read_text())
         prepared, wrappers, ram_libs, macros = fakeram.prepare_memories(elaborated, case/'ram')
