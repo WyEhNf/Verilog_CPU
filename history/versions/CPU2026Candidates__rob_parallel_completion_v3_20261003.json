@@ -1,0 +1,12 @@
+{
+  "version": "rob_parallel_completion_v3_20261003",
+  "source_manifest": "F:\\CPU2026Candidates\\rob_parallel_completion_v3_20261003\\candidate_manifest.json",
+  "source_sha256": {
+    "rtl/backend/rv32_rob.v": "b53248f75ae46efc4b0d14f1d3ab7089213eb5ce46708997caf0aa603bdc783e",
+    "tb/unit/rv32_rob_tb.v": "a743a31d7016d9fee7a8f0b70e959e768314c5ae1de3b741df32500579329fa0",
+    "tools/probe_localized_component.py": "acfed78d30320c0f635dd1117d2fa38cdc812f79b94af3f05e922f3b3c16b95f",
+    "tools/test_rob_parallel_completion.py": "f2fc3cfdf4348289ebb29ea0ef136b60c1eb70bccff0d48a9677b7c0ead41ee3"
+  },
+  "description": "",
+  "configuration": {}
+}
