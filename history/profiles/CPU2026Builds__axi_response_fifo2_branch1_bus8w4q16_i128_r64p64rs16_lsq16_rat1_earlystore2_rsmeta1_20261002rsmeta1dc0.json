@@ -1,0 +1,22 @@
+{
+  "parameter_overrides": {
+    "ASAP7_FANOUT_BUFFERS": 0,
+    "AXI_RESPONSE_FIFO_DEPTH": 2,
+    "DCACHE_STATIC_UPDATES": 0,
+    "DCACHE_TAG_SRAM": 1,
+    "EARLY_STORE_ADDRESS": 2,
+    "ICACHE_LINES": 128,
+    "LSQ_ENTRIES": 16,
+    "PHYS_REGS": 64,
+    "PREDICTOR_DIRECT_BRANCH_TARGET": 1,
+    "RAT_RECOVERY_IMPL": 1,
+    "READ_LINES": 8,
+    "ROB_CONTROL_REGISTER_BANKS": 0,
+    "ROB_ENTRIES": 64,
+    "RS_ENTRIES": 16,
+    "RS_ISSUE_METADATA": 1,
+    "WORD_QUEUE": 16,
+    "WRITE_LINES": 4
+  },
+  "compiler_flags": "-std=c++17 -DVL_TIME_CONTEXT (official explicit VerilatedContext time)"
+}
