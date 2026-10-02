@@ -3,7 +3,13 @@ module rv32_dcache_hash_tb #(
     parameter integer INDEX_HASH = 1,
     parameter integer CACHE_LINES = 64,
     parameter integer CACHE_WAYS = 1,
-    parameter integer PREFETCH = 1
+    parameter integer PREFETCH = 1,
+    parameter integer TAG_SRAM = 0,
+    parameter integer STATIC_UPDATES = 0,
+    parameter integer REGISTERED_INDEX = 0,
+    parameter integer LOCAL_METADATA_QUERY = 0,
+    parameter integer LOCAL_ACTION_DECODE = 0,
+    parameter integer METADATA_GROUP_ROWS = 16
 );
     reg clk = 0, reset = 1;
     always #5 clk = ~clk;
@@ -19,7 +25,11 @@ module rv32_dcache_hash_tb #(
     wire [127:0] mem_data, mem_resp_data;
     wire [15:0] mem_mask;
     wire [7:0] mem_id, mem_resp_id;
-    reg [7:0] reference [0:4095];
+    // Directed conflicts use up to three full cache-capacity strides. Keep
+    // reference/real memory in range for every legal cache geometry instead
+    // of reading X beyond the original 4KiB small-cache fixture.
+    localparam integer MEMORY_BYTES = (CACHE_LINES*64 < 4096) ? 4096 : CACHE_LINES*64;
+    reg [7:0] reference [0:MEMORY_BYTES-1];
     integer seed, trial, byte_index;
     reg [31:0] address_a, address_b, address_c, random_address, random_data, inverse_address;
     reg [3:0] random_mask;
@@ -32,7 +42,11 @@ module rv32_dcache_hash_tb #(
 `else
     rv32_dcache_nonblocking #(.CACHE_LINES(CACHE_LINES), .CACHE_WAYS(CACHE_WAYS),
         .INDEX_HASH(INDEX_HASH),
-        .PREFETCH(PREFETCH), .TAG_WIDTH(16)) dut (
+        .PREFETCH(PREFETCH), .TAG_WIDTH(16), .TAG_SRAM(TAG_SRAM),
+        .STATIC_UPDATES(STATIC_UPDATES), .REGISTERED_INDEX(REGISTERED_INDEX),
+        .LOCAL_METADATA_QUERY(LOCAL_METADATA_QUERY),
+        .LOCAL_ACTION_DECODE(LOCAL_ACTION_DECODE),
+        .METADATA_GROUP_ROWS(METADATA_GROUP_ROWS)) dut (
 `endif
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0),
         .dcache_req_valid_i(req_valid), .dcache_req_ready_o(req_ready),
@@ -49,7 +63,56 @@ module rv32_dcache_hash_tb #(
         .mem_resp_valid_i(mem_resp_valid), .mem_resp_ready_o(mem_resp_ready), .mem_resp_line_addr_i(mem_resp_addr),
         .mem_resp_data_i(mem_resp_data), .mem_resp_id_i(mem_resp_id), .mem_resp_error_i(mem_error)
     );
-    rv32im_memory_model #(.MEMORY_SIZE(4096), .LATENCY(3)) memory (
+    initial if (dut.LOCAL_ACTION_DECODE != LOCAL_ACTION_DECODE ||
+                dut.METADATA_GROUP_ROWS != METADATA_GROUP_ROWS)
+        $fatal(1,"Action/geometry parameters did not reach actual Cache");
+    generate if (STATIC_UPDATES == 2) begin : g_geometry_check
+        localparam integer EXPECT_ROWS = (METADATA_GROUP_ROWS < CACHE_LINES) ?
+                                            METADATA_GROUP_ROWS : CACHE_LINES;
+        initial if (dut.g_banked_updates.GROUP_ROWS != EXPECT_ROWS ||
+                    dut.g_banked_updates.GROUP_COUNT != CACHE_LINES/EXPECT_ROWS)
+            $fatal(1,"Actual Cache metadata bank geometry mismatch");
+    end endgenerate
+    integer registered_index_checks = 0;
+    integer metadata_query_checks = 0;
+    localparam integer INDEX_WIDTH = $clog2(CACHE_LINES/CACHE_WAYS);
+    function [INDEX_WIDTH-1:0] reference_index;
+        input [31:0] address;
+        begin
+            reference_index = address >> 4;
+            if (INDEX_HASH != 0)
+                reference_index = reference_index ^ (address >> (INDEX_WIDTH+4));
+        end
+    endfunction
+    initial if (dut.REGISTERED_INDEX != REGISTERED_INDEX)
+        $fatal(1,"Registered-index parameter did not reach real Cache");
+    initial if (dut.LOCAL_METADATA_QUERY != LOCAL_METADATA_QUERY)
+        $fatal(1,"Local metadata query parameter did not reach real Cache");
+    generate if (TAG_SRAM != 0) begin : g_index_scoreboard
+        integer check_way;
+        always @(negedge clk) if (!reset && dut.g_sram_tags.query_valid) begin
+            if (dut.request_index !== reference_index(dut.core_req_addr) ||
+                dut.prefetch_index !== reference_index({dut.core_req_addr[31:4],4'b0} + 32'd16))
+                $fatal(1,"Hash/prefetch index differs from captured address");
+            registered_index_checks = registered_index_checks + 1;
+            for (check_way = 0; check_way < CACHE_WAYS; check_way = check_way + 1) begin
+                if (dut.request_query_valid[check_way] !==
+                        dut.valid_bits[reference_index(dut.core_req_addr)*CACHE_WAYS+check_way] ||
+                    dut.request_query_dirty[check_way] !==
+                        dut.dirty_bits[reference_index(dut.core_req_addr)*CACHE_WAYS+check_way] ||
+                    dut.prefetch_query_valid[check_way] !==
+                        dut.valid_bits[reference_index({dut.core_req_addr[31:4],4'b0}+32'd16)*CACHE_WAYS+check_way] ||
+                    dut.prefetch_query_dirty[check_way] !==
+                        dut.dirty_bits[reference_index({dut.core_req_addr[31:4],4'b0}+32'd16)*CACHE_WAYS+check_way])
+                    $fatal(1,"Live bank metadata query differs from independent address/state lookup");
+            end
+            if (dut.request_query_lru !== dut.lru_way_mem[reference_index(dut.core_req_addr)] ||
+                dut.prefetch_query_lru !== dut.lru_way_mem[reference_index({dut.core_req_addr[31:4],4'b0}+32'd16)])
+                $fatal(1,"Bank LRU query differs from independent address/state lookup");
+            metadata_query_checks = metadata_query_checks + 1;
+        end
+    end endgenerate
+    rv32im_memory_model #(.MEMORY_SIZE(MEMORY_BYTES), .LATENCY(3)) memory (
         .clk_i(clk), .reset_i(reset), .i_req_valid_i(1'b0), .i_req_line_addr_i(32'b0),
         .i_req_id_i(8'b0), .i_resp_ready_i(1'b1),
         .d_req_valid_i(mem_valid), .d_req_ready_o(mem_ready), .d_req_write_i(mem_write),
@@ -101,7 +164,7 @@ module rv32_dcache_hash_tb #(
 
     initial begin
         seed = 32'h7543bc12;
-        for (byte_index = 0; byte_index < 4096; byte_index = byte_index + 1) reference[byte_index] = 0;
+        for (byte_index = 0; byte_index < MEMORY_BYTES; byte_index = byte_index + 1) reference[byte_index] = 0;
         address_a = CACHE_LINES*16 + (INDEX_HASH ? 16 : 0);
         address_b = CACHE_LINES*32 + (INDEX_HASH ? 32 : 0);
         address_c = CACHE_LINES*48 + (INDEX_HASH ? 48 : 0);
@@ -141,7 +204,11 @@ module rv32_dcache_hash_tb #(
         // store-buffer forwarded value.
         for (trial = 0; trial < 1024; trial = trial + 1)
             access_word(trial*4, 0, 0, 4'hf);
-        $display("PASS: D-cache hash=%0d lines=%0d ways=%0d prefetch=%0d", INDEX_HASH, CACHE_LINES, CACHE_WAYS, PREFETCH);
+        if (TAG_SRAM != 0 && registered_index_checks == 0)
+            $fatal(1,"No registered-index query checks executed");
+        $display("PASS: registered index scoreboard mode=%0d tag=%0d checks=%0d",REGISTERED_INDEX,TAG_SRAM,registered_index_checks);
+        $display("PASS: live metadata query scoreboard mode=%0d tag=%0d checks=%0d",LOCAL_METADATA_QUERY,TAG_SRAM,metadata_query_checks);
+        $display("PASS: D-cache tag_sram=%0d hash=%0d lines=%0d ways=%0d prefetch=%0d", TAG_SRAM, INDEX_HASH, CACHE_LINES, CACHE_WAYS, PREFETCH);
         $finish;
     end
 endmodule
