@@ -1,0 +1,12 @@
+{
+  "version": "icache_refill_policy_20261003",
+  "source_manifest": "F:\\CPU2026Candidates\\icache_refill_policy_20261003\\candidate_manifest.json",
+  "source_sha256": {
+    "rtl/cache/rv32_icache_nonblocking.v": "20ad5ba549db029a39380b8aa7e6f418e35acf96461451f0f0f4e0f7203e0f1d",
+    "tb/unit/rv32_icache_refill_policy_tb.v": "75003e31ec78a675a5d2dc8f1510c5e63b2a90ff9cd6e989c3effd3033ed1293",
+    "tb/unit/rv32_icache_sram_tb.v": "eb9f0451f563572e1e5d274149794f0f2be9ea4851d259f55c5fd7bccd3c1aa9",
+    "tools/probe_localized_component.py": "4ae6146763d2e3d1a746ffe0c766ad273d8aea70fb2b6c50052e1cab75617efe"
+  },
+  "description": "",
+  "configuration": {}
+}
