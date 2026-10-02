@@ -11,12 +11,19 @@ module rv32_backend_joint #(
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer RS_ENTRIES = 8,
     parameter integer LSQ_ENTRIES = 8,
+    parameter integer LSQ_STORE_ADMISSION_BYPASS = 0,
+    parameter integer EARLY_STORE_ADDRESS = 0,
+    parameter integer RS_ISSUE_METADATA = 0,
+    parameter integer ASAP7_FANOUT_BUFFERS = 0,
+    parameter integer ROB_CONTROL_REGISTER_BANKS = 0,
+    parameter integer PREDICTOR_META = 0,
     parameter integer INT_ISSUE_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer CDB_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer MUL_IMPL = 0,
     parameter integer SHIFT_IMPL = 0,
     parameter integer PHYS_TAG_IMPL = 0,
     parameter integer CHECKPOINT_IMPL = 0,
+    parameter integer RAT_RECOVERY_IMPL = 0,
     parameter integer STORE_BUFFERED_RETIRE = 1,
     parameter integer COMPLETION_BYPASS = 0,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
@@ -52,6 +59,7 @@ module rv32_backend_joint #(
     input  wire [BE_WIDTH-1:0]          trace_pred_taken_i,
     input  wire [BE_WIDTH*32-1:0]       trace_pred_target_i,
     input  wire [BE_WIDTH*2-1:0]        trace_pred_kind_i,
+    input  wire [BE_WIDTH*16-1:0]       trace_pred_metadata_i,
 
     output wire                         dcache_req_valid_o,
     input  wire                         dcache_req_ready_i,
@@ -101,6 +109,8 @@ module rv32_backend_joint #(
     output wire [31:0]                  branch_feedback_target_o,
     output wire                         branch_feedback_pred_taken_o,
     output wire [31:0]                  branch_feedback_pred_target_o,
+    output wire [15:0]                  branch_feedback_metadata_o,
+    output reg  [7:0]                   branch_recovery_history_o,
     output wire [15:0]                  perf_rob_occupancy_o,
     output wire [15:0]                  perf_rs_occupancy_o,
     output wire [15:0]                  perf_lsq_occupancy_o,
@@ -178,7 +188,20 @@ module rv32_backend_joint #(
     wire [PAW-1:0] rob_recovery_new_phys;
     wire [PHYS_REGS-1:0] rob_recovery_reclaim_bitmap;
     wire [FREE_COUNT_WIDTH-1:0] rob_recovery_reclaim_count;
-    wire [ROB_SLOT_WIDTH-1:0] rob_head, rob_tail;
+    wire [ROB_SLOT_WIDTH-1:0] rob_head, rob_head_source, rob_tail;
+    wire [6*ROB_SLOT_WIDTH-1:0] rob_head_views;
+    wire [6*ROB_SLOT_WIDTH-1:0] rob_registered_head_views;
+    assign rob_head = rob_head_views[3*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+    generate
+        if (ROB_CONTROL_REGISTER_BANKS != 0) begin : g_registered_heads
+            assign rob_head_views = rob_registered_head_views;
+        end else if (ASAP7_FANOUT_BUFFERS != 0) begin : g_head_fanout
+            rv32_asap7_fanout #(.WIDTH(ROB_SLOT_WIDTH), .LEAVES(6), .ENABLED(1)) tree(
+                .signal_i(rob_head_source), .replicas_o(rob_head_views));
+        end else begin : g_head_wires
+            assign rob_head_views = {6{rob_head_source}};
+        end
+    endgenerate
     wire [ROB_COUNT_WIDTH-1:0] rob_occupancy;
     wire [ROB_ENTRIES-1:0] rob_entry_valid;
     wire [ROB_ENTRIES*ROB_GENERATION_WIDTH-1:0] rob_entry_generation;
@@ -199,6 +222,7 @@ module rv32_backend_joint #(
     wire [(BE_WIDTH*PAW)-1:0] completion_prf_write_phys;
     wire [(BE_WIDTH*32)-1:0] completion_prf_write_data;
     wire [BE_WIDTH-1:0] completion_prf_write_valid;
+    wire [BE_WIDTH-1:0] completion_live_load_error;
 
     wire [BE_WIDTH-1:0] rs_alloc_valid;
     wire rs_alloc_ready;
@@ -221,6 +245,11 @@ module rv32_backend_joint #(
     wire [RS_WAKE_WIDTH*32-1:0] rs_wake_value;
     wire [RS_ENTRIES-1:0] rs_entry_valid;
     wire [RS_ENTRIES*TAG_WIDTH-1:0] rs_entry_rob_tag;
+    wire [RS_ENTRIES-1:0] rs_entry_base_ready;
+    wire [RS_ENTRIES*32-1:0] rs_entry_base_value;
+    localparam integer RS_METADATA_WIDTH = (RS_ISSUE_METADATA != 0) ? 70 : 1;
+    wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] rs_alloc_metadata, rs_issue_metadata;
+    wire [RS_ENTRIES*RS_METADATA_WIDTH-1:0] rs_entry_metadata;
     reg [RS_ENTRIES-1:0] rs_flush_kill_mask;
 
     wire [BE_WIDTH-1:0] alu_exec_valid, alu_exec_ready, alu_issue_ready;
@@ -230,6 +259,9 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] alu_exec_value, alu_exec_branch_target, alu_exec_redirect_pc, alu_exec_mem_addr;
     wire [BE_WIDTH*2-1:0] alu_exec_mem_size;
     wire [BE_WIDTH*32-1:0] alu_exec_store_data;
+    wire [BE_WIDTH*32-1:0] alu_exec_source_pc, alu_exec_pred_target;
+    wire [BE_WIDTH-1:0] alu_exec_pred_taken;
+    wire [BE_WIDTH*2-1:0] alu_exec_pred_kind;
     wire [BE_WIDTH*PAW-1:0] alu_exec_phys;
     wire [BE_WIDTH*TAG_WIDTH-1:0] alu_exec_tag;
     wire [BE_WIDTH-1:0] rs_issue_is_mdu;
@@ -273,7 +305,17 @@ module rv32_backend_joint #(
     wire [BE_WIDTH-1:0] lsq_alloc_fire;
     wire [((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))-1:0] lsq_alloc_count;
     wire [BE_WIDTH*TAG_WIDTH-1:0] lsq_alloc_tag;
+    wire [BE_WIDTH-1:0] lsq_alloc_addr_valid;
+    wire [BE_WIDTH*32-1:0] lsq_alloc_addr;
+    wire [BE_WIDTH-1:0] lsq_alloc_data_valid = (EARLY_STORE_ADDRESS != 0) ?
+        {BE_WIDTH{1'b0}} : (trace_is_store_i & rename_valid);
     wire [((LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES + 1))-1:0] lsq_occupancy;
+    wire [((LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES))-1:0] lsq_head;
+    wire [LSQ_ENTRIES-1:0] lsq_store_addr_pending;
+    wire [LSQ_ENTRIES*TAG_WIDTH-1:0] lsq_store_addr_rob_tag, lsq_store_addr_lsq_tag;
+    wire shared_store_addr_valid;
+    wire [TAG_WIDTH-1:0] shared_store_addr_tag;
+    wire [31:0] shared_store_addr;
     wire [15:0] lsq_free_count = (lsq_occupancy < LSQ_ENTRIES) ? LSQ_ENTRIES - lsq_occupancy : 16'd0;
     wire lsq_store_commit_ready, lsq_load_complete_valid, lsq_load_complete_ready;
     wire [TAG_WIDTH-1:0] lsq_load_complete_tag;
@@ -296,6 +338,66 @@ module rv32_backend_joint #(
     reg [31:0] rob_pc_mem [0:ROB_ENTRIES-1];
     reg load_error_mem [0:ROB_ENTRIES-1];
     reg [31:0] rob_imm_mem [0:ROB_ENTRIES-1];
+    // Mode 1 probes only at allocation; mode 2 also follows existing RS
+    // base wakeups with a single shared adder and ROB immediate read port.
+    // Store data, execution completion and in-order commit remain unchanged.
+    generate if (EARLY_STORE_ADDRESS == 2) begin : g_shared_store_address
+        wire selected;
+        wire [TAG_WIDTH-1:0] selected_rob_tag;
+        wire [31:0] selected_base;
+        wire [31:0] selected_imm;
+        wire [ROB_SLOT_WIDTH-1:0] selected_slot = selected_rob_tag[3 +: ROB_SLOT_WIDTH];
+        rv32_store_address_select #(.LSQ_ENTRIES(LSQ_ENTRIES), .RS_ENTRIES(RS_ENTRIES),
+            .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH)) selector (
+            .head_i(lsq_head), .pending_i(lsq_store_addr_pending),
+            .lsq_tag_i(lsq_store_addr_lsq_tag), .store_rob_tag_i(lsq_store_addr_rob_tag),
+            .base_ready_i(rs_entry_base_ready), .rs_rob_tag_i(rs_entry_rob_tag),
+            .base_value_i(rs_entry_base_value), .valid_o(selected),
+            .lsq_tag_o(shared_store_addr_tag), .rob_tag_o(selected_rob_tag), .base_value_o(selected_base)
+        );
+        assign shared_store_addr_valid = selected && !reset_i && !flush_i &&
+            !rob_recovery_accept && selected_rob_tag[0] && rob_entry_valid[selected_slot] &&
+            (selected_rob_tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH] ==
+             rob_entry_generation[selected_slot*ROB_GENERATION_WIDTH +: ROB_GENERATION_WIDTH]);
+        if (RS_ISSUE_METADATA != 0) begin : g_inline_imm
+            wire [RS_ENTRIES-1:0] metadata_matches, selected_rs;
+            reg [31:0] imm_value;
+            integer slot;
+            genvar meta_slot;
+            for (meta_slot = 0; meta_slot < RS_ENTRIES; meta_slot = meta_slot + 1) begin : g_match
+                assign metadata_matches[meta_slot] = rs_entry_base_ready[meta_slot] &&
+                    (rs_entry_rob_tag[meta_slot*TAG_WIDTH +: TAG_WIDTH] == selected_rob_tag);
+                if (meta_slot == 0)
+                    assign selected_rs[meta_slot] = metadata_matches[meta_slot];
+                else
+                    assign selected_rs[meta_slot] = metadata_matches[meta_slot] && !(|metadata_matches[meta_slot-1:0]);
+            end
+            always @* begin
+                imm_value = 32'b0;
+                for (slot = 0; slot < RS_ENTRIES; slot = slot + 1)
+                    imm_value = imm_value |
+                        ({32{selected_rs[slot]}} & rs_entry_metadata[slot*RS_METADATA_WIDTH +: 32]);
+            end
+            assign selected_imm = imm_value;
+        end else begin : g_rob_imm
+            assign selected_imm = rob_imm_mem[selected_slot];
+        end
+        assign shared_store_addr = selected_base + selected_imm;
+    end else begin : g_no_shared_store_address
+        assign shared_store_addr_valid = 1'b0;
+        assign shared_store_addr_tag = {TAG_WIDTH{1'b0}};
+        assign shared_store_addr = 32'b0;
+    end endgenerate
+    initial begin
+        if (RS_ISSUE_METADATA != 0 && RS_ISSUE_METADATA != 1) begin
+            $display("ERROR: RS_ISSUE_METADATA must be 0 or 1");
+            $finish;
+        end
+        if (EARLY_STORE_ADDRESS < 0 || EARLY_STORE_ADDRESS > 2) begin
+            $display("ERROR: EARLY_STORE_ADDRESS must be 0, 1 or 2");
+            $finish;
+        end
+    end
     reg rob_pred_taken_mem [0:ROB_ENTRIES-1];
     reg [31:0] rob_pred_target_mem [0:ROB_ENTRIES-1];
     reg [1:0] rob_pred_kind_mem [0:ROB_ENTRIES-1];
@@ -423,26 +525,51 @@ module rv32_backend_joint #(
     genvar io_lane;
     generate
         for (io_lane = 0; io_lane < BE_WIDTH; io_lane = io_lane + 1) begin : g_backend_lane_io
+            // Direct completion can reach the ROB on the SAME edge that
+            // captures the LSQ error in load_error_mem. Carry this result's
+            // precise error alongside its value rather than reading the old
+            // flag. Full-tag qualification protects recycled ROB slots.
+            assign completion_live_load_error[io_lane] =
+                (COMPLETION_BYPASS == 2) && cdb_is_load[io_lane] &&
+                lsq_load_complete_valid && lsq_load_complete_error &&
+                (cdb_tag[io_lane*TAG_WIDTH +: TAG_WIDTH] == lsq_load_complete_tag);
             // The public trace interface retains its legacy line-sized field,
             // while the backend stores only the access-relative low word.
             assign trace_store_data_relative[io_lane*32 +: 32] =
                 trace_store_data_i[io_lane*128 +: 32];
+            // Publish only an already-ready store base at allocation. This
+            // releases disjoint younger loads without issuing the store or
+            // declaring its data ready. Same-bundle producers explicitly
+            // clear rs_src1_ready below; unresolved bases keep the old AGU path.
+            assign lsq_alloc_addr_valid[io_lane] = (EARLY_STORE_ADDRESS != 0) &&
+                dispatch_valid[io_lane] && trace_is_store_i[io_lane] && rs_src1_ready[io_lane];
+            assign lsq_alloc_addr[io_lane*32 +: 32] =
+                rs_src1_value[io_lane*32 +: 32] + trace_imm_i[io_lane*32 +: 32];
             assign prf_read_phys[(2*io_lane)*PAW +: PAW] =
                 rename_rs1_phys[io_lane*PAW +: PAW];
             assign prf_read_phys[(2*io_lane+1)*PAW +: PAW] =
                 rename_rs2_phys[io_lane*PAW +: PAW];
-            assign rs_issue_imm[io_lane*32 +: 32] =
-                rob_imm_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-            assign rs_issue_pred_taken[io_lane] =
-                rob_pred_taken_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-            assign rs_issue_pred_target[io_lane*32 +: 32] =
-                rob_pred_target_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-            assign rs_issue_pred_kind[io_lane*2 +: 2] =
-                rob_pred_kind_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-            assign rs_issue_mem_size[io_lane*2 +: 2] =
-                rob_mem_size_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-            assign rs_issue_mem_unsigned[io_lane] =
-                rob_mem_unsigned_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+            if (RS_ISSUE_METADATA != 0) begin : g_inline_metadata
+                // {unsigned, size, prediction kind, target, taken, immediate}
+                assign rs_alloc_metadata[io_lane*RS_METADATA_WIDTH +: RS_METADATA_WIDTH] =
+                    {trace_mem_unsigned_i[io_lane], trace_mem_size_i[io_lane*2 +: 2],
+                     trace_pred_kind_i[io_lane*2 +: 2], trace_pred_target_i[io_lane*32 +: 32],
+                     trace_pred_taken_i[io_lane], trace_imm_i[io_lane*32 +: 32]};
+                assign rs_issue_imm[io_lane*32 +: 32] = rs_issue_metadata[io_lane*RS_METADATA_WIDTH +: 32];
+                assign rs_issue_pred_taken[io_lane] = rs_issue_metadata[io_lane*RS_METADATA_WIDTH+32];
+                assign rs_issue_pred_target[io_lane*32 +: 32] = rs_issue_metadata[io_lane*RS_METADATA_WIDTH+33 +: 32];
+                assign rs_issue_pred_kind[io_lane*2 +: 2] = rs_issue_metadata[io_lane*RS_METADATA_WIDTH+65 +: 2];
+                assign rs_issue_mem_size[io_lane*2 +: 2] = rs_issue_metadata[io_lane*RS_METADATA_WIDTH+67 +: 2];
+                assign rs_issue_mem_unsigned[io_lane] = rs_issue_metadata[io_lane*RS_METADATA_WIDTH+69];
+            end else begin : g_rob_metadata
+                assign rs_alloc_metadata[io_lane*RS_METADATA_WIDTH +: RS_METADATA_WIDTH] = {RS_METADATA_WIDTH{1'b0}};
+                assign rs_issue_imm[io_lane*32 +: 32] = rob_imm_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                assign rs_issue_pred_taken[io_lane] = rob_pred_taken_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                assign rs_issue_pred_target[io_lane*32 +: 32] = rob_pred_target_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                assign rs_issue_pred_kind[io_lane*2 +: 2] = rob_pred_kind_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                assign rs_issue_mem_size[io_lane*2 +: 2] = rob_mem_size_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                assign rs_issue_mem_unsigned[io_lane] = rob_mem_unsigned_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+            end
             assign rs_issue_is_mdu[io_lane] =
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_MUL) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_MULH) ||
@@ -547,11 +674,23 @@ module rv32_backend_joint #(
     assign branch_feedback_target_o = branch_feedback_target_r;
     assign branch_feedback_pred_taken_o = branch_feedback_pred_taken_r;
     assign branch_feedback_pred_target_o = branch_feedback_pred_target_r;
+    reg [15:0] rob_pred_metadata_mem [0:ROB_ENTRIES-1];
+    assign branch_feedback_metadata_o = (PREDICTOR_META != 0 && branch_feedback_valid_r) ?
+        rob_pred_metadata_mem[branch_feedback_slot] : 16'b0;
 
     // Train on every resolved control-flow instruction, not only on the
     // mispredictions that enter branch_pending.  The previous policy left
     // loop counters and BTB entries almost untrained once a prediction became
     // correct.  One feedback port selects the oldest/lowest issue lane.
+    wire [BE_WIDTH-1:0] branch_training_live;
+    genvar training_lane;
+    generate for (training_lane = 0; training_lane < BE_WIDTH; training_lane = training_lane + 1) begin : g_training_live
+        wire [ROB_SLOT_WIDTH-1:0] slot = alu_exec_tag[training_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH];
+        assign branch_training_live[training_lane] = !reset_i && !flush_i && !alu_flush_r[training_lane] &&
+            alu_exec_tag[training_lane*TAG_WIDTH] && rob_entry_valid[slot] &&
+            (alu_exec_tag[training_lane*TAG_WIDTH+3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH] ==
+             rob_entry_generation[slot*ROB_GENERATION_WIDTH +: ROB_GENERATION_WIDTH]);
+    end endgenerate
     always @* begin
         branch_feedback_valid_r = 1'b0;
         branch_feedback_pc_r = 32'd0;
@@ -566,17 +705,22 @@ module rv32_backend_joint #(
              branch_feedback_lane = branch_feedback_lane + 1) begin
             if (!branch_feedback_found && alu_exec_valid[branch_feedback_lane] &&
                 alu_exec_ready[branch_feedback_lane] &&
+                (PREDICTOR_META == 0 || branch_training_live[branch_feedback_lane]) &&
                 alu_exec_is_branch[branch_feedback_lane]) begin
                 branch_feedback_slot =
                     alu_exec_tag[branch_feedback_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH];
                 branch_feedback_valid_r = 1'b1;
-                branch_feedback_pc_r = rob_pc_mem[branch_feedback_slot];
-                branch_feedback_kind_r = rob_pred_kind_mem[branch_feedback_slot];
+                branch_feedback_pc_r = (RS_ISSUE_METADATA != 0) ?
+                    alu_exec_source_pc[branch_feedback_lane*32 +: 32] : rob_pc_mem[branch_feedback_slot];
+                branch_feedback_kind_r = (RS_ISSUE_METADATA != 0) ?
+                    alu_exec_pred_kind[branch_feedback_lane*2 +: 2] : rob_pred_kind_mem[branch_feedback_slot];
                 branch_feedback_taken_r = alu_exec_branch_taken[branch_feedback_lane];
                 branch_feedback_target_r =
                     alu_exec_branch_target[branch_feedback_lane*32 +: 32];
-                branch_feedback_pred_taken_r = rob_pred_taken_mem[branch_feedback_slot];
-                branch_feedback_pred_target_r = rob_pred_target_mem[branch_feedback_slot];
+                branch_feedback_pred_taken_r = (RS_ISSUE_METADATA != 0) ?
+                    alu_exec_pred_taken[branch_feedback_lane] : rob_pred_taken_mem[branch_feedback_slot];
+                branch_feedback_pred_target_r = (RS_ISSUE_METADATA != 0) ?
+                    alu_exec_pred_target[branch_feedback_lane*32 +: 32] : rob_pred_target_mem[branch_feedback_slot];
                 branch_feedback_found = 1;
             end
         end
@@ -623,20 +767,34 @@ module rv32_backend_joint #(
     // The ROB owns the physical mappings of in-flight instructions.  Recovery
     // restores the branch RAT checkpoint, keeps the branch's own destination,
     // and returns only destinations allocated by the killed younger suffix.
+    wire [CHECK_RAT_WIDTH-1:0] parallel_recovery_rat;
+    generate if (RAT_RECOVERY_IMPL != 0 && CHECKPOINT_IMPL != 0) begin : g_parallel_rat_recovery
+        rv32_rat_recovery #(.ROB_ENTRIES(ROB_ENTRIES), .PAW(PAW), .IMPL(1)) rat_recovery (
+            .rat_i(rat_state), .head_i(rob_head_views[0 +: ROB_SLOT_WIDTH]),
+            .branch_slot_i(branch_pending_tag[3 +: ROB_SLOT_WIDTH]),
+            .occupancy_i(rob_occupancy), .valid_i(rob_entry_valid),
+            .rd_we_i(rob_entry_rd_we), .rd_i(rob_entry_rd), .old_phys_i(rob_entry_old_phys),
+            .branch_rd_we_i(rob_recovery_rd_we), .branch_rd_i(rob_recovery_rd),
+            .branch_new_phys_i(rob_recovery_new_phys), .restore_o(parallel_recovery_rat)
+        );
+    end else begin : g_no_parallel_rat_recovery
+        assign parallel_recovery_rat = {CHECK_RAT_WIDTH{1'b0}};
+    end endgenerate
     always @* begin
         recovery_rat_state = (CHECKPOINT_IMPL == 0) ?
-            rob_checkpoint_restore[CHECK_RAT_WIDTH-1:0] : rat_state;
-        recovery_rat_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head;
+            rob_checkpoint_restore[CHECK_RAT_WIDTH-1:0] :
+            ((RAT_RECOVERY_IMPL != 0) ? parallel_recovery_rat : rat_state);
+        recovery_rat_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head_views[0 +: ROB_SLOT_WIDTH];
         if (recovery_rat_branch_age < 0)
             recovery_rat_branch_age = recovery_rat_branch_age + ROB_ENTRIES;
-        if (CHECKPOINT_IMPL != 0) begin
+        if (CHECKPOINT_IMPL != 0 && RAT_RECOVERY_IMPL == 0) begin
             // Undo the killed suffix youngest-to-oldest.  Each old-physical
             // link restores the mapping that existed immediately before that
             // instruction, so repeated writes to one architectural register
             // collapse correctly without a full RAT snapshot per ROB entry.
             for (recovery_rat_age = ROB_ENTRIES - 1; recovery_rat_age >= 0;
                  recovery_rat_age = recovery_rat_age - 1) begin
-                recovery_rat_slot = rob_head + recovery_rat_age;
+                recovery_rat_slot = rob_head_views[0 +: ROB_SLOT_WIDTH] + recovery_rat_age;
                 if (recovery_rat_slot >= ROB_ENTRIES)
                     recovery_rat_slot = recovery_rat_slot - ROB_ENTRIES;
                 if ((recovery_rat_age > recovery_rat_branch_age) &&
@@ -649,7 +807,8 @@ module rv32_backend_joint #(
                         rob_entry_old_phys[recovery_rat_slot*PAW +: PAW];
             end
         end
-        if (rob_recovery_rd_we && (rob_recovery_rd != 0))
+        if ((CHECKPOINT_IMPL == 0 || RAT_RECOVERY_IMPL == 0) &&
+            rob_recovery_rd_we && (rob_recovery_rd != 0))
             recovery_rat_state[(rob_recovery_rd*PAW) +: PAW] = rob_recovery_new_phys;
         recovery_free_bitmap = free_bitmap_state | rob_recovery_reclaim_bitmap;
         recovery_free_bitmap[0] = 1'b0;
@@ -665,7 +824,7 @@ module rv32_backend_joint #(
         recovery_rs_rob_slot = 0;
         recovery_rs_branch_slot = branch_pending_tag[3 +: ROB_SLOT_WIDTH];
         recovery_rs_age = 0;
-        recovery_rs_branch_age = recovery_rs_branch_slot - rob_head;
+        recovery_rs_branch_age = recovery_rs_branch_slot - rob_head_views[ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
         if (recovery_rs_branch_age < 0)
             recovery_rs_branch_age = recovery_rs_branch_age + ROB_ENTRIES;
         if (flush_i) begin
@@ -673,7 +832,7 @@ module rv32_backend_joint #(
         end else if (rob_recovery_accept) begin
             for (recovery_rs_index = 0; recovery_rs_index < RS_ENTRIES; recovery_rs_index = recovery_rs_index + 1) begin
                 recovery_rs_rob_slot = rs_entry_rob_tag[(recovery_rs_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH];
-                recovery_rs_age = recovery_rs_rob_slot - rob_head;
+                recovery_rs_age = recovery_rs_rob_slot - rob_head_views[ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
                 if (recovery_rs_age < 0) recovery_rs_age = recovery_rs_age + ROB_ENTRIES;
                 if (rs_entry_valid[recovery_rs_index] &&
                     (!rs_entry_rob_tag[recovery_rs_index*TAG_WIDTH] ||
@@ -693,7 +852,7 @@ module rv32_backend_joint #(
         completion_kill_mask = {COMPLETION_DEPTH{1'b0}};
         recovery_completion_rob_slot = 0;
         recovery_completion_age = 0;
-        recovery_completion_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head;
+        recovery_completion_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head_views[2*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
         if (recovery_completion_branch_age < 0)
             recovery_completion_branch_age = recovery_completion_branch_age + ROB_ENTRIES;
         if (rob_recovery_accept) begin
@@ -701,7 +860,7 @@ module rv32_backend_joint #(
                  recovery_completion_index = recovery_completion_index + 1) begin
                 recovery_completion_rob_slot =
                     completion_entry_tag[(recovery_completion_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH];
-                recovery_completion_age = recovery_completion_rob_slot - rob_head;
+                recovery_completion_age = recovery_completion_rob_slot - rob_head_views[2*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
                 if (recovery_completion_age < 0)
                     recovery_completion_age = recovery_completion_age + ROB_ENTRIES;
                 if (completion_entry_valid[recovery_completion_index] &&
@@ -822,7 +981,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
+    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rob_alloc_valid), .alloc_pc_i(rob_alloc_pc), .alloc_inst_i(rob_alloc_inst), .alloc_rd_i(rob_alloc_rd),
         .alloc_rd_we_i(rename_rd_we), .alloc_old_phys_i(rob_alloc_old_phys), .alloc_new_phys_i(rob_alloc_new_phys), .alloc_is_store_i(rob_alloc_is_store),
         .alloc_is_branch_i(rob_alloc_is_branch), .alloc_is_halt_i(rob_alloc_is_halt), .alloc_is_error_i(rob_alloc_is_error), .alloc_checkpoint_i(rob_alloc_checkpoint),
@@ -833,10 +992,12 @@ module rv32_backend_joint #(
         .commit_store_addr_o(rob_commit_store_addr), .commit_store_mask_o(rob_commit_store_mask), .commit_store_data_o(rob_commit_store_data), .commit_tag_o(rob_commit_tag), .commit_old_phys_o(commit_old_phys), .commit_new_phys_o(commit_new_phys),
         .store_commit_valid_o(rob_store_commit_valid), .store_commit_ready_i(rob_store_commit_ready), .store_commit_tag_o(rob_store_commit_tag), .store_commit_addr_o(rob_store_commit_addr), .store_commit_mask_o(rob_store_commit_mask), .store_commit_data_o(rob_store_commit_data), .store_ack_valid_i(rob_store_ack_valid), .store_ack_tag_i(rob_store_ack_tag), .store_ack_error_i(lsq_store_ack_error),
         .recovery_valid_i({ {(BE_WIDTH-1){1'b0}}, branch_pending }), .recovery_tag_i({ {(BE_WIDTH-1)*TAG_WIDTH{1'b0}}, branch_pending_tag }), .recovery_pc_i({ {(BE_WIDTH-1)*32{1'b0}}, branch_pending_pc }),
-        .recovery_accept_o(rob_recovery_accept), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation), .entry_new_phys_o(rob_entry_new_phys), .entry_rd_we_o(rob_entry_rd_we), .entry_rd_o(rob_entry_rd), .entry_old_phys_o(rob_entry_old_phys)
+        .recovery_accept_o(rob_recovery_accept), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head_source), .head_domains_o(rob_registered_head_views), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation), .entry_new_phys_o(rob_entry_new_phys), .entry_rd_we_o(rob_entry_rd_we), .entry_rd_o(rob_entry_rd), .entry_old_phys_o(rob_entry_old_phys)
     );
 
-    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32)) rs (
+    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH)) rs (
+        .alloc_metadata_i(rs_alloc_metadata), .issue_metadata_o(rs_issue_metadata), .entry_metadata_o(rs_entry_metadata),
+        .entry_base_ready_o(rs_entry_base_ready), .entry_base_value_o(rs_entry_base_value),
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rs_alloc_valid), .alloc_op_i(trace_op_i), .alloc_pc_i(trace_pc_i), .alloc_rob_tag_i(rob_alloc_tag), .alloc_target_live_i(rob_alloc_valid), .alloc_phys_rd_i(rename_new_phys),
         .alloc_src1_value_i(rs_src1_value), .alloc_src1_tag_i(rs_src1_tag), .alloc_src1_ready_i(rs_src1_ready), .alloc_src2_value_i(rs_src2_value), .alloc_src2_tag_i(rs_src2_tag), .alloc_src2_ready_i(rs_src2_ready), .alloc_store_data_i(trace_store_data_relative), .alloc_ready_o(rs_alloc_ready), .alloc_fire_o(rs_alloc_fire), .alloc_count_o(rs_alloc_count),
         .wake_valid_i(rs_wake_valid), .wake_tag_i(rs_wake_tag), .wake_value_i(rs_wake_value), .issue_ready_i(rs_issue_ready), .issue_valid_o(rs_issue_valid), .issue_op_o(rs_issue_op), .issue_pc_o(rs_issue_pc), .issue_rob_tag_o(rs_issue_tag), .issue_phys_rd_o(rs_issue_phys), .issue_src1_value_o(rs_issue_src1), .issue_src2_value_o(rs_issue_src2), .issue_store_data_o(rs_issue_store), .issue_slot_o(rs_issue_slot), .flush_valid_i(flush_i || rob_recovery_accept), .flush_kill_mask_i(rs_flush_kill_mask), .entry_valid_o(rs_entry_valid), .entry_rob_tag_o(rs_entry_rob_tag), .occupancy_o(rs_occupancy)
@@ -845,7 +1006,11 @@ module rv32_backend_joint #(
     genvar alu_lane;
     generate
         for (alu_lane = 0; alu_lane < BE_WIDTH; alu_lane = alu_lane + 1) begin : g_alu
-            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL)) alu (
+            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .FORWARD_METADATA(RS_ISSUE_METADATA)) alu (
+                .exec_source_pc_o(alu_exec_source_pc[alu_lane*32 +: 32]),
+                .exec_pred_taken_o(alu_exec_pred_taken[alu_lane]),
+                .exec_pred_target_o(alu_exec_pred_target[alu_lane*32 +: 32]),
+                .exec_pred_kind_o(alu_exec_pred_kind[alu_lane*2 +: 2]),
                 .clk_i(clk_i), .reset_i(reset_i), .flush_i(alu_flush_r[alu_lane]),
                 .issue_valid_i(!rob_recovery_accept &&
                                (alu_lane < INT_ISSUE_WIDTH) &&
@@ -893,10 +1058,14 @@ module rv32_backend_joint #(
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
-    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES)) lsq (
+    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES)) lsq (
+        .early_addr_valid_i(shared_store_addr_valid), .early_addr_tag_i(shared_store_addr_tag),
+        .early_addr_i(shared_store_addr), .store_addr_pending_o(lsq_store_addr_pending),
+        .store_addr_rob_tag_o(lsq_store_addr_rob_tag), .store_addr_lsq_tag_o(lsq_store_addr_lsq_tag),
+        .head_o(lsq_head),
         .retire_valid_i(rob_commit_valid & {BE_WIDTH{commit_ready_i}}),
         .retire_rob_tag_i(rob_commit_tag),
-        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_valid_i(rob_recovery_accept), .recovery_tag_i(branch_pending_tag), .recovery_head_i(rob_head), .recovery_occupancy_i({{(16-ROB_COUNT_WIDTH){1'b0}}, rob_occupancy}), .alloc_valid_i(lsq_alloc_valid), .alloc_ready_o(lsq_alloc_ready), .alloc_fire_o(lsq_alloc_fire), .alloc_count_o(lsq_alloc_count), .alloc_lsq_tag_o(lsq_alloc_tag), .alloc_is_load_i(trace_is_load_i), .alloc_is_store_i(trace_is_store_i), .alloc_rob_tag_i(rob_alloc_tag), .alloc_size_i(trace_mem_size_i), .alloc_unsigned_i(trace_mem_unsigned_i), .alloc_addr_valid_i({BE_WIDTH{1'b0}}), .alloc_addr_i({BE_WIDTH*32{1'b0}}), .alloc_data_valid_i(trace_is_store_i & dispatch_valid), .alloc_store_data_i(trace_store_data_relative), .alloc_store_mask_i({BE_WIDTH*4{1'b0}}), .addr_update_valid_i(lsq_addr_update_valid), .addr_update_tag_i(lsq_addr_update_tag), .addr_update_i(lsq_addr_update), .data_update_valid_i(lsq_data_update_valid), .data_update_tag_i(lsq_data_update_tag), .data_update_i(alu_exec_store_data), .data_mask_update_i({BE_WIDTH*4{1'b0}}), .wakeup_valid_i({BE_WIDTH{1'b0}}), .wakeup_tag_i({BE_WIDTH*TAG_WIDTH{1'b0}}), .wakeup_value_i({BE_WIDTH*32{1'b0}}), .store_commit_valid_i(rob_store_commit_valid), .store_commit_ready_o(rob_store_commit_ready), .store_commit_rob_tag_i(rob_store_commit_tag), .dcache_req_valid_o(dcache_req_valid_o), .dcache_req_ready_i(dcache_req_ready_i), .dcache_req_is_load_o(dcache_req_is_load_o), .dcache_req_is_store_o(dcache_req_is_store_o), .dcache_req_addr_o(dcache_req_addr_o), .dcache_req_size_o(dcache_req_size_o), .dcache_req_unsigned_o(dcache_req_unsigned_o), .dcache_req_mask_o(dcache_req_mask_o), .dcache_req_wdata_o(dcache_req_wdata_o), .dcache_req_rob_tag_o(dcache_req_rob_tag_o), .dcache_req_lsq_tag_o(dcache_req_lsq_tag_o), .dcache_resp_valid_i(dcache_resp_valid_i), .dcache_resp_ready_o(dcache_resp_ready_o), .dcache_resp_lsq_tag_i(dcache_resp_lsq_tag_i), .dcache_resp_addr_i(dcache_resp_addr_i), .dcache_resp_line_data_i(dcache_resp_line_data_i), .dcache_resp_word_data_i(dcache_resp_word_data_i), .dcache_resp_line_valid_i(dcache_resp_line_valid_i), .dcache_resp_error_i(dcache_resp_error_i), .load_complete_valid_o(lsq_load_complete_valid), .load_complete_ready_i(lsq_load_complete_ready), .load_complete_rob_tag_o(lsq_load_complete_tag), .load_complete_lsq_tag_o(lsq_load_complete_lsq_tag), .load_complete_value_o(lsq_load_complete_value), .load_complete_error_o(lsq_load_complete_error), .dcache_store_ack_valid_i(dcache_store_ack_valid_i), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag_i), .dcache_store_ack_error_i(dcache_store_ack_error_i), .store_ack_valid_o(lsq_store_ack_valid), .store_ack_ready_i(1'b1), .store_ack_rob_tag_o(lsq_store_ack_rob_tag), .store_ack_lsq_tag_o(lsq_store_ack_lsq_tag), .store_ack_error_o(lsq_store_ack_error), .occupancy_o(lsq_occupancy), .head_o(), .tail_o()
+.clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_valid_i(rob_recovery_accept), .recovery_tag_i(branch_pending_tag), .recovery_head_i(rob_head), .recovery_occupancy_i({{(16-ROB_COUNT_WIDTH){1'b0}}, rob_occupancy}), .alloc_valid_i(lsq_alloc_valid), .alloc_ready_o(lsq_alloc_ready), .alloc_fire_o(lsq_alloc_fire), .alloc_count_o(lsq_alloc_count), .alloc_lsq_tag_o(lsq_alloc_tag), .alloc_is_load_i(trace_is_load_i), .alloc_is_store_i(trace_is_store_i), .alloc_rob_tag_i(rob_alloc_tag), .alloc_size_i(trace_mem_size_i), .alloc_unsigned_i(trace_mem_unsigned_i), .alloc_addr_valid_i(lsq_alloc_addr_valid), .alloc_addr_i(lsq_alloc_addr), .alloc_data_valid_i(lsq_alloc_data_valid), .alloc_store_data_i(trace_store_data_relative), .alloc_store_mask_i({BE_WIDTH*4{1'b0}}), .addr_update_valid_i(lsq_addr_update_valid), .addr_update_tag_i(lsq_addr_update_tag), .addr_update_i(lsq_addr_update), .data_update_valid_i(lsq_data_update_valid), .data_update_tag_i(lsq_data_update_tag), .data_update_i(alu_exec_store_data), .data_mask_update_i({BE_WIDTH*4{1'b0}}), .wakeup_valid_i({BE_WIDTH{1'b0}}), .wakeup_tag_i({BE_WIDTH*TAG_WIDTH{1'b0}}), .wakeup_value_i({BE_WIDTH*32{1'b0}}), .store_commit_valid_i(rob_store_commit_valid), .store_commit_ready_o(rob_store_commit_ready), .store_commit_rob_tag_i(rob_store_commit_tag), .dcache_req_valid_o(dcache_req_valid_o), .dcache_req_ready_i(dcache_req_ready_i), .dcache_req_is_load_o(dcache_req_is_load_o), .dcache_req_is_store_o(dcache_req_is_store_o), .dcache_req_addr_o(dcache_req_addr_o), .dcache_req_size_o(dcache_req_size_o), .dcache_req_unsigned_o(dcache_req_unsigned_o), .dcache_req_mask_o(dcache_req_mask_o), .dcache_req_wdata_o(dcache_req_wdata_o), .dcache_req_rob_tag_o(dcache_req_rob_tag_o), .dcache_req_lsq_tag_o(dcache_req_lsq_tag_o), .dcache_resp_valid_i(dcache_resp_valid_i), .dcache_resp_ready_o(dcache_resp_ready_o), .dcache_resp_lsq_tag_i(dcache_resp_lsq_tag_i), .dcache_resp_addr_i(dcache_resp_addr_i), .dcache_resp_line_data_i(dcache_resp_line_data_i), .dcache_resp_word_data_i(dcache_resp_word_data_i), .dcache_resp_line_valid_i(dcache_resp_line_valid_i), .dcache_resp_error_i(dcache_resp_error_i), .load_complete_valid_o(lsq_load_complete_valid), .load_complete_ready_i(lsq_load_complete_ready), .load_complete_rob_tag_o(lsq_load_complete_tag), .load_complete_lsq_tag_o(lsq_load_complete_lsq_tag), .load_complete_value_o(lsq_load_complete_value), .load_complete_error_o(lsq_load_complete_error), .dcache_store_ack_valid_i(dcache_store_ack_valid_i), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag_i), .dcache_store_ack_error_i(dcache_store_ack_error_i), .store_ack_valid_o(lsq_store_ack_valid), .store_ack_ready_i(1'b1), .store_ack_rob_tag_o(lsq_store_ack_rob_tag), .store_ack_lsq_tag_o(lsq_store_ack_lsq_tag), .store_ack_error_o(lsq_store_ack_error), .occupancy_o(lsq_occupancy), .tail_o()
     );
 
     // Keep producer positions fixed.  The completion network already skips
@@ -955,7 +1124,7 @@ module rv32_backend_joint #(
         end
         producer_recovery_rob_slot = 0;
         producer_recovery_age = 0;
-        producer_recovery_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head;
+        producer_recovery_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head_views[4*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
         if (producer_recovery_branch_age < 0)
             producer_recovery_branch_age = producer_recovery_branch_age + ROB_ENTRIES;
         if (rob_recovery_accept) begin
@@ -963,7 +1132,7 @@ module rv32_backend_joint #(
                  producer_recovery_index = producer_recovery_index + 1) begin
                 producer_recovery_rob_slot =
                     producer_tag_r[(producer_recovery_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH];
-                producer_recovery_age = producer_recovery_rob_slot - rob_head;
+                producer_recovery_age = producer_recovery_rob_slot - rob_head_views[4*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
                 if (producer_recovery_age < 0)
                     producer_recovery_age = producer_recovery_age + ROB_ENTRIES;
                 if (producer_valid_r[producer_recovery_index] &&
@@ -998,7 +1167,7 @@ module rv32_backend_joint #(
         alu_flush_r = {BE_WIDTH{flush_i}};
         alu_recovery_slot = 0;
         alu_recovery_age = 0;
-        alu_recovery_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head;
+        alu_recovery_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head_views[5*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
         if (alu_recovery_branch_age < 0)
             alu_recovery_branch_age = alu_recovery_branch_age + ROB_ENTRIES;
         if (rob_recovery_accept) begin
@@ -1006,7 +1175,7 @@ module rv32_backend_joint #(
                  alu_recovery_lane = alu_recovery_lane + 1) begin
                 alu_recovery_slot =
                     alu_exec_tag[alu_recovery_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH];
-                alu_recovery_age = alu_recovery_slot - rob_head;
+                alu_recovery_age = alu_recovery_slot - rob_head_views[5*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
                 if (alu_recovery_age < 0)
                     alu_recovery_age = alu_recovery_age + ROB_ENTRIES;
                 if (alu_exec_valid[alu_recovery_lane] &&
@@ -1066,7 +1235,8 @@ module rv32_backend_joint #(
         for (completion_lane = 0; completion_lane < BE_WIDTH; completion_lane = completion_lane + 1) begin
             completion_slot = rob_wb_tag[(completion_lane*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH];
             if (rob_wb_valid[completion_lane] && (completion_slot < ROB_ENTRIES)) begin
-                completion_error_r[completion_lane] = load_error_mem[completion_slot];
+                completion_error_r[completion_lane] = load_error_mem[completion_slot] |
+                    completion_live_load_error[completion_lane];
                 if (cdb_is_store[completion_lane]) begin
                     case (rob_mem_size_mem[completion_slot])
                         `RV32IM_MEM_BYTE: completion_store_mask_r[completion_lane*4 +: 4] = 4'b0001;
@@ -1101,7 +1271,8 @@ module rv32_backend_joint #(
                         rob_wb_tag[completion_source*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH];
                     if (completion_slot < ROB_ENTRIES) begin
                         completion_error_r[completion_lane] =
-                            load_error_mem[completion_slot];
+                            load_error_mem[completion_slot] |
+                            completion_live_load_error[completion_source];
                         completion_store_addr_r[completion_lane*32 +: 32] =
                             cdb_addr[completion_source*32 +: 32];
                         completion_store_data_r[completion_lane*32 +: 32] =
@@ -1139,9 +1310,11 @@ module rv32_backend_joint #(
             branch_pending_target <= 0;
             branch_pending_pred_taken <= 1'b0;
             branch_pending_pred_target <= 0;
+            branch_recovery_history_o <= 0;
             for (map_index = 0; map_index < ROB_ENTRIES; map_index = map_index + 1) begin
                 rob_to_lsq_mem[map_index] <= 0;
                 rob_pc_mem[map_index] <= 0;
+                rob_pred_metadata_mem[map_index] <= 0;
             end
             for (map_index = 0; map_index < LSQ_ENTRIES; map_index = map_index + 1)
                 lsq_phys_mem[map_index] <= 0;
@@ -1160,6 +1333,11 @@ module rv32_backend_joint #(
             end
         end else begin
             if (rob_recovery_accept && branch_pending) begin
+                if (PREDICTOR_META != 0)
+                    branch_recovery_history_o <= (branch_pending_kind == `RV32IM_PRED_BRANCH) ?
+                        {rob_pred_metadata_mem[branch_pending_tag[3 +: ROB_SLOT_WIDTH]][14:8],
+                         branch_pending_taken} :
+                        rob_pred_metadata_mem[branch_pending_tag[3 +: ROB_SLOT_WIDTH]][15:8];
                 // The branch is retained in the ROB by recovery and will
                 // commit on the following cycle; stop reissuing recovery.
                 branch_pending <= 1'b0;
@@ -1174,12 +1352,16 @@ module rv32_backend_joint #(
                         branch_pending_phys <= alu_exec_phys[branch_lane*PAW +: PAW];
                         branch_pending_rd_we <= alu_exec_rd_we[branch_lane];
                         branch_pending_pc <= alu_exec_redirect_pc[branch_lane*32 +: 32];
-                        branch_pending_source_pc <= rob_pc_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-                        branch_pending_kind <= rob_pred_kind_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                        branch_pending_source_pc <= (RS_ISSUE_METADATA != 0) ?
+                            alu_exec_source_pc[branch_lane*32 +: 32] : rob_pc_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                        branch_pending_kind <= (RS_ISSUE_METADATA != 0) ?
+                            alu_exec_pred_kind[branch_lane*2 +: 2] : rob_pred_kind_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
                         branch_pending_taken <= alu_exec_branch_taken[branch_lane];
                         branch_pending_target <= alu_exec_redirect_pc[branch_lane*32 +: 32];
-                        branch_pending_pred_taken <= rob_pred_taken_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-                        branch_pending_pred_target <= rob_pred_target_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                        branch_pending_pred_taken <= (RS_ISSUE_METADATA != 0) ?
+                            alu_exec_pred_taken[branch_lane] : rob_pred_taken_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                        branch_pending_pred_target <= (RS_ISSUE_METADATA != 0) ?
+                            alu_exec_pred_target[branch_lane*32 +: 32] : rob_pred_target_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
                         branch_capture_found = 1;
                     end
                 end
@@ -1196,6 +1378,8 @@ module rv32_backend_joint #(
                     rob_pred_taken_mem[map_rob_slot] <= trace_pred_taken_i[map_lane];
                     rob_pred_target_mem[map_rob_slot] <= trace_pred_target_i[map_lane*32 +: 32];
                     rob_pred_kind_mem[map_rob_slot] <= trace_pred_kind_i[map_lane*2 +: 2];
+                    rob_pred_metadata_mem[map_rob_slot] <= (PREDICTOR_META != 0) ?
+                        trace_pred_metadata_i[map_lane*16 +: 16] : 16'b0;
                     rob_mem_size_mem[map_rob_slot] <= trace_mem_size_i[map_lane*2 +: 2];
                     rob_mem_unsigned_mem[map_rob_slot] <= trace_mem_unsigned_i[map_lane];
                     if ((PHYS_TAG_IMPL == 0) && rename_rd_we[map_lane] &&
