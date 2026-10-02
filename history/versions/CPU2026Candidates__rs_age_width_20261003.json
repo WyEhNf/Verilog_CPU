@@ -1,0 +1,17 @@
+{
+  "version": "rs_age_width_20261003",
+  "source_manifest": "F:\\CPU2026Candidates\\rs_age_width_20261003\\candidate_manifest.json",
+  "source_sha256": {
+    "rtl/backend/rv32_reservation_station.v": "9dbf90f1121ac3f0495b4910a3c42502d167db036c50fec49cdd3307a507365f",
+    "tb/unit/rv32_reservation_station_tb.v": "ddf672c53dca9d45fba1074fe6ace6e6127558ab086f1f795f37ad27c8701ce5",
+    "tb/unit/rv32_rs_rank_tb.v": "537bf21ba99c75cd753ba52c6989b825532050668b1f13c224907b1f5808b1c7",
+    "tools/probe_localized_component.py": "cdc95cc351a8be39d34320d12ea7b69db368e981ea1002bfbfe75f82e33af5de"
+  },
+  "description": "",
+  "configuration": {
+    "measured_age_widths": [
+      32,
+      8
+    ]
+  }
+}
