@@ -1,10 +1,11 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// Completion/CDB network. Producer inputs are ordered by source index and
-// accepted into a small FIFO; output lanes drain the FIFO in order. This
-// keeps completion deterministic and prevents an ungranted result from being
-// overwritten by a later producer.
+// Completion/CDB network: BYPASS=0 retains the completion FIFO, BYPASS=1
+// retains the legacy single-CDB path, and BYPASS=2 directly arbitrates up to
+// CDB_WIDTH producer results. Producers must retain each result until ready;
+// a stalled direct lane locks its source and full tag, not another payload copy.
+(* keep_hierarchy = 1 *)
 module rv32_completion_network #(
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer CDB_WIDTH = BE_WIDTH,
@@ -101,6 +102,16 @@ module rv32_completion_network #(
     reg [SOURCES-1:0] source_fire;
     reg bypass_selected;
     reg [TAG_WIDTH-1:0] bypass_source_tag;
+    localparam integer SOURCE_WIDTH = (SOURCES <= 1) ? 1 : $clog2(SOURCES);
+    reg [SOURCE_WIDTH-1:0] direct_rr_reg, direct_rr_next;
+    reg [CDB_WIDTH-1:0] direct_hold_valid;
+    reg [SOURCE_WIDTH-1:0] direct_hold_source [0:CDB_WIDTH-1];
+    reg [TAG_WIDTH-1:0] direct_hold_tag [0:CDB_WIDTH-1];
+    reg [CDB_WIDTH-1:0] direct_selected_valid;
+    reg [SOURCE_WIDTH-1:0] direct_selected_source [0:CDB_WIDTH-1];
+    reg [SOURCES-1:0] direct_eligible, direct_used;
+    integer direct_source, direct_lane, direct_scan, direct_candidate;
+    integer direct_state_lane;
     wire [COUNT_WIDTH-1:0] occupancy_wire = BYPASS ? {COUNT_WIDTH{1'b0}} : count_reg;
     assign occupancy_o = occupancy_wire;
 
@@ -113,6 +124,75 @@ module rv32_completion_network #(
                 BYPASS ? {TAG_WIDTH{1'b0}} : tag_mem[entry_index];
         end
     endgenerate
+
+    // Reserve ALL held lanes before filling any unheld lane. Otherwise a
+    // newly available low lane could steal a source held on a higher lane.
+    // Selection is independent of downstream ready; ready only changes the
+    // next-cycle round-robin cursor and whether a source lock is needed.
+    always @* begin
+        direct_eligible = {SOURCES{1'b0}};
+        direct_used = {SOURCES{1'b0}};
+        direct_selected_valid = {CDB_WIDTH{1'b0}};
+        direct_candidate = 0;
+        direct_rr_next = direct_rr_reg;
+        for (direct_source = 0; direct_source < SOURCES; direct_source = direct_source + 1)
+            direct_eligible[direct_source] = producer_valid_i[direct_source] &&
+                producer_target_live_i[direct_source] && producer_tag_i[direct_source*TAG_WIDTH] &&
+                (!live_tag_valid_i ||
+                 producer_tag_i[direct_source*TAG_WIDTH +: TAG_WIDTH] == live_tag_i);
+        for (direct_lane = 0; direct_lane < CDB_WIDTH; direct_lane = direct_lane + 1) begin
+            direct_selected_source[direct_lane] = 0;
+            if (direct_hold_valid[direct_lane] && direct_hold_source[direct_lane] < SOURCES &&
+                direct_eligible[direct_hold_source[direct_lane]] &&
+                producer_tag_i[direct_hold_source[direct_lane]*TAG_WIDTH +: TAG_WIDTH] ==
+                    direct_hold_tag[direct_lane]) begin
+                direct_selected_valid[direct_lane] = 1'b1;
+                direct_selected_source[direct_lane] = direct_hold_source[direct_lane];
+                direct_used[direct_hold_source[direct_lane]] = 1'b1;
+            end
+        end
+        for (direct_lane = 0; direct_lane < CDB_WIDTH; direct_lane = direct_lane + 1) begin
+            for (direct_scan = 0; direct_scan < SOURCES; direct_scan = direct_scan + 1) begin
+                direct_candidate = direct_rr_reg + direct_scan;
+                if (direct_candidate >= SOURCES) direct_candidate = direct_candidate - SOURCES;
+                if (!direct_selected_valid[direct_lane] &&
+                    direct_eligible[direct_candidate] && !direct_used[direct_candidate]) begin
+                    direct_selected_valid[direct_lane] = 1'b1;
+                    direct_selected_source[direct_lane] = direct_candidate;
+                    direct_used[direct_candidate] = 1'b1;
+                end
+            end
+            if (direct_selected_valid[direct_lane] && cdb_ready_i[direct_lane]) begin
+                if (direct_selected_source[direct_lane] == SOURCES-1)
+                    direct_rr_next = 0;
+                else direct_rr_next = direct_selected_source[direct_lane] + 1'b1;
+            end
+        end
+    end
+
+    always @(posedge clk_i) begin
+        if (BYPASS != 2 || reset_i || flush_i) begin
+            direct_rr_reg <= 0;
+            direct_hold_valid <= 0;
+            for (direct_state_lane = 0; direct_state_lane < CDB_WIDTH;
+                 direct_state_lane = direct_state_lane + 1) begin
+                direct_hold_source[direct_state_lane] <= 0;
+                direct_hold_tag[direct_state_lane] <= 0;
+            end
+        end else begin
+            direct_rr_reg <= direct_rr_next;
+            for (direct_state_lane = 0; direct_state_lane < CDB_WIDTH;
+                 direct_state_lane = direct_state_lane + 1) begin
+                direct_hold_valid[direct_state_lane] <=
+                    direct_selected_valid[direct_state_lane] && !cdb_ready_i[direct_state_lane];
+                if (direct_selected_valid[direct_state_lane] && !cdb_ready_i[direct_state_lane]) begin
+                    direct_hold_source[direct_state_lane] <= direct_selected_source[direct_state_lane];
+                    direct_hold_tag[direct_state_lane] <=
+                        producer_tag_i[direct_selected_source[direct_state_lane]*TAG_WIDTH +: TAG_WIDTH];
+                end
+            end
+        end
+    end
 
     always @* begin
         producer_ready_o = {SOURCES{1'b0}};
@@ -197,7 +277,7 @@ module rv32_completion_network #(
 
         // Minimum-area single-CDB mode. Producers already retain their result
         // until ready, so they directly provide the only required storage.
-        if (BYPASS != 0) begin
+        if (BYPASS == 1) begin
             producer_ready_o = {SOURCES{1'b0}};
             source_fire = {SOURCES{1'b0}};
             cdb_valid_o = {BE_WIDTH{1'b0}};
@@ -243,6 +323,46 @@ module rv32_completion_network #(
                     cdb_is_memory_o[0] = producer_is_memory_i[source];
                     cdb_is_load_o[0] = producer_is_load_i[source];
                     producer_ready_o[source] = !flush_i && cdb_ready_i[0];
+                end
+            end
+        end
+        if (BYPASS == 2) begin
+            // No FIFO admission or prefix stall in this mode. Each result
+            // handshakes on its own CDB lane; stale results drain even when
+            // every live lane is blocked. Recovery supplies target_live, as
+            // kill_mask only describes entries in the legacy FIFO.
+            producer_ready_o = {SOURCES{1'b0}};
+            source_fire = {SOURCES{1'b0}};
+            cdb_valid_o = {BE_WIDTH{1'b0}};
+            cdb_tag_o = 0; cdb_phys_rd_o = 0; cdb_value_o = 0;
+            cdb_addr_o = 0; cdb_branch_target_o = 0; cdb_store_data_o = 0;
+            cdb_rd_we_o = 0; cdb_is_store_o = 0; cdb_is_branch_o = 0;
+            cdb_branch_taken_o = 0; cdb_redirect_valid_o = 0;
+            cdb_is_memory_o = 0; cdb_is_load_o = 0;
+            pop_fire = 0; enq_count = 0; pop_count = 0;
+            for (source = 0; source < SOURCES; source = source + 1)
+                if (producer_valid_i[source] && !direct_eligible[source])
+                    producer_ready_o[source] = !reset_i && !flush_i;
+            for (lane = 0; lane < CDB_WIDTH; lane = lane + 1) begin
+                for (source = 0; source < SOURCES; source = source + 1) begin
+                    if (!reset_i && !flush_i && direct_selected_valid[lane] &&
+                        direct_selected_source[lane] == source) begin
+                        cdb_valid_o[lane] = 1'b1;
+                        cdb_tag_o[lane*TAG_WIDTH +: TAG_WIDTH] = producer_tag_i[source*TAG_WIDTH +: TAG_WIDTH];
+                        cdb_phys_rd_o[lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH] = producer_phys_rd_i[source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
+                        cdb_value_o[lane*32 +: 32] = producer_value_i[source*32 +: 32];
+                        cdb_addr_o[lane*32 +: 32] = producer_addr_i[source*32 +: 32];
+                        cdb_branch_target_o[lane*32 +: 32] = producer_branch_target_i[source*32 +: 32];
+                        cdb_store_data_o[lane*32 +: 32] = producer_store_data_i[source*32 +: 32];
+                        cdb_rd_we_o[lane] = producer_rd_we_i[source] && !producer_is_store_i[source];
+                        cdb_is_store_o[lane] = producer_is_store_i[source];
+                        cdb_is_branch_o[lane] = producer_is_branch_i[source];
+                        cdb_branch_taken_o[lane] = producer_branch_taken_i[source];
+                        cdb_redirect_valid_o[lane] = producer_redirect_valid_i[source];
+                        cdb_is_memory_o[lane] = producer_is_memory_i[source];
+                        cdb_is_load_o[lane] = producer_is_load_i[source];
+                        producer_ready_o[source] = cdb_ready_i[lane];
+                    end
                 end
             end
         end
@@ -320,6 +440,10 @@ module rv32_completion_network #(
     end
 
     initial begin
+        if (SOURCES < 1 || BYPASS < 0 || BYPASS > 2) begin
+            $display("ERROR: SOURCES must be positive and BYPASS must be 0, 1 or 2");
+            $finish;
+        end
         if (CDB_WIDTH < 1 || CDB_WIDTH > BE_WIDTH) begin
             $display("ERROR: CDB_WIDTH must be in 1..BE_WIDTH");
             $finish;

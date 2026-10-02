@@ -9,7 +9,8 @@ module rv32i_alu #(
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
     parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH,
-    parameter integer SHIFT_IMPL = 0
+    parameter integer SHIFT_IMPL = 0,
+    parameter integer FORWARD_METADATA = 0
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -52,6 +53,10 @@ module rv32i_alu #(
     output wire [1:0]                   exec_mem_size_o,
     output wire                         exec_mem_unsigned_o,
     output wire [31:0]                  exec_store_data_o,
+    output wire [31:0]                  exec_source_pc_o,
+    output wire                         exec_pred_taken_o,
+    output wire [31:0]                  exec_pred_target_o,
+    output wire [1:0]                   exec_pred_kind_o,
 
     input  wire                         live_tag_valid_i,
     input  wire [TAG_WIDTH-1:0]         live_tag_i
@@ -218,6 +223,39 @@ module rv32i_alu #(
     assign exec_mem_size_o = result_mem_size_reg;
     assign exec_mem_unsigned_o = result_mem_unsigned_reg;
     assign exec_store_data_o = result_store_data_reg;
+
+    // Capture on the original result acceptance edge, with the original stall,
+    // stale-result and iterative-shift priority. No added execution cycle.
+    generate if (FORWARD_METADATA != 0) begin : g_forward_metadata
+        reg [31:0] source_pc_reg, pred_target_reg;
+        reg pred_taken_reg;
+        reg [1:0] pred_kind_reg;
+        assign exec_source_pc_o = source_pc_reg;
+        assign exec_pred_taken_o = pred_taken_reg;
+        assign exec_pred_target_o = pred_target_reg;
+        assign exec_pred_kind_o = pred_kind_reg;
+        always @(posedge clk_i) begin
+            if (reset_i || flush_i) begin
+                source_pc_reg <= 32'b0;
+                pred_taken_reg <= 1'b0;
+                pred_target_reg <= 32'b0;
+                pred_kind_reg <= 2'b0;
+            end else if (!shift_busy &&
+                         !(result_valid_reg && live_tag_valid_i &&
+                           (result_rob_tag_reg != live_tag_i) && !exec_ready_i) &&
+                         issue_ready_o && issue_valid_i) begin
+                source_pc_reg <= issue_pc_i;
+                pred_taken_reg <= issue_pred_taken_i;
+                pred_target_reg <= issue_pred_target_i;
+                pred_kind_reg <= issue_pred_kind_i;
+            end
+        end
+    end else begin : g_no_forward_metadata
+        assign exec_source_pc_o = 32'b0;
+        assign exec_pred_taken_o = 1'b0;
+        assign exec_pred_target_o = 32'b0;
+        assign exec_pred_kind_o = 2'b0;
+    end endgenerate
 
     // All operation semantics are combinational from the accepted IssuePacket.
     // The resulting fields are latched below, making completion visible one

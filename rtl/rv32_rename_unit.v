@@ -3,9 +3,11 @@
 
 // Speculative register renaming with a physical-register free bitmap.
 // All bundle buses are flattened in program/lane order.
+(* keep_hierarchy = 1 *)
 module rv32_rename_unit #(
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
+    parameter integer RAT_READ_BYPASS = 0,
     parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS),
     parameter integer COUNT_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1)
 ) (
@@ -59,6 +61,7 @@ module rv32_rename_unit #(
     reg [PHYS_ADDR_WIDTH-1:0] free_candidate [0:BE_WIDTH-1];
     integer lane;
     integer reg_index;
+    integer bypass_lane;
     integer alloc_used;
     integer rob_used;
     integer rs_used;
@@ -169,11 +172,41 @@ module rv32_rename_unit #(
                 rename_valid_o[lane] = 1'b1;
                 rename_rd_we_o[lane] = decoded_rd_we_i[lane] && (decoded_rd_i[(lane*5) +: 5] != 0);
                 rename_rd_o[(lane*5) +: 5] = decoded_rd_i[(lane*5) +: 5];
-                if (decoded_rs1_used_i[lane] && (decoded_rs1_i[(lane*5) +: 5] != 0))
-                    rename_rs1_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = bundle_rat[decoded_rs1_i[(lane*5) +: 5]];
-                if (decoded_rs2_used_i[lane] && (decoded_rs2_i[(lane*5) +: 5] != 0))
-                    rename_rs2_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = bundle_rat[decoded_rs2_i[(lane*5) +: 5]];
+                if (decoded_rs1_used_i[lane] && (decoded_rs1_i[(lane*5) +: 5] != 0)) begin
+                    if (RAT_READ_BYPASS != 0) begin
+                        rename_rs1_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = rat[decoded_rs1_i[(lane*5) +: 5]];
+                        // Forward the youngest accepted older writer directly,
+                        // avoiding a full temporary RAT rewrite for every lane.
+                        for (bypass_lane = 0; bypass_lane < BE_WIDTH; bypass_lane = bypass_lane + 1)
+                            if (bypass_lane < lane && rename_valid_o[bypass_lane] && rename_rd_we_o[bypass_lane] &&
+                                decoded_rd_i[bypass_lane*5 +: 5] == decoded_rs1_i[lane*5 +: 5])
+                                rename_rs1_phys_o[lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH] =
+                                    rename_new_phys_o[bypass_lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
+                    end else
+                        rename_rs1_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = bundle_rat[decoded_rs1_i[(lane*5) +: 5]];
+                end
+                if (decoded_rs2_used_i[lane] && (decoded_rs2_i[(lane*5) +: 5] != 0)) begin
+                    if (RAT_READ_BYPASS != 0) begin
+                        rename_rs2_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = rat[decoded_rs2_i[(lane*5) +: 5]];
+                        // Forward the youngest accepted older writer directly,
+                        // avoiding a full temporary RAT rewrite for every lane.
+                        for (bypass_lane = 0; bypass_lane < BE_WIDTH; bypass_lane = bypass_lane + 1)
+                            if (bypass_lane < lane && rename_valid_o[bypass_lane] && rename_rd_we_o[bypass_lane] &&
+                                decoded_rd_i[bypass_lane*5 +: 5] == decoded_rs2_i[lane*5 +: 5])
+                                rename_rs2_phys_o[lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH] =
+                                    rename_new_phys_o[bypass_lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
+                    end else
+                        rename_rs2_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = bundle_rat[decoded_rs2_i[(lane*5) +: 5]];
+                end
                 if (rename_rd_we_o[lane]) begin
+                    if (RAT_READ_BYPASS != 0) begin
+                        rename_old_phys_o[lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH] = rat[decoded_rd_i[lane*5 +: 5]];
+                        for (bypass_lane = 0; bypass_lane < BE_WIDTH; bypass_lane = bypass_lane + 1)
+                            if (bypass_lane < lane && rename_valid_o[bypass_lane] && rename_rd_we_o[bypass_lane] &&
+                                decoded_rd_i[bypass_lane*5 +: 5] == decoded_rd_i[lane*5 +: 5])
+                                rename_old_phys_o[lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH] =
+                                    rename_new_phys_o[bypass_lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
+                    end else
                     rename_old_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = bundle_rat[decoded_rd_i[(lane*5) +: 5]];
                     rename_new_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] =
                         free_candidate[alloc_used];

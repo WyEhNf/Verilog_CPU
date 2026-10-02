@@ -4,6 +4,7 @@
 // One-entry MDU reservation station.  It holds a tagged multiply/divide
 // issue packet until the selected unit accepts it, while the units retain
 // their own in-flight and completion state.
+(* keep_hierarchy = 1 *)
 module rv32m_mdu_reservation_station #(
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
