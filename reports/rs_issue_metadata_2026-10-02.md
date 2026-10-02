@@ -31,6 +31,8 @@
 
 ## 当前同源码原生对照与PPA
 
+**08:35追加完成证据**：开启新布局、地址模式2的 Cache 控制0/2两套也都完成全部29项。只改变 `DCACHE_STATIC_UPDATES 0→2` 的严格机器对照逐项 cycle/instret/退出结果相同，全部当前43个构建来源核验通过；证据 `F:/CPU2026Proofs/rs_metadata_dcache_modes_native_exact29_20261002/report.json`。两套六项IPC均1.1213155347352615，控制0已开始原版完整PPA，控制2仍在prepare；新布局的任何总面积/频率均未完成，不与冻结旧PPA拼接。控制0构建后缀为 `20261002rsmeta1dc0`，其审计目录为 `F:/CPU2026AreaAudits/axi_response_fifo2_branch1_bus8w4q16_i128_r64p64rs16_lsq16_rat1_earlystore2_rsmeta1_standard_20261002rsmeta1dc0`。
+
 两套固定四发射、ROB64/PRF64/RS16/LSQ16、RAT1、地址2、Cache控制2、I128/D1024/2way/TAG1、预测1、CPL16、AXI8/4/16/FIFO2，只改变`RS_ISSUE_METADATA`。均使用原官方256MiB/20cycle/FIFO16/B握手退出以及同一C++-Os、Verilator-fno-dfg主机选项：
 
 - 关闭版：`F:/CPU2026Builds/axi_response_fifo2_branch1_bus8w4q16_i128_r64p64rs16_lsq16_rat1_earlystore2_dcupdate2_20261002rsmeta0`。
