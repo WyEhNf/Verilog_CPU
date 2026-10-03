@@ -863,9 +863,11 @@ module rv32_rob #(
                 if (completion_valid_i[bank_complete_lane] && completion_done_i[bank_complete_lane]) begin
                     for (bank_slot_index = 0; bank_slot_index < ROB_ENTRIES; bank_slot_index = bank_slot_index + 1) begin
                         bank_update_completion_age = bank_slot_index - head_update_index;
-                        if ((;
+                        if ((bank_update_completion_age <= bank_branch_age) &&
+                            tag_matches(completion_tag_i[(bank_complete_lane*TAG_WIDTH) +: TAG_WIDTH], bank_slot_index)) begin
+                            begin ready_mem_write_data[bank_slot_index] = 1'b1; ready_mem_write_enable[bank_slot_index] = 1'b1; end
                             begin value_mem_write_data[bank_slot_index] = completion_value_i[(bank_complete_lane*32) +: 32]; value_mem_write_enable[bank_slot_index] = 1'b1; end
-                            if (begin completion_error_i[bank_complete_lane]) error_mem_write_data[bank_slot_index] = 1'b1; error_mem_write_enable[bank_slot_index] = 1'b1; end
+                            if (completion_error_i[bank_complete_lane]) begin error_mem_write_data[bank_slot_index] = 1'b1; error_mem_write_enable[bank_slot_index] = 1'b1; end
                             begin store_addr_mem_write_data[bank_slot_index] = completion_store_addr_i[(bank_complete_lane*32) +: 32]; store_addr_mem_write_enable[bank_slot_index] = 1'b1; end
                             if (MMIO_PREDECODE != 0)
                                 begin mmio_word_mem_write_data[bank_slot_index] = (completion_store_addr_i[(bank_complete_lane*32) +: 32] == 32'h80000000) &&
@@ -887,7 +889,7 @@ module rv32_rob #(
                         if (tag_matches(completion_tag_i[(bank_complete_lane*TAG_WIDTH) +: TAG_WIDTH], bank_slot_index)) begin
                             begin ready_mem_write_data[bank_slot_index] = 1'b1; ready_mem_write_enable[bank_slot_index] = 1'b1; end
                             begin value_mem_write_data[bank_slot_index] = completion_value_i[(bank_complete_lane*32) +: 32]; value_mem_write_enable[bank_slot_index] = 1'b1; end
-                            if (begin completion_error_i[bank_complete_lane]) error_mem_write_data[bank_slot_index] = 1'b1; error_mem_write_enable[bank_slot_index] = 1'b1; end
+                            if (completion_error_i[bank_complete_lane]) begin error_mem_write_data[bank_slot_index] = 1'b1; error_mem_write_enable[bank_slot_index] = 1'b1; end
                             begin store_addr_mem_write_data[bank_slot_index] = completion_store_addr_i[(bank_complete_lane*32) +: 32]; store_addr_mem_write_enable[bank_slot_index] = 1'b1; end
                             if (MMIO_PREDECODE != 0)
                                 begin mmio_word_mem_write_data[bank_slot_index] = (completion_store_addr_i[(bank_complete_lane*32) +: 32] == 32'h80000000) &&
@@ -1030,9 +1032,9 @@ module rv32_rob #(
                         update_completion_age = slot_index - head_update_index;
                         if ((update_completion_age <= branch_age) &&
                             tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index)) begin
-                            ready_mem[slot_index] <= 1'b1;
                             ;
-                            if (;
+                            ;
+                            if (completion_error_i[complete_lane]) ;
                             ;
                             if (MMIO_PREDECODE != 0)
                                 ;
@@ -1053,7 +1055,7 @@ module rv32_rob #(
                         if (tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index)) begin
                             ;
                             ;
-                            if (;
+                            if (completion_error_i[complete_lane]) ;
                             ;
                             if (MMIO_PREDECODE != 0)
                                 ;
