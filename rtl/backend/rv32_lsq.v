@@ -759,6 +759,120 @@ module rv32_lsq #(
         end
     end
 
+
+    // Wide payload fields have no reset state. Their old write sequence is
+    // expressed as independent local events; scalar metadata remains separate.
+    localparam integer ADDRESS_EVENTS=1+2*BE_WIDTH;
+    localparam integer DATA_EVENTS=3*BE_WIDTH;
+    localparam integer RESULT_EVENTS=2+BE_WIDTH;
+    localparam integer FORWARD_EVENTS=1+BE_WIDTH;
+    wire [3*LSQ_ENTRIES-1:0] payload_modes;
+    wire [SLOT_WIDTH-1:0] payload_alloc_slot [0:BE_WIDTH-1];
+    wire [31:0] payload_response_word=dcache_resp_line_valid_i ?
+        relative_data_from_line(dcache_resp_line_data_i,addr_mem[response_slot]) : dcache_resp_word_data_i;
+    wire [31:0] payload_response_merge=
+        (forward_data_mem[response_slot] & expand_word_bytes(forward_mask_mem[response_slot])) |
+        (payload_response_word & ~expand_word_bytes(forward_mask_mem[response_slot]));
+    wire [31:0] payload_response_value=format_relative_value(
+        payload_response_merge,size_mem[response_slot],unsigned_mem[response_slot]);
+    wire [31:0] payload_forward_value=format_relative_value(fwd_data,selected_size,selected_unsigned);
+    function [RECOVERY_ARITH_WIDTH-1:0] payload_recovery_age;
+        input [ROB_TAG_WIDTH-1:0] tag;
+        reg [RECOVERY_ARITH_WIDTH-1:0] difference;
+        begin
+            difference=tag[3 +: ROB_SLOT_WIDTH]-recovery_head_i;
+            if(((ROB_ENTRIES & (ROB_ENTRIES-1))!=0) && difference[RECOVERY_ARITH_WIDTH-1])
+                difference=difference+ROB_ENTRIES;
+            payload_recovery_age=difference;
+        end
+    endfunction
+    wire [RECOVERY_ARITH_WIDTH-1:0] payload_branch_age=payload_recovery_age(recovery_tag_i);
+    rv32_frequency_control_tree #(.WIDTH(3),.LEAVES(LSQ_ENTRIES)) payload_mode_tree (
+        .signal_i({recovery_valid_i,flush_i,reset_i}),.views_o(payload_modes));
+    genvar payload_row,payload_lane;
+    generate
+        for(payload_lane=0;payload_lane<BE_WIDTH;payload_lane=payload_lane+1) begin:g_payload_allocation
+            wire [31:0] offset=tail_reg+alloc_count_before_lane(payload_lane,alloc_fire_o);
+            assign payload_alloc_slot[payload_lane]=(offset>=LSQ_ENTRIES)?offset-LSQ_ENTRIES:offset;
+        end
+        for(payload_row=0;payload_row<LSQ_ENTRIES;payload_row=payload_row+1) begin:g_payload_row
+            wire enabled=!payload_modes[payload_row*3] && !payload_modes[payload_row*3+1];
+            wire recovery=payload_modes[payload_row*3+2];
+            wire normal=enabled && !recovery;
+            wire [BE_WIDTH-1:0] allocations;
+            wire [ADDRESS_EVENTS-1:0] address_events;
+            wire [ADDRESS_EVENTS*32-1:0] address_values;
+            wire [DATA_EVENTS-1:0] data_events;
+            wire [DATA_EVENTS*32-1:0] data_values;
+            wire [RESULT_EVENTS-1:0] result_events;
+            wire [RESULT_EVENTS*32-1:0] result_values;
+            wire [FORWARD_EVENTS-1:0] forward_events;
+            wire [FORWARD_EVENTS*32-1:0] forward_values;
+            wire [BE_WIDTH*ROB_TAG_WIDTH-1:0] rob_tag_values;
+            wire [31:0] address_value,data_value,result_value,forward_value;
+            wire [ROB_TAG_WIDTH-1:0] rob_tag_value;
+            wire address_write,data_write,result_write,forward_write,rob_tag_write;
+            wire early_event=normal && (STORE_ADDRESS_PROBE!=0) && early_addr_valid_i &&
+                tag_matches_slot(early_addr_tag_i,payload_row) && store_mem[payload_row] &&
+                !addr_ready_mem[payload_row] && !request_sent_mem[payload_row] && !complete_mem[payload_row];
+            assign address_events[0]=early_event;
+            assign address_values[0 +: 32]=early_addr_i;
+            assign result_events[0]=normal && candidate_found && candidate==payload_row &&
+                load_mem[payload_row] && !request_sent_mem[payload_row] && !complete_mem[payload_row] &&
+                ((fwd_mask & target_mask)==target_mask);
+            assign result_values[0 +: 32]=payload_forward_value;
+            wire [RECOVERY_ARITH_WIDTH-1:0] row_age=payload_recovery_age(rob_tag_mem[payload_row]);
+            assign result_events[1]=enabled && response_fire && response_slot==payload_row &&
+                (!recovery || !(row_age>payload_branch_age && row_age<recovery_occupancy_i));
+            assign result_values[32 +: 32]=payload_response_value;
+            assign forward_events[0]=normal && request_fire && candidate==payload_row && load_mem[payload_row];
+            assign forward_values[0 +: 32]=fwd_data;
+            for(payload_lane=0;payload_lane<BE_WIDTH;payload_lane=payload_lane+1) begin:g_lane
+                assign allocations[payload_lane]=normal && alloc_fire_o[payload_lane] &&
+                    payload_alloc_slot[payload_lane]==payload_row;
+                assign address_events[1+payload_lane]=enabled && addr_update_valid_i[payload_lane] &&
+                    tag_matches_slot(addr_update_tag_i[payload_lane*TAG_WIDTH +: TAG_WIDTH],payload_row);
+                assign address_values[(1+payload_lane)*32 +: 32]=addr_update_i[payload_lane*32 +: 32];
+                assign address_events[1+BE_WIDTH+payload_lane]=allocations[payload_lane];
+                assign address_values[(1+BE_WIDTH+payload_lane)*32 +: 32]=alloc_addr_i[payload_lane*32 +: 32];
+                assign data_events[2*payload_lane]=enabled && data_update_valid_i[payload_lane] &&
+                    tag_matches_slot(data_update_tag_i[payload_lane*TAG_WIDTH +: TAG_WIDTH],payload_row);
+                assign data_values[(2*payload_lane)*32 +: 32]=data_update_i[payload_lane*32 +: 32];
+                assign data_events[2*payload_lane+1]=enabled && wakeup_valid_i[payload_lane] &&
+                    tag_matches_slot(wakeup_tag_i[payload_lane*TAG_WIDTH +: TAG_WIDTH],payload_row);
+                assign data_values[(2*payload_lane+1)*32 +: 32]=wakeup_value_i[payload_lane*32 +: 32];
+                assign data_events[2*BE_WIDTH+payload_lane]=allocations[payload_lane];
+                assign data_values[(2*BE_WIDTH+payload_lane)*32 +: 32]=alloc_store_data_i[payload_lane*32 +: 32];
+                assign result_events[2+payload_lane]=allocations[payload_lane];
+                assign result_values[(2+payload_lane)*32 +: 32]=0;
+                assign forward_events[1+payload_lane]=allocations[payload_lane];
+                assign forward_values[(1+payload_lane)*32 +: 32]=0;
+                assign rob_tag_values[payload_lane*ROB_TAG_WIDTH +: ROB_TAG_WIDTH]=alloc_rob_tag_i[payload_lane*ROB_TAG_WIDTH +: ROB_TAG_WIDTH];
+            end
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(ADDRESS_EVENTS)) address_selector (
+                .events_i(address_events),.values_i(address_values),.write_o(address_write),.value_o(address_value));
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(DATA_EVENTS)) data_selector (
+                .events_i(data_events),.values_i(data_values),.write_o(data_write),.value_o(data_value));
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(RESULT_EVENTS)) result_selector (
+                .events_i(result_events),.values_i(result_values),.write_o(result_write),.value_o(result_value));
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(FORWARD_EVENTS)) forward_selector (
+                .events_i(forward_events),.values_i(forward_values),.write_o(forward_write),.value_o(forward_value));
+            rv32_frequency_event_select #(.WIDTH(ROB_TAG_WIDTH),.EVENTS(BE_WIDTH)) tag_selector (
+                .events_i(allocations),.values_i(rob_tag_values),.write_o(rob_tag_write),.value_o(rob_tag_value));
+            always @* begin
+                addr_mem_write_data[payload_row]=address_value;
+                addr_mem_write_enable[payload_row]=address_write;
+                data_mem_write_data[payload_row]=data_value;
+                data_mem_write_enable[payload_row]=data_write;
+                complete_value_mem_write_data[payload_row]=result_value;
+                complete_value_mem_write_enable[payload_row]=result_write;
+                forward_data_mem_write_data[payload_row]=forward_value;
+                forward_data_mem_write_enable[payload_row]=forward_write;
+                rob_tag_mem_write_data[payload_row]=rob_tag_value;
+                rob_tag_mem_write_enable[payload_row]=rob_tag_write;
+            end
+        end
+    endgenerate
     always @* begin : g_state_commands
         integer bank_alloc_count_calc;
         integer bank_alloc_slot;
@@ -778,12 +892,13 @@ module rv32_lsq #(
         integer bank_scan;
         integer bank_slot;
         integer bank_update_slot;
+        integer bank_retirement_slot,bank_retirement_lane;
         integer bank_default_row;
+        bank_retirement_slot=0;bank_retirement_lane=0;
         for(bank_default_row=0;bank_default_row<LSQ_ENTRIES;bank_default_row=bank_default_row+1) begin
             valid_mem_write_data[bank_default_row]=0; valid_mem_write_enable[bank_default_row]=0;
             load_mem_write_data[bank_default_row]=0; load_mem_write_enable[bank_default_row]=0;
             store_mem_write_data[bank_default_row]=0; store_mem_write_enable[bank_default_row]=0;
-            rob_tag_mem_write_data[bank_default_row]=0; rob_tag_mem_write_enable[bank_default_row]=0;
             retired_mem_write_data[bank_default_row]=0; retired_mem_write_enable[bank_default_row]=0;
             generation_mem_write_data[bank_default_row]=0; generation_mem_write_enable[bank_default_row]=0;
             generation_next_mem_write_data[bank_default_row]=0; generation_next_mem_write_enable[bank_default_row]=0;
@@ -791,17 +906,13 @@ module rv32_lsq #(
             unsigned_mem_write_data[bank_default_row]=0; unsigned_mem_write_enable[bank_default_row]=0;
             addr_ready_mem_write_data[bank_default_row]=0; addr_ready_mem_write_enable[bank_default_row]=0;
             data_ready_mem_write_data[bank_default_row]=0; data_ready_mem_write_enable[bank_default_row]=0;
-            addr_mem_write_data[bank_default_row]=0; addr_mem_write_enable[bank_default_row]=0;
-            data_mem_write_data[bank_default_row]=0; data_mem_write_enable[bank_default_row]=0;
             mask_mem_write_data[bank_default_row]=0; mask_mem_write_enable[bank_default_row]=0;
             request_sent_mem_write_data[bank_default_row]=0; request_sent_mem_write_enable[bank_default_row]=0;
             response_wait_mem_write_data[bank_default_row]=0; response_wait_mem_write_enable[bank_default_row]=0;
             complete_mem_write_data[bank_default_row]=0; complete_mem_write_enable[bank_default_row]=0;
             load_reported_mem_write_data[bank_default_row]=0; load_reported_mem_write_enable[bank_default_row]=0;
-            complete_value_mem_write_data[bank_default_row]=0; complete_value_mem_write_enable[bank_default_row]=0;
             complete_error_mem_write_data[bank_default_row]=0; complete_error_mem_write_enable[bank_default_row]=0;
             forward_mask_mem_write_data[bank_default_row]=0; forward_mask_mem_write_enable[bank_default_row]=0;
-            forward_data_mem_write_data[bank_default_row]=0; forward_data_mem_write_enable[bank_default_row]=0;
             store_commit_mem_write_data[bank_default_row]=0; store_commit_mem_write_enable[bank_default_row]=0;
             store_ack_mem_write_data[bank_default_row]=0; store_ack_mem_write_enable[bank_default_row]=0;
             store_ack_error_mem_write_data[bank_default_row]=0; store_ack_error_mem_write_enable[bank_default_row]=0;
@@ -911,21 +1022,21 @@ module rv32_lsq #(
                     if (addr_update_valid_i[bank_lane] &&
                         tag_matches_slot(addr_update_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
                         begin addr_ready_mem_write_data[bank_update_slot] = 1'b1; addr_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        begin addr_mem_write_data[bank_update_slot] = addr_update_i[(bank_lane*32) +: 32]; addr_mem_write_enable[bank_update_slot] = 1'b1; end
+                        ;
                         if (mask_mem[bank_update_slot] == 4'b0 && store_mem[bank_update_slot])
                             begin mask_mem_write_data[bank_update_slot] = access_mask(size_mem[bank_update_slot]); mask_mem_write_enable[bank_update_slot] = 1'b1; end
                     end
                     if (data_update_valid_i[bank_lane] &&
                         tag_matches_slot(data_update_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
                         begin data_ready_mem_write_data[bank_update_slot] = 1'b1; data_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        begin data_mem_write_data[bank_update_slot] = data_update_i[(bank_lane*32) +: 32]; data_mem_write_enable[bank_update_slot] = 1'b1; end
+                        ;
                         if (data_mask_update_i[(bank_lane*4) +: 4] != 4'b0)
                             begin mask_mem_write_data[bank_update_slot] = data_mask_update_i[(bank_lane*4) +: 4]; mask_mem_write_enable[bank_update_slot] = 1'b1; end
                     end
                     if (wakeup_valid_i[bank_lane] &&
                         tag_matches_slot(wakeup_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
                         begin data_ready_mem_write_data[bank_update_slot] = 1'b1; data_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        begin data_mem_write_data[bank_update_slot] = wakeup_value_i[(bank_lane*32) +: 32]; data_mem_write_enable[bank_update_slot] = 1'b1; end
+                        ;
                     end
                 end
             end
@@ -957,8 +1068,7 @@ module rv32_lsq #(
                                    expand_word_bytes(forward_mask_mem[response_slot])) |
                                   (bank_response_word &
                                    ~expand_word_bytes(forward_mask_mem[response_slot]));
-                    begin complete_value_mem_write_data[response_slot] = format_relative_value(
-                        bank_merged_word, size_mem[response_slot], unsigned_mem[response_slot]); complete_value_mem_write_enable[response_slot] = 1'b1; end
+                    ;
                     begin complete_error_mem_write_data[response_slot] = dcache_resp_error_i; complete_error_mem_write_enable[response_slot] = 1'b1; end
                     begin complete_mem_write_data[response_slot] = 1'b1; complete_mem_write_enable[response_slot] = 1'b1; end
                     begin response_wait_mem_write_data[response_slot] = 1'b0; response_wait_mem_write_enable[response_slot] = 1'b1; end
@@ -971,12 +1081,12 @@ module rv32_lsq #(
             bank_commit_fire = store_commit_valid_i && store_commit_ready_o;
             if (bank_commit_fire) begin store_commit_mem_write_data[commit_slot_select] = 1'b1; store_commit_mem_write_enable[commit_slot_select] = 1'b1; end
 
-            for (retirement_slot = 0; retirement_slot < LSQ_ENTRIES; retirement_slot = retirement_slot + 1)
-                for (retirement_lane = 0; retirement_lane < BE_WIDTH; retirement_lane = retirement_lane + 1)
-                    if (valid_mem[retirement_slot] && load_mem[retirement_slot] &&
-                        retire_valid_i[retirement_lane] &&
-                        rob_tag_mem[retirement_slot] == retire_rob_tag_i[retirement_lane*ROB_TAG_WIDTH +: ROB_TAG_WIDTH])
-                        begin retired_mem_write_data[retirement_slot] = 1'b1; retired_mem_write_enable[retirement_slot] = 1'b1; end
+            for (bank_retirement_slot = 0; bank_retirement_slot < LSQ_ENTRIES; bank_retirement_slot = bank_retirement_slot + 1)
+                for (bank_retirement_lane = 0; bank_retirement_lane < BE_WIDTH; bank_retirement_lane = bank_retirement_lane + 1)
+                    if (valid_mem[bank_retirement_slot] && load_mem[bank_retirement_slot] &&
+                        retire_valid_i[bank_retirement_lane] &&
+                        rob_tag_mem[bank_retirement_slot] == retire_rob_tag_i[bank_retirement_lane*ROB_TAG_WIDTH +: ROB_TAG_WIDTH])
+                        begin retired_mem_write_data[bank_retirement_slot] = 1'b1; retired_mem_write_enable[bank_retirement_slot] = 1'b1; end
 
             
             
@@ -988,26 +1098,26 @@ module rv32_lsq #(
                     store_mem[bank_update_slot] && !addr_ready_mem[bank_update_slot] &&
                     !request_sent_mem[bank_update_slot] && !complete_mem[bank_update_slot]) begin
                     begin addr_ready_mem_write_data[bank_update_slot] = 1'b1; addr_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                    begin addr_mem_write_data[bank_update_slot] = early_addr_i; addr_mem_write_enable[bank_update_slot] = 1'b1; end
+                    ;
                     if (mask_mem[bank_update_slot] == 4'b0)
                         begin mask_mem_write_data[bank_update_slot] = access_mask(size_mem[bank_update_slot]); mask_mem_write_enable[bank_update_slot] = 1'b1; end
                 end
                 for (bank_lane = 0; bank_lane < BE_WIDTH; bank_lane = bank_lane + 1) begin
                     if (addr_update_valid_i[bank_lane] && tag_matches_slot(addr_update_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
                         begin addr_ready_mem_write_data[bank_update_slot] = 1'b1; addr_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        begin addr_mem_write_data[bank_update_slot] = addr_update_i[(bank_lane*32) +: 32]; addr_mem_write_enable[bank_update_slot] = 1'b1; end
+                        ;
                         if (mask_mem[bank_update_slot] == 4'b0 && store_mem[bank_update_slot])
                             begin mask_mem_write_data[bank_update_slot] = access_mask(size_mem[bank_update_slot]); mask_mem_write_enable[bank_update_slot] = 1'b1; end
                     end
                     if (data_update_valid_i[bank_lane] && tag_matches_slot(data_update_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
                         begin data_ready_mem_write_data[bank_update_slot] = 1'b1; data_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        begin data_mem_write_data[bank_update_slot] = data_update_i[(bank_lane*32) +: 32]; data_mem_write_enable[bank_update_slot] = 1'b1; end
+                        ;
                         if (data_mask_update_i[(bank_lane*4) +: 4] != 4'b0)
                             begin mask_mem_write_data[bank_update_slot] = data_mask_update_i[(bank_lane*4) +: 4]; mask_mem_write_enable[bank_update_slot] = 1'b1; end
                     end
                     if (wakeup_valid_i[bank_lane] && tag_matches_slot(wakeup_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
                         begin data_ready_mem_write_data[bank_update_slot] = 1'b1; data_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        begin data_mem_write_data[bank_update_slot] = wakeup_value_i[(bank_lane*32) +: 32]; data_mem_write_enable[bank_update_slot] = 1'b1; end
+                        ;
                     end
                 end
             end
@@ -1016,8 +1126,7 @@ module rv32_lsq #(
             
             if (candidate_found && load_mem[candidate] && !request_sent_mem[candidate] && !complete_mem[candidate]) begin
                 if ((fwd_mask & target_mask) == target_mask) begin
-                    begin complete_value_mem_write_data[candidate] = format_relative_value(
-                        fwd_data, selected_size, selected_unsigned); complete_value_mem_write_enable[candidate] = 1'b1; end
+                    ;
                     begin complete_error_mem_write_data[candidate] = 1'b0; complete_error_mem_write_enable[candidate] = 1'b1; end
                     begin complete_mem_write_data[candidate] = 1'b1; complete_mem_write_enable[candidate] = 1'b1; end
                 end
@@ -1028,7 +1137,7 @@ module rv32_lsq #(
                 if (load_mem[candidate]) begin
                     begin response_wait_mem_write_data[candidate] = 1'b1; response_wait_mem_write_enable[candidate] = 1'b1; end
                     begin forward_mask_mem_write_data[candidate] = fwd_mask; forward_mask_mem_write_enable[candidate] = 1'b1; end
-                    begin forward_data_mem_write_data[candidate] = fwd_data; forward_data_mem_write_enable[candidate] = 1'b1; end
+                    ;
                 end else begin
                     begin response_wait_mem_write_data[candidate] = 1'b1; response_wait_mem_write_enable[candidate] = 1'b1; end
                 end
@@ -1042,8 +1151,7 @@ module rv32_lsq #(
                                expand_word_bytes(forward_mask_mem[response_slot])) |
                               (bank_response_word &
                                ~expand_word_bytes(forward_mask_mem[response_slot]));
-                begin complete_value_mem_write_data[response_slot] = format_relative_value(
-                    bank_merged_word, size_mem[response_slot], unsigned_mem[response_slot]); complete_value_mem_write_enable[response_slot] = 1'b1; end
+                ;
                 begin complete_error_mem_write_data[response_slot] = dcache_resp_error_i; complete_error_mem_write_enable[response_slot] = 1'b1; end
                 begin complete_mem_write_data[response_slot] = 1'b1; complete_mem_write_enable[response_slot] = 1'b1; end
                 begin response_wait_mem_write_data[response_slot] = 1'b0; response_wait_mem_write_enable[response_slot] = 1'b1; end
@@ -1089,14 +1197,14 @@ module rv32_lsq #(
                     begin valid_mem_write_data[bank_alloc_slot] = 1'b1; valid_mem_write_enable[bank_alloc_slot] = 1'b1; end
                     begin load_mem_write_data[bank_alloc_slot] = alloc_is_load_i[bank_lane]; load_mem_write_enable[bank_alloc_slot] = 1'b1; end
                     begin store_mem_write_data[bank_alloc_slot] = alloc_is_store_i[bank_lane]; store_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin rob_tag_mem_write_data[bank_alloc_slot] = alloc_rob_tag_i[(bank_lane*ROB_TAG_WIDTH) +: ROB_TAG_WIDTH]; rob_tag_mem_write_enable[bank_alloc_slot] = 1'b1; end
+                    ;
                     begin retired_mem_write_data[bank_alloc_slot] = 1'b0; retired_mem_write_enable[bank_alloc_slot] = 1'b1; end
                     begin size_mem_write_data[bank_alloc_slot] = alloc_size_i[(bank_lane*2) +: 2]; size_mem_write_enable[bank_alloc_slot] = 1'b1; end
                     begin unsigned_mem_write_data[bank_alloc_slot] = alloc_unsigned_i[bank_lane]; unsigned_mem_write_enable[bank_alloc_slot] = 1'b1; end
                     begin addr_ready_mem_write_data[bank_alloc_slot] = alloc_addr_valid_i[bank_lane]; addr_ready_mem_write_enable[bank_alloc_slot] = 1'b1; end
                     begin data_ready_mem_write_data[bank_alloc_slot] = alloc_data_valid_i[bank_lane] || alloc_is_load_i[bank_lane]; data_ready_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin addr_mem_write_data[bank_alloc_slot] = alloc_addr_i[(bank_lane*32) +: 32]; addr_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin data_mem_write_data[bank_alloc_slot] = alloc_store_data_i[(bank_lane*32) +: 32]; data_mem_write_enable[bank_alloc_slot] = 1'b1; end
+                    ;
+                    ;
                     begin mask_mem_write_data[bank_alloc_slot] = (alloc_store_mask_i[(bank_lane*4) +: 4] != 4'b0) ?
                         alloc_store_mask_i[(bank_lane*4) +: 4] :
                         ((alloc_is_store_i[bank_lane] && alloc_addr_valid_i[bank_lane]) ?
@@ -1105,10 +1213,10 @@ module rv32_lsq #(
                     begin response_wait_mem_write_data[bank_alloc_slot] = 1'b0; response_wait_mem_write_enable[bank_alloc_slot] = 1'b1; end
                     begin complete_mem_write_data[bank_alloc_slot] = 1'b0; complete_mem_write_enable[bank_alloc_slot] = 1'b1; end
                     begin load_reported_mem_write_data[bank_alloc_slot] = 1'b0; load_reported_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin complete_value_mem_write_data[bank_alloc_slot] = 32'b0; complete_value_mem_write_enable[bank_alloc_slot] = 1'b1; end
+                    ;
                     begin complete_error_mem_write_data[bank_alloc_slot] = 1'b0; complete_error_mem_write_enable[bank_alloc_slot] = 1'b1; end
                     begin forward_mask_mem_write_data[bank_alloc_slot] = 4'b0; forward_mask_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin forward_data_mem_write_data[bank_alloc_slot] = 32'b0; forward_data_mem_write_enable[bank_alloc_slot] = 1'b1; end
+                    ;
                     begin store_commit_mem_write_data[bank_alloc_slot] = 1'b0; store_commit_mem_write_enable[bank_alloc_slot] = 1'b1; end
                     begin store_ack_mem_write_data[bank_alloc_slot] = 1'b0; store_ack_mem_write_enable[bank_alloc_slot] = 1'b1; end
                     begin store_ack_error_mem_write_data[bank_alloc_slot] = 1'b0; store_ack_error_mem_write_enable[bank_alloc_slot] = 1'b1; end

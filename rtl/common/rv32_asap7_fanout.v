@@ -90,3 +90,48 @@ module rv32_frequency_word_bank #(parameter integer WIDTH=32) (
             data_o[LOW +: BITS]<=data_i[LOW +: BITS];
     end endgenerate
 endmodule
+
+
+// Last event wins, matching ordered nonblocking writes. Qualification takes
+// place before distribution; each select leaf drives at most 32 payload bits.
+module rv32_frequency_event_select #(
+    parameter integer WIDTH=32,EVENTS=4,
+    parameter integer LEAVES=1<<$clog2(EVENTS),
+    parameter integer WORDS=(WIDTH+31)/32
+) (
+    input wire [EVENTS-1:0] events_i,
+    input wire [EVENTS*WIDTH-1:0] values_i,
+    output wire write_o,
+    output wire [WIDTH-1:0] value_o
+);
+    wire [EVENTS-1:0] grants;
+    wire [WIDTH-1:0] mux_tree [1:2*LEAVES-1];
+    assign write_o=|events_i;
+    assign value_o=mux_tree[1];
+    genvar event_id,word_id,node_id;
+    generate
+        for(event_id=0;event_id<LEAVES;event_id=event_id+1) begin:g_event
+            if(event_id<EVENTS) begin:g_present
+                wire [WORDS-1:0] selections;
+                if(event_id==EVENTS-1) begin:g_last
+                    assign grants[event_id]=events_i[event_id];
+                end else begin:g_priority
+                    assign grants[event_id]=events_i[event_id] && !(|events_i[EVENTS-1:event_id+1]);
+                end
+                rv32_frequency_control_tree #(.LEAVES(WORDS)) selection_tree (
+                    .signal_i(grants[event_id]),.views_o(selections));
+                for(word_id=0;word_id<WORDS;word_id=word_id+1) begin:g_word
+                    localparam integer LOW=word_id*32;
+                    localparam integer BITS=WIDTH-LOW>=32 ? 32 : WIDTH-LOW;
+                    assign mux_tree[LEAVES+event_id][LOW +: BITS]=
+                        {BITS{selections[word_id]}} & values_i[event_id*WIDTH+LOW +: BITS];
+                end
+            end else begin:g_padding
+                assign mux_tree[LEAVES+event_id]=0;
+            end
+        end
+        for(node_id=1;node_id<LEAVES;node_id=node_id+1) begin:g_or
+            assign mux_tree[node_id]=mux_tree[2*node_id] | mux_tree[2*node_id+1];
+        end
+    endgenerate
+endmodule

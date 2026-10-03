@@ -44,16 +44,16 @@ module rv32_reservation_station #(
     input  wire [(WAKE_WIDTH*32)-1:0]      wake_value_i,
 
     input  wire [BE_WIDTH-1:0]           issue_ready_i,
-    output reg  [BE_WIDTH-1:0]           issue_valid_o,
-    output reg  [(BE_WIDTH*OP_WIDTH)-1:0] issue_op_o,
-    output reg  [(BE_WIDTH*32)-1:0]      issue_pc_o,
-    output reg  [(BE_WIDTH*TAG_WIDTH)-1:0] issue_rob_tag_o,
-    output reg  [(BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] issue_phys_rd_o,
-    output reg  [(BE_WIDTH*32)-1:0]      issue_src1_value_o,
-    output reg  [(BE_WIDTH*32)-1:0]      issue_src2_value_o,
-    output reg  [(BE_WIDTH*STORE_DATA_WIDTH)-1:0] issue_store_data_o,
-    output reg  [(BE_WIDTH*METADATA_WIDTH)-1:0] issue_metadata_o,
-    output reg  [(BE_WIDTH*SLOT_WIDTH)-1:0] issue_slot_o,
+    output wire  [BE_WIDTH-1:0]           issue_valid_o,
+    output wire  [(BE_WIDTH*OP_WIDTH)-1:0] issue_op_o,
+    output wire  [(BE_WIDTH*32)-1:0]      issue_pc_o,
+    output wire  [(BE_WIDTH*TAG_WIDTH)-1:0] issue_rob_tag_o,
+    output wire  [(BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] issue_phys_rd_o,
+    output wire  [(BE_WIDTH*32)-1:0]      issue_src1_value_o,
+    output wire  [(BE_WIDTH*32)-1:0]      issue_src2_value_o,
+    output wire  [(BE_WIDTH*STORE_DATA_WIDTH)-1:0] issue_store_data_o,
+    output wire  [(BE_WIDTH*METADATA_WIDTH)-1:0] issue_metadata_o,
+    output wire  [(BE_WIDTH*SLOT_WIDTH)-1:0] issue_slot_o,
 
     input  wire                         flush_valid_i,
     input  wire [ENTRIES-1:0]            flush_kill_mask_i,
@@ -450,6 +450,48 @@ module rv32_reservation_station #(
         end
     end endgenerate
 
+
+    // Rank/ready remain unchanged. A selection never drives an entire packet;
+    // it is distributed into <=32-bit words before balanced payload reduction.
+    localparam integer ISSUE_DATA_WIDTH=OP_WIDTH+32+TAG_WIDTH+PHYS_ADDR_WIDTH+
+        64+STORE_DATA_WIDTH+METADATA_WIDTH+SLOT_WIDTH;
+    localparam integer ISSUE_DATA_WORDS=(ISSUE_DATA_WIDTH+31)/32;
+    localparam integer ISSUE_DATA_LEAVES=1<<$clog2(ENTRIES);
+    genvar issue_lane,issue_row,issue_word,issue_node;
+    generate for(issue_lane=0;issue_lane<BE_WIDTH;issue_lane=issue_lane+1) begin:g_issue_payload
+        wire [ENTRIES-1:0] selections;
+        wire [ISSUE_DATA_WIDTH-1:0] payload_tree [1:2*ISSUE_DATA_LEAVES-1];
+        for(issue_row=0;issue_row<ISSUE_DATA_LEAVES;issue_row=issue_row+1) begin:g_row
+            if(issue_row<ENTRIES) begin:g_present
+                wire [ISSUE_DATA_WORDS-1:0] selected_words;
+                wire [ISSUE_DATA_WIDTH-1:0] payload={
+                    op_mem[issue_row],pc_mem[issue_row],rob_tag_mem[issue_row],phys_rd_mem[issue_row],
+                    src1_value_effective[issue_row],src2_value_effective[issue_row],
+                    store_data_mem[issue_row],metadata_mem[issue_row],issue_row[SLOT_WIDTH-1:0]};
+                assign selections[issue_row]=ready_candidates[issue_row] && ready_rank[issue_row]==issue_lane;
+                rv32_frequency_control_tree #(.LEAVES(ISSUE_DATA_WORDS)) selection_tree (
+                    .signal_i(selections[issue_row]),.views_o(selected_words));
+                for(issue_word=0;issue_word<ISSUE_DATA_WORDS;issue_word=issue_word+1) begin:g_word
+                    localparam integer LOW=issue_word*32;
+                    localparam integer BITS=ISSUE_DATA_WIDTH-LOW>=32 ? 32 : ISSUE_DATA_WIDTH-LOW;
+                    assign payload_tree[ISSUE_DATA_LEAVES+issue_row][LOW +: BITS]=
+                        {BITS{selected_words[issue_word]}} & payload[LOW +: BITS];
+                end
+            end else begin:g_padding
+                assign payload_tree[ISSUE_DATA_LEAVES+issue_row]=0;
+            end
+        end
+        for(issue_node=1;issue_node<ISSUE_DATA_LEAVES;issue_node=issue_node+1) begin:g_or
+            assign payload_tree[issue_node]=payload_tree[2*issue_node] | payload_tree[2*issue_node+1];
+        end
+        assign issue_valid_o[issue_lane]=|selections;
+        assign {issue_op_o[issue_lane*OP_WIDTH +: OP_WIDTH],issue_pc_o[issue_lane*32 +: 32],
+            issue_rob_tag_o[issue_lane*TAG_WIDTH +: TAG_WIDTH],issue_phys_rd_o[issue_lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
+            issue_src1_value_o[issue_lane*32 +: 32],issue_src2_value_o[issue_lane*32 +: 32],
+            issue_store_data_o[issue_lane*STORE_DATA_WIDTH +: STORE_DATA_WIDTH],
+            issue_metadata_o[issue_lane*METADATA_WIDTH +: METADATA_WIDTH],issue_slot_o[issue_lane*SLOT_WIDTH +: SLOT_WIDTH]}=payload_tree[1];
+    end endgenerate
+
     // Allocate a contiguous prefix and choose the oldest ready entries for
     // each issue lane.  Fold current-cycle CDB wakeups into selection and the
     // operand mux.  State is still updated on the edge, but a dependent entry
@@ -503,32 +545,7 @@ for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
             end
         end
 
-        issue_valid_o = {BE_WIDTH{1'b0}};
-        issue_op_o = {(BE_WIDTH*OP_WIDTH){1'b0}};
-        issue_pc_o = {(BE_WIDTH*32){1'b0}};
-        issue_rob_tag_o = {(BE_WIDTH*TAG_WIDTH){1'b0}};
-        issue_phys_rd_o = {(BE_WIDTH*PHYS_ADDR_WIDTH){1'b0}};
-        issue_src1_value_o = {(BE_WIDTH*32){1'b0}};
-        issue_src2_value_o = {(BE_WIDTH*32){1'b0}};
-        issue_store_data_o = {(BE_WIDTH*STORE_DATA_WIDTH){1'b0}};
-        issue_metadata_o = {(BE_WIDTH*METADATA_WIDTH){1'b0}};
-        issue_slot_o = {(BE_WIDTH*SLOT_WIDTH){1'b0}};
-        for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
-            for (slot = 0; slot < ENTRIES; slot = slot + 1) begin
-                if (ready_candidates[slot] && (ready_rank[slot] == lane)) begin
-                    issue_valid_o[lane] = 1'b1;
-                    issue_op_o[(lane*OP_WIDTH) +: OP_WIDTH] = issue_op_o[(lane*OP_WIDTH) +: OP_WIDTH] | op_mem[slot];
-                    issue_pc_o[(lane*32) +: 32] = issue_pc_o[(lane*32) +: 32] | pc_mem[slot];
-                    issue_rob_tag_o[(lane*TAG_WIDTH) +: TAG_WIDTH] = issue_rob_tag_o[(lane*TAG_WIDTH) +: TAG_WIDTH] | rob_tag_mem[slot];
-                    issue_phys_rd_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = issue_phys_rd_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] | phys_rd_mem[slot];
-                    issue_src1_value_o[(lane*32) +: 32] = issue_src1_value_o[(lane*32) +: 32] | src1_value_effective[slot];
-                    issue_src2_value_o[(lane*32) +: 32] = issue_src2_value_o[(lane*32) +: 32] | src2_value_effective[slot];
-                    issue_store_data_o[(lane*STORE_DATA_WIDTH) +: STORE_DATA_WIDTH] = issue_store_data_o[(lane*STORE_DATA_WIDTH) +: STORE_DATA_WIDTH] | store_data_mem[slot];
-                    issue_metadata_o[(lane*METADATA_WIDTH) +: METADATA_WIDTH] = issue_metadata_o[(lane*METADATA_WIDTH) +: METADATA_WIDTH] | metadata_mem[slot];
-                    issue_slot_o[(lane*SLOT_WIDTH) +: SLOT_WIDTH] = issue_slot_o[(lane*SLOT_WIDTH) +: SLOT_WIDTH] | slot[SLOT_WIDTH-1:0];
-                end
-            end
-        end
+
     end
 
     // Keep issue selection independent from the downstream ready feedback.

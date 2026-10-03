@@ -118,32 +118,45 @@ module rv32_fetch_frontend #(
     wire [FQ_DEPTH-1:0] head_row_select;
     wire [FE_WIDTH*PACKET_WIDTH-1:0] queue_read_packets;
     wire [FE_WIDTH*16-1:0] queue_read_metadata;
-    genvar read_row, read_lane;
+
+    localparam integer READ_DATA_WIDTH=PACKET_WIDTH+16;
+    localparam integer READ_WORDS=(READ_DATA_WIDTH+31)/32;
+    localparam integer READ_LEAVES=1<<$clog2(FQ_DEPTH);
+    wire [FQ_DEPTH*FE_WIDTH*READ_WORDS-1:0] head_word_select;
+    genvar read_row,read_lane,read_word,read_node;
     generate
-        for (read_row = 0; read_row < FQ_DEPTH; read_row = read_row + 1) begin : g_head_decode
-            localparam [PTR_WIDTH-1:0] ROW = read_row;
-            assign head_row_select[read_row] = (head_reg == ROW);
+        for(read_row=0;read_row<FQ_DEPTH;read_row=read_row+1) begin:g_head_decode
+            localparam [PTR_WIDTH-1:0] ROW=read_row;
+            assign head_row_select[read_row]=head_reg==ROW;
+            rv32_frequency_control_tree #(.LEAVES(FE_WIDTH*READ_WORDS)) selection_tree (
+                .signal_i(head_row_select[read_row]),
+                .views_o(head_word_select[read_row*FE_WIDTH*READ_WORDS +: FE_WIDTH*READ_WORDS]));
         end
-        for (read_lane = 0; read_lane < FE_WIDTH; read_lane = read_lane + 1) begin : g_packet_read
-            reg [PACKET_WIDTH-1:0] packet;
-            reg [15:0] metadata;
-            integer row;
-            always @* begin
-                packet = {PACKET_WIDTH{1'b0}};
-                metadata = 16'b0;
-                for (row = 0; row < FQ_DEPTH; row = row + 1) begin
-                    packet = packet |
-                        ({PACKET_WIDTH{head_row_select[(row+FQ_DEPTH-read_lane)%FQ_DEPTH]}} &
-                         `RV32IM_FETCH_PACKET_PACK(fq_pc[row], fq_inst[row],
-                            fq_pred_taken[row], fq_pred_target[row], fq_pred_kind[row],
-                            fq_pred_btb_hit[row], fq_epoch[row]));
-                    if (PREDICTOR_META != 0)
-                        metadata = metadata | ({16{head_row_select[(row+FQ_DEPTH-read_lane)%FQ_DEPTH]}} &
-                            fq_pred_metadata[row]);
+        for(read_lane=0;read_lane<FE_WIDTH;read_lane=read_lane+1) begin:g_packet_read
+            wire [READ_DATA_WIDTH-1:0] payload_tree [1:2*READ_LEAVES-1];
+            for(read_row=0;read_row<READ_LEAVES;read_row=read_row+1) begin:g_row
+                if(read_row<FQ_DEPTH) begin:g_present
+                    localparam integer HEAD_ROW=(read_row+FQ_DEPTH-read_lane)%FQ_DEPTH;
+                    wire [READ_DATA_WIDTH-1:0] payload={
+                        `RV32IM_FETCH_PACKET_PACK(fq_pc[read_row],fq_inst[read_row],
+                            fq_pred_taken[read_row],fq_pred_target[read_row],fq_pred_kind[read_row],
+                            fq_pred_btb_hit[read_row],fq_epoch[read_row]),
+                        ((PREDICTOR_META!=0)?fq_pred_metadata[read_row]:16'b0)};
+                    for(read_word=0;read_word<READ_WORDS;read_word=read_word+1) begin:g_word
+                        localparam integer LOW=read_word*32;
+                        localparam integer BITS=READ_DATA_WIDTH-LOW>=32 ? 32 : READ_DATA_WIDTH-LOW;
+                        assign payload_tree[READ_LEAVES+read_row][LOW +: BITS]=
+                            {BITS{head_word_select[(HEAD_ROW*FE_WIDTH+read_lane)*READ_WORDS+read_word]}} & payload[LOW +: BITS];
+                    end
+                end else begin:g_padding
+                    assign payload_tree[READ_LEAVES+read_row]=0;
                 end
             end
-            assign queue_read_packets[read_lane*PACKET_WIDTH +: PACKET_WIDTH] = packet;
-            assign queue_read_metadata[read_lane*16 +: 16] = metadata;
+            for(read_node=1;read_node<READ_LEAVES;read_node=read_node+1) begin:g_or
+                assign payload_tree[read_node]=payload_tree[2*read_node] | payload_tree[2*read_node+1];
+            end
+            assign {queue_read_packets[read_lane*PACKET_WIDTH +: PACKET_WIDTH],
+                queue_read_metadata[read_lane*16 +: 16]}=payload_tree[1];
         end
     endgenerate
 
@@ -357,42 +370,29 @@ endmodule
 // Each bank owns an actual queue field and its local write selection.
 // State logic may flatten and prune unused bits. Kept inversion
 // modules inside the write trees retain the electrical domains.
+
+// Functional payload state remains visible to pruning. Local event selection
+// and word ownership bound the actual payload consumers of every control leaf.
 module rv32_frontend_queue_payload_bank #(
-    parameter integer WIDTH=32,
-    parameter integer FE_WIDTH=4,
-    parameter integer PTR_WIDTH=4,
-    parameter integer ROW_ID=0
+    parameter integer WIDTH=32,FE_WIDTH=4,PTR_WIDTH=4,ROW_ID=0
 ) (
-    input wire clk_i, reset_i, redirect_i,
+    input wire clk_i,reset_i,redirect_i,
     input wire [FE_WIDTH-1:0] write_valid_i,
     input wire [FE_WIDTH*PTR_WIDTH-1:0] write_slots_i,
     input wire [FE_WIDTH*WIDTH-1:0] write_data_i,
-    output reg [WIDTH-1:0] data_o
+    output wire [WIDTH-1:0] data_o
 );
-    wire [FE_WIDTH-1:0] selected, granted;
-    wire [FE_WIDTH-1:0] granted_local;
-    rv32_frequency_control_tree #(.WIDTH(FE_WIDTH),.LEAVES(1)) write_tree (
-        .signal_i(granted),.views_o(granted_local));
+    wire [FE_WIDTH-1:0] selected;
+    wire write_qualified;
+    wire [WIDTH-1:0] payload;
     genvar lane;
     generate for(lane=0;lane<FE_WIDTH;lane=lane+1) begin:g_lane
-        assign selected[lane]=write_valid_i[lane] &&
-            write_slots_i[lane*PTR_WIDTH +: PTR_WIDTH]==ROW_ID;
-        if(lane==FE_WIDTH-1) assign granted[lane]=selected[lane];
-        else assign granted[lane]=selected[lane] && !(|selected[FE_WIDTH-1:lane+1]);
+        assign selected[lane]=write_valid_i[lane] && write_slots_i[lane*PTR_WIDTH +: PTR_WIDTH]==ROW_ID;
     end endgenerate
-    wire write_local;
-    rv32_frequency_control_tree #(.LEAVES(1)) write_enable_tree (
-        .signal_i(|granted_local),.views_o(write_local));
-    reg [WIDTH-1:0] packet;
-    integer source_lane;
-    always @* begin
-        packet=0;
-        for(source_lane=0;source_lane<FE_WIDTH;source_lane=source_lane+1)
-            packet=packet | ({WIDTH{granted_local[source_lane]}} & write_data_i[source_lane*WIDTH +: WIDTH]);
-    end
-    always @(posedge clk_i) begin
-        // Empty/invalid rows have no architectural payload. Do not broadcast
-        // reset or redirect to the stored data; queue control owns validity.
-        if(write_local) data_o<=packet;
-    end
+    rv32_frequency_event_select #(.WIDTH(WIDTH),.EVENTS(FE_WIDTH)) selector (
+        .events_i(selected),.values_i(write_data_i),.write_o(write_qualified),.value_o(payload));
+    // Occupancy owns reset/redirect invalidation. Each newly valid row has
+    // a complete payload write, matching the existing frontend contract.
+    rv32_frequency_word_bank #(.WIDTH(WIDTH)) state_owner (
+        .clk_i(clk_i),.write_i(write_qualified),.data_i(payload),.data_o(data_o));
 endmodule
