@@ -4,12 +4,30 @@
 // Parameterized RV32IM out-of-order top-level. Frontend bundles are decoded
 // lane-wise and a contiguous prefix is dispatched to the backend each cycle.
 module cpu_core #(
+    parameter integer DECODE_PIPELINE = 0, ISSUE_PIPELINE = 0,
+    parameter integer ICACHE_MSHR_STATIC_WRITES = 0,
+    parameter integer ICACHE_MSHR_STATE_BANKS = 0,
+    parameter integer FRONTEND_QUEUE_PAYLOAD_BANKS = 0,
+    parameter integer DCACHE_LOCAL_SRAM_COMMANDS = 0,
     parameter integer FE_WIDTH = `RV32IM_FE_WIDTH_DEFAULT,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer RS_ENTRIES = 8,
     parameter integer LSQ_ENTRIES = 8,
+    parameter integer LSQ_STORE_ADMISSION_BYPASS = 0,
+    parameter integer EARLY_STORE_ADDRESS = 0,
+    parameter integer RS_ISSUE_METADATA = 0,
+    parameter integer RS_WAKE_MUX_IMPL = 0,
+    parameter integer RS_AGE_WIDTH = 32,
+    parameter integer RS_ALLOC_STATIC_WRITE = 0,
+    parameter integer PRF_READ_MUX_IMPL = 0,
+    parameter integer RAT_READ_BYPASS = 0,
+    parameter integer ASAP7_FANOUT_BUFFERS = 0,
+    parameter integer ROB_CONTROL_REGISTER_BANKS = 0,
+    parameter integer ROB_COMMIT_BANKED_READ = 0,
+    parameter integer ROB_MMIO_PREDECODE = 0,
+    parameter integer ROB_ALLOC_BANKED_WRITE = 0,
     parameter integer INT_ISSUE_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer CDB_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer ENABLE_CACHE_STATS = 0,
@@ -17,6 +35,8 @@ module cpu_core #(
     parameter integer ICACHE_FAST_HIT = 1,
     parameter integer ICACHE_COMBINATIONAL_HIT = 0,
     parameter integer ICACHE_PREFETCH = 1,
+    parameter integer ICACHE_LOCAL_RESPONSE_READY = 0,
+    parameter integer ICACHE_TAG_MATCH_PARALLEL = 0,
     parameter integer ICACHE_MSHRS = 8,
     parameter integer ICACHE_LINES = 64,
     parameter integer ICACHE_WAYS = 2,
@@ -25,14 +45,24 @@ module cpu_core #(
     parameter integer DCACHE_WAYS = 1,
     parameter integer DCACHE_INDEX_HASH = 0,
     parameter integer DCACHE_REQUEST_PIPELINE = 0,
+    parameter integer DCACHE_STORE_MERGE_DELAY = 0,
+    parameter integer DCACHE_TAG_SRAM = 0,
+    parameter integer DCACHE_STATIC_UPDATES = 0,
+    parameter integer DCACHE_REGISTERED_INDEX = 0,
+    parameter integer DCACHE_LOCAL_METADATA_QUERY = 0,
+    parameter integer DCACHE_LOCAL_ACTION_DECODE = 0,
     parameter integer RAM_SIZE_BYTES = 268435456,
     parameter integer LEGACY_SENTINEL_HALT = 0,
     parameter integer ENABLE_PREDICTOR = 1,
+    parameter integer PREDICTOR_DIRECT_BRANCH_TARGET = 0,
+    parameter integer PREDICTOR_HISTORY_BITS = 6,
+    parameter integer FRONTEND_NARROW_OCCUPANCY = 0,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
     parameter integer SHIFT_IMPL = 0,
     parameter integer PHYS_TAG_IMPL = 0,
     parameter integer CHECKPOINT_IMPL = 0,
+    parameter integer RAT_RECOVERY_IMPL = 0,
     parameter integer STORE_BUFFERED_RETIRE = 1,
     parameter integer COMPLETION_BYPASS = 0,
     parameter integer SERIAL_BACKEND = 0,
@@ -79,6 +109,17 @@ module cpu_core #(
         GENERATION_WIDTH;
 
     initial begin
+        if ((RS_ISSUE_METADATA != 0 && RS_ISSUE_METADATA != 1) ||
+            (EARLY_STORE_ADDRESS < 0 || EARLY_STORE_ADDRESS > 2) ||
+            (RAT_RECOVERY_IMPL != 0 && RAT_RECOVERY_IMPL != 1)) begin
+            $display("ERROR: invalid early store address or RAT recovery implementation");
+            $finish(1);
+        end
+        if (PREDICTOR_DIRECT_BRANCH_TARGET == 2 &&
+            (SERIAL_BACKEND != 0 || ENABLE_PREDICTOR == 0)) begin
+            $display("ERROR: indexed-history predictor requires enabled OoO predictor metadata");
+            $finish;
+        end
         if ((DCACHE_REQUEST_PIPELINE != 0) && (DCACHE_REQUEST_PIPELINE != 1)) begin
             $display("ERROR: invalid DCACHE_REQUEST_PIPELINE; expected 0 or 1");
             $finish;
@@ -117,6 +158,10 @@ module cpu_core #(
     wire [3:0] redirect_epoch;
     wire branch_feedback_valid, branch_feedback_taken, branch_feedback_pred_taken;
     wire [31:0] branch_feedback_pc, branch_feedback_target, branch_feedback_pred_target;
+    wire [15:0] branch_feedback_metadata;
+    wire [7:0] branch_recovery_history;
+    wire [FE_WIDTH*16-1:0] pred_metadata_bus, fetch_pred_metadata;
+    wire [BE_WIDTH*16-1:0] trace_pred_metadata;
     wire [1:0] branch_feedback_kind;
 
     wire [FE_WIDTH-1:0] pred_taken_bus, pred_btb_hit_bus;
@@ -157,9 +202,15 @@ module cpu_core #(
     genvar predictor_lane;
     generate
         if (ENABLE_PREDICTOR != 0) begin : g_banked_predictor
-            rv32_banked_predictor #(.FE_WIDTH(FE_WIDTH)) predictor (
+            rv32_banked_predictor #(.FE_WIDTH(FE_WIDTH), .DIRECT_BRANCH_TARGET(PREDICTOR_DIRECT_BRANCH_TARGET),
+                .HISTORY_BITS(PREDICTOR_HISTORY_BITS), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) predictor (
                 .clk_i(clk), .reset_i(reset), .query_valid_i(if_resp_valid),
                 .query_pc_i(if_resp_pc), .query_line_i(if_resp_line_data),
+                .query_accept_i(if_resp_valid && if_resp_ready && !if_resp_error &&
+                    !redirect_valid && !halted && !error),
+                .effective_pred_taken_i(pred_taken_bus),
+                .recovery_valid_i(redirect_valid), .recovery_history_i(branch_recovery_history),
+                .pred_metadata_o(pred_metadata_bus),
                 .pred_taken_o(pred_taken_raw_bus), .pred_target_o(pred_target_raw_bus),
                 .pred_kind_o(pred_kind_raw_bus), .pred_btb_hit_o(pred_btb_hit_raw_bus),
                 .pred_bht_index_o(pred_bht_index_bus), .pred_btb_index_o(pred_btb_index_bus),
@@ -168,9 +219,11 @@ module cpu_core #(
                 .feedback_taken_i(branch_feedback_taken), .feedback_target_i(branch_feedback_target),
                 .feedback_pred_taken_i(branch_feedback_pred_taken),
                 .feedback_pred_target_i(branch_feedback_pred_target),
+                .feedback_metadata_i(branch_feedback_metadata),
                 .prediction_count_o(pred_count), .correct_count_o(pred_correct)
             );
         end else begin : g_no_predictor
+            assign pred_metadata_bus = {FE_WIDTH*16{1'b0}};
             assign pred_taken_raw_bus = {FE_WIDTH{1'b0}};
             assign pred_target_raw_bus = {FE_WIDTH*32{1'b0}};
             assign pred_kind_raw_bus = {FE_WIDTH*2{1'b0}};
@@ -268,7 +321,8 @@ module cpu_core #(
         end
     end
 
-    rv32_fetch_frontend #(.FE_WIDTH(FE_WIDTH), .FQ_DEPTH(FETCH_QUEUE_DEPTH)) frontend (
+    rv32_fetch_frontend #(.QUEUE_PAYLOAD_BANKS(FRONTEND_QUEUE_PAYLOAD_BANKS), .FE_WIDTH(FE_WIDTH), .FQ_DEPTH(FETCH_QUEUE_DEPTH), .NARROW_OCCUPANCY(FRONTEND_NARROW_OCCUPANCY),
+        .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) frontend (
         .clk_i(clk), .reset_i(reset), .redirect_valid_i(redirect_valid),
         .redirect_pc_i(redirect_pc), .redirect_epoch_i(redirect_epoch),
         .stop_i(halted), .error_i(error), .if_req_valid_o(if_req_valid),
@@ -279,6 +333,7 @@ module cpu_core #(
         .if_resp_epoch_i(if_resp_epoch), .if_resp_error_i(if_resp_error),
         .if_resp_pred_taken_i(pred_taken_bus), .if_resp_pred_target_i(pred_target_bus),
         .if_resp_pred_kind_i(pred_kind_bus), .if_resp_pred_btb_hit_i(pred_btb_hit_bus),
+        .if_resp_pred_metadata_i(pred_metadata_bus), .fetch_pred_metadata_o(fetch_pred_metadata),
         .fetch_valid_o(fetch_valid), .fetch_ready_i(fetch_ready),
         .fetch_packet_o(fetch_packet), .current_epoch_o(frontend_epoch),
         .frozen_o(frontend_frozen), .event_fetch_o(frontend_event_fetch),
@@ -405,8 +460,8 @@ module cpu_core #(
     generate
     if (ENABLE_CACHES != 0) begin : g_cached_memory
     if (ICACHE_MSHRS > 1) begin : g_nonblocking_icache
-    rv32_icache_nonblocking #(
-        .MSHR_ENTRIES(ICACHE_MSHRS),
+    rv32_icache_nonblocking #(.MSHR_STATIC_WRITES(ICACHE_MSHR_STATIC_WRITES), .MSHR_STATE_BANKS(ICACHE_MSHR_STATE_BANKS), 
+        .MSHR_ENTRIES(ICACHE_MSHRS), .TAG_MATCH_PARALLEL(ICACHE_TAG_MATCH_PARALLEL), .LOCAL_RESPONSE_READY(ICACHE_LOCAL_RESPONSE_READY),
         .CACHE_LINES(ICACHE_LINES), .CACHE_WAYS(ICACHE_WAYS),
         .NEXT_LINE_PREFETCH(ICACHE_PREFETCH),
         // Fill the remaining MSHRs with sequential lines.  Redirected
@@ -451,10 +506,11 @@ module cpu_core #(
     end
 
     if (DCACHE_MSHRS > 1) begin : g_nonblocking_dcache
-    rv32_dcache_nonblocking #(
+    rv32_dcache_nonblocking #(.LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), 
         .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS),
         .CACHE_LINES(DCACHE_LINES), .CACHE_WAYS(DCACHE_WAYS),
-        .INDEX_HASH(DCACHE_INDEX_HASH)
+        .INDEX_HASH(DCACHE_INDEX_HASH), .STORE_MERGE_DELAY(DCACHE_STORE_MERGE_DELAY),
+        .TAG_SRAM(DCACHE_TAG_SRAM), .STATIC_UPDATES(DCACHE_STATIC_UPDATES), .REGISTERED_INDEX(DCACHE_REGISTERED_INDEX), .LOCAL_METADATA_QUERY(DCACHE_LOCAL_METADATA_QUERY), .LOCAL_ACTION_DECODE(DCACHE_LOCAL_ACTION_DECODE)
     ) dcache (
         // LSQ generations reject wrong-path responses while retaining older
         // loads across a redirect.  The cache itself has no ROB-age context.
@@ -633,11 +689,38 @@ module cpu_core #(
     wire [BE_WIDTH*4-1:0] dec_mem_base_mask;
     wire [BE_WIDTH-1:0] dec_jalr_clear_lsb, is_halt_trace, backend_rs1_used;
 
+
+    // Decode output is registered before rename/PRF access.
+    localparam integer DECODE_PAYLOAD_WIDTH = PACKET_WIDTH + 16 + 1 + `RV32IM_OP_WIDTH + 4 + 5 + 5 + 5 + 1 + 1 + 1 + 32 + 1 + 1 + 1 + 1 + 1 + 2 + 1 + 4 + 1;
+    wire [BE_WIDTH-1:0] raw_trace_valid, raw_trace_ready;
+    wire [BE_WIDTH*PACKET_WIDTH-1:0] raw_trace_packet;
+    wire [BE_WIDTH*16-1:0] raw_trace_pred_metadata;
+    wire [BE_WIDTH*1-1:0] raw_dec_legal;
+    wire [BE_WIDTH*`RV32IM_OP_WIDTH-1:0] raw_dec_op;
+    wire [BE_WIDTH*4-1:0] raw_dec_class;
+    wire [BE_WIDTH*5-1:0] raw_dec_rd;
+    wire [BE_WIDTH*5-1:0] raw_dec_rs1;
+    wire [BE_WIDTH*5-1:0] raw_dec_rs2;
+    wire [BE_WIDTH*1-1:0] raw_dec_rd_we;
+    wire [BE_WIDTH*1-1:0] raw_dec_rs1_used;
+    wire [BE_WIDTH*1-1:0] raw_dec_rs2_used;
+    wire [BE_WIDTH*32-1:0] raw_dec_imm;
+    wire [BE_WIDTH*1-1:0] raw_dec_load;
+    wire [BE_WIDTH*1-1:0] raw_dec_store;
+    wire [BE_WIDTH*1-1:0] raw_dec_branch;
+    wire [BE_WIDTH*1-1:0] raw_dec_jump;
+    wire [BE_WIDTH*1-1:0] raw_dec_serialize;
+    wire [BE_WIDTH*2-1:0] raw_dec_mem_size;
+    wire [BE_WIDTH*1-1:0] raw_dec_mem_unsigned;
+    wire [BE_WIDTH*4-1:0] raw_dec_mem_base_mask;
+    wire [BE_WIDTH*1-1:0] raw_dec_jalr_clear_lsb;
+    wire [BE_WIDTH*DECODE_PAYLOAD_WIDTH-1:0] decode_input, decode_output;
+
     genvar frontend_lane;
     generate
         for (frontend_lane = 0; frontend_lane < FE_WIDTH; frontend_lane = frontend_lane + 1) begin : g_frontend_ready
             if (frontend_lane < BE_WIDTH)
-                assign fetch_ready[frontend_lane] = trace_ready[frontend_lane];
+                assign fetch_ready[frontend_lane] = raw_trace_ready[frontend_lane];
             else
                 assign fetch_ready[frontend_lane] = 1'b0;
         end
@@ -647,12 +730,15 @@ module cpu_core #(
     generate
         for (decode_lane = 0; decode_lane < BE_WIDTH; decode_lane = decode_lane + 1) begin : g_decode
             if (decode_lane < FE_WIDTH) begin : g_has_frontend_lane
-                assign trace_valid[decode_lane] = fetch_valid[decode_lane];
-                assign trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH] =
+                assign raw_trace_pred_metadata[decode_lane*16 +: 16] =
+                    fetch_pred_metadata[decode_lane*16 +: 16];
+                assign raw_trace_valid[decode_lane] = fetch_valid[decode_lane];
+                assign raw_trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH] =
                     fetch_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH];
             end else begin : g_no_frontend_lane
-                assign trace_valid[decode_lane] = 1'b0;
-                assign trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH] =
+                assign raw_trace_pred_metadata[decode_lane*16 +: 16] = 16'b0;
+                assign raw_trace_valid[decode_lane] = 1'b0;
+                assign raw_trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH] =
                     {PACKET_WIDTH{1'b0}};
             end
             assign trace_pc[decode_lane*32 +: 32] =
@@ -667,27 +753,30 @@ module cpu_core #(
                 trace_packet[decode_lane*PACKET_WIDTH + 97 +: 2];
 
             rv32im_decoder #(.LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) decoder (
-                .inst_i(trace_inst[decode_lane*32 +: 32]),
-                .legal_o(dec_legal[decode_lane]),
-                .op_o(dec_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH]),
-                .class_o(dec_class[decode_lane*4 +: 4]),
-                .rd_o(dec_rd[decode_lane*5 +: 5]),
-                .rs1_o(dec_rs1[decode_lane*5 +: 5]),
-                .rs2_o(dec_rs2[decode_lane*5 +: 5]),
-                .rd_we_o(dec_rd_we[decode_lane]),
-                .rs1_used_o(dec_rs1_used[decode_lane]),
-                .rs2_used_o(dec_rs2_used[decode_lane]),
-                .imm_o(dec_imm[decode_lane*32 +: 32]),
-                .is_load_o(dec_load[decode_lane]),
-                .is_store_o(dec_store[decode_lane]),
-                .is_branch_o(dec_branch[decode_lane]),
-                .is_jump_o(dec_jump[decode_lane]),
-                .is_serialize_o(dec_serialize[decode_lane]),
-                .mem_size_o(dec_mem_size[decode_lane*2 +: 2]),
-                .mem_unsigned_o(dec_mem_unsigned[decode_lane]),
-                .mem_base_mask_o(dec_mem_base_mask[decode_lane*4 +: 4]),
-                .jalr_clear_lsb_o(dec_jalr_clear_lsb[decode_lane])
+                .inst_i(raw_trace_packet[decode_lane*PACKET_WIDTH+32 +: 32]),
+                .legal_o(raw_dec_legal[decode_lane]),
+                .op_o(raw_dec_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH]),
+                .class_o(raw_dec_class[decode_lane*4 +: 4]),
+                .rd_o(raw_dec_rd[decode_lane*5 +: 5]),
+                .rs1_o(raw_dec_rs1[decode_lane*5 +: 5]),
+                .rs2_o(raw_dec_rs2[decode_lane*5 +: 5]),
+                .rd_we_o(raw_dec_rd_we[decode_lane]),
+                .rs1_used_o(raw_dec_rs1_used[decode_lane]),
+                .rs2_used_o(raw_dec_rs2_used[decode_lane]),
+                .imm_o(raw_dec_imm[decode_lane*32 +: 32]),
+                .is_load_o(raw_dec_load[decode_lane]),
+                .is_store_o(raw_dec_store[decode_lane]),
+                .is_branch_o(raw_dec_branch[decode_lane]),
+                .is_jump_o(raw_dec_jump[decode_lane]),
+                .is_serialize_o(raw_dec_serialize[decode_lane]),
+                .mem_size_o(raw_dec_mem_size[decode_lane*2 +: 2]),
+                .mem_unsigned_o(raw_dec_mem_unsigned[decode_lane]),
+                .mem_base_mask_o(raw_dec_mem_base_mask[decode_lane*4 +: 4]),
+                .jalr_clear_lsb_o(raw_dec_jalr_clear_lsb[decode_lane])
             );
+
+            assign decode_input[decode_lane*DECODE_PAYLOAD_WIDTH +: DECODE_PAYLOAD_WIDTH] = {raw_trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH], raw_trace_pred_metadata[decode_lane*16 +: 16], raw_dec_legal[decode_lane*1 +: 1], raw_dec_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH], raw_dec_class[decode_lane*4 +: 4], raw_dec_rd[decode_lane*5 +: 5], raw_dec_rs1[decode_lane*5 +: 5], raw_dec_rs2[decode_lane*5 +: 5], raw_dec_rd_we[decode_lane*1 +: 1], raw_dec_rs1_used[decode_lane*1 +: 1], raw_dec_rs2_used[decode_lane*1 +: 1], raw_dec_imm[decode_lane*32 +: 32], raw_dec_load[decode_lane*1 +: 1], raw_dec_store[decode_lane*1 +: 1], raw_dec_branch[decode_lane*1 +: 1], raw_dec_jump[decode_lane*1 +: 1], raw_dec_serialize[decode_lane*1 +: 1], raw_dec_mem_size[decode_lane*2 +: 2], raw_dec_mem_unsigned[decode_lane*1 +: 1], raw_dec_mem_base_mask[decode_lane*4 +: 4], raw_dec_jalr_clear_lsb[decode_lane*1 +: 1]};
+            assign {trace_packet[decode_lane*PACKET_WIDTH +: PACKET_WIDTH], trace_pred_metadata[decode_lane*16 +: 16], dec_legal[decode_lane*1 +: 1], dec_op[decode_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH], dec_class[decode_lane*4 +: 4], dec_rd[decode_lane*5 +: 5], dec_rs1[decode_lane*5 +: 5], dec_rs2[decode_lane*5 +: 5], dec_rd_we[decode_lane*1 +: 1], dec_rs1_used[decode_lane*1 +: 1], dec_rs2_used[decode_lane*1 +: 1], dec_imm[decode_lane*32 +: 32], dec_load[decode_lane*1 +: 1], dec_store[decode_lane*1 +: 1], dec_branch[decode_lane*1 +: 1], dec_jump[decode_lane*1 +: 1], dec_serialize[decode_lane*1 +: 1], dec_mem_size[decode_lane*2 +: 2], dec_mem_unsigned[decode_lane*1 +: 1], dec_mem_base_mask[decode_lane*4 +: 4], dec_jalr_clear_lsb[decode_lane*1 +: 1]} = decode_output[decode_lane*DECODE_PAYLOAD_WIDTH +: DECODE_PAYLOAD_WIDTH];
 
             // HALT commits the live architectural a0 value through the normal
             // ALU/read path while retaining precise sentinel classification.
@@ -705,6 +794,18 @@ module cpu_core #(
         end
     endgenerate
 
+
+    generate if (DECODE_PIPELINE != 0) begin : g_decode_pipeline
+        rv32_decode_bundle_register #(.LANES(BE_WIDTH), .PAYLOAD_WIDTH(DECODE_PAYLOAD_WIDTH)) pipe (
+            .clk_i(clk), .reset_i(reset), .flush_i(redirect_valid || halted || error),
+            .valid_i(raw_trace_valid), .ready_o(raw_trace_ready), .data_i(decode_input),
+            .valid_o(trace_valid), .ready_i(trace_ready), .data_o(decode_output));
+    end else begin : g_decode_direct
+        assign trace_valid = raw_trace_valid;
+        assign raw_trace_ready = trace_ready;
+        assign decode_output = decode_input;
+    end endgenerate
+
     wire [BE_WIDTH-1:0] commit_valid, commit_rd_we, commit_is_store;
     wire commit_ready;
     wire [BE_WIDTH*32-1:0] commit_pc, commit_inst, commit_value, commit_store_addr;
@@ -717,6 +818,8 @@ module cpu_core #(
     wire perf_branch_pending, perf_mdu_busy;
     assign commit_ready = 1'b1;
     generate if (SERIAL_BACKEND != 0) begin : g_serial_backend
+    assign branch_feedback_metadata = 16'b0;
+    assign branch_recovery_history = 8'b0;
     rv32_serial_backend #(.BE_WIDTH(BE_WIDTH), .SHIFT_IMPL(SHIFT_IMPL),
         .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
@@ -758,7 +861,7 @@ module cpu_core #(
     assign perf_branch_pending = 1'b0;
     assign perf_mdu_busy = 1'b0;
     end else begin : g_ooo_backend
-    rv32_backend_joint #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
+    rv32_backend_joint #(.ISSUE_PIPELINE(ISSUE_PIPELINE), .BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .RS_ISSUE_METADATA(RS_ISSUE_METADATA), .RS_WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .RS_ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .RS_AGE_WIDTH(RS_AGE_WIDTH), .PRF_READ_MUX_IMPL(PRF_READ_MUX_IMPL), .RAT_READ_BYPASS(RAT_READ_BYPASS), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .ROB_COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ROB_ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .ROB_MMIO_PREDECODE(ROB_MMIO_PREDECODE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),
@@ -790,6 +893,8 @@ module cpu_core #(
          .branch_feedback_pc_o(branch_feedback_pc), .branch_feedback_kind_o(branch_feedback_kind),
          .branch_feedback_taken_o(branch_feedback_taken), .branch_feedback_target_o(branch_feedback_target),
          .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target),
+         .trace_pred_metadata_i(trace_pred_metadata), .branch_feedback_metadata_o(branch_feedback_metadata),
+         .branch_recovery_history_o(branch_recovery_history),
          .perf_rob_occupancy_o(perf_rob_occupancy), .perf_rs_occupancy_o(perf_rs_occupancy),
          .perf_lsq_occupancy_o(perf_lsq_occupancy), .perf_issue_valid_o(perf_issue_valid),
          .perf_branch_pending_o(perf_branch_pending), .perf_mdu_busy_o(perf_mdu_busy)
@@ -881,5 +986,110 @@ module cpu_core #(
                 if (perf_mdu_busy) perf_mdu_busy_cycles <= perf_mdu_busy_cycles + 1'b1;
             end
         end
+    end
+endmodule
+
+// Ordered elastic bundle implemented as a ring: dequeue changes a pointer,
+// never shifts the entire decoded payload through a recovery/ready mux.
+module rv32_decode_bundle_register #(
+    parameter integer LANES=4, PAYLOAD_WIDTH=194,
+    parameter integer CW=(LANES<2)?1:$clog2(LANES+1),
+    parameter integer PW=(LANES<2)?1:$clog2(LANES)
+) (
+    input wire clk_i,reset_i,flush_i,
+    input wire [LANES-1:0] valid_i,
+    output reg [LANES-1:0] ready_o,
+    input wire [LANES*PAYLOAD_WIDTH-1:0] data_i,
+    output reg [LANES-1:0] valid_o,
+    input wire [LANES-1:0] ready_i,
+    output wire [LANES*PAYLOAD_WIDTH-1:0] data_o
+);
+    localparam integer WORDS=(PAYLOAD_WIDTH+31)/32;
+    reg [CW-1:0] count;
+    reg [PW-1:0] head,tail;
+    reg [CW-1:0] consumed,accepted;
+    integer lane,capacity;
+    reg prefix;
+    // Raw storage writes agree with public acceptance on ordinary cycles.
+    // During invalidation arbitrary payload writes are harmless: count=0 wins.
+    reg [LANES-1:0] storage_push;
+    reg [LANES-1:0] storage_ready;
+    reg [CW-1:0] storage_consumed;
+    wire invalidate = reset_i || flush_i;
+    wire [LANES*PAYLOAD_WIDTH-1:0] rows;
+    always @* begin
+        consumed=0;accepted=0;valid_o=0;ready_o=0;prefix=1;
+        storage_consumed=0;storage_push=0;storage_ready=0;
+        for(lane=0;lane<LANES;lane=lane+1) begin
+            valid_o[lane]=(lane<count) && !invalidate;
+            if(prefix && (lane<count) && ready_i[lane])
+                storage_consumed=storage_consumed+1'b1;
+            else prefix=0;
+        end
+        capacity=LANES-count+storage_consumed;
+        prefix=1;
+        for(lane=0;lane<LANES;lane=lane+1) begin
+            storage_ready[lane]=prefix && (lane<capacity);
+            storage_push[lane]=storage_ready[lane] && valid_i[lane];
+            ready_o[lane]=storage_ready[lane] && !invalidate;
+            if(ready_o[lane] && valid_i[lane]) accepted=accepted+1'b1;
+            if(!storage_push[lane]) prefix=0;
+        end
+        if(!invalidate) consumed=storage_consumed;
+    end
+    always @(posedge clk_i) begin
+        if(reset_i || flush_i) begin count<=0;head<=0;tail<=0;end
+        else begin
+            count<=count-consumed+accepted;
+            head<=(head+consumed)%LANES;
+            tail<=(tail+accepted)%LANES;
+        end
+    end
+    genvar slot,word_id,read_lane;
+    generate for(slot=0;slot<LANES;slot=slot+1) begin:g_slot
+        for(word_id=0;word_id<WORDS;word_id=word_id+1) begin:g_field
+            localparam integer W=((PAYLOAD_WIDTH-word_id*32)<32)?(PAYLOAD_WIDTH-word_id*32):32;
+            wire [LANES*W-1:0] inputs;
+            for(genvar writer=0;writer<LANES;writer=writer+1) begin:g_input
+                assign inputs[writer*W +: W]=data_i[writer*PAYLOAD_WIDTH+word_id*32 +: W];
+            end
+            rv32_decode_field_bank #(.LANES(LANES),.WIDTH(W),.ROW(slot),.PW(PW)) bank (
+                .clk_i(clk_i),.reset_i(1'b0),.flush_i(1'b0),.tail_i(tail),
+                .push_i(storage_push),.data_i(inputs),.data_o(rows[slot*PAYLOAD_WIDTH+word_id*32 +: W]));
+        end
+    end
+    for(read_lane=0;read_lane<LANES;read_lane=read_lane+1) begin:g_read
+        assign data_o[read_lane*PAYLOAD_WIDTH +: PAYLOAD_WIDTH]=
+            rows[((head+read_lane)%LANES)*PAYLOAD_WIDTH +: PAYLOAD_WIDTH];
+    end endgenerate
+endmodule
+
+// Functional state owner, not a buffer-only hierarchy boundary.
+(* keep_hierarchy = 1 *)
+module rv32_decode_field_bank #(
+    parameter integer LANES=4,WIDTH=32,ROW=0,PW=(LANES<2)?1:$clog2(LANES)
+) (
+    input wire clk_i,reset_i,flush_i,
+    input wire [PW-1:0] tail_i,
+    input wire [LANES-1:0] push_i,
+    input wire [LANES*WIDTH-1:0] data_i,
+    output reg [WIDTH-1:0] data_o
+);
+    wire [LANES-1:0] selected;
+    genvar writer;
+    generate for(writer=0;writer<LANES;writer=writer+1) begin:g_select
+        assign selected[writer]=push_i[writer] && (((tail_i+writer)%LANES)==ROW);
+    end endgenerate
+    reg [WIDTH-1:0] next_data;
+    integer lane;
+    always @* begin
+        next_data=0;
+        for(lane=0;lane<LANES;lane=lane+1)
+            next_data=next_data | ({WIDTH{selected[lane]}} & data_i[lane*WIDTH +: WIDTH]);
+    end
+    always @(posedge clk_i) begin
+        // Count/head/tail invalidate the queue on the same edge. Every row
+        // is fully rewritten before it becomes valid again.
+        if(|selected) data_o<=next_data;
     end
 endmodule
