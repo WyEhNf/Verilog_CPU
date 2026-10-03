@@ -91,23 +91,28 @@ module rv32_icache_nonblocking #(
     reg [EPOCH_WIDTH-1:0] mshr_txn_epoch [0:MSHR_ENTRIES-1];
 
     reg resp_valid_reg;
-    reg [31:0] resp_pc_reg;
-    reg [31:0] resp_line_reg;
+    wire [31:0] resp_pc_reg;
+    wire [31:0] resp_line_reg;
     reg [127:0] resp_data_reg;
     // A synchronous hit and its metadata become valid after the same edge.
     // Capture the macro result before idle/write makes rdata undefined.
     reg resp_from_sram;
     wire [127:0] data_rdata;
-    reg [EPOCH_WIDTH-1:0] resp_epoch_reg;
-    reg resp_error_reg;
+    wire [EPOCH_WIDTH-1:0] resp_epoch_reg;
+    wire resp_error_reg;
 
     reg prefetch_active;
-    reg [31:0] prefetch_next_line;
-    reg [EPOCH_WIDTH-1:0] prefetch_epoch;
-    integer prefetch_remaining;
+    wire [31:0] prefetch_next_line;
+    wire [EPOCH_WIDTH-1:0] prefetch_epoch;
+    // Positive stream occupancy is bounded by both parameters. The
+    // extra sign bit preserves old signed comparisons; unsupported negative
+    // distances keep the original 32-bit signed behavior rather than wrap.
+    localparam integer STREAM_MAX=(PREFETCH_DISTANCE<MSHR_ENTRIES-1)?PREFETCH_DISTANCE:MSHR_ENTRIES-1;
+    localparam integer STREAM_COUNT_WIDTH=(STREAM_MAX<0)?32:((STREAM_MAX<1)?2:$clog2(STREAM_MAX+1)+1);
+    reg signed [STREAM_COUNT_WIDTH-1:0] prefetch_remaining;
     reg prefetch_control_stream;
     reg last_demand_valid;
-    reg [31:0] last_demand_line;
+    wire [31:0] last_demand_line;
 
     wire [31:0] request_line = {lookup_req_pc[31:4], 4'b0000};
     wire [CACHE_SET_WIDTH-1:0] request_set = lookup_req_pc[CACHE_SET_WIDTH+3:4];
@@ -476,21 +481,53 @@ module rv32_icache_nonblocking #(
 
     integer reset_index;
     integer prefetch_count;
+
+    localparam integer RESPONSE_META_WIDTH=65+EPOCH_WIDTH;
+    wire response_hit_write=!reset_i && hit_array_read;
+    wire [2*RESPONSE_META_WIDTH-1:0] response_metadata_values={
+        mem_resp_error_i || !response_matches,
+        (response_promoted?lookup_req_epoch:mshr_demand_epoch[response_index]),
+        (response_promoted?mem_resp_line_addr_i:mshr_line[response_index]),
+        (response_promoted?lookup_req_pc:mshr_pc[response_index]),
+        1'b0,lookup_req_epoch,request_line,lookup_req_pc};
+    wire response_metadata_write;
+    wire [RESPONSE_META_WIDTH-1:0] response_metadata_next,response_metadata_saved;
+    rv32_frequency_event_select #(.WIDTH(RESPONSE_META_WIDTH),.EVENTS(2)) response_metadata_selector (
+        .events_i({response_memory_write,response_hit_write}),.values_i(response_metadata_values),
+        .write_o(response_metadata_write),.value_o(response_metadata_next));
+    rv32_frequency_word_bank #(.WIDTH(RESPONSE_META_WIDTH)) response_metadata_owner (
+        .clk_i(clk_i),.write_i(response_metadata_write),.data_i(response_metadata_next),.data_o(response_metadata_saved));
+    assign {resp_error_reg,resp_epoch_reg,resp_line_reg,resp_pc_reg}=response_metadata_saved;
+
+    wire stream_start=!reset_i && stream_reset;
+    wire stream_control_start=!reset_i && control_target_allocate;
+    wire stream_line_write;
+    wire [31:0] stream_line_next;
+    wire [3*32-1:0] stream_line_values={
+        ({control_target[31:4],4'b0}+32'd16),request_line+32'd16,prefetch_next_line+32'd16};
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(3)) stream_line_selector (
+        .events_i({stream_control_start,stream_start,!reset_i && prefetch_step}),.values_i(stream_line_values),
+        .write_o(stream_line_write),.value_o(stream_line_next));
+    rv32_frequency_word_bank #(.WIDTH(32)) stream_line_owner (
+        .clk_i(clk_i),.write_i(stream_line_write),.data_i(stream_line_next),.data_o(prefetch_next_line));
+    wire stream_epoch_write;
+    wire [EPOCH_WIDTH-1:0] stream_epoch_next;
+    rv32_frequency_event_select #(.WIDTH(EPOCH_WIDTH),.EVENTS(2)) stream_epoch_selector (
+        .events_i({stream_control_start,stream_start}),.values_i({current_epoch_i,lookup_req_epoch}),
+        .write_o(stream_epoch_write),.value_o(stream_epoch_next));
+    rv32_frequency_word_bank #(.WIDTH(EPOCH_WIDTH)) stream_epoch_owner (
+        .clk_i(clk_i),.write_i(stream_epoch_write),.data_i(stream_epoch_next),.data_o(prefetch_epoch));
+    rv32_frequency_word_bank #(.WIDTH(32)) demand_line_owner (
+        .clk_i(clk_i),.write_i(!reset_i && stream_request),.data_i(request_line),.data_o(last_demand_line));
+
     always @(posedge clk_i) begin
         if (reset_i) begin
             resp_valid_reg <= 1'b0;
             resp_from_sram <= 1'b0;
-            resp_pc_reg <= 32'd0;
-            resp_line_reg <= 32'd0;
-            resp_epoch_reg <= {EPOCH_WIDTH{1'b0}};
-            resp_error_reg <= 1'b0;
             prefetch_active <= 1'b0;
-            prefetch_next_line <= 32'd0;
-            prefetch_epoch <= {EPOCH_WIDTH{1'b0}};
             prefetch_remaining <= 0;
             prefetch_control_stream <= 1'b0;
             last_demand_valid <= 1'b0;
-            last_demand_line <= 32'd0;
             event_request_o <= 1'b0;
             event_hit_o <= 1'b0;
             event_miss_o <= 1'b0;
@@ -545,11 +582,7 @@ module rv32_icache_nonblocking #(
                     event_hit_o <= 1'b1;
                     if (lookup_req_epoch == current_epoch_i) begin
                         resp_valid_reg <= 1'b1;
-                        resp_pc_reg <= lookup_req_pc;
-                        resp_line_reg <= request_line;
                         resp_from_sram <= 1'b1;
-                        resp_epoch_reg <= lookup_req_epoch;
-                        resp_error_reg <= 1'b0;
                     end
                 end else begin
                     event_miss_o <= 1'b1;
@@ -581,7 +614,6 @@ module rv32_icache_nonblocking #(
             // This preserves memory-level parallelism on long straight-line
             // regions without issuing an unbounded wrong-path stream.
             if (prefetch_step) begin
-                prefetch_next_line <= prefetch_next_line + 32'd16;
                 if (!stream_sequential)
                     prefetch_remaining <= prefetch_remaining - 1;
             end
@@ -600,11 +632,8 @@ module rv32_icache_nonblocking #(
 
             if (stream_request) begin
                 last_demand_valid <= 1'b1;
-                last_demand_line <= request_line;
                 if (stream_reset) begin
                     prefetch_active <= 1'b1;
-                    prefetch_next_line <= request_line + 32'd16;
-                    prefetch_epoch <= lookup_req_epoch;
                     prefetch_control_stream <= 1'b0;
                     prefetch_count = PREFETCH_DISTANCE;
                     if (prefetch_count > MSHR_ENTRIES-1)
@@ -639,18 +668,10 @@ module rv32_icache_nonblocking #(
                     (request_match_index == response_index)) begin
                     if (lookup_req_epoch == current_epoch_i) begin
                         resp_valid_reg <= 1'b1;
-                        resp_pc_reg <= lookup_req_pc;
-                        resp_line_reg <= mem_resp_line_addr_i;
-                        resp_epoch_reg <= lookup_req_epoch;
-                        resp_error_reg <= mem_resp_error_i || !response_matches;
                     end
                 end else if (!mshr_prefetch[response_index] &&
                              (mshr_demand_epoch[response_index] == current_epoch_i)) begin
                     resp_valid_reg <= 1'b1;
-                    resp_pc_reg <= mshr_pc[response_index];
-                    resp_line_reg <= mshr_line[response_index];
-                    resp_epoch_reg <= mshr_demand_epoch[response_index];
-                    resp_error_reg <= mem_resp_error_i || !response_matches;
                 end
             end
 
@@ -667,9 +688,6 @@ module rv32_icache_nonblocking #(
                     mshr_txn_epoch[response_index] <= current_epoch_i;
                 end
                 prefetch_active <= 1'b1;
-                prefetch_next_line <=
-                    {control_target[31:4], 4'b0} + 32'd16;
-                prefetch_epoch <= current_epoch_i;
                 prefetch_control_stream <= 1'b1;
                 prefetch_count = PREFETCH_DISTANCE;
                 if (prefetch_count > MSHR_ENTRIES-1)
