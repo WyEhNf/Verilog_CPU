@@ -263,6 +263,7 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] rs_alloc_metadata, rs_issue_metadata;
     wire [RS_ENTRIES*RS_METADATA_WIDTH-1:0] rs_entry_metadata;
     reg [RS_ENTRIES-1:0] rs_flush_kill_mask;
+    reg [RS_ENTRIES-1:0] rs_preview_kill_mask;
 
     wire [BE_WIDTH-1:0] alu_exec_valid, alu_exec_ready, alu_issue_ready;
     wire [BE_WIDTH-1:0] alu_exec_rd_we, alu_exec_is_branch;
@@ -368,7 +369,7 @@ module rv32_backend_joint #(
             .lsq_tag_o(shared_store_addr_tag), .rob_tag_o(selected_rob_tag), .base_value_o(selected_base)
         );
         assign shared_store_addr_valid = selected && !reset_i && !flush_i &&
-            !recovery_domains[0] && selected_rob_tag[0] && rob_entry_valid[selected_slot] &&
+            !branch_busy_domains[0] && selected_rob_tag[0] && rob_entry_valid[selected_slot] &&
             (selected_rob_tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH] ==
              rob_entry_generation[selected_slot*ROB_GENERATION_WIDTH +: ROB_GENERATION_WIDTH]);
         if (RS_ISSUE_METADATA != 0) begin : g_inline_imm
@@ -415,7 +416,28 @@ module rv32_backend_joint #(
     reg [1:0] rob_pred_kind_mem [0:ROB_ENTRIES-1];
     reg [1:0] rob_mem_size_mem [0:ROB_ENTRIES-1];
     reg rob_mem_unsigned_mem [0:ROB_ENTRIES-1];
+    // Front-end redirect is issued during preview. Backend recovery is a
+    // registered transaction applied on the following edge.
     reg branch_pending;
+    reg recovery_descriptor_valid;
+    reg [CHECK_RAT_WIDTH-1:0] recovery_descriptor_rat;
+    reg [PHYS_REGS-1:0] recovery_descriptor_reclaim;
+    reg [FREE_COUNT_WIDTH-1:0] recovery_descriptor_reclaim_count;
+    reg [ROB_SLOT_WIDTH-1:0] recovery_descriptor_head;
+    reg [ROB_COUNT_WIDTH-1:0] recovery_descriptor_occupancy;
+    reg [RS_ENTRIES-1:0] recovery_descriptor_rs_kill;
+    wire rob_recovery_preview;
+    wire recovery_preview_fire = branch_pending && rob_recovery_preview &&
+        !recovery_descriptor_valid && !flush_i;
+    wire [3:0] branch_busy_domains;
+    wire [3:0] recovery_capture_domains;
+    rv32_frequency_control_tree #(.LEAVES(4)) branch_busy_tree (
+        .signal_i(branch_pending),.views_o(branch_busy_domains));
+    rv32_frequency_control_tree #(.LEAVES(4)) recovery_capture_tree (
+        .signal_i(recovery_preview_fire),.views_o(recovery_capture_domains));
+    wire [6*ROB_SLOT_WIDTH-1:0] recovery_head_views;
+    rv32_frequency_control_tree #(.WIDTH(ROB_SLOT_WIDTH),.LEAVES(6)) recovery_head_tree (
+        .signal_i(recovery_descriptor_head),.views_o(recovery_head_views));
     reg [TAG_WIDTH-1:0] branch_pending_tag;
     reg [31:0] branch_pending_value;
     reg [PAW-1:0] branch_pending_phys;
@@ -597,7 +619,7 @@ module rv32_backend_joint #(
             // ALU/MDU output slot after its ROB generation had been killed.
             // Existing strict-older execution results remain independently
             // drainable through alu_exec_ready/producers below.
-            assign rs_issue_ready[io_lane] = !recovery_domains[0] &&
+            assign rs_issue_ready[io_lane] = !branch_busy_domains[0] &&
                 (rs_issue_is_mdu[io_lane] ?
                  (mdu_select[io_lane] && mdu_issue_ready) :
                  ((io_lane < INT_ISSUE_WIDTH) ? alu_issue_ready[io_lane] : 1'b0));
@@ -647,7 +669,7 @@ module rv32_backend_joint #(
             if (trace_rd_we_i[ready_lane] &&
                 (trace_rd_i[ready_lane*5 +: 5] != 0))
                 ready_phys_used = ready_phys_used + 1;
-            if (!halted_o && !flush_i && !recovery_domains[0] &&
+            if (!halted_o && !flush_i && !branch_busy_domains[0] &&
                 (ready_rob_used <= rob_free_count) &&
                 (ready_rs_used <= rs_free_count) &&
                 (ready_lsq_used <= lsq_free_count) &&
@@ -676,7 +698,7 @@ module rv32_backend_joint #(
     assign commit_store_mask_o = rob_commit_store_mask;
     assign commit_store_data_o = rob_commit_store_data;
     assign commit_tag_o = rob_commit_tag;
-    assign redirect_valid_o = rob_redirect_valid;
+    assign redirect_valid_o = recovery_preview_fire;
     assign redirect_pc_o = rob_redirect_pc;
     assign redirect_epoch_o = rob_redirect_epoch;
     assign branch_feedback_valid_o = branch_feedback_valid_r;
@@ -760,7 +782,7 @@ module rv32_backend_joint #(
             end
         end
     end
-    assign mdu_issue_valid = (|mdu_select) && !recovery_domains[0];
+    assign mdu_issue_valid = (|mdu_select) && !branch_busy_domains[0];
     // Issue acceptance is independent from completion/CDB backpressure.  The
     // previous wiring reused alu_exec_ready for both directions, creating a
     // combinational loop through the reservation station's issue_valid path.
@@ -820,9 +842,9 @@ module rv32_backend_joint #(
         if ((CHECKPOINT_IMPL == 0 || RAT_RECOVERY_IMPL == 0) &&
             rob_recovery_rd_we && (rob_recovery_rd != 0))
             recovery_rat_state[(rob_recovery_rd*PAW) +: PAW] = rob_recovery_new_phys;
-        recovery_free_bitmap = free_bitmap_state | rob_recovery_reclaim_bitmap;
+        recovery_free_bitmap = free_bitmap_state | recovery_descriptor_reclaim;
         recovery_free_bitmap[0] = 1'b0;
-        recovery_free_count = free_count + rob_recovery_reclaim_count;
+        recovery_free_count = free_count + recovery_descriptor_reclaim_count;
     end
 
     // External flushes clear the station.  A branch recovery clears only
@@ -830,14 +852,14 @@ module rv32_backend_joint #(
     // belongs to the retained ROB prefix and must remain executable.
     always @* begin
         recovery_rs_index = 0;
-        rs_flush_kill_mask = {RS_ENTRIES{1'b0}};
+        rs_preview_kill_mask = {RS_ENTRIES{1'b0}};
         recovery_rs_rob_slot = 0;
         recovery_rs_branch_slot = branch_pending_tag[3 +: ROB_SLOT_WIDTH];
         recovery_rs_age = 0;
         recovery_rs_branch_age = recovery_rs_branch_slot - rob_head_views[ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
         if (flush_i) begin
-            rs_flush_kill_mask = {RS_ENTRIES{1'b1}};
-        end else if (recovery_domains[2]) begin
+            rs_preview_kill_mask = {RS_ENTRIES{1'b1}};
+        end else if (rob_recovery_preview) begin
             for (recovery_rs_index = 0; recovery_rs_index < RS_ENTRIES; recovery_rs_index = recovery_rs_index + 1) begin
                 recovery_rs_rob_slot = rs_entry_rob_tag[(recovery_rs_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH];
                 recovery_rs_age = recovery_rs_rob_slot - rob_head_views[ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
@@ -845,9 +867,13 @@ module rv32_backend_joint #(
                     (!rs_entry_rob_tag[recovery_rs_index*TAG_WIDTH] ||
                      (recovery_rs_age > recovery_rs_branch_age) ||
                      (recovery_rs_age >= rob_occupancy)))
-                    rs_flush_kill_mask[recovery_rs_index] = 1'b1;
+                    rs_preview_kill_mask[recovery_rs_index] = 1'b1;
             end
         end
+    end
+
+    always @* begin
+        rs_flush_kill_mask = flush_i ? {RS_ENTRIES{1'b1}} : recovery_descriptor_rs_kill;
     end
 
     // Completions may be queued out of program order.  Recovery invalidates
@@ -859,17 +885,17 @@ module rv32_backend_joint #(
         completion_kill_mask = {COMPLETION_DEPTH{1'b0}};
         recovery_completion_rob_slot = 0;
         recovery_completion_age = 0;
-        recovery_completion_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head_views[2*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+        recovery_completion_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - recovery_head_views[2*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
         if (recovery_domains[3]) begin
             for (recovery_completion_index = 0; recovery_completion_index < COMPLETION_DEPTH;
                  recovery_completion_index = recovery_completion_index + 1) begin
                 recovery_completion_rob_slot =
                     completion_entry_tag[(recovery_completion_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH];
-                recovery_completion_age = recovery_completion_rob_slot - rob_head_views[2*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+                recovery_completion_age = recovery_completion_rob_slot - recovery_head_views[2*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
                 if (completion_entry_valid[recovery_completion_index] &&
                     (!completion_entry_tag[recovery_completion_index*TAG_WIDTH] ||
                      (recovery_completion_age > recovery_completion_branch_age) ||
-                     (recovery_completion_age >= rob_occupancy)))
+                     (recovery_completion_age >= recovery_descriptor_occupancy)))
                     completion_kill_mask[recovery_completion_index] = 1'b1;
             end
         end
@@ -943,7 +969,7 @@ module rv32_backend_joint #(
     end
 
     rv32_rename_unit #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .RAT_READ_BYPASS(RAT_READ_BYPASS)) rename (
-        .clk_i(clk_i), .reset_i(reset_i), .rename_ready_i(!halted_o && !flush_i && !recovery_domains[1]),
+        .clk_i(clk_i), .reset_i(reset_i), .rename_ready_i(!halted_o && !flush_i && !branch_busy_domains[1]),
         .decoded_valid_i(dec_valid), .decoded_rd_we_i(dec_rd_we), .decoded_rs1_used_i(dec_rs1_used), .decoded_rs2_used_i(dec_rs2_used),
         .decoded_rs_need_i(dec_rs_need), .decoded_lsq_need_i(dec_lsq_need), .decoded_rd_i(dec_rd), .decoded_rs1_i(dec_rs1), .decoded_rs2_i(dec_rs2),
         .rob_free_count_i(rob_free_count), .rs_free_count_i(rs_free_count), .lsq_free_count_i(lsq_free_count),
@@ -952,7 +978,7 @@ module rv32_backend_joint #(
         .free_bitmap_state_o(free_bitmap_state), .free_count_o(free_count),
         .commit_valid_i((|rob_commit_valid) && commit_ready_i), .commit_rd_we_i(rob_commit_rd_we), .commit_rd_i(rob_commit_rd),
         .commit_old_phys_i(commit_old_phys), .commit_new_phys_i(commit_new_phys),
-        .restore_valid_i(rob_checkpoint_restore_valid), .restore_rat_i(recovery_rat_state),
+        .restore_valid_i(rob_checkpoint_restore_valid), .restore_rat_i(recovery_descriptor_rat),
         .restore_free_bitmap_i(recovery_free_bitmap), .restore_free_count_i(recovery_free_count)
     );
 
@@ -984,7 +1010,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
+    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STAGED_RECOVERY(1), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rob_alloc_valid), .alloc_pc_i(rob_alloc_pc), .alloc_inst_i(rob_alloc_inst), .alloc_rd_i(rob_alloc_rd),
         .alloc_rd_we_i(rename_rd_we), .alloc_old_phys_i(rob_alloc_old_phys), .alloc_new_phys_i(rob_alloc_new_phys), .alloc_is_store_i(rob_alloc_is_store),
         .alloc_is_branch_i(rob_alloc_is_branch), .alloc_is_halt_i(rob_alloc_is_halt), .alloc_is_error_i(rob_alloc_is_error), .alloc_checkpoint_i(rob_alloc_checkpoint),
@@ -995,7 +1021,8 @@ module rv32_backend_joint #(
         .commit_store_addr_o(rob_commit_store_addr), .commit_store_mask_o(rob_commit_store_mask), .commit_store_data_o(rob_commit_store_data), .commit_tag_o(rob_commit_tag), .commit_old_phys_o(commit_old_phys), .commit_new_phys_o(commit_new_phys),
         .store_commit_valid_o(rob_store_commit_valid), .store_commit_ready_i(rob_store_commit_ready), .store_commit_tag_o(rob_store_commit_tag), .store_commit_addr_o(rob_store_commit_addr), .store_commit_mask_o(rob_store_commit_mask), .store_commit_data_o(rob_store_commit_data), .store_ack_valid_i(rob_store_ack_valid), .store_ack_tag_i(rob_store_ack_tag), .store_ack_error_i(lsq_store_ack_error),
         .recovery_valid_i({ {(BE_WIDTH-1){1'b0}}, branch_pending }), .recovery_tag_i({ {(BE_WIDTH-1)*TAG_WIDTH{1'b0}}, branch_pending_tag }), .recovery_pc_i({ {(BE_WIDTH-1)*32{1'b0}}, branch_pending_pc }),
-        .recovery_accept_o(rob_recovery_accept_source), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head_source), .head_domains_o(rob_registered_head_views), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation), .entry_new_phys_o(rob_entry_new_phys), .entry_rd_we_o(rob_entry_rd_we), .entry_rd_o(rob_entry_rd), .entry_old_phys_o(rob_entry_old_phys)
+        .recovery_apply_i(recovery_descriptor_valid), .recovery_hold_i(branch_busy_domains[3]),
+        .recovery_preview_valid_o(rob_recovery_preview), .recovery_accept_o(rob_recovery_accept_source), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head_source), .head_domains_o(rob_registered_head_views), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation), .entry_new_phys_o(rob_entry_new_phys), .entry_rd_we_o(rob_entry_rd_we), .entry_rd_o(rob_entry_rd), .entry_old_phys_o(rob_entry_old_phys)
     );
 
 
@@ -1031,7 +1058,7 @@ module rv32_backend_joint #(
                 .TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES)) pipe (
                 .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i),
                 .recovery_i(recovery_domains[4]), .recovery_tag_i(branch_pending_tag),
-                .head_i(rob_head_views[5*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]),
+                .head_i(recovery_head_views[5*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]),
                 .valid_i(raw_rs_issue_valid[pipe_lane]),
                 .eligible_i((pipe_lane < INT_ISSUE_WIDTH) || raw_mdu),
                 .ready_o(raw_rs_issue_ready[pipe_lane]), .data_i(in_payload),
@@ -1062,7 +1089,7 @@ module rv32_backend_joint #(
                 .exec_pred_target_o(alu_exec_pred_target[alu_lane*32 +: 32]),
                 .exec_pred_kind_o(alu_exec_pred_kind[alu_lane*2 +: 2]),
                 .clk_i(clk_i), .reset_i(reset_i), .flush_i(alu_flush_r[alu_lane]),
-                .issue_valid_i(!recovery_domains[4] &&
+                .issue_valid_i(!branch_busy_domains[2] &&
                                (alu_lane < INT_ISSUE_WIDTH) &&
                                rs_issue_valid[alu_lane] &&
                                !rs_issue_is_mdu[alu_lane]),
@@ -1115,7 +1142,7 @@ module rv32_backend_joint #(
         .head_o(lsq_head),
         .retire_valid_i(rob_commit_valid & {BE_WIDTH{commit_ready_i}}),
         .retire_rob_tag_i(rob_commit_tag),
-.clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_valid_i(recovery_domains[5]), .recovery_tag_i(branch_pending_tag), .recovery_head_i(rob_head), .recovery_occupancy_i({{(16-ROB_COUNT_WIDTH){1'b0}}, rob_occupancy}), .alloc_valid_i(lsq_alloc_valid), .alloc_ready_o(lsq_alloc_ready), .alloc_fire_o(lsq_alloc_fire), .alloc_count_o(lsq_alloc_count), .alloc_lsq_tag_o(lsq_alloc_tag), .alloc_is_load_i(trace_is_load_i), .alloc_is_store_i(trace_is_store_i), .alloc_rob_tag_i(rob_alloc_tag), .alloc_size_i(trace_mem_size_i), .alloc_unsigned_i(trace_mem_unsigned_i), .alloc_addr_valid_i(lsq_alloc_addr_valid), .alloc_addr_i(lsq_alloc_addr), .alloc_data_valid_i(lsq_alloc_data_valid), .alloc_store_data_i(trace_store_data_relative), .alloc_store_mask_i({BE_WIDTH*4{1'b0}}), .addr_update_valid_i(lsq_addr_update_valid), .addr_update_tag_i(lsq_addr_update_tag), .addr_update_i(lsq_addr_update), .data_update_valid_i(lsq_data_update_valid), .data_update_tag_i(lsq_data_update_tag), .data_update_i(alu_exec_store_data), .data_mask_update_i({BE_WIDTH*4{1'b0}}), .wakeup_valid_i({BE_WIDTH{1'b0}}), .wakeup_tag_i({BE_WIDTH*TAG_WIDTH{1'b0}}), .wakeup_value_i({BE_WIDTH*32{1'b0}}), .store_commit_valid_i(rob_store_commit_valid), .store_commit_ready_o(rob_store_commit_ready), .store_commit_rob_tag_i(rob_store_commit_tag), .dcache_req_valid_o(dcache_req_valid_o), .dcache_req_ready_i(dcache_req_ready_i), .dcache_req_is_load_o(dcache_req_is_load_o), .dcache_req_is_store_o(dcache_req_is_store_o), .dcache_req_addr_o(dcache_req_addr_o), .dcache_req_size_o(dcache_req_size_o), .dcache_req_unsigned_o(dcache_req_unsigned_o), .dcache_req_mask_o(dcache_req_mask_o), .dcache_req_wdata_o(dcache_req_wdata_o), .dcache_req_rob_tag_o(dcache_req_rob_tag_o), .dcache_req_lsq_tag_o(dcache_req_lsq_tag_o), .dcache_resp_valid_i(dcache_resp_valid_i), .dcache_resp_ready_o(dcache_resp_ready_o), .dcache_resp_lsq_tag_i(dcache_resp_lsq_tag_i), .dcache_resp_addr_i(dcache_resp_addr_i), .dcache_resp_line_data_i(dcache_resp_line_data_i), .dcache_resp_word_data_i(dcache_resp_word_data_i), .dcache_resp_line_valid_i(dcache_resp_line_valid_i), .dcache_resp_error_i(dcache_resp_error_i), .load_complete_valid_o(lsq_load_complete_valid), .load_complete_ready_i(lsq_load_complete_ready), .load_complete_rob_tag_o(lsq_load_complete_tag), .load_complete_lsq_tag_o(lsq_load_complete_lsq_tag), .load_complete_value_o(lsq_load_complete_value), .load_complete_error_o(lsq_load_complete_error), .dcache_store_ack_valid_i(dcache_store_ack_valid_i), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag_i), .dcache_store_ack_error_i(dcache_store_ack_error_i), .store_ack_valid_o(lsq_store_ack_valid), .store_ack_ready_i(1'b1), .store_ack_rob_tag_o(lsq_store_ack_rob_tag), .store_ack_lsq_tag_o(lsq_store_ack_lsq_tag), .store_ack_error_o(lsq_store_ack_error), .occupancy_o(lsq_occupancy), .tail_o()
+.clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_valid_i(recovery_domains[5]), .recovery_tag_i(branch_pending_tag), .recovery_head_i(recovery_head_views[3*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]), .recovery_occupancy_i({{(16-ROB_COUNT_WIDTH){1'b0}}, recovery_descriptor_occupancy}), .alloc_valid_i(lsq_alloc_valid), .alloc_ready_o(lsq_alloc_ready), .alloc_fire_o(lsq_alloc_fire), .alloc_count_o(lsq_alloc_count), .alloc_lsq_tag_o(lsq_alloc_tag), .alloc_is_load_i(trace_is_load_i), .alloc_is_store_i(trace_is_store_i), .alloc_rob_tag_i(rob_alloc_tag), .alloc_size_i(trace_mem_size_i), .alloc_unsigned_i(trace_mem_unsigned_i), .alloc_addr_valid_i(lsq_alloc_addr_valid), .alloc_addr_i(lsq_alloc_addr), .alloc_data_valid_i(lsq_alloc_data_valid), .alloc_store_data_i(trace_store_data_relative), .alloc_store_mask_i({BE_WIDTH*4{1'b0}}), .addr_update_valid_i(lsq_addr_update_valid), .addr_update_tag_i(lsq_addr_update_tag), .addr_update_i(lsq_addr_update), .data_update_valid_i(lsq_data_update_valid), .data_update_tag_i(lsq_data_update_tag), .data_update_i(alu_exec_store_data), .data_mask_update_i({BE_WIDTH*4{1'b0}}), .wakeup_valid_i({BE_WIDTH{1'b0}}), .wakeup_tag_i({BE_WIDTH*TAG_WIDTH{1'b0}}), .wakeup_value_i({BE_WIDTH*32{1'b0}}), .store_commit_valid_i(rob_store_commit_valid), .store_commit_ready_o(rob_store_commit_ready), .store_commit_rob_tag_i(rob_store_commit_tag), .dcache_req_valid_o(dcache_req_valid_o), .dcache_req_ready_i(dcache_req_ready_i), .dcache_req_is_load_o(dcache_req_is_load_o), .dcache_req_is_store_o(dcache_req_is_store_o), .dcache_req_addr_o(dcache_req_addr_o), .dcache_req_size_o(dcache_req_size_o), .dcache_req_unsigned_o(dcache_req_unsigned_o), .dcache_req_mask_o(dcache_req_mask_o), .dcache_req_wdata_o(dcache_req_wdata_o), .dcache_req_rob_tag_o(dcache_req_rob_tag_o), .dcache_req_lsq_tag_o(dcache_req_lsq_tag_o), .dcache_resp_valid_i(dcache_resp_valid_i), .dcache_resp_ready_o(dcache_resp_ready_o), .dcache_resp_lsq_tag_i(dcache_resp_lsq_tag_i), .dcache_resp_addr_i(dcache_resp_addr_i), .dcache_resp_line_data_i(dcache_resp_line_data_i), .dcache_resp_word_data_i(dcache_resp_word_data_i), .dcache_resp_line_valid_i(dcache_resp_line_valid_i), .dcache_resp_error_i(dcache_resp_error_i), .load_complete_valid_o(lsq_load_complete_valid), .load_complete_ready_i(lsq_load_complete_ready), .load_complete_rob_tag_o(lsq_load_complete_tag), .load_complete_lsq_tag_o(lsq_load_complete_lsq_tag), .load_complete_value_o(lsq_load_complete_value), .load_complete_error_o(lsq_load_complete_error), .dcache_store_ack_valid_i(dcache_store_ack_valid_i), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag_i), .dcache_store_ack_error_i(dcache_store_ack_error_i), .store_ack_valid_o(lsq_store_ack_valid), .store_ack_ready_i(1'b1), .store_ack_rob_tag_o(lsq_store_ack_rob_tag), .store_ack_lsq_tag_o(lsq_store_ack_lsq_tag), .store_ack_error_o(lsq_store_ack_error), .occupancy_o(lsq_occupancy), .tail_o()
     );
 
     // Keep producer positions fixed.  The completion network already skips
@@ -1174,17 +1201,17 @@ module rv32_backend_joint #(
         end
         producer_recovery_rob_slot = 0;
         producer_recovery_age = 0;
-        producer_recovery_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head_views[4*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+        producer_recovery_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - recovery_head_views[4*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
         if (recovery_domains[6]) begin
             for (producer_recovery_index = 0; producer_recovery_index < PRODUCERS;
                  producer_recovery_index = producer_recovery_index + 1) begin
                 producer_recovery_rob_slot =
                     producer_tag_r[(producer_recovery_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH];
-                producer_recovery_age = producer_recovery_rob_slot - rob_head_views[4*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+                producer_recovery_age = producer_recovery_rob_slot - recovery_head_views[4*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
                 if (producer_valid_r[producer_recovery_index] &&
                     (!producer_tag_r[producer_recovery_index*TAG_WIDTH] ||
                      (producer_recovery_age > producer_recovery_branch_age) ||
-                     (producer_recovery_age >= rob_occupancy)))
+                     (producer_recovery_age >= recovery_descriptor_occupancy)))
                     producer_target_live_r[producer_recovery_index] = 1'b0;
             end
         end
@@ -1213,13 +1240,13 @@ module rv32_backend_joint #(
         alu_flush_r = {BE_WIDTH{flush_i}};
         alu_recovery_slot = 0;
         alu_recovery_age = 0;
-        alu_recovery_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - rob_head_views[5*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+        alu_recovery_branch_age = branch_pending_tag[3 +: ROB_SLOT_WIDTH] - recovery_head_views[5*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
         if (recovery_domains[6]) begin
             for (alu_recovery_lane = 0; alu_recovery_lane < BE_WIDTH;
                  alu_recovery_lane = alu_recovery_lane + 1) begin
                 alu_recovery_slot =
                     alu_exec_tag[alu_recovery_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH];
-                alu_recovery_age = alu_recovery_slot - rob_head_views[5*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+                alu_recovery_age = alu_recovery_slot - recovery_head_views[5*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
                 if (alu_exec_valid[alu_recovery_lane] &&
                     (alu_recovery_age >= alu_recovery_branch_age))
                     alu_flush_r[alu_recovery_lane] = 1'b1;
@@ -1339,6 +1366,22 @@ module rv32_backend_joint #(
     assign rob_store_ack_tag = lsq_store_ack_rob_tag;
 
     always @(posedge clk_i) begin
+        if(reset_i || flush_i) recovery_descriptor_valid<=1'b0;
+        else if(recovery_domains[7]) recovery_descriptor_valid<=1'b0;
+        else if(recovery_capture_domains[0]) recovery_descriptor_valid<=1'b1;
+        if(recovery_capture_domains[1]) recovery_descriptor_rat<=recovery_rat_state;
+        if(recovery_capture_domains[2]) begin
+            recovery_descriptor_reclaim<=rob_recovery_reclaim_bitmap;
+            recovery_descriptor_reclaim_count<=rob_recovery_reclaim_count;
+        end
+        if(recovery_capture_domains[3]) begin
+            recovery_descriptor_head<=rob_head_views[0 +: ROB_SLOT_WIDTH];
+            recovery_descriptor_occupancy<=rob_occupancy;
+            recovery_descriptor_rs_kill<=rs_preview_kill_mask;
+        end
+    end
+
+    always @(posedge clk_i) begin
         if (reset_i) begin
             branch_pending <= 1'b0;
             branch_pending_tag <= 0;
@@ -1374,19 +1417,17 @@ module rv32_backend_joint #(
                 rob_mem_unsigned_mem[map_index] <= 1'b0;
             end
         end else begin
-            if (recovery_domains[7] && branch_pending) begin
-                if (PREDICTOR_META != 0)
-                    branch_recovery_history_o <= (branch_pending_kind == `RV32IM_PRED_BRANCH) ?
-                        {rob_pred_metadata_mem[branch_pending_tag[3 +: ROB_SLOT_WIDTH]][14:8],
-                         branch_pending_taken} :
-                        rob_pred_metadata_mem[branch_pending_tag[3 +: ROB_SLOT_WIDTH]][15:8];
+            if (flush_i || (branch_pending && !recovery_descriptor_valid && !rob_recovery_preview)) begin
+                branch_pending <= 1'b0;
+            end else if (recovery_domains[7] && branch_pending) begin
                 // The branch is retained in the ROB by recovery and will
                 // commit on the following cycle; stop reissuing recovery.
                 branch_pending <= 1'b0;
             end else if (!branch_pending && (|(alu_exec_valid & alu_exec_redirect_valid))) begin
                 branch_capture_found = 0;
                 for (branch_lane = 0; branch_lane < BE_WIDTH; branch_lane = branch_lane + 1) begin
-                    if (!branch_capture_found && alu_exec_valid[branch_lane] &&
+                    if (!flush_i && !branch_capture_found && alu_exec_valid[branch_lane] &&
+                        alu_exec_ready[branch_lane] && branch_training_live[branch_lane] &&
                         alu_exec_redirect_valid[branch_lane]) begin
                         branch_pending <= 1'b1;
                         branch_pending_tag <= alu_exec_tag[branch_lane*TAG_WIDTH +: TAG_WIDTH];
@@ -1404,6 +1445,15 @@ module rv32_backend_joint #(
                             alu_exec_pred_taken[branch_lane] : rob_pred_taken_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
                         branch_pending_pred_target <= (RS_ISSUE_METADATA != 0) ?
                             alu_exec_pred_target[branch_lane*32 +: 32] : rob_pred_target_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                        // History must be ready BEFORE the early front-end
+                        // redirect samples it, not updated on backend apply.
+                        if(PREDICTOR_META != 0)
+                            branch_recovery_history_o <=
+                                (((RS_ISSUE_METADATA != 0) ? alu_exec_pred_kind[branch_lane*2 +: 2] :
+                                  rob_pred_kind_mem[alu_exec_tag[branch_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]]) == `RV32IM_PRED_BRANCH) ?
+                                {rob_pred_metadata_mem[alu_exec_tag[branch_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]][14:8],
+                                 alu_exec_branch_taken[branch_lane]} :
+                                rob_pred_metadata_mem[alu_exec_tag[branch_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]][15:8];
                         branch_capture_found = 1;
                     end
                 end

@@ -14,6 +14,9 @@ module rv32_rob #(
     parameter integer CHECKPOINT_WIDTH = 1024,
     parameter integer MMIO_PREDECODE = 0,
     parameter integer CHECKPOINT_IMPL = 0,
+    // Preview captures a recovery transaction; apply is a later clock edge.
+    // Default 0 preserves the standalone legacy interface behavior.
+    parameter integer STAGED_RECOVERY = 0,
     parameter integer ASAP7_FANOUT_BUFFERS = 0,
     parameter integer ROB_CONTROL_REGISTER_BANKS = 0,
     // One read per physical modulo-BE bank, then rotate into strict commit order.
@@ -82,6 +85,9 @@ module rv32_rob #(
     input  wire [BE_WIDTH-1:0]           recovery_valid_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] recovery_tag_i,
     input  wire [(BE_WIDTH*32)-1:0]      recovery_pc_i,
+    input  wire                         recovery_apply_i,
+    input  wire                         recovery_hold_i,
+    output wire                         recovery_preview_valid_o,
     output wire                         recovery_accept_o,
     output wire                         redirect_valid_o,
     output reg  [31:0]                  redirect_pc_o,
@@ -196,12 +202,43 @@ module rv32_rob #(
     reg [SLOT_WIDTH-1:0] update_completion_age;
     integer update_alloc_entry;
     reg recovery_found;
+    reg recovery_saved_valid;
+    reg [SLOT_WIDTH-1:0] recovery_saved_slot, recovery_saved_age;
+    reg [ROB_ENTRIES-1:0] recovery_saved_kill;
+    wire [ROB_ENTRIES-1:0] recovery_preview_kill;
+    wire [SLOT_WIDTH-1:0] apply_slot = STAGED_RECOVERY ? recovery_saved_slot : chosen_slot;
+    wire [SLOT_WIDTH-1:0] apply_age = STAGED_RECOVERY ? recovery_saved_age : chosen_age;
+    wire recovery_apply = STAGED_RECOVERY ?
+        (recovery_apply_i && recovery_saved_valid) : recovery_found;
+    wire recovery_hold = STAGED_RECOVERY && recovery_hold_i;
     wire [5:0] recovery_domains;
+    wire [2:0] recovery_preview_domains;
     rv32_frequency_control_tree #(.LEAVES(6)) recovery_tree (
-        .signal_i(recovery_found),.views_o(recovery_domains));
+        .signal_i(recovery_apply),.views_o(recovery_domains));
+    rv32_frequency_control_tree #(.LEAVES(3)) recovery_preview_tree (
+        .signal_i(recovery_found),.views_o(recovery_preview_domains));
+    assign recovery_preview_valid_o=recovery_preview_domains[0];
     assign recovery_accept_o=recovery_domains[0];
-    assign redirect_valid_o=recovery_domains[1];
+    assign redirect_valid_o=STAGED_RECOVERY ? recovery_preview_domains[1] : recovery_domains[1];
     assign checkpoint_restore_valid_o=recovery_domains[2];
+    genvar recovery_row;
+    generate for(recovery_row=0;recovery_row<ROB_ENTRIES;recovery_row=recovery_row+1) begin:g_recovery_descriptor
+        wire [SLOT_WIDTH-1:0] relative_age = recovery_row-head_recovery_index;
+        assign recovery_preview_kill[recovery_row] = valid_mem[recovery_row] &&
+            relative_age>chosen_age && relative_age<occupancy_reg;
+    end endgenerate
+    // Allocation and commit are held between preview and apply, so these
+    // physical slot identities cannot be reused while the mask is pending.
+    always @(posedge clk_i) begin
+        if(reset_i) recovery_saved_valid<=1'b0;
+        else if(recovery_domains[5] || !recovery_hold) recovery_saved_valid<=1'b0;
+        else if(recovery_preview_domains[0] && !recovery_saved_valid) begin
+            recovery_saved_valid<=1'b1;
+            recovery_saved_slot<=chosen_slot;
+            recovery_saved_age<=chosen_age;
+            recovery_saved_kill<=recovery_preview_kill;
+        end
+    end
     reg prefix_open;
     reg commit_break;
     reg [GENERATION_WIDTH-1:0] next_generation;
@@ -439,7 +476,7 @@ module rv32_rob #(
 
     // Recovery holds the architectural head exactly as in the legacy ROB.
     // All real replicated state uses this same transition, including stalls.
-    assign head_next = recovery_domains[3] ? head_reg :
+    assign head_next = (recovery_domains[3] || recovery_hold) ? head_reg :
         advance_slot(head_update_index, (commit_ready_i ? pop_count : 0));
 
     function [TAG_WIDTH-1:0] make_tag;
@@ -479,7 +516,7 @@ module rv32_rob #(
     assign head_o = head_views[4*SLOT_WIDTH +: SLOT_WIDTH];
     assign tail_o = tail_reg;
     assign occupancy_o = occupancy_reg;
-    assign alloc_ready_o = (alloc_count_o != 0) && !recovery_domains[3];
+    assign alloc_ready_o = (alloc_count_o != 0) && !recovery_domains[3] && !recovery_hold;
 
     genvar entry_index;
     generate
@@ -508,7 +545,7 @@ module rv32_rob #(
     generate
         for (reclaim_entry = 0; reclaim_entry < ROB_ENTRIES; reclaim_entry = reclaim_entry + 1) begin : g_reclaim_age
             wire [SLOT_WIDTH-1:0] relative_age = reclaim_entry - head_recovery_index;
-            assign reclaim_eligible[reclaim_entry] = recovery_domains[4] && valid_mem[reclaim_entry] &&
+            assign reclaim_eligible[reclaim_entry] = recovery_preview_domains[2] && valid_mem[reclaim_entry] &&
                 rd_we_mem[reclaim_entry] && (relative_age > chosen_age) && (relative_age < occupancy_reg);
         end
         for (reclaim_phys = 0; reclaim_phys < RECLAIM_LEAVES; reclaim_phys = reclaim_phys + 1) begin : g_reclaim_phys
@@ -547,7 +584,7 @@ module rv32_rob #(
         alloc_fire_o = {BE_WIDTH{1'b0}};
         alloc_tag_o = {(BE_WIDTH*TAG_WIDTH){1'b0}};
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
-        prefix_open = 1'b1;
+        prefix_open = !recovery_hold;
         allocation_count = 0;
         free_entries = ROB_ENTRIES - occupancy_reg;
         alloc_slot = 0;
@@ -589,7 +626,7 @@ module rv32_rob #(
         recovery_new_phys_o = {PHYS_ADDR_WIDTH{1'b0}};
         recovery_reclaim_bitmap_o = reclaim_bitmap;
         recovery_reclaim_count_o = reclaim_count_tree[1];
-        if (recovery_domains[4]) begin
+        if (recovery_preview_domains[2]) begin
             redirect_pc_o = recovery_pc_i[0 +: 32];
             if (CHECKPOINT_IMPL == 0)
                 checkpoint_restore_o = checkpoint_mem[chosen_slot];
@@ -619,7 +656,7 @@ module rv32_rob #(
         pop_count = 0;
         commit_slot = 0;
         commit_break = 1'b0;
-        if (!recovery_domains[5] && !halted_o && !error_o) begin
+        if (!recovery_domains[5] && !recovery_hold && !halted_o && !error_o) begin
             for (commit_lane = 0; commit_lane < BE_WIDTH; commit_lane = commit_lane + 1) begin
                 if (!commit_break) begin
                     commit_slot = head_commit_index + commit_lane;
@@ -710,10 +747,11 @@ module rv32_rob #(
             end
         end else if (recovery_domains[5]) begin
             // Keep the branch itself and all older entries; kill strict young entries.
-            branch_age = chosen_age;
+            branch_age = apply_age;
             for (reset_slot = 0; reset_slot < ROB_ENTRIES; reset_slot = reset_slot + 1) begin
                 younger_age = reset_slot - head_update_index;
-                if (valid_mem[reset_slot] && (younger_age > branch_age) && (younger_age < occupancy_reg)) begin
+                if (STAGED_RECOVERY ? recovery_saved_kill[reset_slot] :
+                    (valid_mem[reset_slot] && (younger_age > branch_age) && (younger_age < occupancy_reg))) begin
                     valid_mem[reset_slot] <= 1'b0;
                     ready_mem[reset_slot] <= 1'b0;
                     store_wait_mem[reset_slot] <= 1'b0;
@@ -744,7 +782,7 @@ module rv32_rob #(
                     end
                 end
             end
-            tail_reg <= advance_slot(chosen_slot[SLOT_WIDTH-1:0], 1);
+            tail_reg <= advance_slot(apply_slot, 1);
             occupancy_reg <= branch_age + 1;
             epoch_reg <= epoch_reg + 1'b1;
         end else begin
