@@ -1518,7 +1518,8 @@ endmodule
 
 // Owns actual architectural queue fields. The enable/hold mux is local,
 // so a shared write decision drives one input rather than every data bit.
-(* keep_hierarchy = 1 *)
+// State logic may flatten and prune unused bits. Kept inversion
+// modules inside the write trees retain the electrical domains.
 module rv32_lsq_owned_field #(parameter integer WIDTH=32) (
     input wire clk_i,write_i,
     input wire [WIDTH-1:0] data_i,

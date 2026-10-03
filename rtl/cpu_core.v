@@ -1071,7 +1071,8 @@ module rv32_decode_bundle_register #(
 endmodule
 
 // Functional state owner, not a buffer-only hierarchy boundary.
-(* keep_hierarchy = 1 *)
+// State logic may flatten and prune unused bits. Kept inversion
+// modules inside the write trees retain the electrical domains.
 module rv32_decode_field_bank #(
     parameter integer LANES=4,WIDTH=32,ROW=0,PW=(LANES<2)?1:$clog2(LANES)
 ) (

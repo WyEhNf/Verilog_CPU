@@ -355,7 +355,8 @@ module rv32_fetch_frontend #(
 endmodule
 
 // Each bank owns an actual queue field and its local write selection.
-(* keep_hierarchy = 1 *)
+// State logic may flatten and prune unused bits. Kept inversion
+// modules inside the write trees retain the electrical domains.
 module rv32_frontend_queue_payload_bank #(
     parameter integer WIDTH=32,
     parameter integer FE_WIDTH=4,
