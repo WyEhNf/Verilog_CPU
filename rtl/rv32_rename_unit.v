@@ -7,6 +7,7 @@ module rv32_rename_unit #(
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer RAT_READ_BYPASS = 0,
+    parameter integer REGISTERED_FREE_POOL = 0,
     parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS),
     parameter integer COUNT_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1)
 ) (
@@ -37,6 +38,7 @@ module rv32_rename_unit #(
     output wire [(32*PHYS_ADDR_WIDTH)-1:0] rrat_state_o,
     output wire [PHYS_REGS-1:0]           free_bitmap_state_o,
     output wire [COUNT_WIDTH-1:0]         free_count_o,
+    output wire [((BE_WIDTH<=1)?1:$clog2(BE_WIDTH+1))-1:0] allocatable_count_o,
     input  wire                           commit_valid_i,
     input  wire [BE_WIDTH-1:0]            commit_rd_we_i,
     input  wire [(BE_WIDTH*5)-1:0]        commit_rd_i,
@@ -57,7 +59,64 @@ module rv32_rename_unit #(
 
     reg [PHYS_ADDR_WIDTH-1:0] bundle_rat [0:31];
     reg [PHYS_REGS-1:0] candidate_free_bitmap;
-    reg [PHYS_ADDR_WIDTH-1:0] free_candidate [0:BE_WIDTH-1];
+    reg [PHYS_ADDR_WIDTH-1:0] raw_candidate [0:BE_WIDTH-1];
+    wire [PHYS_ADDR_WIDTH-1:0] free_candidate [0:BE_WIDTH-1];
+    reg [PHYS_ADDR_WIDTH-1:0] pool_candidate [0:BE_WIDTH-1];
+    reg [RENAME_COUNT_WIDTH-1:0] pool_count;
+    wire [PHYS_REGS-1:0] pool_bitmap;
+    reg [PHYS_REGS-1:0] pool_reserve_mask;
+    reg [RENAME_COUNT_WIDTH-1:0] pool_next_count;
+    reg [BE_WIDTH*PHYS_ADDR_WIDTH-1:0] pool_next_payload;
+    reg [BE_WIDTH-1:0] pool_write;
+    integer pool_retained,pool_refilled,pool_row,pool_source;
+    wire [COUNT_WIDTH-1:0] available_for_rename=(REGISTERED_FREE_POOL!=0)?pool_count:free_count;
+    assign allocatable_count_o=(available_for_rename>BE_WIDTH)?BE_WIDTH:available_for_rename;
+    genvar pool_index,pool_phys;
+    generate for(pool_index=0;pool_index<BE_WIDTH;pool_index=pool_index+1) begin:g_pool_slot
+        assign free_candidate[pool_index]=(REGISTERED_FREE_POOL!=0)?pool_candidate[pool_index]:raw_candidate[pool_index];
+        wire local_write;
+        rv32_frequency_control_tree #(.LEAVES(1)) write_tree (
+            .signal_i(REGISTERED_FREE_POOL!=0 && !reset_i && !restore_valid_i && pool_write[pool_index]),
+            .views_o(local_write));
+        always @(posedge clk_i) if(local_write)
+            pool_candidate[pool_index]<=pool_next_payload[pool_index*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
+    end
+    for(pool_phys=0;pool_phys<PHYS_REGS;pool_phys=pool_phys+1) begin:g_pool_bitmap
+        wire [BE_WIDTH-1:0] matches;
+        for(pool_index=0;pool_index<BE_WIDTH;pool_index=pool_index+1) begin:g_match
+            assign matches[pool_index]=(pool_index<pool_count) && pool_candidate[pool_index]==pool_phys;
+        end
+        assign pool_bitmap[pool_phys]=(pool_phys!=0) && (|matches);
+    end endgenerate
+    // The pool is not architectural allocation. Expose both unreserved and
+    // reserved-but-unused registers as free so recovery never leaks them.
+    always @* begin
+        pool_retained=pool_count-alloc_count_comb;
+        pool_refilled=0;
+        pool_reserve_mask=0;pool_next_payload=0;pool_write=0;
+        for(pool_row=0;pool_row<BE_WIDTH;pool_row=pool_row+1) begin
+            if(pool_row<pool_retained) begin
+                pool_source=pool_row+alloc_count_comb;
+                pool_next_payload[pool_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]=pool_candidate[pool_source];
+                pool_write[pool_row]=(alloc_count_comb!=0);
+            end else begin
+                pool_source=pool_row-pool_retained;
+                if(pool_source>=0 && pool_source<BE_WIDTH && raw_candidate[pool_source]!=0) begin
+                    pool_next_payload[pool_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]=raw_candidate[pool_source];
+                    pool_reserve_mask[raw_candidate[pool_source]]=1'b1;
+                    pool_write[pool_row]=1'b1;
+                    pool_refilled=pool_refilled+1;
+                end
+            end
+        end
+        pool_next_count=pool_retained+pool_refilled;
+    end
+    always @(posedge clk_i) begin
+        // Restore receives the complete logical free bitmap, including all
+        // previous pool entries. Return them and refill from that new bitmap.
+        if(reset_i || restore_valid_i || REGISTERED_FREE_POOL==0) pool_count<=0;
+        else pool_count<=pool_next_count;
+    end
     integer lane;
     integer reg_index;
     integer bypass_lane;
@@ -117,7 +176,7 @@ module rv32_rename_unit #(
         end
     end
 
-    assign free_bitmap_state_o = free_bitmap;
+    assign free_bitmap_state_o = (REGISTERED_FREE_POOL!=0)?(free_bitmap | pool_bitmap):free_bitmap;
     assign free_count_o = free_count;
 
     genvar state_index;
@@ -137,7 +196,7 @@ module rv32_rename_unit #(
         for (candidate_lane = 0; candidate_lane < BE_WIDTH;
              candidate_lane = candidate_lane + 1) begin
             selected_phys = lowest_free_phys(candidate_free_bitmap);
-            free_candidate[candidate_lane] =
+            raw_candidate[candidate_lane] =
                 selected_phys[PHYS_ADDR_WIDTH-1:0];
             candidate_free_bitmap[selected_phys] = 1'b0;
         end
@@ -167,7 +226,7 @@ module rv32_rename_unit #(
                 ((rob_used + 1) <= rob_free_count_i) &&
                 ((!decoded_rs_need_i[lane]) || ((rs_used + 1) <= rs_free_count_i)) &&
                 ((!decoded_lsq_need_i[lane]) || ((lsq_used + 1) <= lsq_free_count_i)) &&
-                ((!decoded_rd_we_i[lane]) || (decoded_rd_i[(lane*5) +: 5] == 0) || ((alloc_used + 1) <= free_count))) begin
+                ((!decoded_rd_we_i[lane]) || (decoded_rd_i[(lane*5) +: 5] == 0) || ((alloc_used + 1) <= available_for_rename))) begin
                 rename_valid_o[lane] = 1'b1;
                 rename_rd_we_o[lane] = decoded_rd_we_i[lane] && (decoded_rd_i[(lane*5) +: 5] != 0);
                 rename_rd_o[(lane*5) +: 5] = decoded_rd_i[(lane*5) +: 5];
@@ -241,11 +300,13 @@ module rv32_rename_unit #(
                 rat[restore_index] <= restore_rat_i[(restore_index*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
             rat[0] <= 0;
         end else begin
-            // Rename allocation advances RAT and the free-list head.
+            if(REGISTERED_FREE_POOL!=0) free_bitmap<=free_bitmap & ~pool_reserve_mask;
+            // Rename allocation advances RAT and consumes reserved entries.
             for (lane = 0; lane < BE_WIDTH; lane = lane + 1)
                 if (rename_valid_o[lane] && rename_rd_we_o[lane]) begin
                     rat[rename_rd_o[(lane*5) +: 5]] <= rename_new_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
-                    free_bitmap[rename_new_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]] <= 1'b0;
+                    if(REGISTERED_FREE_POOL==0)
+                        free_bitmap[rename_new_phys_o[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]] <= 1'b0;
                 end
 
             release_used = 0;

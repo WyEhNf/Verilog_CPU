@@ -543,7 +543,10 @@ module rv32_backend_joint #(
     reg [BE_WIDTH-1:0] alu_flush_r;
     reg [BE_WIDTH-1:0] trace_ready_r;
     localparam integer CREDIT_WIDTH=(BE_WIDTH<=1)?1:$clog2(BE_WIDTH+1);
-    reg [CREDIT_WIDTH-1:0] rob_credit, rs_credit, lsq_credit, phys_credit;
+    reg [CREDIT_WIDTH-1:0] rob_credit, rs_credit, lsq_credit;
+    // A registered reservoir count is already a ready boundary. Do not add
+    // another conservative lag that would halve full-width allocation.
+    wire [CREDIT_WIDTH-1:0] phys_credit;
     reg [CREDIT_WIDTH-1:0] used_rob_credit, used_rs_credit, used_lsq_credit, used_phys_credit;
     integer credit_lane;
     function [CREDIT_WIDTH-1:0] bounded_credit;
@@ -572,12 +575,11 @@ module rv32_backend_joint #(
     end
     always @(posedge clk_i) begin
         if(reset_i || flush_i) begin
-            rob_credit<=0;rs_credit<=0;lsq_credit<=0;phys_credit<=0;
+            rob_credit<=0;rs_credit<=0;lsq_credit<=0;
         end else begin
             rob_credit<=bounded_credit(rob_free_count,used_rob_credit);
             rs_credit<=bounded_credit(rs_free_count,used_rs_credit);
             lsq_credit<=bounded_credit(lsq_free_count,used_lsq_credit);
-            phys_credit<=bounded_credit({{(16-FREE_COUNT_WIDTH){1'b0}},free_count},used_phys_credit);
         end
     end
     reg [BE_WIDTH-1:0] completion_valid_r, completion_done_r, completion_error_r;
@@ -1012,7 +1014,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rename_unit #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .RAT_READ_BYPASS(RAT_READ_BYPASS)) rename (
+    rv32_rename_unit #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .RAT_READ_BYPASS(RAT_READ_BYPASS), .REGISTERED_FREE_POOL(1)) rename (
         .clk_i(clk_i), .reset_i(reset_i), .rename_ready_i(!halted_o && !flush_i && !branch_busy_domains[1]),
         .decoded_valid_i(dec_valid), .decoded_rd_we_i(dec_rd_we), .decoded_rs1_used_i(dec_rs1_used), .decoded_rs2_used_i(dec_rs2_used),
         .decoded_rs_need_i(dec_rs_need), .decoded_lsq_need_i(dec_lsq_need), .decoded_rd_i(dec_rd), .decoded_rs1_i(dec_rs1), .decoded_rs2_i(dec_rs2),
@@ -1021,7 +1023,7 @@ module rv32_backend_joint #(
         .lsq_free_count_i({{(16-CREDIT_WIDTH){1'b0}},lsq_credit}),
         .rename_valid_o(rename_valid), .rename_rd_we_o(rename_rd_we), .rename_rd_o(rename_rd), .rename_old_phys_o(rename_old_phys), .rename_new_phys_o(rename_new_phys),
         .rename_rs1_phys_o(rename_rs1_phys), .rename_rs2_phys_o(rename_rs2_phys), .rename_count_o(rename_count), .rat_state_o(rat_state), .rrat_state_o(rrat_state),
-        .free_bitmap_state_o(free_bitmap_state), .free_count_o(free_count),
+        .free_bitmap_state_o(free_bitmap_state), .free_count_o(free_count), .allocatable_count_o(phys_credit),
         .commit_valid_i((|rob_commit_valid) && commit_ready_i), .commit_rd_we_i(rob_commit_rd_we), .commit_rd_i(rob_commit_rd),
         .commit_old_phys_i(commit_old_phys), .commit_new_phys_i(commit_new_phys),
         .restore_valid_i(rob_checkpoint_restore_valid), .restore_rat_i(recovery_descriptor_rat),
