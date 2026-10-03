@@ -71,8 +71,16 @@ module rv32_rename_unit #(
     integer pool_retained,pool_refilled,pool_row,pool_source;
     wire [COUNT_WIDTH-1:0] available_for_rename=(REGISTERED_FREE_POOL!=0)?pool_count:free_count;
     assign allocatable_count_o=(available_for_rename>BE_WIDTH)?BE_WIDTH:available_for_rename;
+    wire [BE_WIDTH*PHYS_ADDR_WIDTH-1:0] pool_ids,pool_ids_local;
+    wire [BE_WIDTH-1:0] pool_valid,pool_valid_local;
+    rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*PHYS_ADDR_WIDTH),.LEAVES(1)) pool_id_tree (
+        .signal_i(pool_ids),.views_o(pool_ids_local));
+    rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(1)) pool_valid_tree (
+        .signal_i(pool_valid),.views_o(pool_valid_local));
     genvar pool_index,pool_phys;
     generate for(pool_index=0;pool_index<BE_WIDTH;pool_index=pool_index+1) begin:g_pool_slot
+        assign pool_ids[pool_index*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]=pool_candidate[pool_index];
+        assign pool_valid[pool_index]=pool_index<pool_count;
         assign free_candidate[pool_index]=(REGISTERED_FREE_POOL!=0)?pool_candidate[pool_index]:raw_candidate[pool_index];
         wire local_write;
         rv32_frequency_control_tree #(.LEAVES(1)) write_tree (
@@ -84,7 +92,7 @@ module rv32_rename_unit #(
     for(pool_phys=0;pool_phys<PHYS_REGS;pool_phys=pool_phys+1) begin:g_pool_bitmap
         wire [BE_WIDTH-1:0] matches;
         for(pool_index=0;pool_index<BE_WIDTH;pool_index=pool_index+1) begin:g_match
-            assign matches[pool_index]=(pool_index<pool_count) && pool_candidate[pool_index]==pool_phys;
+            assign matches[pool_index]=pool_valid_local[pool_index] && pool_ids_local[pool_index*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==pool_phys;
         end
         assign pool_bitmap[pool_phys]=(pool_phys!=0) && (|matches);
     end endgenerate

@@ -849,7 +849,7 @@ module rv32_backend_joint #(
     // and returns only destinations allocated by the killed younger suffix.
     wire [CHECK_RAT_WIDTH-1:0] parallel_recovery_rat;
     generate if (RAT_RECOVERY_IMPL != 0 && CHECKPOINT_IMPL != 0) begin : g_parallel_rat_recovery
-        rv32_rat_recovery #(.ROB_ENTRIES(ROB_ENTRIES), .PAW(PAW), .IMPL(1)) rat_recovery (
+        rv32_rat_recovery #(.ROB_ENTRIES(ROB_ENTRIES), .PAW(PAW), .IMPL(2)) rat_recovery (
             .rat_i(rat_state), .head_i(rob_head_views[0 +: ROB_SLOT_WIDTH]),
             .branch_slot_i(recovery_tag_views[TAG_WIDTH+3 +: ROB_SLOT_WIDTH]),
             .occupancy_i(rob_occupancy), .valid_i(rob_entry_valid),
@@ -1030,7 +1030,7 @@ module rv32_backend_joint #(
         .restore_free_bitmap_i(recovery_free_bitmap), .restore_free_count_i(recovery_free_count)
     );
 
-    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL)) prf (
+    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL), .LOCAL_VALUE_ROWS(1)) prf (
         .clk_i(clk_i), .reset_i(reset_i), .read_phys_i(prf_read_phys), .read_data_o(prf_read_data), .read_ready_o(prf_read_ready),
         .alloc_phys_i(prf_alloc_phys), .alloc_valid_i(prf_alloc_valid), .write_phys_i(prf_write_phys), .write_data_i(prf_write_data), .write_valid_i(prf_write_valid)
     );
