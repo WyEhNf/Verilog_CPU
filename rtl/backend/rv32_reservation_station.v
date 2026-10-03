@@ -15,6 +15,7 @@ module rv32_reservation_station #(
     parameter integer WAKE_MUX_IMPL = 0,
     parameter integer ALLOC_STATIC_WRITE = 0,
     parameter integer AGE_ORDER_MATRIX = 0,
+    parameter integer LOCAL_PAYLOAD_ROWS = 0,
     parameter integer SLOT_WIDTH = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES),
     parameter integer AGE_WIDTH = 32
 ) (
@@ -69,22 +70,36 @@ module rv32_reservation_station #(
     localparam integer ALLOC_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
 
     reg valid_mem [0:ENTRIES-1];
-    reg target_live_mem [0:ENTRIES-1];
-    reg [OP_WIDTH-1:0] op_mem [0:ENTRIES-1];
-    reg [31:0] pc_mem [0:ENTRIES-1];
-    reg [TAG_WIDTH-1:0] rob_tag_mem [0:ENTRIES-1];
-    reg [PHYS_ADDR_WIDTH-1:0] phys_rd_mem [0:ENTRIES-1];
-    reg [31:0] src1_value_mem [0:ENTRIES-1];
-    reg [TAG_WIDTH-1:0] src1_tag_mem [0:ENTRIES-1];
-    reg src1_ready_mem [0:ENTRIES-1];
-    reg [31:0] src2_value_mem [0:ENTRIES-1];
-    reg [TAG_WIDTH-1:0] src2_tag_mem [0:ENTRIES-1];
-    reg src2_ready_mem [0:ENTRIES-1];
-    reg [STORE_DATA_WIDTH-1:0] store_data_mem [0:ENTRIES-1];
+    wire target_live_mem [0:ENTRIES-1];
+    reg target_live_mem_legacy [0:ENTRIES-1];
+    wire [OP_WIDTH-1:0] op_mem [0:ENTRIES-1];
+    reg [OP_WIDTH-1:0] op_mem_legacy [0:ENTRIES-1];
+    wire [31:0] pc_mem [0:ENTRIES-1];
+    reg [31:0] pc_mem_legacy [0:ENTRIES-1];
+    wire [TAG_WIDTH-1:0] rob_tag_mem [0:ENTRIES-1];
+    reg [TAG_WIDTH-1:0] rob_tag_mem_legacy [0:ENTRIES-1];
+    wire [PHYS_ADDR_WIDTH-1:0] phys_rd_mem [0:ENTRIES-1];
+    reg [PHYS_ADDR_WIDTH-1:0] phys_rd_mem_legacy [0:ENTRIES-1];
+    wire [31:0] src1_value_mem [0:ENTRIES-1];
+    reg [31:0] src1_value_mem_legacy [0:ENTRIES-1];
+    wire [TAG_WIDTH-1:0] src1_tag_mem [0:ENTRIES-1];
+    reg [TAG_WIDTH-1:0] src1_tag_mem_legacy [0:ENTRIES-1];
+    wire src1_ready_mem [0:ENTRIES-1];
+    reg src1_ready_mem_legacy [0:ENTRIES-1];
+    wire [31:0] src2_value_mem [0:ENTRIES-1];
+    reg [31:0] src2_value_mem_legacy [0:ENTRIES-1];
+    wire [TAG_WIDTH-1:0] src2_tag_mem [0:ENTRIES-1];
+    reg [TAG_WIDTH-1:0] src2_tag_mem_legacy [0:ENTRIES-1];
+    wire src2_ready_mem [0:ENTRIES-1];
+    reg src2_ready_mem_legacy [0:ENTRIES-1];
+    wire [STORE_DATA_WIDTH-1:0] store_data_mem [0:ENTRIES-1];
+    reg [STORE_DATA_WIDTH-1:0] store_data_mem_legacy [0:ENTRIES-1];
     // Opaque dispatch information follows the same allocation, selection and
     // recovery ownership as the operands. Invalid entry payload is undefined.
-    reg [METADATA_WIDTH-1:0] metadata_mem [0:ENTRIES-1];
-    reg [AGE_WIDTH-1:0] age_mem [0:ENTRIES-1];
+    wire [METADATA_WIDTH-1:0] metadata_mem [0:ENTRIES-1];
+    reg [METADATA_WIDTH-1:0] metadata_mem_legacy [0:ENTRIES-1];
+    wire [AGE_WIDTH-1:0] age_mem [0:ENTRIES-1];
+    reg [AGE_WIDTH-1:0] age_mem_legacy [0:ENTRIES-1];
     reg src1_ready_effective [0:ENTRIES-1];
     reg [31:0] src1_value_effective [0:ENTRIES-1];
     reg src2_ready_effective [0:ENTRIES-1];
@@ -266,12 +281,15 @@ module rv32_reservation_station #(
                 if (al == BE_WIDTH-1) assign grants[al] = allocation_match_bits[al];
                 else assign grants[al] = allocation_match_bits[al] && !(|allocation_match_bits[BE_WIDTH-1:al+1]);
             end
+            wire [BE_WIDTH-1:0] payload_grants;
+            rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(1)) grant_tree (
+                .signal_i(grants),.views_o(payload_grants));
             reg [ALLOC_PAYLOAD_WIDTH-1:0] payload;
             integer mux_lane;
             always @* begin
                 payload = 0;
                 for (mux_lane = 0; mux_lane < BE_WIDTH; mux_lane = mux_lane + 1)
-                    payload = payload | ({ALLOC_PAYLOAD_WIDTH{grants[mux_lane]}} & alloc_lane_payload[mux_lane]);
+                    payload = payload | ({ALLOC_PAYLOAD_WIDTH{payload_grants[mux_lane]}} & alloc_lane_payload[mux_lane]);
             end
             assign alloc_row_grants[ar] = grants;
             assign alloc_row_write[ar] = |allocation_match_bits;
@@ -332,6 +350,68 @@ module rv32_reservation_station #(
                 assign cached_age_precedes[pair_low][pair_high] = low_precedes_high;
                 assign cached_age_precedes[pair_high][pair_low] = !low_precedes_high;
             end
+        end
+    end endgenerate
+
+    genvar owner_row, owner_lane;
+    generate for(owner_row=0;owner_row<ENTRIES;owner_row=owner_row+1) begin:g_payload_owner
+        if(LOCAL_PAYLOAD_ROWS!=0 && ALLOC_STATIC_WRITE!=0) begin:g_local
+            wire [BE_WIDTH-1:0] issued_here;
+            for(owner_lane=0;owner_lane<BE_WIDTH;owner_lane=owner_lane+1) begin:g_issue
+                assign issued_here[owner_lane]=issue_valid_o[owner_lane] && issue_ready_i[owner_lane] &&
+                    issue_slot_o[owner_lane*SLOT_WIDTH +: SLOT_WIDTH]==owner_row;
+            end
+            wire [WAKE_WIDTH-1:0] match1,match2;
+            wire [31:0] last1,last2;
+            if(WAKE_MUX_IMPL!=0) begin:g_shared_wake
+                assign match1=wake1_match[owner_row];assign match2=wake2_match[owner_row];
+                assign last1=wake1_last[owner_row];assign last2=wake2_last[owner_row];
+            end else begin:g_legacy_wake
+                reg [31:0] value1,value2;
+                integer wake_port;
+                for(owner_lane=0;owner_lane<WAKE_WIDTH;owner_lane=owner_lane+1) begin:g_match
+                    assign match1[owner_lane]=wake_valid_i[owner_lane] && wake_tag_i[owner_lane*TAG_WIDTH] &&
+                        src1_tag_mem[owner_row][0] && wake_tag_i[owner_lane*TAG_WIDTH +: TAG_WIDTH]==src1_tag_mem[owner_row];
+                    assign match2[owner_lane]=wake_valid_i[owner_lane] && wake_tag_i[owner_lane*TAG_WIDTH] &&
+                        src2_tag_mem[owner_row][0] && wake_tag_i[owner_lane*TAG_WIDTH +: TAG_WIDTH]==src2_tag_mem[owner_row];
+                end
+                always @* begin
+                    value1=0;value2=0;
+                    for(wake_port=0;wake_port<WAKE_WIDTH;wake_port=wake_port+1) begin
+                        if(match1[wake_port]) value1=wake_value_i[wake_port*32 +: 32];
+                        if(match2[wake_port]) value2=wake_value_i[wake_port*32 +: 32];
+                    end
+                end
+                assign last1=value1;assign last2=value2;
+            end
+            rv32_rs_payload_row #(.OP_WIDTH(OP_WIDTH),.TAG_WIDTH(TAG_WIDTH),
+                .PHYS_ADDR_WIDTH(PHYS_ADDR_WIDTH),.STORE_DATA_WIDTH(STORE_DATA_WIDTH),
+                .METADATA_WIDTH(METADATA_WIDTH),.AGE_WIDTH(AGE_WIDTH),
+                .PAYLOAD_WIDTH(ALLOC_PAYLOAD_WIDTH)) row (
+                .clk_i(clk_i),.reset_i(reset_i),.flush_i(flush_valid_i),
+                .kill_i(flush_kill_mask_i[owner_row]),.valid_i(valid_mem[owner_row]),.issue_i(|issued_here),
+                .alloc_i(alloc_row_write[owner_row]),.payload_i(alloc_row_payload[owner_row]),
+                .wake1_i(|match1),.wake2_i(|match2),.wake1_value_i(last1),.wake2_value_i(last2),
+                .target_live_o(target_live_mem[owner_row]),.op_o(op_mem[owner_row]),.pc_o(pc_mem[owner_row]),
+                .rob_tag_o(rob_tag_mem[owner_row]),.phys_rd_o(phys_rd_mem[owner_row]),
+                .src1_value_o(src1_value_mem[owner_row]),.src1_tag_o(src1_tag_mem[owner_row]),.src1_ready_o(src1_ready_mem[owner_row]),
+                .src2_value_o(src2_value_mem[owner_row]),.src2_tag_o(src2_tag_mem[owner_row]),.src2_ready_o(src2_ready_mem[owner_row]),
+                .store_data_o(store_data_mem[owner_row]),.metadata_o(metadata_mem[owner_row]),.age_o(age_mem[owner_row]));
+        end else begin:g_legacy
+            assign target_live_mem[owner_row]=target_live_mem_legacy[owner_row];
+            assign op_mem[owner_row]=op_mem_legacy[owner_row];
+            assign pc_mem[owner_row]=pc_mem_legacy[owner_row];
+            assign rob_tag_mem[owner_row]=rob_tag_mem_legacy[owner_row];
+            assign phys_rd_mem[owner_row]=phys_rd_mem_legacy[owner_row];
+            assign src1_value_mem[owner_row]=src1_value_mem_legacy[owner_row];
+            assign src1_tag_mem[owner_row]=src1_tag_mem_legacy[owner_row];
+            assign src1_ready_mem[owner_row]=src1_ready_mem_legacy[owner_row];
+            assign src2_value_mem[owner_row]=src2_value_mem_legacy[owner_row];
+            assign src2_tag_mem[owner_row]=src2_tag_mem_legacy[owner_row];
+            assign src2_ready_mem[owner_row]=src2_ready_mem_legacy[owner_row];
+            assign store_data_mem[owner_row]=store_data_mem_legacy[owner_row];
+            assign metadata_mem[owner_row]=metadata_mem_legacy[owner_row];
+            assign age_mem[owner_row]=age_mem_legacy[owner_row];
         end
     end endgenerate
 
@@ -433,10 +513,10 @@ for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
             age_counter <= 0;
             for (reset_slot = 0; reset_slot < ENTRIES; reset_slot = reset_slot + 1) begin
                 valid_mem[reset_slot] <= 1'b0;
-                target_live_mem[reset_slot] <= 1'b0;
-                src1_ready_mem[reset_slot] <= 1'b0;
-                src2_ready_mem[reset_slot] <= 1'b0;
-                age_mem[reset_slot] <= 0;
+                target_live_mem_legacy[reset_slot] <= 1'b0;
+                src1_ready_mem_legacy[reset_slot] <= 1'b0;
+                src2_ready_mem_legacy[reset_slot] <= 1'b0;
+                age_mem_legacy[reset_slot] <= 0;
             end
         end else if (flush_valid_i) begin
             flush_count = 0;
@@ -444,32 +524,32 @@ for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
             for (reset_slot = 0; reset_slot < ENTRIES; reset_slot = reset_slot + 1) begin
                 if (flush_kill_mask_i[reset_slot]) begin
                     valid_mem[reset_slot] <= 1'b0;
-                    target_live_mem[reset_slot] <= 1'b0;
+                    target_live_mem_legacy[reset_slot] <= 1'b0;
                     flush_count = flush_count + 1;
                 end else if (valid_mem[reset_slot]) begin
                     remaining_count = remaining_count + 1;
                     if (WAKE_MUX_IMPL != 0) begin
-                    if (!src1_ready_mem[reset_slot] && (|wake1_match[reset_slot])) begin
-                        src1_ready_mem[reset_slot] <= 1'b1;
-                        src1_value_mem[reset_slot] <= wake1_last[reset_slot];
+                    if (!src1_ready_mem_legacy[reset_slot] && (|wake1_match[reset_slot])) begin
+                        src1_ready_mem_legacy[reset_slot] <= 1'b1;
+                        src1_value_mem_legacy[reset_slot] <= wake1_last[reset_slot];
                     end
-                    if (!src2_ready_mem[reset_slot] && (|wake2_match[reset_slot])) begin
-                        src2_ready_mem[reset_slot] <= 1'b1;
-                        src2_value_mem[reset_slot] <= wake2_last[reset_slot];
+                    if (!src2_ready_mem_legacy[reset_slot] && (|wake2_match[reset_slot])) begin
+                        src2_ready_mem_legacy[reset_slot] <= 1'b1;
+                        src2_value_mem_legacy[reset_slot] <= wake2_last[reset_slot];
                     end
                 end else begin
 for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
-                        if (!src1_ready_mem[reset_slot] && wake_valid_i[wake_lane] &&
-                            wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[reset_slot] &&
-                            wake_tag_i[(wake_lane*TAG_WIDTH)] && src1_tag_mem[reset_slot][0]) begin
-                            src1_ready_mem[reset_slot] <= 1'b1;
-                            src1_value_mem[reset_slot] <= wake_value_i[(wake_lane*32) +: 32];
+                        if (!src1_ready_mem_legacy[reset_slot] && wake_valid_i[wake_lane] &&
+                            wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem_legacy[reset_slot] &&
+                            wake_tag_i[(wake_lane*TAG_WIDTH)] && src1_tag_mem_legacy[reset_slot][0]) begin
+                            src1_ready_mem_legacy[reset_slot] <= 1'b1;
+                            src1_value_mem_legacy[reset_slot] <= wake_value_i[(wake_lane*32) +: 32];
                         end
-                        if (!src2_ready_mem[reset_slot] && wake_valid_i[wake_lane] &&
-                            wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[reset_slot] &&
-                            wake_tag_i[(wake_lane*TAG_WIDTH)] && src2_tag_mem[reset_slot][0]) begin
-                            src2_ready_mem[reset_slot] <= 1'b1;
-                            src2_value_mem[reset_slot] <= wake_value_i[(wake_lane*32) +: 32];
+                        if (!src2_ready_mem_legacy[reset_slot] && wake_valid_i[wake_lane] &&
+                            wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem_legacy[reset_slot] &&
+                            wake_tag_i[(wake_lane*TAG_WIDTH)] && src2_tag_mem_legacy[reset_slot][0]) begin
+                            src2_ready_mem_legacy[reset_slot] <= 1'b1;
+                            src2_value_mem_legacy[reset_slot] <= wake_value_i[(wake_lane*32) +: 32];
                         end
                     end
                 end
@@ -480,23 +560,23 @@ for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
             for (wake_slot = 0; wake_slot < ENTRIES; wake_slot = wake_slot + 1) begin
                 if (valid_mem[wake_slot]) begin
                     if (WAKE_MUX_IMPL != 0) begin
-                    if (!src1_ready_mem[wake_slot] && (|wake1_match[wake_slot])) begin
-                        src1_ready_mem[wake_slot] <= 1'b1;
-                        src1_value_mem[wake_slot] <= wake1_last[wake_slot];
+                    if (!src1_ready_mem_legacy[wake_slot] && (|wake1_match[wake_slot])) begin
+                        src1_ready_mem_legacy[wake_slot] <= 1'b1;
+                        src1_value_mem_legacy[wake_slot] <= wake1_last[wake_slot];
                     end
-                    if (!src2_ready_mem[wake_slot] && (|wake2_match[wake_slot])) begin
-                        src2_ready_mem[wake_slot] <= 1'b1;
-                        src2_value_mem[wake_slot] <= wake2_last[wake_slot];
+                    if (!src2_ready_mem_legacy[wake_slot] && (|wake2_match[wake_slot])) begin
+                        src2_ready_mem_legacy[wake_slot] <= 1'b1;
+                        src2_value_mem_legacy[wake_slot] <= wake2_last[wake_slot];
                     end
                 end else begin
 for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
-                        if (!src1_ready_mem[wake_slot] && wake_valid_i[wake_lane] && wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[wake_slot] && wake_tag_i[(wake_lane*TAG_WIDTH)] && src1_tag_mem[wake_slot][0]) begin
-                            src1_ready_mem[wake_slot] <= 1'b1;
-                            src1_value_mem[wake_slot] <= wake_value_i[(wake_lane*32) +: 32];
+                        if (!src1_ready_mem_legacy[wake_slot] && wake_valid_i[wake_lane] && wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem_legacy[wake_slot] && wake_tag_i[(wake_lane*TAG_WIDTH)] && src1_tag_mem_legacy[wake_slot][0]) begin
+                            src1_ready_mem_legacy[wake_slot] <= 1'b1;
+                            src1_value_mem_legacy[wake_slot] <= wake_value_i[(wake_lane*32) +: 32];
                         end
-                        if (!src2_ready_mem[wake_slot] && wake_valid_i[wake_lane] && wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[wake_slot] && wake_tag_i[(wake_lane*TAG_WIDTH)] && src2_tag_mem[wake_slot][0]) begin
-                            src2_ready_mem[wake_slot] <= 1'b1;
-                            src2_value_mem[wake_slot] <= wake_value_i[(wake_lane*32) +: 32];
+                        if (!src2_ready_mem_legacy[wake_slot] && wake_valid_i[wake_lane] && wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem_legacy[wake_slot] && wake_tag_i[(wake_lane*TAG_WIDTH)] && src2_tag_mem_legacy[wake_slot][0]) begin
+                            src2_ready_mem_legacy[wake_slot] <= 1'b1;
+                            src2_value_mem_legacy[wake_slot] <= wake_value_i[(wake_lane*32) +: 32];
                         end
                     end
                 end
@@ -506,11 +586,11 @@ for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
                 for (alloc_static_row = 0; alloc_static_row < ENTRIES; alloc_static_row = alloc_static_row + 1) begin
                     if (alloc_row_write[alloc_static_row]) begin
                         valid_mem[alloc_static_row] <= 1'b1;
-                        {target_live_mem[alloc_static_row], op_mem[alloc_static_row],
-                         pc_mem[alloc_static_row], rob_tag_mem[alloc_static_row], phys_rd_mem[alloc_static_row],
-                         src1_value_mem[alloc_static_row], src1_tag_mem[alloc_static_row], src1_ready_mem[alloc_static_row],
-                         src2_value_mem[alloc_static_row], src2_tag_mem[alloc_static_row], src2_ready_mem[alloc_static_row],
-                         store_data_mem[alloc_static_row], metadata_mem[alloc_static_row], age_mem[alloc_static_row]}
+                        {target_live_mem_legacy[alloc_static_row], op_mem_legacy[alloc_static_row],
+                         pc_mem_legacy[alloc_static_row], rob_tag_mem_legacy[alloc_static_row], phys_rd_mem_legacy[alloc_static_row],
+                         src1_value_mem_legacy[alloc_static_row], src1_tag_mem_legacy[alloc_static_row], src1_ready_mem_legacy[alloc_static_row],
+                         src2_value_mem_legacy[alloc_static_row], src2_tag_mem_legacy[alloc_static_row], src2_ready_mem_legacy[alloc_static_row],
+                         store_data_mem_legacy[alloc_static_row], metadata_mem_legacy[alloc_static_row], age_mem_legacy[alloc_static_row]}
                             <= alloc_row_payload[alloc_static_row];
                     end
                 end
@@ -528,31 +608,96 @@ for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
                     end
                     alloc_cursor = alloc_slot + 1;
                     valid_mem[alloc_slot] <= 1'b1;
-                    target_live_mem[alloc_slot] <= alloc_target_live_i[lane] && alloc_rob_tag_i[(lane*TAG_WIDTH)];
-                    op_mem[alloc_slot] <= alloc_op_i[(lane*OP_WIDTH) +: OP_WIDTH];
-                    pc_mem[alloc_slot] <= alloc_pc_i[(lane*32) +: 32];
-                    rob_tag_mem[alloc_slot] <= alloc_rob_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH];
-                    phys_rd_mem[alloc_slot] <= alloc_phys_rd_i[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
-                    src1_value_mem[alloc_slot] <= alloc_src1_value_i[(lane*32) +: 32];
-                    src1_tag_mem[alloc_slot] <= alloc_src1_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH];
-                    src1_ready_mem[alloc_slot] <= alloc_src1_ready_i[lane];
-                    src2_value_mem[alloc_slot] <= alloc_src2_value_i[(lane*32) +: 32];
-                    src2_tag_mem[alloc_slot] <= alloc_src2_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH];
-                    src2_ready_mem[alloc_slot] <= alloc_src2_ready_i[lane];
-                    store_data_mem[alloc_slot] <= alloc_store_data_i[(lane*STORE_DATA_WIDTH) +: STORE_DATA_WIDTH];
-                    metadata_mem[alloc_slot] <= alloc_metadata_i[(lane*METADATA_WIDTH) +: METADATA_WIDTH];
-                    age_mem[alloc_slot] <= age_counter + lane;
+                    target_live_mem_legacy[alloc_slot] <= alloc_target_live_i[lane] && alloc_rob_tag_i[(lane*TAG_WIDTH)];
+                    op_mem_legacy[alloc_slot] <= alloc_op_i[(lane*OP_WIDTH) +: OP_WIDTH];
+                    pc_mem_legacy[alloc_slot] <= alloc_pc_i[(lane*32) +: 32];
+                    rob_tag_mem_legacy[alloc_slot] <= alloc_rob_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH];
+                    phys_rd_mem_legacy[alloc_slot] <= alloc_phys_rd_i[(lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
+                    src1_value_mem_legacy[alloc_slot] <= alloc_src1_value_i[(lane*32) +: 32];
+                    src1_tag_mem_legacy[alloc_slot] <= alloc_src1_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH];
+                    src1_ready_mem_legacy[alloc_slot] <= alloc_src1_ready_i[lane];
+                    src2_value_mem_legacy[alloc_slot] <= alloc_src2_value_i[(lane*32) +: 32];
+                    src2_tag_mem_legacy[alloc_slot] <= alloc_src2_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH];
+                    src2_ready_mem_legacy[alloc_slot] <= alloc_src2_ready_i[lane];
+                    store_data_mem_legacy[alloc_slot] <= alloc_store_data_i[(lane*STORE_DATA_WIDTH) +: STORE_DATA_WIDTH];
+                    metadata_mem_legacy[alloc_slot] <= alloc_metadata_i[(lane*METADATA_WIDTH) +: METADATA_WIDTH];
+                    age_mem_legacy[alloc_slot] <= age_counter + lane;
                 end
             end
             end
             for (issue_slot = 0; issue_slot < BE_WIDTH; issue_slot = issue_slot + 1) begin
                 if (issue_valid_o[issue_slot] && issue_ready_i[issue_slot]) begin
                     valid_mem[issue_slot_o[(issue_slot*SLOT_WIDTH) +: SLOT_WIDTH]] <= 1'b0;
-                    target_live_mem[issue_slot_o[(issue_slot*SLOT_WIDTH) +: SLOT_WIDTH]] <= 1'b0;
+                    target_live_mem_legacy[issue_slot_o[(issue_slot*SLOT_WIDTH) +: SLOT_WIDTH]] <= 1'b0;
                 end
             end
             age_counter <= age_counter + allocation_count;
             occupancy_reg <= occupancy_reg + allocation_count - issue_fire_count;
+        end
+    end
+endmodule
+
+// Each row owns its final data writes. Wide metadata has no reset/flush
+// feedback mux after its qualified and priced local write driver.
+module rv32_rs_payload_row #(
+    parameter integer OP_WIDTH=6,TAG_WIDTH=17,PHYS_ADDR_WIDTH=6,
+    parameter integer STORE_DATA_WIDTH=32,METADATA_WIDTH=70,AGE_WIDTH=8,
+    parameter integer PAYLOAD_WIDTH=272
+) (
+    input wire clk_i,reset_i,flush_i,kill_i,valid_i,issue_i,alloc_i,
+    input wire [PAYLOAD_WIDTH-1:0] payload_i,
+    input wire wake1_i,wake2_i,
+    input wire [31:0] wake1_value_i,wake2_value_i,
+    output reg target_live_o,
+    output reg [OP_WIDTH-1:0] op_o,
+    output reg [31:0] pc_o,src1_value_o,src2_value_o,
+    output reg [TAG_WIDTH-1:0] rob_tag_o,src1_tag_o,src2_tag_o,
+    output reg [PHYS_ADDR_WIDTH-1:0] phys_rd_o,
+    output reg src1_ready_o,src2_ready_o,
+    output reg [STORE_DATA_WIDTH-1:0] store_data_o,
+    output reg [METADATA_WIDTH-1:0] metadata_o,
+    output reg [AGE_WIDTH-1:0] age_o
+);
+    wire new_live,new_ready1,new_ready2;
+    wire [OP_WIDTH-1:0] new_op;
+    wire [31:0] new_pc,new_value1,new_value2;
+    wire [TAG_WIDTH-1:0] new_tag,new_tag1,new_tag2;
+    wire [PHYS_ADDR_WIDTH-1:0] new_phys;
+    wire [STORE_DATA_WIDTH-1:0] new_store;
+    wire [METADATA_WIDTH-1:0] new_metadata;
+    wire [AGE_WIDTH-1:0] new_age;
+    assign {new_live,new_op,new_pc,new_tag,new_phys,new_value1,new_tag1,new_ready1,
+            new_value2,new_tag2,new_ready2,new_store,new_metadata,new_age}=payload_i;
+    wire allocation=!reset_i && !flush_i && alloc_i;
+    wire wake_allowed=!reset_i && valid_i && (!flush_i || !kill_i);
+    wire wake1_write=wake_allowed && !src1_ready_o && wake1_i;
+    wire wake2_write=wake_allowed && !src2_ready_o && wake2_i;
+    wire [5:0] alloc_views;
+    wire src1_write,src2_write;
+    rv32_frequency_control_tree #(.LEAVES(6)) allocation_tree (
+        .signal_i(allocation),.views_o(alloc_views));
+    rv32_frequency_control_tree #(.LEAVES(1)) value1_tree (
+        .signal_i(allocation || wake1_write),.views_o(src1_write));
+    rv32_frequency_control_tree #(.LEAVES(1)) value2_tree (
+        .signal_i(allocation || wake2_write),.views_o(src2_write));
+    // Allocation wins over a simultaneous wake, exactly as the old NBA order.
+    always @(posedge clk_i) begin
+        if(alloc_views[0]) {op_o,pc_o,rob_tag_o,phys_rd_o,store_data_o,metadata_o}<=
+            {new_op,new_pc,new_tag,new_phys,new_store,new_metadata};
+        if(alloc_views[1]) src1_tag_o<=new_tag1;
+        if(alloc_views[2]) src2_tag_o<=new_tag2;
+        if(src1_write) src1_value_o<=alloc_views[3]?new_value1:wake1_value_i;
+        if(src2_write) src2_value_o<=alloc_views[4]?new_value2:wake2_value_i;
+        if(reset_i) begin
+            target_live_o<=0;src1_ready_o<=0;src2_ready_o<=0;age_o<=0;
+        end else begin
+            if(alloc_views[5]) begin
+                target_live_o<=new_live;src1_ready_o<=new_ready1;src2_ready_o<=new_ready2;age_o<=new_age;
+            end else begin
+                if(wake1_write) src1_ready_o<=1;
+                if(wake2_write) src2_ready_o<=1;
+            end
+            if((flush_i && kill_i) || (!flush_i && issue_i)) target_live_o<=0;
         end
     end
 endmodule
