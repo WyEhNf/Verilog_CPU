@@ -120,7 +120,7 @@ module rv32_backend_joint #(
     output wire                         branch_feedback_pred_taken_o,
     output wire [31:0]                  branch_feedback_pred_target_o,
     output wire [15:0]                  branch_feedback_metadata_o,
-    output reg  [7:0]                   branch_recovery_history_o,
+    output wire [7:0]                   branch_recovery_history_o,
     output wire [15:0]                  perf_rob_occupancy_o,
     output wire [15:0]                  perf_rs_occupancy_o,
     output wire [15:0]                  perf_lsq_occupancy_o,
@@ -370,6 +370,74 @@ module rv32_backend_joint #(
 
     wire [TAG_WIDTH-1:0] rob_to_lsq_mem [0:ROB_ENTRIES-1];
     wire [PAW-1:0] lsq_phys_mem [0:LSQ_ENTRIES-1];
+
+    localparam integer ROB_MAP_READ_DOMAINS=(ROB_ENTRIES+3)/4;
+    localparam integer LSQ_MAP_READ_DOMAINS=(LSQ_ENTRIES+3)/4;
+    localparam integer ROB_MAP_READ_LEAVES=1<<$clog2(ROB_ENTRIES);
+    localparam integer LSQ_MAP_READ_LEAVES=1<<$clog2(LSQ_ENTRIES);
+    localparam integer ROB_MAP_READ_WORDS=(TAG_WIDTH+15)/16;
+    localparam integer LSQ_MAP_READ_WORDS=(PAW+15)/16;
+    wire [BE_WIDTH*ROB_SLOT_WIDTH-1:0] rob_map_query;
+    wire [ROB_MAP_READ_DOMAINS*BE_WIDTH*ROB_SLOT_WIDTH-1:0] rob_map_query_views;
+    wire [LSQ_MAP_READ_DOMAINS*LSQ_SLOT_WIDTH-1:0] lsq_map_query_views;
+    wire [BE_WIDTH*TAG_WIDTH-1:0] alu_lsq_map_read;
+    wire [PAW-1:0] load_phys_map_read;
+    rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*ROB_SLOT_WIDTH),.LEAVES(ROB_MAP_READ_DOMAINS)) rob_map_query_tree (
+        .signal_i(rob_map_query),.views_o(rob_map_query_views));
+    rv32_frequency_control_tree #(.WIDTH(LSQ_SLOT_WIDTH),.LEAVES(LSQ_MAP_READ_DOMAINS)) lsq_map_query_tree (
+        .signal_i(lsq_load_complete_lsq_tag[3 +: LSQ_SLOT_WIDTH]),.views_o(lsq_map_query_views));
+    genvar map_query_lane,map_query_row,map_query_word,map_query_node;
+    generate
+        for(map_query_lane=0;map_query_lane<BE_WIDTH;map_query_lane=map_query_lane+1) begin:g_rob_map_read
+            wire [TAG_WIDTH-1:0] reads [1:2*ROB_MAP_READ_LEAVES-1];
+            assign rob_map_query[map_query_lane*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]=
+                alu_exec_tag[map_query_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH];
+            assign alu_lsq_map_read[map_query_lane*TAG_WIDTH +: TAG_WIDTH]=reads[1];
+            for(map_query_row=0;map_query_row<ROB_MAP_READ_LEAVES;map_query_row=map_query_row+1) begin:g_row
+                if(map_query_row<ROB_ENTRIES) begin:g_present
+                    wire [ROB_MAP_READ_WORDS-1:0] selects;
+                    wire hit=rob_map_query_views[((map_query_row/4)*BE_WIDTH+map_query_lane)*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]==map_query_row;
+                    rv32_frequency_control_tree #(.LEAVES(ROB_MAP_READ_WORDS)) select_tree (
+                        .signal_i(hit),.views_o(selects));
+                    for(map_query_word=0;map_query_word<ROB_MAP_READ_WORDS;map_query_word=map_query_word+1) begin:g_word
+                        localparam integer LOW=map_query_word*16;
+                        localparam integer BITS=(TAG_WIDTH-LOW>=16)?16:TAG_WIDTH-LOW;
+                        assign reads[ROB_MAP_READ_LEAVES+map_query_row][LOW +: BITS]=
+                            {BITS{selects[map_query_word]}} & rob_to_lsq_mem[map_query_row][LOW +: BITS];
+                    end
+                end else begin:g_padding
+                    assign reads[ROB_MAP_READ_LEAVES+map_query_row]=0;
+                end
+            end
+            for(map_query_node=1;map_query_node<ROB_MAP_READ_LEAVES;map_query_node=map_query_node+1) begin:g_reduce
+                assign reads[map_query_node]=reads[2*map_query_node] | reads[2*map_query_node+1];
+            end
+        end
+        begin:g_lsq_phys_read
+            wire [PAW-1:0] reads [1:2*LSQ_MAP_READ_LEAVES-1];
+            assign load_phys_map_read=reads[1];
+            for(map_query_row=0;map_query_row<LSQ_MAP_READ_LEAVES;map_query_row=map_query_row+1) begin:g_row
+                if(map_query_row<LSQ_ENTRIES) begin:g_present
+                    wire [LSQ_MAP_READ_WORDS-1:0] selects;
+                    wire hit=lsq_map_query_views[(map_query_row/4)*LSQ_SLOT_WIDTH +: LSQ_SLOT_WIDTH]==map_query_row;
+                    rv32_frequency_control_tree #(.LEAVES(LSQ_MAP_READ_WORDS)) select_tree (
+                        .signal_i(hit),.views_o(selects));
+                    for(map_query_word=0;map_query_word<LSQ_MAP_READ_WORDS;map_query_word=map_query_word+1) begin:g_word
+                        localparam integer LOW=map_query_word*16;
+                        localparam integer BITS=(PAW-LOW>=16)?16:PAW-LOW;
+                        assign reads[LSQ_MAP_READ_LEAVES+map_query_row][LOW +: BITS]=
+                            {BITS{selects[map_query_word]}} & lsq_phys_mem[map_query_row][LOW +: BITS];
+                    end
+                end else begin:g_padding
+                    assign reads[LSQ_MAP_READ_LEAVES+map_query_row]=0;
+                end
+            end
+            for(map_query_node=1;map_query_node<LSQ_MAP_READ_LEAVES;map_query_node=map_query_node+1) begin:g_reduce
+                assign reads[map_query_node]=reads[2*map_query_node] | reads[2*map_query_node+1];
+            end
+        end
+    endgenerate
+
     wire [TAG_WIDTH-1:0] phys_tag_mem [0:PHYS_REGS-1];
 
     localparam integer TAG_READ_PORTS=2*BE_WIDTH;
@@ -527,22 +595,16 @@ module rv32_backend_joint #(
     wire [6*ROB_SLOT_WIDTH-1:0] recovery_head_views;
     rv32_frequency_control_tree #(.WIDTH(ROB_SLOT_WIDTH),.LEAVES(6)) recovery_head_tree (
         .signal_i(recovery_descriptor_head),.views_o(recovery_head_views));
-    reg [TAG_WIDTH-1:0] branch_pending_tag;
+    wire [TAG_WIDTH-1:0] branch_pending_tag;
     // Registered descriptors still need electrical separation at their
     // consumers. These are priced course-library cells, without new cycles.
     wire [8*TAG_WIDTH-1:0] recovery_tag_views;
     rv32_frequency_control_tree #(.WIDTH(TAG_WIDTH),.LEAVES(8)) recovery_tag_tree (
         .signal_i(branch_pending_tag),.views_o(recovery_tag_views));
-    reg [31:0] branch_pending_value;
-    reg [PAW-1:0] branch_pending_phys;
-    reg branch_pending_rd_we;
-    reg [31:0] branch_pending_pc;
-    reg [31:0] branch_pending_source_pc;
-    reg [1:0] branch_pending_kind;
-    reg branch_pending_taken;
-    reg [31:0] branch_pending_target;
-    reg branch_pending_pred_taken;
-    reg [31:0] branch_pending_pred_target;
+    wire [31:0] branch_pending_value;
+    wire [PAW-1:0] branch_pending_phys;
+    wire branch_pending_rd_we;
+    wire [31:0] branch_pending_pc;
     reg branch_feedback_valid_r;
     reg [31:0] branch_feedback_pc_r;
     reg [1:0] branch_feedback_kind_r;
@@ -551,8 +613,6 @@ module rv32_backend_joint #(
     reg branch_feedback_pred_taken_r;
     reg [31:0] branch_feedback_pred_target_r;
     reg [BE_WIDTH-1:0] cdb_ready_r;
-    integer branch_lane;
-    integer branch_capture_found;
     integer branch_feedback_lane;
     integer branch_feedback_found;
     integer branch_feedback_slot;
@@ -764,13 +824,13 @@ module rv32_backend_joint #(
             assign lsq_addr_update_valid[io_lane] =
                 alu_exec_valid[io_lane] && alu_exec_is_memory[io_lane];
             assign lsq_addr_update_tag[io_lane*TAG_WIDTH +: TAG_WIDTH] =
-                rob_to_lsq_mem[alu_exec_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                alu_lsq_map_read[io_lane*TAG_WIDTH +: TAG_WIDTH];
             assign lsq_addr_update[io_lane*32 +: 32] =
                 alu_exec_mem_addr[io_lane*32 +: 32];
             assign lsq_data_update_valid[io_lane] =
                 alu_exec_valid[io_lane] && alu_exec_is_store[io_lane];
             assign lsq_data_update_tag[io_lane*TAG_WIDTH +: TAG_WIDTH] =
-                rob_to_lsq_mem[alu_exec_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
+                alu_lsq_map_read[io_lane*TAG_WIDTH +: TAG_WIDTH];
             // Recovery reserves CDB slot CDB_WIDTH-1 for its direct ROB
             // completion.  Reuse the corresponding idle PRF write slot so a
             // redirecting JAL/JALR also publishes its link value.  An ordinary
@@ -1376,7 +1436,7 @@ module rv32_backend_joint #(
         producer_phys_r[MDU_SOURCE*PAW +: PAW]=mdu_completion_phys;
         producer_value_r[MDU_SOURCE*32 +: 32]=mdu_completion_value;
         producer_tag_r[LSQ_SOURCE*TAG_WIDTH +: TAG_WIDTH]=lsq_load_complete_tag;
-        producer_phys_r[LSQ_SOURCE*PAW +: PAW]=lsq_phys_mem[lsq_load_complete_lsq_tag[3 +: LSQ_SLOT_WIDTH]];
+        producer_phys_r[LSQ_SOURCE*PAW +: PAW]=load_phys_map_read;
         producer_value_r[LSQ_SOURCE*32 +: 32]=lsq_load_complete_value;
         if (mdu_completion_valid) begin
             producer_valid_r[MDU_SOURCE]=1'b1;
@@ -1727,70 +1787,69 @@ module rv32_backend_joint #(
         end
     end
 
-    always @(posedge clk_i) begin
-        if (reset_i) begin
-            branch_pending <= 1'b0;
-            branch_pending_tag <= 0;
-            branch_pending_value <= 0;
-            branch_pending_phys <= 0;
-            branch_pending_rd_we <= 1'b0;
-            branch_pending_pc <= 0;
-            branch_pending_source_pc <= 0;
-            branch_pending_kind <= `RV32IM_PRED_NONE;
-            branch_pending_taken <= 1'b0;
-            branch_pending_target <= 0;
-            branch_pending_pred_taken <= 1'b0;
-            branch_pending_pred_target <= 0;
-            branch_recovery_history_o <= 0;
 
-        end else begin
-            if (flush_i || (branch_pending && !recovery_descriptor_valid && !rob_recovery_preview)) begin
-                branch_pending <= 1'b0;
-            end else if (recovery_domains[7] && branch_pending) begin
-                // The branch is retained in the ROB by recovery and will
-                // commit on the following cycle; stop reissuing recovery.
-                branch_pending <= 1'b0;
-            end else if (!branch_pending && (|(alu_exec_valid & alu_exec_redirect_valid))) begin
-                branch_capture_found = 0;
-                for (branch_lane = 0; branch_lane < BE_WIDTH; branch_lane = branch_lane + 1) begin
-                    if (!flush_i && !branch_capture_found && alu_exec_valid[branch_lane] &&
-                        alu_exec_ready[branch_lane] && branch_training_live[branch_lane] &&
-                        alu_exec_redirect_valid[branch_lane]) begin
-                        branch_pending <= 1'b1;
-                        branch_pending_tag <= alu_exec_tag[branch_lane*TAG_WIDTH +: TAG_WIDTH];
-                        branch_pending_value <= alu_exec_value[branch_lane*32 +: 32];
-                        branch_pending_phys <= alu_exec_phys[branch_lane*PAW +: PAW];
-                        branch_pending_rd_we <= alu_exec_rd_we[branch_lane];
-                        branch_pending_pc <= alu_exec_redirect_pc[branch_lane*32 +: 32];
-                        branch_pending_source_pc <= (RS_ISSUE_METADATA != 0) ?
-                            alu_exec_source_pc[branch_lane*32 +: 32] : rob_pc_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-                        branch_pending_kind <= (RS_ISSUE_METADATA != 0) ?
-                            alu_exec_pred_kind[branch_lane*2 +: 2] : rob_pred_kind_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-                        branch_pending_taken <= alu_exec_branch_taken[branch_lane];
-                        branch_pending_target <= alu_exec_redirect_pc[branch_lane*32 +: 32];
-                        branch_pending_pred_taken <= (RS_ISSUE_METADATA != 0) ?
-                            alu_exec_pred_taken[branch_lane] : rob_pred_taken_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-                        branch_pending_pred_target <= (RS_ISSUE_METADATA != 0) ?
-                            alu_exec_pred_target[branch_lane*32 +: 32] : rob_pred_target_mem[alu_exec_tag[branch_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
-                        // History must be ready BEFORE the early front-end
-                        // redirect samples it, not updated on backend apply.
-                        if(PREDICTOR_META != 0)
-                            branch_recovery_history_o <=
-                                (((RS_ISSUE_METADATA != 0) ? alu_exec_pred_kind[branch_lane*2 +: 2] :
-                                  rob_pred_kind_mem[alu_exec_tag[branch_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]]) == `RV32IM_PRED_BRANCH) ?
-                                {rob_pred_metadata_mem[alu_exec_tag[branch_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]][14:8],
-                                 alu_exec_branch_taken[branch_lane]} :
-                                rob_pred_metadata_mem[alu_exec_tag[branch_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]][15:8];
-                        branch_capture_found = 1;
-                    end
-                end
-            end else if (branch_pending && commit_ready_i && rob_commit_valid[0] &&
-                         (rob_commit_tag[TAG_WIDTH-1:0] == recovery_tag_views[0 +: TAG_WIDTH])) begin
-                branch_pending <= 1'b0;
-            end
-
+    // Only accepted live redirects can acquire this packet. Select the first
+    // lane exactly as the old ordered loop, then distribute the qualified
+    // grants and write enable into at most sixteen payload bits per leaf.
+    localparam integer BRANCH_CAPTURE_WIDTH=TAG_WIDTH+PAW+65;
+    wire [BE_WIDTH-1:0] branch_capture_match,branch_capture_grant;
+    wire [BE_WIDTH*BRANCH_CAPTURE_WIDTH-1:0] branch_capture_values;
+    wire branch_capture_write;
+    wire [BRANCH_CAPTURE_WIDTH-1:0] branch_capture_next,branch_capture_saved;
+    genvar capture_lane;
+    generate for(capture_lane=0;capture_lane<BE_WIDTH;capture_lane=capture_lane+1) begin:g_branch_capture
+        assign branch_capture_match[capture_lane]=!reset_i && !flush_i && !branch_pending &&
+            alu_exec_valid[capture_lane] && alu_exec_ready[capture_lane] &&
+            branch_training_live[capture_lane] && alu_exec_redirect_valid[capture_lane];
+        if(capture_lane==0) begin:g_first
+            assign branch_capture_grant[capture_lane]=branch_capture_match[capture_lane];
+        end else begin:g_priority
+            assign branch_capture_grant[capture_lane]=branch_capture_match[capture_lane] &&
+                !(|branch_capture_match[capture_lane-1:0]);
         end
+        assign branch_capture_values[capture_lane*BRANCH_CAPTURE_WIDTH +: BRANCH_CAPTURE_WIDTH]={
+            alu_exec_tag[capture_lane*TAG_WIDTH +: TAG_WIDTH],
+            alu_exec_phys[capture_lane*PAW +: PAW],alu_exec_rd_we[capture_lane],
+            alu_exec_value[capture_lane*32 +: 32],alu_exec_redirect_pc[capture_lane*32 +: 32]};
+    end endgenerate
+    rv32_frequency_event_select #(.WIDTH(BRANCH_CAPTURE_WIDTH),.EVENTS(BE_WIDTH)) branch_capture_selector (
+        .events_i(branch_capture_grant),.values_i(branch_capture_values),
+        .write_o(branch_capture_write),.value_o(branch_capture_next));
+    rv32_frequency_word_bank #(.WIDTH(BRANCH_CAPTURE_WIDTH)) branch_capture_owner (
+        .clk_i(clk_i),.write_i(branch_capture_write),.data_i(branch_capture_next),.data_o(branch_capture_saved));
+    assign {branch_pending_tag,branch_pending_phys,branch_pending_rd_we,
+            branch_pending_value,branch_pending_pc}=branch_capture_saved;
+    generate if(PREDICTOR_META!=0) begin:g_branch_history_capture
+        wire [BE_WIDTH*8-1:0] histories;
+        wire history_write;
+        wire [7:0] history_next;
+        for(capture_lane=0;capture_lane<BE_WIDTH;capture_lane=capture_lane+1) begin:g_lane
+            wire [ROB_SLOT_WIDTH-1:0] slot=alu_exec_tag[capture_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH];
+            wire [1:0] kind=(RS_ISSUE_METADATA!=0)?
+                alu_exec_pred_kind[capture_lane*2 +: 2]:rob_pred_kind_mem[slot];
+            assign histories[capture_lane*8 +: 8]=(kind==`RV32IM_PRED_BRANCH)?
+                {rob_pred_metadata_mem[slot][14:8],alu_exec_branch_taken[capture_lane]}:
+                rob_pred_metadata_mem[slot][15:8];
+        end
+        rv32_frequency_event_select #(.WIDTH(8),.EVENTS(BE_WIDTH)) history_selector (
+            .events_i(branch_capture_grant),.values_i(histories),.write_o(history_write),.value_o(history_next));
+        rv32_frequency_word_bank #(.WIDTH(8)) history_owner (
+            .clk_i(clk_i),.write_i(history_write),.data_i(history_next),.data_o(branch_recovery_history_o));
+    end else begin:g_no_branch_history
+        assign branch_recovery_history_o=8'b0;
+    end endgenerate
+
+    always @(posedge clk_i) begin
+        if(reset_i) branch_pending<=1'b0;
+        else if(flush_i || (branch_pending && !recovery_descriptor_valid && !rob_recovery_preview))
+            branch_pending<=1'b0;
+        else if(recovery_domains[7] && branch_pending) branch_pending<=1'b0;
+        else if(branch_capture_write) branch_pending<=1'b1;
+        else if(branch_pending && commit_ready_i && rob_commit_valid[0] &&
+                rob_commit_tag[TAG_WIDTH-1:0]==recovery_tag_views[0 +: TAG_WIDTH])
+            branch_pending<=1'b0;
     end
+
 endmodule
 
 // Two retained entries break the functional-unit ready -> RS ready path.
