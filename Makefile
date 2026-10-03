@@ -1,9 +1,21 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
+.DEFAULT_GOAL := gui
 
 .PHONY: gui join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build join04 join05 join06-report reference-trace-build reference-trace-test doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression asap7-maplib synth synth-bb
 
 ROOT := $(CURDIR)
+# Current course assessment uses only the pinned Windows native toolchain.
+# Legacy research targets below retain their historical tool settings.
+COURSE_PYTHON ?= C:/Users/admin/miniconda3/python.exe
+
+.PHONY: course-standard-measure course-standard-versions
+course-standard-measure:
+	@set "PYTHONUTF8=1" && "$(COURSE_PYTHON)" tools/run_course_standard_windows.py
+
+course-standard-versions:
+	@set "PYTHONUTF8=1" && "$(COURSE_PYTHON)" tools/record_course_windows_toolchain.py
+
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
 RV_ROOT ?= $(ROOT)/.deps/riscv-toolchain-install/xpack-riscv-none-elf-gcc-15.2.0-1
 OSS_CAD_ROOT_WIN := $(subst /,\,$(OSS_CAD_ROOT))
