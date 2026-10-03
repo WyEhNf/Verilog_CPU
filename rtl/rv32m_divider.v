@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// Two restoring digit steps per cycle with separate normalization and final correction, so
+// Parallel radix-4 trial subtraction with separate normalization and final correction, so
 // the worst case is 16 iterations rather than 32.  A request holds the unit
 // busy until the quotient/remainder is complete; the response register then
 // applies normal valid/ready backpressure and live-tag/flush cancellation.
@@ -42,12 +42,6 @@ module rv32m_divider #(
     reg [PHYS_ADDR_WIDTH-1:0] result_phys_reg;
     reg result_live_reg;
     reg [31:0] result_value_reg;
-    reg [32:0] remainder_shift;
-    reg [32:0] remainder_after;
-    reg [31:0] quotient_after;
-    reg [32:0] remainder_shift_second;
-    reg [32:0] remainder_after_second;
-    reg [31:0] quotient_after_second;
     reg [32:0] selected_remainder_after;
     reg [31:0] selected_quotient_after;
     reg [31:0] quotient_final, remainder_final;
@@ -109,8 +103,49 @@ module rv32m_divider #(
          (req_want_remainder ? 32'b0 : 32'h80000000) :
          (req_want_remainder ? req_cached_remainder : req_cached_quotient));
     wire [5:0] prepare_skip_steps = count_leading_zeros(dividend_reg);
-    wire [33:0] first_subtract={1'b0,remainder_shift}-{2'b0,divisor_reg};
-    wire [33:0] second_subtract={1'b0,remainder_shift_second}-{2'b0,divisor_reg};
+    // 3D is formed during the EXISTING prepare edge. It is valid before
+    // any iteration and is never consumed by a fast/bypassed transaction.
+    wire [33:0] divisor_triple;
+    wire [33:0] triple_value={2'b0,divisor_reg}+{1'b0,divisor_reg,1'b0};
+    rv32_frequency_word_bank #(.WIDTH(34)) triple_owner (
+        .clk_i(clk_i),.write_i(!reset_i && !flush_i && busy_reg && prepare_reg),
+        .data_i(triple_value),.data_o(divisor_triple));
+    wire [3:0] odd_views;
+    rv32_frequency_control_tree #(.LEAVES(4)) odd_tree (
+        .signal_i(step_reg==31),.views_o(odd_views));
+    wire [33:0] one_bit_trial={1'b0,remainder_reg[31:0],dividend_reg[31]};
+    wire [33:0] two_bit_trial={remainder_reg[31:0],dividend_reg[31:30]};
+    wire [33:0] trial;
+    assign trial[31:0]=odd_views[0]?one_bit_trial[31:0]:two_bit_trial[31:0];
+    assign trial[33:32]=odd_views[1]?one_bit_trial[33:32]:two_bit_trial[33:32];
+    // Each 35-bit subtraction supplies a borrow without a separate compare.
+    // The three trials start from the same register word, not one another.
+    wire [34:0] subtract_one={1'b0,trial}-{3'b0,divisor_reg};
+    wire [34:0] subtract_two={1'b0,trial}-{2'b0,divisor_reg,1'b0};
+    wire [34:0] subtract_three={1'b0,trial}-{1'b0,divisor_triple};
+    wire [3:0] digit_select;
+    assign digit_select[0]=subtract_one[34];
+    assign digit_select[1]=!subtract_one[34] && subtract_two[34];
+    assign digit_select[2]=!subtract_two[34] && subtract_three[34];
+    assign digit_select[3]=!subtract_three[34];
+    wire [7:0] digit_views;
+    rv32_frequency_control_tree #(.WIDTH(4),.LEAVES(2)) digit_tree (
+        .signal_i(digit_select),.views_o(digit_views));
+    wire [32:0] even_remainder;
+    assign even_remainder[31:0]=
+        ({32{digit_views[0]}} & trial[31:0]) |
+        ({32{digit_views[1]}} & subtract_one[31:0]) |
+        ({32{digit_views[2]}} & subtract_two[31:0]) |
+        ({32{digit_views[3]}} & subtract_three[31:0]);
+    assign even_remainder[32]=
+        (digit_views[4] && trial[32]) |
+        (digit_views[5] && subtract_one[32]) |
+        (digit_views[6] && subtract_two[32]) |
+        (digit_views[7] && subtract_three[32]);
+    wire [1:0] even_digit={digit_views[6] | digit_views[7],digit_views[5] | digit_views[7]};
+    wire [32:0] odd_remainder=subtract_one[34]?trial[32:0]:subtract_one[32:0];
+    wire [31:0] odd_quotient={quotient_reg[30:0],!subtract_one[34]};
+    wire [31:0] even_quotient={quotient_reg[29:0],even_digit};
     wire result_discard = result_valid_reg && (!result_live_reg ||
         (live_tag_valid_i && (result_tag_reg != live_tag_i)));
 
@@ -124,32 +159,11 @@ module rv32m_divider #(
     assign resp_rd_we_o = 1'b1;
 
     always @* begin
-        remainder_shift = {remainder_reg[31:0], dividend_reg[31]};
-        // The extended subtraction supplies both borrow and remainder.
-        if (!first_subtract[33]) begin
-            remainder_after = first_subtract[32:0];
-            quotient_after = {quotient_reg[30:0], 1'b1};
-        end else begin
-            remainder_after = remainder_shift;
-            quotient_after = {quotient_reg[30:0], 1'b0};
-        end
-        remainder_shift_second = {remainder_after[31:0], dividend_reg[30]};
-        if (!second_subtract[33]) begin
-            remainder_after_second = second_subtract[32:0];
-            quotient_after_second = {quotient_after[30:0], 1'b1};
-        end else begin
-            remainder_after_second = remainder_shift_second;
-            quotient_after_second = {quotient_after[30:0], 1'b0};
-        end
-        // An odd number of significant dividend bits leaves a final
-        // one-bit iteration at step 31; all other cycles consume two bits.
-        if (step_reg == 31) begin
-            selected_remainder_after = remainder_after;
-            selected_quotient_after = quotient_after;
-        end else begin
-            selected_remainder_after = remainder_after_second;
-            selected_quotient_after = quotient_after_second;
-        end
+        // An odd final significant bit uses q in {0,1}; otherwise consume
+        // two bits and append the parallel radix-4 digit. Remainder and
+        // quotient update on the same existing edge as the former iterator.
+        selected_remainder_after=odd_views[2]?odd_remainder:even_remainder;
+        selected_quotient_after=odd_views[3]?odd_quotient:even_quotient;
         if (sign_a_reg ^ sign_b_reg)
             quotient_final = ~quotient_reg + 32'd1;
         else
