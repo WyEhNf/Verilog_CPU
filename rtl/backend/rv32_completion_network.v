@@ -213,8 +213,8 @@ module rv32_completion_network #(
         wire [63:0] memory_tree [1:2*RANK_LEAVES-1];
         for(payload_source=0;payload_source<RANK_LEAVES;payload_source=payload_source+1) begin:g_source
             if(payload_source<SOURCES) begin:g_live
-                wire [3:0] selected_views;
-                rv32_frequency_control_tree #(.LEAVES(4)) select_tree (
+                wire [4:0] selected_views;
+                rv32_frequency_control_tree #(.LEAVES(5)) select_tree (
                     .signal_i(selected_mask[payload_lane][payload_source] && !reset_i && !flush_i),
                     .views_o(selected_views));
                 assign meta_tree[RANK_LEAVES+payload_source]={DIRECT_META_WIDTH{selected_views[0]}} &
@@ -226,9 +226,10 @@ module rv32_completion_network #(
                      producer_is_memory_i[payload_source],producer_is_load_i[payload_source]};
                 assign value_tree[RANK_LEAVES+payload_source]={32{selected_views[1]}} &
                     producer_value_i[payload_source*32 +: 32];
-                assign memory_tree[RANK_LEAVES+payload_source]={64{selected_views[2]}} &
-                    {producer_addr_i[payload_source*32 +: 32],producer_store_data_i[payload_source*32 +: 32]};
-                assign target_tree[RANK_LEAVES+payload_source]={32{selected_views[3]}} &
+                assign memory_tree[RANK_LEAVES+payload_source]={
+                    {32{selected_views[2]}} & producer_addr_i[payload_source*32 +: 32],
+                    {32{selected_views[3]}} & producer_store_data_i[payload_source*32 +: 32]};
+                assign target_tree[RANK_LEAVES+payload_source]={32{selected_views[4]}} &
                     producer_branch_target_i[payload_source*32 +: 32];
             end else begin:g_zero
                 assign meta_tree[RANK_LEAVES+payload_source]=0;

@@ -1,26 +1,55 @@
 `timescale 1ns/1ps
 
-// Functional simulation views of actual cells in the original ASAP7 RVT TT
-// INVBUF library. Synthesis imports and prices the real Liberty definitions;
-// these are not zero-area logic exclusions or FakeRAM interface declarations.
-`ifdef SYNTHESIS
-(* blackbox *)
-`endif
-module BUFx16f_ASAP7_75t_R(input wire A, output wire Y);
-`ifndef SYNTHESIS
-    assign Y = A;
-`endif
+// A complete functional RTL module. ABC maps this inversion to real library
+// logic. The hierarchy boundary prevents cancellation with the next inversion;
+// keep on each instance prevents identical sibling instances from merging.
+// No external cell declaration, blackbox, whitebox, or area override is used.
+(* keep_hierarchy = 1 *)
+module rv32_frequency_inversion(input wire signal_i, output wire signal_o);
+    assign signal_o = ~signal_i;
 endmodule
 
-`ifdef SYNTHESIS
-(* blackbox *)
-`endif
-module BUFx2_ASAP7_75t_R(input wire A, output wire Y);
-`ifndef SYNTHESIS
-    assign Y = A;
-`endif
+// Four-way recursive distribution with a pair of real inversions at each
+// node. Every internal driver has at most four child consumers. Leaf outputs
+// must be attached to bounded groups of actual consumers by the caller.
+// Combinational only: the observable signal and cycle remain unchanged.
+module rv32_frequency_control_tree #(
+    parameter integer WIDTH = 1,
+    parameter integer LEAVES = 4
+) (
+    input wire [WIDTH-1:0] signal_i,
+    output wire [WIDTH*LEAVES-1:0] views_o
+);
+    localparam integer CHILDREN = LEAVES > 4 ? 4 : LEAVES;
+    localparam integer BASE_COUNT = LEAVES / CHILDREN;
+    localparam integer EXTRA_COUNT = LEAVES % CHILDREN;
+    wire [WIDTH-1:0] inverted, distributed;
+    genvar bit_id, child;
+    generate
+        for (bit_id=0; bit_id<WIDTH; bit_id=bit_id+1) begin:g_driver
+            (* keep = 1, keep_hierarchy = 1 *)
+            rv32_frequency_inversion invert_root (
+                .signal_i(signal_i[bit_id]), .signal_o(inverted[bit_id]));
+            (* keep = 1, keep_hierarchy = 1 *)
+            rv32_frequency_inversion invert_output (
+                .signal_i(inverted[bit_id]), .signal_o(distributed[bit_id]));
+        end
+        if (LEAVES == 1) begin:g_leaf
+            assign views_o = distributed;
+        end else begin:g_branches
+            for (child=0; child<CHILDREN; child=child+1) begin:g_child
+                localparam integer COUNT = BASE_COUNT + (child < EXTRA_COUNT);
+                localparam integer OFFSET = child*BASE_COUNT +
+                    (child < EXTRA_COUNT ? child : EXTRA_COUNT);
+                rv32_frequency_control_tree #(.WIDTH(WIDTH), .LEAVES(COUNT)) subtree (
+                    .signal_i(distributed),
+                    .views_o(views_o[OFFSET*WIDTH +: COUNT*WIDTH]));
+            end
+        end
+    endgenerate
 endmodule
 
+// Preserve the legacy optional interface without importing external cells.
 module rv32_asap7_fanout #(
     parameter integer WIDTH = 1,
     parameter integer LEAVES = 16,
@@ -29,47 +58,35 @@ module rv32_asap7_fanout #(
     input wire [WIDTH-1:0] signal_i,
     output wire [WIDTH*LEAVES-1:0] replicas_o
 );
-    initial begin
-        if (WIDTH < 1 || LEAVES < 1 || LEAVES > 32 ||
-            (ENABLED != 0 && ENABLED != 1))
-            $fatal(1, "invalid ASAP7 fanout-tree configuration");
-    end
-    genvar bit_id, leaf;
+    genvar leaf;
     generate
-        if (ENABLED != 0) begin : g_physical
-            wire [WIDTH-1:0] trunk;
-            for (bit_id = 0; bit_id < WIDTH; bit_id = bit_id + 1) begin : g_root
-                (* keep = 1 *) BUFx16f_ASAP7_75t_R buffer_root(
-                    .A(signal_i[bit_id]), .Y(trunk[bit_id]));
-                for (leaf = 0; leaf < LEAVES; leaf = leaf + 1) begin : g_leaf
-                    (* keep = 1 *) BUFx2_ASAP7_75t_R buffer_leaf(
-                        .A(trunk[bit_id]), .Y(replicas_o[leaf*WIDTH+bit_id]));
-                end
-            end
-        end else begin : g_wires
-            for (leaf = 0; leaf < LEAVES; leaf = leaf + 1) begin : g_leaf
+        if (ENABLED != 0) begin:g_distribution
+            rv32_frequency_control_tree #(.WIDTH(WIDTH), .LEAVES(LEAVES)) tree (
+                .signal_i(signal_i), .views_o(replicas_o));
+        end else begin:g_aliases
+            for (leaf=0; leaf<LEAVES; leaf=leaf+1) begin:g_leaf
                 assign replicas_o[leaf*WIDTH +: WIDTH] = signal_i;
             end
         end
     endgenerate
 endmodule
 
-// Actual priced ASAP7 cells preserve separate electrical domains through ABC.
-// No cycle is added. Each output must be wired to its own real consumers.
-module rv32_frequency_control_tree #(
-    parameter integer WIDTH=1, LEAVES=4
-) (
-    input wire [WIDTH-1:0] signal_i,
-    output wire [WIDTH*LEAVES-1:0] views_o
+// Write ownership is distributed AFTER qualification. Each last driver
+// controls at most 32 existing payload hold muxes, with no payload reset.
+module rv32_frequency_word_bank #(parameter integer WIDTH=32) (
+    input wire clk_i, write_i,
+    input wire [WIDTH-1:0] data_i,
+    output reg [WIDTH-1:0] data_o
 );
-    wire [WIDTH-1:0] trunk;
-    genvar bit_id, leaf;
-    generate for(bit_id=0;bit_id<WIDTH;bit_id=bit_id+1) begin:g_bit
-        (* keep=1 *) BUFx16f_ASAP7_75t_R root_cell (
-            .A(signal_i[bit_id]),.Y(trunk[bit_id]));
-        for(leaf=0;leaf<LEAVES;leaf=leaf+1) begin:g_leaf
-            (* keep=1 *) BUFx16f_ASAP7_75t_R leaf_cell (
-                .A(trunk[bit_id]),.Y(views_o[leaf*WIDTH+bit_id]));
-        end
+    localparam integer WORDS=(WIDTH+31)/32;
+    wire [WORDS-1:0] write_words;
+    rv32_frequency_control_tree #(.LEAVES(WORDS)) write_tree (
+        .signal_i(write_i), .views_o(write_words));
+    genvar word_id;
+    generate for(word_id=0;word_id<WORDS;word_id=word_id+1) begin:g_word
+        localparam integer LOW=word_id*32;
+        localparam integer BITS=WIDTH-LOW>=32 ? 32 : WIDTH-LOW;
+        always @(posedge clk_i) if(write_words[word_id])
+            data_o[LOW +: BITS]<=data_i[LOW +: BITS];
     end endgenerate
 endmodule

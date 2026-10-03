@@ -239,7 +239,7 @@ module rv32_reservation_station #(
     integer pick_lane, pick_search, pick_cursor, pick_slot;
     integer alloc_static_row;
     reg pick_found;
-    genvar ar, al;
+    genvar ar, al, alloc_word;
     generate if (ALLOC_STATIC_WRITE != 0) begin : g_static_allocation
         always @* begin
             pick_cursor = 0;
@@ -281,15 +281,24 @@ module rv32_reservation_station #(
                 if (al == BE_WIDTH-1) assign grants[al] = allocation_match_bits[al];
                 else assign grants[al] = allocation_match_bits[al] && !(|allocation_match_bits[BE_WIDTH-1:al+1]);
             end
-            wire [BE_WIDTH-1:0] payload_grants;
-            rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(1)) grant_tree (
+            localparam integer WORDS=(ALLOC_PAYLOAD_WIDTH+31)/32;
+            wire [BE_WIDTH*WORDS-1:0] payload_grants;
+            rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(WORDS)) grant_tree (
                 .signal_i(grants),.views_o(payload_grants));
-            reg [ALLOC_PAYLOAD_WIDTH-1:0] payload;
-            integer mux_lane;
-            always @* begin
-                payload = 0;
-                for (mux_lane = 0; mux_lane < BE_WIDTH; mux_lane = mux_lane + 1)
-                    payload = payload | ({ALLOC_PAYLOAD_WIDTH{payload_grants[mux_lane]}} & alloc_lane_payload[mux_lane]);
+            wire [ALLOC_PAYLOAD_WIDTH-1:0] payload;
+            for(alloc_word=0;alloc_word<WORDS;alloc_word=alloc_word+1) begin:g_word
+                localparam integer LOW=alloc_word*32;
+                localparam integer BITS=ALLOC_PAYLOAD_WIDTH-LOW>=32 ? 32 : ALLOC_PAYLOAD_WIDTH-LOW;
+                reg [BITS-1:0] selected_word;
+                integer mux_lane;
+                always @* begin
+                    selected_word=0;
+                    for(mux_lane=0;mux_lane<BE_WIDTH;mux_lane=mux_lane+1)
+                        selected_word=selected_word |
+                            ({BITS{payload_grants[alloc_word*BE_WIDTH+mux_lane]}} &
+                             alloc_lane_payload[mux_lane][LOW +: BITS]);
+                end
+                assign payload[LOW +: BITS]=selected_word;
             end
             assign alloc_row_grants[ar] = grants;
             assign alloc_row_write[ar] = |allocation_match_bits;
@@ -649,13 +658,15 @@ module rv32_rs_payload_row #(
     input wire wake1_i,wake2_i,
     input wire [31:0] wake1_value_i,wake2_value_i,
     output reg target_live_o,
-    output reg [OP_WIDTH-1:0] op_o,
-    output reg [31:0] pc_o,src1_value_o,src2_value_o,
-    output reg [TAG_WIDTH-1:0] rob_tag_o,src1_tag_o,src2_tag_o,
-    output reg [PHYS_ADDR_WIDTH-1:0] phys_rd_o,
+    output wire [OP_WIDTH-1:0] op_o,
+    output wire [31:0] pc_o,
+    output reg [31:0] src1_value_o,src2_value_o,
+    output wire [TAG_WIDTH-1:0] rob_tag_o,
+    output reg [TAG_WIDTH-1:0] src1_tag_o,src2_tag_o,
+    output wire [PHYS_ADDR_WIDTH-1:0] phys_rd_o,
     output reg src1_ready_o,src2_ready_o,
-    output reg [STORE_DATA_WIDTH-1:0] store_data_o,
-    output reg [METADATA_WIDTH-1:0] metadata_o,
+    output wire [STORE_DATA_WIDTH-1:0] store_data_o,
+    output wire [METADATA_WIDTH-1:0] metadata_o,
     output reg [AGE_WIDTH-1:0] age_o
 );
     wire new_live,new_ready1,new_ready2;
@@ -680,10 +691,15 @@ module rv32_rs_payload_row #(
         .signal_i(allocation || wake1_write),.views_o(src1_write));
     rv32_frequency_control_tree #(.LEAVES(1)) value2_tree (
         .signal_i(allocation || wake2_write),.views_o(src2_write));
+    localparam integer META_BITS=OP_WIDTH+32+TAG_WIDTH+PHYS_ADDR_WIDTH+STORE_DATA_WIDTH+METADATA_WIDTH;
+    wire [META_BITS-1:0] metadata_payload;
+    assign {op_o,pc_o,rob_tag_o,phys_rd_o,store_data_o,metadata_o}=metadata_payload;
+    rv32_frequency_word_bank #(.WIDTH(META_BITS)) metadata_owner (
+        .clk_i(clk_i),.write_i(alloc_views[0]),
+        .data_i({new_op,new_pc,new_tag,new_phys,new_store,new_metadata}),
+        .data_o(metadata_payload));
     // Allocation wins over a simultaneous wake, exactly as the old NBA order.
     always @(posedge clk_i) begin
-        if(alloc_views[0]) {op_o,pc_o,rob_tag_o,phys_rd_o,store_data_o,metadata_o}<=
-            {new_op,new_pc,new_tag,new_phys,new_store,new_metadata};
         if(alloc_views[1]) src1_tag_o<=new_tag1;
         if(alloc_views[2]) src2_tag_o<=new_tag2;
         if(src1_write) src1_value_o<=alloc_views[3]?new_value1:wake1_value_i;

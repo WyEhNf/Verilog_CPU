@@ -121,32 +121,76 @@ module rv32_rob #(
     localparam integer SLOT_LSB = 3;
     localparam integer GEN_LSB = SLOT_LSB + SLOT_WIDTH;
 
-    reg valid_mem [0:ROB_ENTRIES-1];
-    reg ready_mem [0:ROB_ENTRIES-1];
-    reg store_mem [0:ROB_ENTRIES-1];
-    reg branch_mem [0:ROB_ENTRIES-1];
-    reg halt_mem [0:ROB_ENTRIES-1];
-    reg error_mem [0:ROB_ENTRIES-1];
-    reg store_wait_mem [0:ROB_ENTRIES-1];
-    reg store_sent_mem [0:ROB_ENTRIES-1];
-    reg [GENERATION_WIDTH-1:0] generation_mem [0:ROB_ENTRIES-1];
-    reg [GENERATION_WIDTH-1:0] generation_next_mem [0:ROB_ENTRIES-1];
-    reg [31:0] pc_mem [0:ROB_ENTRIES-1];
-    reg [31:0] inst_mem [0:ROB_ENTRIES-1];
-    reg [4:0] rd_mem [0:ROB_ENTRIES-1];
-    reg rd_we_mem [0:ROB_ENTRIES-1];
-    reg [PHYS_ADDR_WIDTH-1:0] old_phys_mem [0:ROB_ENTRIES-1];
-    reg [PHYS_ADDR_WIDTH-1:0] new_phys_mem [0:ROB_ENTRIES-1];
-    reg [31:0] value_mem [0:ROB_ENTRIES-1];
-    reg [31:0] store_addr_mem [0:ROB_ENTRIES-1];
+    wire valid_mem [0:ROB_ENTRIES-1];
+    reg valid_mem_write_data [0:ROB_ENTRIES-1];
+    reg valid_mem_write_enable [0:ROB_ENTRIES-1];
+    wire ready_mem [0:ROB_ENTRIES-1];
+    reg ready_mem_write_data [0:ROB_ENTRIES-1];
+    reg ready_mem_write_enable [0:ROB_ENTRIES-1];
+    wire store_mem [0:ROB_ENTRIES-1];
+    reg store_mem_write_data [0:ROB_ENTRIES-1];
+    reg store_mem_write_enable [0:ROB_ENTRIES-1];
+    wire branch_mem [0:ROB_ENTRIES-1];
+    reg branch_mem_write_data [0:ROB_ENTRIES-1];
+    reg branch_mem_write_enable [0:ROB_ENTRIES-1];
+    wire halt_mem [0:ROB_ENTRIES-1];
+    reg halt_mem_write_data [0:ROB_ENTRIES-1];
+    reg halt_mem_write_enable [0:ROB_ENTRIES-1];
+    wire error_mem [0:ROB_ENTRIES-1];
+    reg error_mem_write_data [0:ROB_ENTRIES-1];
+    reg error_mem_write_enable [0:ROB_ENTRIES-1];
+    wire store_wait_mem [0:ROB_ENTRIES-1];
+    reg store_wait_mem_write_data [0:ROB_ENTRIES-1];
+    reg store_wait_mem_write_enable [0:ROB_ENTRIES-1];
+    wire store_sent_mem [0:ROB_ENTRIES-1];
+    reg store_sent_mem_write_data [0:ROB_ENTRIES-1];
+    reg store_sent_mem_write_enable [0:ROB_ENTRIES-1];
+    wire [GENERATION_WIDTH-1:0] generation_mem [0:ROB_ENTRIES-1];
+    reg [GENERATION_WIDTH-1:0] generation_mem_write_data [0:ROB_ENTRIES-1];
+    reg generation_mem_write_enable [0:ROB_ENTRIES-1];
+    wire [GENERATION_WIDTH-1:0] generation_next_mem [0:ROB_ENTRIES-1];
+    reg [GENERATION_WIDTH-1:0] generation_next_mem_write_data [0:ROB_ENTRIES-1];
+    reg generation_next_mem_write_enable [0:ROB_ENTRIES-1];
+    wire [31:0] pc_mem [0:ROB_ENTRIES-1];
+    reg [31:0] pc_mem_write_data [0:ROB_ENTRIES-1];
+    reg pc_mem_write_enable [0:ROB_ENTRIES-1];
+    wire [31:0] inst_mem [0:ROB_ENTRIES-1];
+    reg [31:0] inst_mem_write_data [0:ROB_ENTRIES-1];
+    reg inst_mem_write_enable [0:ROB_ENTRIES-1];
+    wire [4:0] rd_mem [0:ROB_ENTRIES-1];
+    reg [4:0] rd_mem_write_data [0:ROB_ENTRIES-1];
+    reg rd_mem_write_enable [0:ROB_ENTRIES-1];
+    wire rd_we_mem [0:ROB_ENTRIES-1];
+    reg rd_we_mem_write_data [0:ROB_ENTRIES-1];
+    reg rd_we_mem_write_enable [0:ROB_ENTRIES-1];
+    wire [PHYS_ADDR_WIDTH-1:0] old_phys_mem [0:ROB_ENTRIES-1];
+    reg [PHYS_ADDR_WIDTH-1:0] old_phys_mem_write_data [0:ROB_ENTRIES-1];
+    reg old_phys_mem_write_enable [0:ROB_ENTRIES-1];
+    wire [PHYS_ADDR_WIDTH-1:0] new_phys_mem [0:ROB_ENTRIES-1];
+    reg [PHYS_ADDR_WIDTH-1:0] new_phys_mem_write_data [0:ROB_ENTRIES-1];
+    reg new_phys_mem_write_enable [0:ROB_ENTRIES-1];
+    wire [31:0] value_mem [0:ROB_ENTRIES-1];
+    reg [31:0] value_mem_write_data [0:ROB_ENTRIES-1];
+    reg value_mem_write_enable [0:ROB_ENTRIES-1];
+    wire [31:0] store_addr_mem [0:ROB_ENTRIES-1];
+    reg [31:0] store_addr_mem_write_data [0:ROB_ENTRIES-1];
+    reg store_addr_mem_write_enable [0:ROB_ENTRIES-1];
     // Updated with exactly the same completion enable/priority as address and
     // mask. Payload remains observable; only retirement classification moves.
-    reg mmio_word_mem [0:ROB_ENTRIES-1];
+    wire mmio_word_mem [0:ROB_ENTRIES-1];
+    reg mmio_word_mem_write_data [0:ROB_ENTRIES-1];
+    reg mmio_word_mem_write_enable [0:ROB_ENTRIES-1];
     // Store payloads stay access-relative in the ROB.  Expand to the
     // cache-line representation only on the external commit interface.
-    reg [3:0] store_mask_mem [0:ROB_ENTRIES-1];
-    reg [31:0] store_data_mem [0:ROB_ENTRIES-1];
-    reg [CHECKPOINT_WIDTH-1:0] checkpoint_mem [0:ROB_ENTRIES-1];
+    wire [3:0] store_mask_mem [0:ROB_ENTRIES-1];
+    reg [3:0] store_mask_mem_write_data [0:ROB_ENTRIES-1];
+    reg store_mask_mem_write_enable [0:ROB_ENTRIES-1];
+    wire [31:0] store_data_mem [0:ROB_ENTRIES-1];
+    reg [31:0] store_data_mem_write_data [0:ROB_ENTRIES-1];
+    reg store_data_mem_write_enable [0:ROB_ENTRIES-1];
+    wire [CHECKPOINT_WIDTH-1:0] checkpoint_mem [0:ROB_ENTRIES-1];
+    reg [CHECKPOINT_WIDTH-1:0] checkpoint_mem_write_data [0:ROB_ENTRIES-1];
+    reg checkpoint_mem_write_enable [0:ROB_ENTRIES-1];
 
     reg [SLOT_WIDTH-1:0] head_reg;
     wire [SLOT_WIDTH-1:0] head_next;
@@ -728,6 +772,223 @@ module rv32_rob #(
         end
     end
 
+    always @* begin : g_state_commands
+        reg [GENERATION_WIDTH-1:0] bank_bank_next_generation;
+        integer bank_branch_age;
+        integer bank_complete_lane;
+        reg [GENERATION_WIDTH-1:0] bank_next_generation;
+        integer bank_reset_slot;
+        integer bank_slot_index;
+        integer bank_update_alloc_entry;
+        integer bank_update_alloc_lane;
+        integer bank_update_alloc_slot;
+        integer bank_update_commit_lane;
+        integer bank_update_commit_slot;
+        reg [SLOT_WIDTH-1:0] bank_update_completion_age;
+        reg [SLOT_WIDTH-1:0] bank_younger_age;
+        integer bank_default_row;
+        for(bank_default_row=0;bank_default_row<ROB_ENTRIES;bank_default_row=bank_default_row+1) begin
+            valid_mem_write_data[bank_default_row]=0; valid_mem_write_enable[bank_default_row]=0;
+            ready_mem_write_data[bank_default_row]=0; ready_mem_write_enable[bank_default_row]=0;
+            store_mem_write_data[bank_default_row]=0; store_mem_write_enable[bank_default_row]=0;
+            branch_mem_write_data[bank_default_row]=0; branch_mem_write_enable[bank_default_row]=0;
+            halt_mem_write_data[bank_default_row]=0; halt_mem_write_enable[bank_default_row]=0;
+            error_mem_write_data[bank_default_row]=0; error_mem_write_enable[bank_default_row]=0;
+            store_wait_mem_write_data[bank_default_row]=0; store_wait_mem_write_enable[bank_default_row]=0;
+            store_sent_mem_write_data[bank_default_row]=0; store_sent_mem_write_enable[bank_default_row]=0;
+            generation_mem_write_data[bank_default_row]=0; generation_mem_write_enable[bank_default_row]=0;
+            generation_next_mem_write_data[bank_default_row]=0; generation_next_mem_write_enable[bank_default_row]=0;
+            pc_mem_write_data[bank_default_row]=0; pc_mem_write_enable[bank_default_row]=0;
+            inst_mem_write_data[bank_default_row]=0; inst_mem_write_enable[bank_default_row]=0;
+            rd_mem_write_data[bank_default_row]=0; rd_mem_write_enable[bank_default_row]=0;
+            rd_we_mem_write_data[bank_default_row]=0; rd_we_mem_write_enable[bank_default_row]=0;
+            old_phys_mem_write_data[bank_default_row]=0; old_phys_mem_write_enable[bank_default_row]=0;
+            new_phys_mem_write_data[bank_default_row]=0; new_phys_mem_write_enable[bank_default_row]=0;
+            value_mem_write_data[bank_default_row]=0; value_mem_write_enable[bank_default_row]=0;
+            store_addr_mem_write_data[bank_default_row]=0; store_addr_mem_write_enable[bank_default_row]=0;
+            mmio_word_mem_write_data[bank_default_row]=0; mmio_word_mem_write_enable[bank_default_row]=0;
+            store_mask_mem_write_data[bank_default_row]=0; store_mask_mem_write_enable[bank_default_row]=0;
+            store_data_mem_write_data[bank_default_row]=0; store_data_mem_write_enable[bank_default_row]=0;
+            checkpoint_mem_write_data[bank_default_row]=0; checkpoint_mem_write_enable[bank_default_row]=0;
+        end
+        bank_bank_next_generation=0;
+        bank_branch_age=0;
+        bank_complete_lane=0;
+        bank_next_generation=0;
+        bank_reset_slot=0;
+        bank_slot_index=0;
+        bank_update_alloc_entry=0;
+        bank_update_alloc_lane=0;
+        bank_update_alloc_slot=0;
+        bank_update_commit_lane=0;
+        bank_update_commit_slot=0;
+        bank_update_completion_age=0;
+        bank_younger_age=0;
+
+        if (reset_i) begin
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            for (bank_reset_slot = 0; bank_reset_slot < ROB_ENTRIES; bank_reset_slot = bank_reset_slot + 1) begin
+                begin valid_mem_write_data[bank_reset_slot] = 1'b0; valid_mem_write_enable[bank_reset_slot] = 1'b1; end
+                begin ready_mem_write_data[bank_reset_slot] = 1'b0; ready_mem_write_enable[bank_reset_slot] = 1'b1; end
+                begin store_wait_mem_write_data[bank_reset_slot] = 1'b0; store_wait_mem_write_enable[bank_reset_slot] = 1'b1; end
+                begin store_sent_mem_write_data[bank_reset_slot] = 1'b0; store_sent_mem_write_enable[bank_reset_slot] = 1'b1; end
+                begin error_mem_write_data[bank_reset_slot] = 1'b0; error_mem_write_enable[bank_reset_slot] = 1'b1; end
+                begin generation_mem_write_data[bank_reset_slot] = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1}; generation_mem_write_enable[bank_reset_slot] = 1'b1; end
+                begin generation_next_mem_write_data[bank_reset_slot] = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1}; generation_next_mem_write_enable[bank_reset_slot] = 1'b1; end
+            end
+        end else if (recovery_domains[5]) begin
+            
+            bank_branch_age = apply_age;
+            for (bank_reset_slot = 0; bank_reset_slot < ROB_ENTRIES; bank_reset_slot = bank_reset_slot + 1) begin
+                bank_younger_age = bank_reset_slot - head_update_index;
+                if (STAGED_RECOVERY ? recovery_saved_kill[bank_reset_slot] :
+                    (valid_mem[bank_reset_slot] && (bank_younger_age > bank_branch_age) && (bank_younger_age < occupancy_reg))) begin
+                    begin valid_mem_write_data[bank_reset_slot] = 1'b0; valid_mem_write_enable[bank_reset_slot] = 1'b1; end
+                    begin ready_mem_write_data[bank_reset_slot] = 1'b0; ready_mem_write_enable[bank_reset_slot] = 1'b1; end
+                    begin store_wait_mem_write_data[bank_reset_slot] = 1'b0; store_wait_mem_write_enable[bank_reset_slot] = 1'b1; end
+                    begin store_sent_mem_write_data[bank_reset_slot] = 1'b0; store_sent_mem_write_enable[bank_reset_slot] = 1'b1; end
+                end
+            end
+            
+            
+            
+            
+            for (bank_complete_lane = 0; bank_complete_lane < BE_WIDTH; bank_complete_lane = bank_complete_lane + 1) begin
+                if (completion_valid_i[bank_complete_lane] && completion_done_i[bank_complete_lane]) begin
+                    for (bank_slot_index = 0; bank_slot_index < ROB_ENTRIES; bank_slot_index = bank_slot_index + 1) begin
+                        bank_update_completion_age = bank_slot_index - head_update_index;
+                        if ((;
+                            begin value_mem_write_data[bank_slot_index] = completion_value_i[(bank_complete_lane*32) +: 32]; value_mem_write_enable[bank_slot_index] = 1'b1; end
+                            if (begin completion_error_i[bank_complete_lane]) error_mem_write_data[bank_slot_index] = 1'b1; error_mem_write_enable[bank_slot_index] = 1'b1; end
+                            begin store_addr_mem_write_data[bank_slot_index] = completion_store_addr_i[(bank_complete_lane*32) +: 32]; store_addr_mem_write_enable[bank_slot_index] = 1'b1; end
+                            if (MMIO_PREDECODE != 0)
+                                begin mmio_word_mem_write_data[bank_slot_index] = (completion_store_addr_i[(bank_complete_lane*32) +: 32] == 32'h80000000) &&
+                                    (completion_store_mask_i[(bank_complete_lane*4) +: 4] == 4'hf); mmio_word_mem_write_enable[bank_slot_index] = 1'b1; end
+                            begin store_mask_mem_write_data[bank_slot_index] = completion_store_mask_i[(bank_complete_lane*4) +: 4]; store_mask_mem_write_enable[bank_slot_index] = 1'b1; end
+                            begin store_data_mem_write_data[bank_slot_index] = completion_store_data_i[(bank_complete_lane*32) +: 32]; store_data_mem_write_enable[bank_slot_index] = 1'b1; end
+                        end
+                    end
+                end
+            end
+            ;
+            ;
+            ;
+        end else begin
+            
+            for (bank_complete_lane = 0; bank_complete_lane < BE_WIDTH; bank_complete_lane = bank_complete_lane + 1) begin
+                if (completion_valid_i[bank_complete_lane] && completion_done_i[bank_complete_lane]) begin
+                    for (bank_slot_index = 0; bank_slot_index < ROB_ENTRIES; bank_slot_index = bank_slot_index + 1) begin
+                        if (tag_matches(completion_tag_i[(bank_complete_lane*TAG_WIDTH) +: TAG_WIDTH], bank_slot_index)) begin
+                            begin ready_mem_write_data[bank_slot_index] = 1'b1; ready_mem_write_enable[bank_slot_index] = 1'b1; end
+                            begin value_mem_write_data[bank_slot_index] = completion_value_i[(bank_complete_lane*32) +: 32]; value_mem_write_enable[bank_slot_index] = 1'b1; end
+                            if (begin completion_error_i[bank_complete_lane]) error_mem_write_data[bank_slot_index] = 1'b1; error_mem_write_enable[bank_slot_index] = 1'b1; end
+                            begin store_addr_mem_write_data[bank_slot_index] = completion_store_addr_i[(bank_complete_lane*32) +: 32]; store_addr_mem_write_enable[bank_slot_index] = 1'b1; end
+                            if (MMIO_PREDECODE != 0)
+                                begin mmio_word_mem_write_data[bank_slot_index] = (completion_store_addr_i[(bank_complete_lane*32) +: 32] == 32'h80000000) &&
+                                    (completion_store_mask_i[(bank_complete_lane*4) +: 4] == 4'hf); mmio_word_mem_write_enable[bank_slot_index] = 1'b1; end
+                            begin store_mask_mem_write_data[bank_slot_index] = completion_store_mask_i[(bank_complete_lane*4) +: 4]; store_mask_mem_write_enable[bank_slot_index] = 1'b1; end
+                            begin store_data_mem_write_data[bank_slot_index] = completion_store_data_i[(bank_complete_lane*32) +: 32]; store_data_mem_write_enable[bank_slot_index] = 1'b1; end
+                        end
+                    end
+                end
+            end
+            for (bank_slot_index = 0; bank_slot_index < ROB_ENTRIES; bank_slot_index = bank_slot_index + 1) begin
+                if (store_ack_valid_i && tag_matches(store_ack_tag_i, bank_slot_index)) begin
+                    begin store_wait_mem_write_data[bank_slot_index] = 1'b1; store_wait_mem_write_enable[bank_slot_index] = 1'b1; end
+                    if (store_ack_error_i) begin error_mem_write_data[bank_slot_index] = 1'b1; error_mem_write_enable[bank_slot_index] = 1'b1; end
+                end
+            end
+            if (store_commit_valid_o && store_commit_ready_i) begin
+                begin store_sent_mem_write_data[head_commit_index] = 1'b1; store_sent_mem_write_enable[head_commit_index] = 1'b1; end
+            end
+            
+            for (bank_update_commit_lane = 0; bank_update_commit_lane < BE_WIDTH; bank_update_commit_lane = bank_update_commit_lane + 1) begin
+                if (commit_valid_o[bank_update_commit_lane] && commit_ready_i) begin
+                    bank_update_commit_slot = head_commit_index + bank_update_commit_lane;
+                    if (bank_update_commit_slot >= ROB_ENTRIES)
+                        bank_update_commit_slot = bank_update_commit_slot - ROB_ENTRIES;
+                    if (head_store[bank_update_commit_lane] &&
+                        head_mmio_word[bank_update_commit_lane]) begin
+                        ;
+                        ;
+                    end else if (head_halt[bank_update_commit_lane]) begin
+                        ;
+                        ;
+                    end
+                    if (head_error[bank_update_commit_lane]) ;
+                    begin valid_mem_write_data[bank_update_commit_slot] = 1'b0; valid_mem_write_enable[bank_update_commit_slot] = 1'b1; end
+                    begin ready_mem_write_data[bank_update_commit_slot] = 1'b0; ready_mem_write_enable[bank_update_commit_slot] = 1'b1; end
+                    begin store_wait_mem_write_data[bank_update_commit_slot] = 1'b0; store_wait_mem_write_enable[bank_update_commit_slot] = 1'b1; end
+                    begin store_sent_mem_write_data[bank_update_commit_slot] = 1'b0; store_sent_mem_write_enable[bank_update_commit_slot] = 1'b1; end
+                end
+            end
+            
+            if ((ALLOC_BANKED_WRITE != 0) && (ROB_ENTRIES >= BE_WIDTH)) begin
+                for (bank_update_alloc_entry = 0; bank_update_alloc_entry < ROB_ENTRIES;
+                     bank_update_alloc_entry = bank_update_alloc_entry + 1) begin
+                    if (bank_alloc_fire[bank_update_alloc_entry % BE_WIDTH] &&
+                        bank_alloc_slot[bank_update_alloc_entry % BE_WIDTH] == bank_update_alloc_entry) begin
+                        bank_bank_next_generation = generation_next_mem[bank_update_alloc_entry];
+                        if (bank_bank_next_generation == {GENERATION_WIDTH{1'b0}})
+                            bank_bank_next_generation = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
+                        begin generation_mem_write_data[bank_update_alloc_entry] = bank_bank_next_generation; generation_mem_write_enable[bank_update_alloc_entry] = 1'b1; end
+                        begin generation_next_mem_write_data[bank_update_alloc_entry] = (bank_bank_next_generation == {GENERATION_WIDTH{1'b1}}) ?
+                            {{(GENERATION_WIDTH-1){1'b0}}, 1'b1} : bank_bank_next_generation + 1'b1; generation_next_mem_write_enable[bank_update_alloc_entry] = 1'b1; end
+                        begin valid_mem_write_data[bank_update_alloc_entry] = 1'b1; valid_mem_write_enable[bank_update_alloc_entry] = 1'b1; end
+                        begin ready_mem_write_data[bank_update_alloc_entry] = 1'b0; ready_mem_write_enable[bank_update_alloc_entry] = 1'b1; end
+                        begin store_wait_mem_write_data[bank_update_alloc_entry] = 1'b0; store_wait_mem_write_enable[bank_update_alloc_entry] = 1'b1; end
+                        begin store_sent_mem_write_data[bank_update_alloc_entry] = 1'b0; store_sent_mem_write_enable[bank_update_alloc_entry] = 1'b1; end
+                        begin {store_mem_write_data[bank_update_alloc_entry], branch_mem_write_data[bank_update_alloc_entry],
+                         halt_mem_write_data[bank_update_alloc_entry], error_mem_write_data[bank_update_alloc_entry],
+                         pc_mem_write_data[bank_update_alloc_entry], inst_mem_write_data[bank_update_alloc_entry],
+                         rd_mem_write_data[bank_update_alloc_entry], rd_we_mem_write_data[bank_update_alloc_entry],
+                         old_phys_mem_write_data[bank_update_alloc_entry], new_phys_mem_write_data[bank_update_alloc_entry]} = bank_alloc_packet[bank_update_alloc_entry % BE_WIDTH]
+                                [CHECKPOINT_WIDTH +: ALLOC_PACKET_WIDTH-CHECKPOINT_WIDTH]; store_mem_write_enable[bank_update_alloc_entry] = 1'b1; branch_mem_write_enable[bank_update_alloc_entry] = 1'b1; halt_mem_write_enable[bank_update_alloc_entry] = 1'b1; error_mem_write_enable[bank_update_alloc_entry] = 1'b1; pc_mem_write_enable[bank_update_alloc_entry] = 1'b1; inst_mem_write_enable[bank_update_alloc_entry] = 1'b1; rd_mem_write_enable[bank_update_alloc_entry] = 1'b1; rd_we_mem_write_enable[bank_update_alloc_entry] = 1'b1; old_phys_mem_write_enable[bank_update_alloc_entry] = 1'b1; new_phys_mem_write_enable[bank_update_alloc_entry] = 1'b1; end
+                        if (CHECKPOINT_IMPL == 0)
+                            begin checkpoint_mem_write_data[bank_update_alloc_entry] = bank_alloc_packet[bank_update_alloc_entry % BE_WIDTH][0 +: CHECKPOINT_WIDTH]; checkpoint_mem_write_enable[bank_update_alloc_entry] = 1'b1; end
+                    end
+                end
+            end else begin
+            for (bank_update_alloc_lane = 0; bank_update_alloc_lane < BE_WIDTH; bank_update_alloc_lane = bank_update_alloc_lane + 1) begin
+                if (alloc_fire_o[bank_update_alloc_lane]) begin
+                    bank_update_alloc_slot = tail_reg + bank_update_alloc_lane;
+                    if (bank_update_alloc_slot >= ROB_ENTRIES)
+                        bank_update_alloc_slot = bank_update_alloc_slot - ROB_ENTRIES;
+                    bank_next_generation = generation_next_mem[bank_update_alloc_slot];
+                    if (bank_next_generation == {GENERATION_WIDTH{1'b0}})
+                        bank_next_generation = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
+                    begin generation_mem_write_data[bank_update_alloc_slot] = bank_next_generation; generation_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin generation_next_mem_write_data[bank_update_alloc_slot] = (bank_next_generation == {GENERATION_WIDTH{1'b1}}) ? {{(GENERATION_WIDTH-1){1'b0}}, 1'b1} : bank_next_generation + 1'b1; generation_next_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin valid_mem_write_data[bank_update_alloc_slot] = 1'b1; valid_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin ready_mem_write_data[bank_update_alloc_slot] = 1'b0; ready_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin store_wait_mem_write_data[bank_update_alloc_slot] = 1'b0; store_wait_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin store_sent_mem_write_data[bank_update_alloc_slot] = 1'b0; store_sent_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin store_mem_write_data[bank_update_alloc_slot] = alloc_is_store_i[bank_update_alloc_lane]; store_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin branch_mem_write_data[bank_update_alloc_slot] = alloc_is_branch_i[bank_update_alloc_lane]; branch_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin halt_mem_write_data[bank_update_alloc_slot] = alloc_is_halt_i[bank_update_alloc_lane]; halt_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin error_mem_write_data[bank_update_alloc_slot] = alloc_is_error_i[bank_update_alloc_lane]; error_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin pc_mem_write_data[bank_update_alloc_slot] = alloc_pc_i[(bank_update_alloc_lane*32) +: 32]; pc_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin inst_mem_write_data[bank_update_alloc_slot] = alloc_inst_i[(bank_update_alloc_lane*32) +: 32]; inst_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin rd_mem_write_data[bank_update_alloc_slot] = alloc_rd_i[(bank_update_alloc_lane*5) +: 5]; rd_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin rd_we_mem_write_data[bank_update_alloc_slot] = alloc_rd_we_i[bank_update_alloc_lane]; rd_we_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin old_phys_mem_write_data[bank_update_alloc_slot] = alloc_old_phys_i[(bank_update_alloc_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]; old_phys_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin new_phys_mem_write_data[bank_update_alloc_slot] = alloc_new_phys_i[(bank_update_alloc_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH]; new_phys_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    if (CHECKPOINT_IMPL == 0)
+                        begin checkpoint_mem_write_data[bank_update_alloc_slot] = alloc_checkpoint_i[(bank_update_alloc_lane*CHECKPOINT_WIDTH) +: CHECKPOINT_WIDTH]; checkpoint_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                end
+            end
+            end
+            ;
+            ;
+            ;
+        end
+    end
     always @(posedge clk_i) begin
         if (reset_i) begin
             head_reg <= 0;
@@ -738,31 +999,31 @@ module rv32_rob #(
             error_o <= 1'b0;
             return_value_o <= 0;
             for (reset_slot = 0; reset_slot < ROB_ENTRIES; reset_slot = reset_slot + 1) begin
-                valid_mem[reset_slot] <= 1'b0;
-                ready_mem[reset_slot] <= 1'b0;
-                store_wait_mem[reset_slot] <= 1'b0;
-                store_sent_mem[reset_slot] <= 1'b0;
-                error_mem[reset_slot] <= 1'b0;
-                generation_mem[reset_slot] <= {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
-                generation_next_mem[reset_slot] <= {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
             end
         end else if (recovery_domains[5]) begin
-            // Keep the branch itself and all older entries; kill strict young entries.
+            
             branch_age = apply_age;
             for (reset_slot = 0; reset_slot < ROB_ENTRIES; reset_slot = reset_slot + 1) begin
                 younger_age = reset_slot - head_update_index;
                 if (STAGED_RECOVERY ? recovery_saved_kill[reset_slot] :
                     (valid_mem[reset_slot] && (younger_age > branch_age) && (younger_age < occupancy_reg))) begin
-                    valid_mem[reset_slot] <= 1'b0;
-                    ready_mem[reset_slot] <= 1'b0;
-                    store_wait_mem[reset_slot] <= 1'b0;
-                    store_sent_mem[reset_slot] <= 1'b0;
+                    ;
+                    ;
+                    ;
+                    ;
                 end
             end
-            // Recovery and the resolving branch completion normally arrive
-            // together.  Retained entries must still observe matching
-            // completions or the branch can become a permanently unready
-            // ROB head after its younger suffix is removed.
+            
+            
+            
+            
             for (complete_lane = 0; complete_lane < BE_WIDTH; complete_lane = complete_lane + 1) begin
                 if (completion_valid_i[complete_lane] && completion_done_i[complete_lane]) begin
                     for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
@@ -770,15 +1031,13 @@ module rv32_rob #(
                         if ((update_completion_age <= branch_age) &&
                             tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index)) begin
                             ready_mem[slot_index] <= 1'b1;
-                            value_mem[slot_index] <= completion_value_i[(complete_lane*32) +: 32];
-                            if (completion_error_i[complete_lane]) error_mem[slot_index] <= 1'b1;
-                            store_addr_mem[slot_index] <= completion_store_addr_i[(complete_lane*32) +: 32];
+                            ;
+                            if (;
+                            ;
                             if (MMIO_PREDECODE != 0)
-                                mmio_word_mem[slot_index] <=
-                                    (completion_store_addr_i[(complete_lane*32) +: 32] == 32'h80000000) &&
-                                    (completion_store_mask_i[(complete_lane*4) +: 4] == 4'hf);
-                            store_mask_mem[slot_index] <= completion_store_mask_i[(complete_lane*4) +: 4];
-                            store_data_mem[slot_index] <= completion_store_data_i[(complete_lane*32) +: 32];
+                                ;
+                            ;
+                            ;
                         end
                     end
                 end
@@ -787,35 +1046,33 @@ module rv32_rob #(
             occupancy_reg <= branch_age + 1;
             epoch_reg <= epoch_reg + 1'b1;
         end else begin
-            // Tagged completion and store ack only update live generations.
+            
             for (complete_lane = 0; complete_lane < BE_WIDTH; complete_lane = complete_lane + 1) begin
                 if (completion_valid_i[complete_lane] && completion_done_i[complete_lane]) begin
                     for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
                         if (tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index)) begin
-                            ready_mem[slot_index] <= 1'b1;
-                            value_mem[slot_index] <= completion_value_i[(complete_lane*32) +: 32];
-                            if (completion_error_i[complete_lane]) error_mem[slot_index] <= 1'b1;
-                            store_addr_mem[slot_index] <= completion_store_addr_i[(complete_lane*32) +: 32];
+                            ;
+                            ;
+                            if (;
+                            ;
                             if (MMIO_PREDECODE != 0)
-                                mmio_word_mem[slot_index] <=
-                                    (completion_store_addr_i[(complete_lane*32) +: 32] == 32'h80000000) &&
-                                    (completion_store_mask_i[(complete_lane*4) +: 4] == 4'hf);
-                            store_mask_mem[slot_index] <= completion_store_mask_i[(complete_lane*4) +: 4];
-                            store_data_mem[slot_index] <= completion_store_data_i[(complete_lane*32) +: 32];
+                                ;
+                            ;
+                            ;
                         end
                     end
                 end
             end
             for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
                 if (store_ack_valid_i && tag_matches(store_ack_tag_i, slot_index)) begin
-                    store_wait_mem[slot_index] <= 1'b1;
-                    if (store_ack_error_i) error_mem[slot_index] <= 1'b1;
+                    ;
+                    if (store_ack_error_i) ;
                 end
             end
             if (store_commit_valid_o && store_commit_ready_i) begin
-                store_sent_mem[head_commit_index] <= 1'b1;
+                ;
             end
-            // Precise architectural side effects occur only on popped head entries.
+            
             for (update_commit_lane = 0; update_commit_lane < BE_WIDTH; update_commit_lane = update_commit_lane + 1) begin
                 if (commit_valid_o[update_commit_lane] && commit_ready_i) begin
                     update_commit_slot = head_commit_index + update_commit_lane;
@@ -830,13 +1087,13 @@ module rv32_rob #(
                         return_value_o <= head_value[update_commit_lane];
                     end
                     if (head_error[update_commit_lane]) error_o <= 1'b1;
-                    valid_mem[update_commit_slot] <= 1'b0;
-                    ready_mem[update_commit_slot] <= 1'b0;
-                    store_wait_mem[update_commit_slot] <= 1'b0;
-                    store_sent_mem[update_commit_slot] <= 1'b0;
+                    ;
+                    ;
+                    ;
+                    ;
                 end
             end
-            // Allocate the accepted contiguous prefix at tail.
+            
             if ((ALLOC_BANKED_WRITE != 0) && (ROB_ENTRIES >= BE_WIDTH)) begin
                 for (update_alloc_entry = 0; update_alloc_entry < ROB_ENTRIES;
                      update_alloc_entry = update_alloc_entry + 1) begin
@@ -845,24 +1102,15 @@ module rv32_rob #(
                         bank_next_generation = generation_next_mem[update_alloc_entry];
                         if (bank_next_generation == {GENERATION_WIDTH{1'b0}})
                             bank_next_generation = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
-                        generation_mem[update_alloc_entry] <= bank_next_generation;
-                        generation_next_mem[update_alloc_entry] <=
-                            (bank_next_generation == {GENERATION_WIDTH{1'b1}}) ?
-                            {{(GENERATION_WIDTH-1){1'b0}}, 1'b1} : bank_next_generation + 1'b1;
-                        valid_mem[update_alloc_entry] <= 1'b1;
-                        ready_mem[update_alloc_entry] <= 1'b0;
-                        store_wait_mem[update_alloc_entry] <= 1'b0;
-                        store_sent_mem[update_alloc_entry] <= 1'b0;
-                        {store_mem[update_alloc_entry], branch_mem[update_alloc_entry],
-                         halt_mem[update_alloc_entry], error_mem[update_alloc_entry],
-                         pc_mem[update_alloc_entry], inst_mem[update_alloc_entry],
-                         rd_mem[update_alloc_entry], rd_we_mem[update_alloc_entry],
-                         old_phys_mem[update_alloc_entry], new_phys_mem[update_alloc_entry]} <=
-                            bank_alloc_packet[update_alloc_entry % BE_WIDTH]
-                                [CHECKPOINT_WIDTH +: ALLOC_PACKET_WIDTH-CHECKPOINT_WIDTH];
+                        ;
+                        ;
+                        ;
+                        ;
+                        ;
+                        ;
+                        ;
                         if (CHECKPOINT_IMPL == 0)
-                            checkpoint_mem[update_alloc_entry] <=
-                                bank_alloc_packet[update_alloc_entry % BE_WIDTH][0 +: CHECKPOINT_WIDTH];
+                            ;
                     end
                 end
             end else begin
@@ -874,24 +1122,24 @@ module rv32_rob #(
                     next_generation = generation_next_mem[update_alloc_slot];
                     if (next_generation == {GENERATION_WIDTH{1'b0}})
                         next_generation = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
-                    generation_mem[update_alloc_slot] <= next_generation;
-                    generation_next_mem[update_alloc_slot] <= (next_generation == {GENERATION_WIDTH{1'b1}}) ? {{(GENERATION_WIDTH-1){1'b0}}, 1'b1} : next_generation + 1'b1;
-                    valid_mem[update_alloc_slot] <= 1'b1;
-                    ready_mem[update_alloc_slot] <= 1'b0;
-                    store_wait_mem[update_alloc_slot] <= 1'b0;
-                    store_sent_mem[update_alloc_slot] <= 1'b0;
-                    store_mem[update_alloc_slot] <= alloc_is_store_i[update_alloc_lane];
-                    branch_mem[update_alloc_slot] <= alloc_is_branch_i[update_alloc_lane];
-                    halt_mem[update_alloc_slot] <= alloc_is_halt_i[update_alloc_lane];
-                    error_mem[update_alloc_slot] <= alloc_is_error_i[update_alloc_lane];
-                    pc_mem[update_alloc_slot] <= alloc_pc_i[(update_alloc_lane*32) +: 32];
-                    inst_mem[update_alloc_slot] <= alloc_inst_i[(update_alloc_lane*32) +: 32];
-                    rd_mem[update_alloc_slot] <= alloc_rd_i[(update_alloc_lane*5) +: 5];
-                    rd_we_mem[update_alloc_slot] <= alloc_rd_we_i[update_alloc_lane];
-                    old_phys_mem[update_alloc_slot] <= alloc_old_phys_i[(update_alloc_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
-                    new_phys_mem[update_alloc_slot] <= alloc_new_phys_i[(update_alloc_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
+                    ;
                     if (CHECKPOINT_IMPL == 0)
-                        checkpoint_mem[update_alloc_slot] <= alloc_checkpoint_i[(update_alloc_lane*CHECKPOINT_WIDTH) +: CHECKPOINT_WIDTH];
+                        ;
                 end
             end
             end
@@ -900,4 +1148,90 @@ module rv32_rob #(
             occupancy_reg <= occupancy_reg - (commit_ready_i ? pop_count : 0) + allocation_count;
         end
     end
+    genvar storage_row;
+    generate for(storage_row=0;storage_row<ROB_ENTRIES;storage_row=storage_row+1) begin:g_state_row
+        rv32_rob_owned_field #(.WIDTH(1)) valid_mem_owner (
+            .clk_i(clk_i),.write_i(valid_mem_write_enable[storage_row]),
+            .data_i(valid_mem_write_data[storage_row]),.data_o(valid_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(1)) ready_mem_owner (
+            .clk_i(clk_i),.write_i(ready_mem_write_enable[storage_row]),
+            .data_i(ready_mem_write_data[storage_row]),.data_o(ready_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(1)) store_mem_owner (
+            .clk_i(clk_i),.write_i(store_mem_write_enable[storage_row]),
+            .data_i(store_mem_write_data[storage_row]),.data_o(store_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(1)) branch_mem_owner (
+            .clk_i(clk_i),.write_i(branch_mem_write_enable[storage_row]),
+            .data_i(branch_mem_write_data[storage_row]),.data_o(branch_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(1)) halt_mem_owner (
+            .clk_i(clk_i),.write_i(halt_mem_write_enable[storage_row]),
+            .data_i(halt_mem_write_data[storage_row]),.data_o(halt_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(1)) error_mem_owner (
+            .clk_i(clk_i),.write_i(error_mem_write_enable[storage_row]),
+            .data_i(error_mem_write_data[storage_row]),.data_o(error_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(1)) store_wait_mem_owner (
+            .clk_i(clk_i),.write_i(store_wait_mem_write_enable[storage_row]),
+            .data_i(store_wait_mem_write_data[storage_row]),.data_o(store_wait_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(1)) store_sent_mem_owner (
+            .clk_i(clk_i),.write_i(store_sent_mem_write_enable[storage_row]),
+            .data_i(store_sent_mem_write_data[storage_row]),.data_o(store_sent_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(GENERATION_WIDTH-1+1)) generation_mem_owner (
+            .clk_i(clk_i),.write_i(generation_mem_write_enable[storage_row]),
+            .data_i(generation_mem_write_data[storage_row]),.data_o(generation_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(GENERATION_WIDTH-1+1)) generation_next_mem_owner (
+            .clk_i(clk_i),.write_i(generation_next_mem_write_enable[storage_row]),
+            .data_i(generation_next_mem_write_data[storage_row]),.data_o(generation_next_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(31+1)) pc_mem_owner (
+            .clk_i(clk_i),.write_i(pc_mem_write_enable[storage_row]),
+            .data_i(pc_mem_write_data[storage_row]),.data_o(pc_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(31+1)) inst_mem_owner (
+            .clk_i(clk_i),.write_i(inst_mem_write_enable[storage_row]),
+            .data_i(inst_mem_write_data[storage_row]),.data_o(inst_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(4+1)) rd_mem_owner (
+            .clk_i(clk_i),.write_i(rd_mem_write_enable[storage_row]),
+            .data_i(rd_mem_write_data[storage_row]),.data_o(rd_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(1)) rd_we_mem_owner (
+            .clk_i(clk_i),.write_i(rd_we_mem_write_enable[storage_row]),
+            .data_i(rd_we_mem_write_data[storage_row]),.data_o(rd_we_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(PHYS_ADDR_WIDTH-1+1)) old_phys_mem_owner (
+            .clk_i(clk_i),.write_i(old_phys_mem_write_enable[storage_row]),
+            .data_i(old_phys_mem_write_data[storage_row]),.data_o(old_phys_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(PHYS_ADDR_WIDTH-1+1)) new_phys_mem_owner (
+            .clk_i(clk_i),.write_i(new_phys_mem_write_enable[storage_row]),
+            .data_i(new_phys_mem_write_data[storage_row]),.data_o(new_phys_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(31+1)) value_mem_owner (
+            .clk_i(clk_i),.write_i(value_mem_write_enable[storage_row]),
+            .data_i(value_mem_write_data[storage_row]),.data_o(value_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(31+1)) store_addr_mem_owner (
+            .clk_i(clk_i),.write_i(store_addr_mem_write_enable[storage_row]),
+            .data_i(store_addr_mem_write_data[storage_row]),.data_o(store_addr_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(1)) mmio_word_mem_owner (
+            .clk_i(clk_i),.write_i(mmio_word_mem_write_enable[storage_row]),
+            .data_i(mmio_word_mem_write_data[storage_row]),.data_o(mmio_word_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(3+1)) store_mask_mem_owner (
+            .clk_i(clk_i),.write_i(store_mask_mem_write_enable[storage_row]),
+            .data_i(store_mask_mem_write_data[storage_row]),.data_o(store_mask_mem[storage_row]));
+        rv32_rob_owned_field #(.WIDTH(31+1)) store_data_mem_owner (
+            .clk_i(clk_i),.write_i(store_data_mem_write_enable[storage_row]),
+            .data_i(store_data_mem_write_data[storage_row]),.data_o(store_data_mem[storage_row]));
+        if(CHECKPOINT_IMPL==0) begin:g_array_checkpoint
+        rv32_rob_owned_field #(.WIDTH(CHECKPOINT_WIDTH-1+1)) checkpoint_mem_owner (
+            .clk_i(clk_i),.write_i(checkpoint_mem_write_enable[storage_row]),
+            .data_i(checkpoint_mem_write_data[storage_row]),.data_o(checkpoint_mem[storage_row]));
+        end else begin:g_unused_array_checkpoint
+            assign checkpoint_mem[storage_row]={CHECKPOINT_WIDTH{1'b0}};
+        end
+    end endgenerate
+
+endmodule
+
+// Owns actual architectural queue fields. The enable/hold mux is local,
+// so a shared write decision drives one input rather than every data bit.
+(* keep_hierarchy = 1 *)
+module rv32_rob_owned_field #(parameter integer WIDTH=32) (
+    input wire clk_i,write_i,
+    input wire [WIDTH-1:0] data_i,
+    output wire [WIDTH-1:0] data_o
+);
+    rv32_frequency_word_bank #(.WIDTH(WIDTH)) payload_owner (
+        .clk_i(clk_i),.write_i(write_i),.data_i(data_i),.data_o(data_o));
 endmodule

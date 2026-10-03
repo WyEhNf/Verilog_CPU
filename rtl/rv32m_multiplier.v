@@ -132,10 +132,10 @@ module rv32m_multiplier #(
         (live_tag_valid_i && out_tag!=live_tag_i));
     wire out_ready=!out_valid || resp_ready_i || out_discard;
     wire s1_ready=!s1_valid || out_ready || s1_discard;
-    wire [8:0] s1_write_domains;
+    wire [16:0] s1_write_domains;
     wire [1:0] out_write_domains;
     // A single ready/valid gate must not directly drive 512 payload hold muxes.
-    rv32_frequency_control_tree #(.LEAVES(9)) s1_write_tree (
+    rv32_frequency_control_tree #(.LEAVES(17)) s1_write_tree (
         .signal_i(req_valid_i && req_ready_o),.views_o(s1_write_domains));
     rv32_frequency_control_tree #(.LEAVES(2)) out_write_tree (
         .signal_i(out_ready && s1_valid && !s1_discard),.views_o(out_write_domains));
@@ -169,8 +169,10 @@ module rv32m_multiplier #(
     // Invalid payload may be overwritten even on a reset edge. Valid bits
     // below discard it; each newly valid transaction has all fields written.
     generate for(row=0;row<8;row=row+1) begin:g_s1_storage
-        always @(posedge clk_i) if(s1_write_domains[row])
-            s1_rows[row]<=l4[row];
+        always @(posedge clk_i) begin
+            if(s1_write_domains[2*row]) s1_rows[row][31:0]<=l4[row][31:0];
+            if(s1_write_domains[2*row+1]) s1_rows[row][63:32]<=l4[row][63:32];
+        end
     end endgenerate
     always @(posedge clk_i) begin
         if(reset_i || flush_i) begin
@@ -179,7 +181,7 @@ module rv32m_multiplier #(
         end else begin
             if(s1_ready) begin
                 s1_valid<=req_valid_i && req_ready_o;
-                if(s1_write_domains[8]) begin
+                if(s1_write_domains[16]) begin
                     s1_op<=req_op_i;
                     s1_tag<=req_rob_tag_i;
                     s1_phys<=req_phys_rd_i;
