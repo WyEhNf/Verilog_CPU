@@ -121,6 +121,12 @@ module rv32m_multiplier #(
     reg [TAG_WIDTH-1:0] s1_tag;
     reg [PHYS_ADDR_WIDTH-1:0] s1_phys;
     reg s1_live;
+    reg s2_valid;
+    reg [63:0] s2_rows [0:1];
+    reg [OP_WIDTH-1:0] s2_op;
+    reg [TAG_WIDTH-1:0] s2_tag;
+    reg [PHYS_ADDR_WIDTH-1:0] s2_phys;
+    reg s2_live;
     reg out_valid;
     reg [31:0] out_value;
     reg [TAG_WIDTH-1:0] out_tag;
@@ -131,14 +137,20 @@ module rv32m_multiplier #(
     wire out_discard=out_valid && (!out_live ||
         (live_tag_valid_i && out_tag!=live_tag_i));
     wire out_ready=!out_valid || resp_ready_i || out_discard;
-    wire s1_ready=!s1_valid || out_ready || s1_discard;
+    wire s2_discard=s2_valid && (!s2_live ||
+        (live_tag_valid_i && s2_tag!=live_tag_i));
+    wire s2_ready=!s2_valid || out_ready || s2_discard;
+    wire s1_ready=!s1_valid || s2_ready || s1_discard;
+    wire [4:0] s2_write_domains;
+    rv32_frequency_control_tree #(.LEAVES(5)) s2_write_tree (
+        .signal_i(s2_ready && s1_valid && !s1_discard),.views_o(s2_write_domains));
     wire [16:0] s1_write_domains;
     wire [1:0] out_write_domains;
     // A single ready/valid gate must not directly drive 512 payload hold muxes.
     rv32_frequency_control_tree #(.LEAVES(17)) s1_write_tree (
         .signal_i(req_valid_i && req_ready_o),.views_o(s1_write_domains));
     rv32_frequency_control_tree #(.LEAVES(2)) out_write_tree (
-        .signal_i(out_ready && s1_valid && !s1_discard),.views_o(out_write_domains));
+        .signal_i(out_ready && s2_valid && !s2_discard),.views_o(out_write_domains));
     assign req_ready_o=!flush_i && s1_ready;
     assign resp_valid_o=out_valid && out_live &&
         (!live_tag_valid_i || out_tag==live_tag_i);
@@ -165,7 +177,15 @@ module rv32m_multiplier #(
     wire [63:0] l8 [0:1];
     assign l8[0]=csa_sum3(l7[0],l7[1],l7[2]);
     assign l8[1]=csa_carry3(l7[0],l7[1],l7[2]);
-    wire [63:0] product=l8[0]+l8[1];
+    // The final CPA starts from two registered rows, never from the same
+    // cycle's four CSA layers. Both rows retain the exact modulo-2^64 sum.
+    wire [63:0] product=s2_rows[0]+s2_rows[1];
+    generate for(row=0;row<2;row=row+1) begin:g_s2_storage
+        always @(posedge clk_i) begin
+            if(s2_write_domains[2*row]) s2_rows[row][31:0]<=l8[row][31:0];
+            if(s2_write_domains[2*row+1]) s2_rows[row][63:32]<=l8[row][63:32];
+        end
+    end endgenerate
     // Invalid payload may be overwritten even on a reset edge. Valid bits
     // below discard it; each newly valid transaction has all fields written.
     generate for(row=0;row<8;row=row+1) begin:g_s1_storage
@@ -177,6 +197,7 @@ module rv32m_multiplier #(
     always @(posedge clk_i) begin
         if(reset_i || flush_i) begin
             s1_valid<=1'b0;
+            s2_valid<=1'b0;
             out_valid<=1'b0;
         end else begin
             if(s1_ready) begin
@@ -188,11 +209,15 @@ module rv32m_multiplier #(
                     s1_live<=req_target_live_i && req_rob_tag_i[0];
                 end
             end
+            if(s2_ready) s2_valid<=s1_valid && !s1_discard;
+            if(s2_write_domains[4]) begin
+                s2_op<=s1_op;s2_tag<=s1_tag;s2_phys<=s1_phys;s2_live<=s1_live;
+            end
             if(out_ready) begin
-                out_valid<=s1_valid && !s1_discard;
+                out_valid<=s2_valid && !s2_discard;
             end
             if(out_write_domains[0]) begin
-                    case(s1_op)
+                    case(s2_op)
                         `RV32IM_OP_MUL: out_value<=product[31:0];
                         `RV32IM_OP_MULH,`RV32IM_OP_MULHSU,`RV32IM_OP_MULHU:
                             out_value<=product[63:32];
@@ -200,9 +225,9 @@ module rv32m_multiplier #(
                     endcase
             end
             if(out_write_domains[1]) begin
-                    out_tag<=s1_tag;
-                    out_phys<=s1_phys;
-                    out_live<=s1_live;
+                    out_tag<=s2_tag;
+                    out_phys<=s2_phys;
+                    out_live<=s2_live;
             end
         end
     end
