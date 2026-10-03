@@ -873,368 +873,212 @@ module rv32_lsq #(
             end
         end
     endgenerate
-    always @* begin : g_state_commands
-        integer bank_alloc_count_calc;
-        integer bank_alloc_slot;
-        reg bank_commit_fire;
-        reg [RECOVERY_ARITH_WIDTH-1:0] bank_entry_rob_slot;
-        integer bank_lane;
-        reg [31:0] bank_merged_word;
-        reg [GENERATION_WIDTH-1:0] bank_next_generation;
-        integer bank_pop_count_calc;
-        reg [RECOVERY_ARITH_WIDTH-1:0] bank_recovery_branch_age;
-        reg [RECOVERY_ARITH_WIDTH-1:0] bank_recovery_branch_slot;
-        reg [RECOVERY_ARITH_WIDTH-1:0] bank_recovery_entry_age;
-        integer bank_recovery_first_killed;
-        integer bank_recovery_keep_count;
-        integer bank_recovery_kill_found;
-        reg [31:0] bank_response_word;
-        integer bank_scan;
-        integer bank_slot;
-        integer bank_update_slot;
-        integer bank_retirement_slot,bank_retirement_lane;
-        integer bank_default_row;
-        bank_retirement_slot=0;bank_retirement_lane=0;
-        for(bank_default_row=0;bank_default_row<LSQ_ENTRIES;bank_default_row=bank_default_row+1) begin
-            valid_mem_write_data[bank_default_row]=0; valid_mem_write_enable[bank_default_row]=0;
-            load_mem_write_data[bank_default_row]=0; load_mem_write_enable[bank_default_row]=0;
-            store_mem_write_data[bank_default_row]=0; store_mem_write_enable[bank_default_row]=0;
-            retired_mem_write_data[bank_default_row]=0; retired_mem_write_enable[bank_default_row]=0;
-            generation_mem_write_data[bank_default_row]=0; generation_mem_write_enable[bank_default_row]=0;
-            generation_next_mem_write_data[bank_default_row]=0; generation_next_mem_write_enable[bank_default_row]=0;
-            size_mem_write_data[bank_default_row]=0; size_mem_write_enable[bank_default_row]=0;
-            unsigned_mem_write_data[bank_default_row]=0; unsigned_mem_write_enable[bank_default_row]=0;
-            addr_ready_mem_write_data[bank_default_row]=0; addr_ready_mem_write_enable[bank_default_row]=0;
-            data_ready_mem_write_data[bank_default_row]=0; data_ready_mem_write_enable[bank_default_row]=0;
-            mask_mem_write_data[bank_default_row]=0; mask_mem_write_enable[bank_default_row]=0;
-            request_sent_mem_write_data[bank_default_row]=0; request_sent_mem_write_enable[bank_default_row]=0;
-            response_wait_mem_write_data[bank_default_row]=0; response_wait_mem_write_enable[bank_default_row]=0;
-            complete_mem_write_data[bank_default_row]=0; complete_mem_write_enable[bank_default_row]=0;
-            load_reported_mem_write_data[bank_default_row]=0; load_reported_mem_write_enable[bank_default_row]=0;
-            complete_error_mem_write_data[bank_default_row]=0; complete_error_mem_write_enable[bank_default_row]=0;
-            forward_mask_mem_write_data[bank_default_row]=0; forward_mask_mem_write_enable[bank_default_row]=0;
-            store_commit_mem_write_data[bank_default_row]=0; store_commit_mem_write_enable[bank_default_row]=0;
-            store_ack_mem_write_data[bank_default_row]=0; store_ack_mem_write_enable[bank_default_row]=0;
-            store_ack_error_mem_write_data[bank_default_row]=0; store_ack_error_mem_write_enable[bank_default_row]=0;
+
+    // Three independent metadata groups per physical LSQ row. Local mode
+    // leaves cannot collapse into one reset/recovery driver across all rows.
+    localparam integer META_LSQ_AGE_WIDTH=((LSQ_ENTRIES & (LSQ_ENTRIES-1))==0)?SLOT_WIDTH:SLOT_WIDTH+1;
+    wire [7*LSQ_ENTRIES-1:0] metadata_events;
+    wire metadata_pop=(occupancy_reg!=0) && valid_mem[head_reg] &&
+        ((load_mem[head_reg] && complete_mem[head_reg] &&
+          (load_reported_mem[head_reg] || (load_complete_valid_o && load_complete_ready_i && complete_slot_select==head_reg))) ||
+         (store_mem[head_reg] && store_ack_mem[head_reg] && store_ack_ready_i));
+    wire metadata_forward=candidate_found && load_mem[candidate] &&
+        !request_sent_mem[candidate] && !complete_mem[candidate] && ((fwd_mask & target_mask)==target_mask);
+    rv32_frequency_control_tree #(.WIDTH(7),.LEAVES(LSQ_ENTRIES)) metadata_event_tree (
+        .signal_i({metadata_pop,metadata_forward,request_fire,response_fire,dcache_store_ack_valid_i,
+                   load_complete_valid_o && load_complete_ready_i,store_commit_valid_i && store_commit_ready_o}),
+        .views_o(metadata_events));
+    genvar metadata_row,metadata_lane;
+    generate for(metadata_row=0;metadata_row<LSQ_ENTRIES;metadata_row=metadata_row+1) begin:g_metadata_row
+        wire [8:0] modes;
+        rv32_frequency_control_tree #(.WIDTH(3),.LEAVES(3)) mode_tree (
+            .signal_i(payload_modes[metadata_row*3 +: 3]),.views_o(modes));
+        wire [BE_WIDTH-1:0] alloc_matches,addr_matches,data_matches,wake_matches,retire_matches;
+        wire [BE_WIDTH*11-1:0] alloc_values;
+        wire allocated;
+        wire [10:0] allocation;
+        for(metadata_lane=0;metadata_lane<BE_WIDTH;metadata_lane=metadata_lane+1) begin:g_match
+            assign alloc_matches[metadata_lane]=alloc_fire_o[metadata_lane] &&
+                payload_alloc_slot[metadata_lane]==metadata_row;
+            assign alloc_values[metadata_lane*11 +: 11]={
+                alloc_store_mask_i[metadata_lane*4 +: 4],
+                alloc_data_valid_i[metadata_lane] || alloc_is_load_i[metadata_lane],
+                alloc_addr_valid_i[metadata_lane],alloc_unsigned_i[metadata_lane],
+                alloc_size_i[metadata_lane*2 +: 2],alloc_is_store_i[metadata_lane],alloc_is_load_i[metadata_lane]};
+            assign addr_matches[metadata_lane]=addr_update_valid_i[metadata_lane] &&
+                tag_matches_slot(addr_update_tag_i[metadata_lane*TAG_WIDTH +: TAG_WIDTH],metadata_row);
+            assign data_matches[metadata_lane]=data_update_valid_i[metadata_lane] &&
+                tag_matches_slot(data_update_tag_i[metadata_lane*TAG_WIDTH +: TAG_WIDTH],metadata_row);
+            assign wake_matches[metadata_lane]=wakeup_valid_i[metadata_lane] &&
+                tag_matches_slot(wakeup_tag_i[metadata_lane*TAG_WIDTH +: TAG_WIDTH],metadata_row);
+            assign retire_matches[metadata_lane]=retire_valid_i[metadata_lane] && valid_mem[metadata_row] &&
+                load_mem[metadata_row] && rob_tag_mem[metadata_row]==retire_rob_tag_i[metadata_lane*ROB_TAG_WIDTH +: ROB_TAG_WIDTH];
         end
-        bank_alloc_count_calc=0;
-        bank_alloc_slot=0;
-        bank_commit_fire=0;
-        bank_entry_rob_slot=0;
-        bank_lane=0;
-        bank_merged_word=0;
-        bank_next_generation=0;
-        bank_pop_count_calc=0;
-        bank_recovery_branch_age=0;
-        bank_recovery_branch_slot=0;
-        bank_recovery_entry_age=0;
-        bank_recovery_first_killed=0;
-        bank_recovery_keep_count=0;
-        bank_recovery_kill_found=0;
-        bank_response_word=0;
-        bank_scan=0;
-        bank_slot=0;
-        bank_update_slot=0;
+        rv32_frequency_event_select #(.WIDTH(11),.EVENTS(BE_WIDTH)) allocation_selector (
+            .events_i(alloc_matches),.values_i(alloc_values),.write_o(allocated),.value_o(allocation));
+        wire [GENERATION_WIDTH-1:0] allocated_generation=(generation_next_mem[metadata_row]==0)?
+            {{(GENERATION_WIDTH-1){1'b0}},1'b1}:generation_next_mem[metadata_row];
+        wire [META_LSQ_AGE_WIDTH-1:0] lsq_difference=metadata_row-head_reg;
+        wire [META_LSQ_AGE_WIDTH-1:0] lsq_age=
+            (((LSQ_ENTRIES & (LSQ_ENTRIES-1))!=0) && lsq_difference[META_LSQ_AGE_WIDTH-1])?
+            lsq_difference+LSQ_ENTRIES:lsq_difference;
+        wire [RECOVERY_ARITH_WIDTH-1:0] row_rob_age=payload_recovery_age(rob_tag_mem[metadata_row]);
+        wire kill=lsq_age<occupancy_reg && valid_mem[metadata_row] &&
+            !(store_mem[metadata_row] && store_commit_mem[metadata_row]) &&
+            !(load_mem[metadata_row] && retired_mem[metadata_row]) &&
+            row_rob_age>payload_branch_age && row_rob_age<recovery_occupancy_i;
+        wire response_allowed=!(row_rob_age>payload_branch_age && row_rob_age<recovery_occupancy_i);
+        wire commit_event=metadata_events[metadata_row*7] && commit_slot_select==metadata_row;
+        wire report_event=metadata_events[metadata_row*7+1] && complete_slot_select==metadata_row;
+        wire ack_event=metadata_events[metadata_row*7+2] &&
+            tag_matches_slot(dcache_store_ack_lsq_tag_i,metadata_row) &&
+            request_sent_mem[metadata_row] && response_wait_mem[metadata_row];
+        wire response_event=metadata_events[metadata_row*7+3] && response_slot==metadata_row;
+        wire request_event=metadata_events[metadata_row*7+4] && candidate==metadata_row;
+        wire forward_event=metadata_events[metadata_row*7+5] && candidate==metadata_row;
+        wire pop_event=metadata_events[metadata_row*7+6] && head_reg==metadata_row;
+        wire early_event=(STORE_ADDRESS_PROBE!=0) && early_addr_valid_i &&
+            tag_matches_slot(early_addr_tag_i,metadata_row) && store_mem[metadata_row] &&
+            !addr_ready_mem[metadata_row] && !request_sent_mem[metadata_row] && !complete_mem[metadata_row];
 
-        if (reset_i) begin
-            ;
-            ;
-            ;
-            for (bank_slot = 0; bank_slot < LSQ_ENTRIES; bank_slot = bank_slot + 1) begin
-                begin valid_mem_write_data[bank_slot] = 1'b0; valid_mem_write_enable[bank_slot] = 1'b1; end
-                begin retired_mem_write_data[bank_slot] = 1'b0; retired_mem_write_enable[bank_slot] = 1'b1; end
-                begin generation_mem_write_data[bank_slot] = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1}; generation_mem_write_enable[bank_slot] = 1'b1; end
-                begin generation_next_mem_write_data[bank_slot] = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1}; generation_next_mem_write_enable[bank_slot] = 1'b1; end
-                begin request_sent_mem_write_data[bank_slot] = 1'b0; request_sent_mem_write_enable[bank_slot] = 1'b1; end
-                begin response_wait_mem_write_data[bank_slot] = 1'b0; response_wait_mem_write_enable[bank_slot] = 1'b1; end
-                begin complete_mem_write_data[bank_slot] = 1'b0; complete_mem_write_enable[bank_slot] = 1'b1; end
-                begin load_reported_mem_write_data[bank_slot] = 1'b0; load_reported_mem_write_enable[bank_slot] = 1'b1; end
-                begin store_commit_mem_write_data[bank_slot] = 1'b0; store_commit_mem_write_enable[bank_slot] = 1'b1; end
-                begin store_ack_mem_write_data[bank_slot] = 1'b0; store_ack_mem_write_enable[bank_slot] = 1'b1; end
-            end
-        end else if (flush_i) begin
-            ;
-            ;
-            ;
-            for (bank_slot = 0; bank_slot < LSQ_ENTRIES; bank_slot = bank_slot + 1) begin
-                begin valid_mem_write_data[bank_slot] = 1'b0; valid_mem_write_enable[bank_slot] = 1'b1; end
-                begin retired_mem_write_data[bank_slot] = 1'b0; retired_mem_write_enable[bank_slot] = 1'b1; end
-                begin request_sent_mem_write_data[bank_slot] = 1'b0; request_sent_mem_write_enable[bank_slot] = 1'b1; end
-                begin response_wait_mem_write_data[bank_slot] = 1'b0; response_wait_mem_write_enable[bank_slot] = 1'b1; end
-                begin complete_mem_write_data[bank_slot] = 1'b0; complete_mem_write_enable[bank_slot] = 1'b1; end
-                begin load_reported_mem_write_data[bank_slot] = 1'b0; load_reported_mem_write_enable[bank_slot] = 1'b1; end
-                begin store_commit_mem_write_data[bank_slot] = 1'b0; store_commit_mem_write_enable[bank_slot] = 1'b1; end
-                begin store_ack_mem_write_data[bank_slot] = 1'b0; store_ack_mem_write_enable[bank_slot] = 1'b1; end
-            end
-        end else if (recovery_valid_i) begin
-            
-            
-            
-            
-            bank_recovery_branch_slot = recovery_tag_i[3 +: ROB_SLOT_WIDTH];
-            bank_recovery_branch_age = bank_recovery_branch_slot - recovery_head_i;
-            if (((ROB_ENTRIES & (ROB_ENTRIES-1))!=0) && bank_recovery_branch_age[RECOVERY_ARITH_WIDTH-1]) bank_recovery_branch_age = bank_recovery_branch_age + ROB_ENTRIES;
-            bank_recovery_keep_count = 0;
-            bank_recovery_first_killed = tail_reg;
-            bank_recovery_kill_found = 0;
-            for (bank_slot = 0; bank_slot < LSQ_ENTRIES; bank_slot = bank_slot + 1) begin
-                bank_scan = head_reg + bank_slot;
-                if (bank_scan >= LSQ_ENTRIES) bank_scan = bank_scan - LSQ_ENTRIES;
-                if ((bank_slot < occupancy_reg) && valid_mem[bank_scan]) begin
-                    bank_entry_rob_slot = rob_tag_mem[bank_scan][3 +: ROB_SLOT_WIDTH];
-                    bank_recovery_entry_age = bank_entry_rob_slot - recovery_head_i;
-                    if (((ROB_ENTRIES & (ROB_ENTRIES-1))!=0) && bank_recovery_entry_age[RECOVERY_ARITH_WIDTH-1]) bank_recovery_entry_age = bank_recovery_entry_age + ROB_ENTRIES;
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    if (!(store_mem[bank_scan] && store_commit_mem[bank_scan]) &&
-                        !(load_mem[bank_scan] && retired_mem[bank_scan]) &&
-                        (bank_recovery_entry_age > bank_recovery_branch_age) &&
-                        (bank_recovery_entry_age < recovery_occupancy_i)) begin
-                        if (!bank_recovery_kill_found) begin
-                            bank_recovery_first_killed = bank_scan;
-                            bank_recovery_kill_found = 1;
-                        end
-                        begin valid_mem_write_data[bank_scan] = 1'b0; valid_mem_write_enable[bank_scan] = 1'b1; end
-                        begin request_sent_mem_write_data[bank_scan] = 1'b0; request_sent_mem_write_enable[bank_scan] = 1'b1; end
-                        begin response_wait_mem_write_data[bank_scan] = 1'b0; response_wait_mem_write_enable[bank_scan] = 1'b1; end
-                        begin complete_mem_write_data[bank_scan] = 1'b0; complete_mem_write_enable[bank_scan] = 1'b1; end
-                        begin load_reported_mem_write_data[bank_scan] = 1'b0; load_reported_mem_write_enable[bank_scan] = 1'b1; end
-                        begin store_commit_mem_write_data[bank_scan] = 1'b0; store_commit_mem_write_enable[bank_scan] = 1'b1; end
-                        begin store_ack_mem_write_data[bank_scan] = 1'b0; store_ack_mem_write_enable[bank_scan] = 1'b1; end
-                    end else begin
-                        bank_recovery_keep_count = bank_recovery_keep_count + 1;
-                    end
+        always @* begin:g_static_commands
+                load_mem_write_data[metadata_row]=0; load_mem_write_enable[metadata_row]=0;
+                store_mem_write_data[metadata_row]=0; store_mem_write_enable[metadata_row]=0;
+                generation_mem_write_data[metadata_row]=0; generation_mem_write_enable[metadata_row]=0;
+                generation_next_mem_write_data[metadata_row]=0; generation_next_mem_write_enable[metadata_row]=0;
+                size_mem_write_data[metadata_row]=0; size_mem_write_enable[metadata_row]=0;
+                unsigned_mem_write_data[metadata_row]=0; unsigned_mem_write_enable[metadata_row]=0;
+                if(modes[0]) begin
+                    generation_mem_write_data[metadata_row]={{(GENERATION_WIDTH-1){1'b0}},1'b1}; generation_mem_write_enable[metadata_row]=1'b1;
+                    generation_next_mem_write_data[metadata_row]={{(GENERATION_WIDTH-1){1'b0}},1'b1}; generation_next_mem_write_enable[metadata_row]=1'b1;
+                end else if(!modes[1] && !modes[2] && allocated) begin
+                    generation_mem_write_data[metadata_row]=allocated_generation; generation_mem_write_enable[metadata_row]=1'b1;
+                    generation_next_mem_write_data[metadata_row]=(allocated_generation=={GENERATION_WIDTH{1'b1}})?{{(GENERATION_WIDTH-1){1'b0}},1'b1}:allocated_generation+1'b1; generation_next_mem_write_enable[metadata_row]=1'b1;
+                    load_mem_write_data[metadata_row]=allocation[0]; load_mem_write_enable[metadata_row]=1'b1;
+                    store_mem_write_data[metadata_row]=allocation[1]; store_mem_write_enable[metadata_row]=1'b1;
+                    size_mem_write_data[metadata_row]=allocation[2 +: 2]; size_mem_write_enable[metadata_row]=1'b1;
+                    unsigned_mem_write_data[metadata_row]=allocation[4]; unsigned_mem_write_enable[metadata_row]=1'b1;
                 end
-            end
-            
-            
-            
-            
-            
-            for (bank_update_slot = 0; bank_update_slot < LSQ_ENTRIES; bank_update_slot = bank_update_slot + 1) begin
-                for (bank_lane = 0; bank_lane < BE_WIDTH; bank_lane = bank_lane + 1) begin
-                    if (addr_update_valid_i[bank_lane] &&
-                        tag_matches_slot(addr_update_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
-                        begin addr_ready_mem_write_data[bank_update_slot] = 1'b1; addr_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        ;
-                        if (mask_mem[bank_update_slot] == 4'b0 && store_mem[bank_update_slot])
-                            begin mask_mem_write_data[bank_update_slot] = access_mask(size_mem[bank_update_slot]); mask_mem_write_enable[bank_update_slot] = 1'b1; end
-                    end
-                    if (data_update_valid_i[bank_lane] &&
-                        tag_matches_slot(data_update_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
-                        begin data_ready_mem_write_data[bank_update_slot] = 1'b1; data_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        ;
-                        if (data_mask_update_i[(bank_lane*4) +: 4] != 4'b0)
-                            begin mask_mem_write_data[bank_update_slot] = data_mask_update_i[(bank_lane*4) +: 4]; mask_mem_write_enable[bank_update_slot] = 1'b1; end
-                    end
-                    if (wakeup_valid_i[bank_lane] &&
-                        tag_matches_slot(wakeup_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
-                        begin data_ready_mem_write_data[bank_update_slot] = 1'b1; data_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        ;
-                    end
-                end
-            end
-            
-            
-            
-            for (bank_slot = 0; bank_slot < LSQ_ENTRIES; bank_slot = bank_slot + 1) begin
-                if (dcache_store_ack_valid_i &&
-                    tag_matches_slot(dcache_store_ack_lsq_tag_i, bank_slot) &&
-                    request_sent_mem[bank_slot] && response_wait_mem[bank_slot]) begin
-                    begin store_ack_mem_write_data[bank_slot] = 1'b1; store_ack_mem_write_enable[bank_slot] = 1'b1; end
-                    begin store_ack_error_mem_write_data[bank_slot] = dcache_store_ack_error_i; store_ack_error_mem_write_enable[bank_slot] = 1'b1; end
-                    begin response_wait_mem_write_data[bank_slot] = 1'b0; response_wait_mem_write_enable[bank_slot] = 1'b1; end
-                end
-            end
-            
-            
-            
-            if (response_fire) begin
-                bank_entry_rob_slot = rob_tag_mem[response_slot][3 +: ROB_SLOT_WIDTH];
-                bank_recovery_entry_age = bank_entry_rob_slot - recovery_head_i;
-                if (((ROB_ENTRIES & (ROB_ENTRIES-1))!=0) && bank_recovery_entry_age[RECOVERY_ARITH_WIDTH-1]) bank_recovery_entry_age = bank_recovery_entry_age + ROB_ENTRIES;
-                if (!((bank_recovery_entry_age > bank_recovery_branch_age) &&
-                      (bank_recovery_entry_age < recovery_occupancy_i))) begin
-                    bank_response_word = dcache_resp_line_valid_i ?
-                        relative_data_from_line(dcache_resp_line_data_i, addr_mem[response_slot]) :
-                        dcache_resp_word_data_i;
-                    bank_merged_word = (forward_data_mem[response_slot] &
-                                   expand_word_bytes(forward_mask_mem[response_slot])) |
-                                  (bank_response_word &
-                                   ~expand_word_bytes(forward_mask_mem[response_slot]));
-                    ;
-                    begin complete_error_mem_write_data[response_slot] = dcache_resp_error_i; complete_error_mem_write_enable[response_slot] = 1'b1; end
-                    begin complete_mem_write_data[response_slot] = 1'b1; complete_mem_write_enable[response_slot] = 1'b1; end
-                    begin response_wait_mem_write_data[response_slot] = 1'b0; response_wait_mem_write_enable[response_slot] = 1'b1; end
-                end
-            end
-            if (bank_recovery_keep_count < occupancy_reg)
-                ;
-            ;
-        end else begin
-            bank_commit_fire = store_commit_valid_i && store_commit_ready_o;
-            if (bank_commit_fire) begin store_commit_mem_write_data[commit_slot_select] = 1'b1; store_commit_mem_write_enable[commit_slot_select] = 1'b1; end
-
-            for (bank_retirement_slot = 0; bank_retirement_slot < LSQ_ENTRIES; bank_retirement_slot = bank_retirement_slot + 1)
-                for (bank_retirement_lane = 0; bank_retirement_lane < BE_WIDTH; bank_retirement_lane = bank_retirement_lane + 1)
-                    if (valid_mem[bank_retirement_slot] && load_mem[bank_retirement_slot] &&
-                        retire_valid_i[bank_retirement_lane] &&
-                        rob_tag_mem[bank_retirement_slot] == retire_rob_tag_i[bank_retirement_lane*ROB_TAG_WIDTH +: ROB_TAG_WIDTH])
-                        begin retired_mem_write_data[bank_retirement_slot] = 1'b1; retired_mem_write_enable[bank_retirement_slot] = 1'b1; end
-
-            
-            
-            for (bank_update_slot = 0; bank_update_slot < LSQ_ENTRIES; bank_update_slot = bank_update_slot + 1) begin
-                
-                
-                if ((STORE_ADDRESS_PROBE != 0) && early_addr_valid_i &&
-                    tag_matches_slot(early_addr_tag_i, bank_update_slot) &&
-                    store_mem[bank_update_slot] && !addr_ready_mem[bank_update_slot] &&
-                    !request_sent_mem[bank_update_slot] && !complete_mem[bank_update_slot]) begin
-                    begin addr_ready_mem_write_data[bank_update_slot] = 1'b1; addr_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                    ;
-                    if (mask_mem[bank_update_slot] == 4'b0)
-                        begin mask_mem_write_data[bank_update_slot] = access_mask(size_mem[bank_update_slot]); mask_mem_write_enable[bank_update_slot] = 1'b1; end
-                end
-                for (bank_lane = 0; bank_lane < BE_WIDTH; bank_lane = bank_lane + 1) begin
-                    if (addr_update_valid_i[bank_lane] && tag_matches_slot(addr_update_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
-                        begin addr_ready_mem_write_data[bank_update_slot] = 1'b1; addr_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        ;
-                        if (mask_mem[bank_update_slot] == 4'b0 && store_mem[bank_update_slot])
-                            begin mask_mem_write_data[bank_update_slot] = access_mask(size_mem[bank_update_slot]); mask_mem_write_enable[bank_update_slot] = 1'b1; end
-                    end
-                    if (data_update_valid_i[bank_lane] && tag_matches_slot(data_update_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
-                        begin data_ready_mem_write_data[bank_update_slot] = 1'b1; data_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        ;
-                        if (data_mask_update_i[(bank_lane*4) +: 4] != 4'b0)
-                            begin mask_mem_write_data[bank_update_slot] = data_mask_update_i[(bank_lane*4) +: 4]; mask_mem_write_enable[bank_update_slot] = 1'b1; end
-                    end
-                    if (wakeup_valid_i[bank_lane] && tag_matches_slot(wakeup_tag_i[(bank_lane*TAG_WIDTH) +: TAG_WIDTH], bank_update_slot)) begin
-                        begin data_ready_mem_write_data[bank_update_slot] = 1'b1; data_ready_mem_write_enable[bank_update_slot] = 1'b1; end
-                        ;
-                    end
-                end
-            end
-
-            
-            
-            if (candidate_found && load_mem[candidate] && !request_sent_mem[candidate] && !complete_mem[candidate]) begin
-                if ((fwd_mask & target_mask) == target_mask) begin
-                    ;
-                    begin complete_error_mem_write_data[candidate] = 1'b0; complete_error_mem_write_enable[candidate] = 1'b1; end
-                    begin complete_mem_write_data[candidate] = 1'b1; complete_mem_write_enable[candidate] = 1'b1; end
-                end
-            end
-
-            if (request_fire) begin
-                begin request_sent_mem_write_data[candidate] = 1'b1; request_sent_mem_write_enable[candidate] = 1'b1; end
-                if (load_mem[candidate]) begin
-                    begin response_wait_mem_write_data[candidate] = 1'b1; response_wait_mem_write_enable[candidate] = 1'b1; end
-                    begin forward_mask_mem_write_data[candidate] = fwd_mask; forward_mask_mem_write_enable[candidate] = 1'b1; end
-                    ;
-                end else begin
-                    begin response_wait_mem_write_data[candidate] = 1'b1; response_wait_mem_write_enable[candidate] = 1'b1; end
-                end
-            end
-
-            if (response_fire) begin
-                bank_response_word = dcache_resp_line_valid_i ?
-                    relative_data_from_line(dcache_resp_line_data_i, addr_mem[response_slot]) :
-                    dcache_resp_word_data_i;
-                bank_merged_word = (forward_data_mem[response_slot] &
-                               expand_word_bytes(forward_mask_mem[response_slot])) |
-                              (bank_response_word &
-                               ~expand_word_bytes(forward_mask_mem[response_slot]));
-                ;
-                begin complete_error_mem_write_data[response_slot] = dcache_resp_error_i; complete_error_mem_write_enable[response_slot] = 1'b1; end
-                begin complete_mem_write_data[response_slot] = 1'b1; complete_mem_write_enable[response_slot] = 1'b1; end
-                begin response_wait_mem_write_data[response_slot] = 1'b0; response_wait_mem_write_enable[response_slot] = 1'b1; end
-            end
-
-            if (load_complete_valid_o && load_complete_ready_i)
-                begin load_reported_mem_write_data[complete_slot_select] = 1'b1; load_reported_mem_write_enable[complete_slot_select] = 1'b1; end
-
-            for (bank_slot = 0; bank_slot < LSQ_ENTRIES; bank_slot = bank_slot + 1) begin
-                if (dcache_store_ack_valid_i && tag_matches_slot(dcache_store_ack_lsq_tag_i, bank_slot) &&
-                    request_sent_mem[bank_slot] && response_wait_mem[bank_slot]) begin
-                    begin store_ack_mem_write_data[bank_slot] = 1'b1; store_ack_mem_write_enable[bank_slot] = 1'b1; end
-                    begin store_ack_error_mem_write_data[bank_slot] = dcache_store_ack_error_i; store_ack_error_mem_write_enable[bank_slot] = 1'b1; end
-                    begin response_wait_mem_write_data[bank_slot] = 1'b0; response_wait_mem_write_enable[bank_slot] = 1'b1; end
-                end
-            end
-
-            if ((occupancy_reg != 0) && valid_mem[head_reg] &&
-                ((load_mem[head_reg] && complete_mem[head_reg] &&
-                  (load_reported_mem[head_reg] ||
-                   (load_complete_valid_o && load_complete_ready_i &&
-                    (complete_slot_select == head_reg)))) ||
-                 (store_mem[head_reg] && store_ack_mem[head_reg] && store_ack_ready_i))) begin
-                begin valid_mem_write_data[head_reg] = 1'b0; valid_mem_write_enable[head_reg] = 1'b1; end
-                begin request_sent_mem_write_data[head_reg] = 1'b0; request_sent_mem_write_enable[head_reg] = 1'b1; end
-                begin response_wait_mem_write_data[head_reg] = 1'b0; response_wait_mem_write_enable[head_reg] = 1'b1; end
-                begin complete_mem_write_data[head_reg] = 1'b0; complete_mem_write_enable[head_reg] = 1'b1; end
-                begin load_reported_mem_write_data[head_reg] = 1'b0; load_reported_mem_write_enable[head_reg] = 1'b1; end
-                begin store_ack_mem_write_data[head_reg] = 1'b0; store_ack_mem_write_enable[head_reg] = 1'b1; end
-            end
-
-            
-            for (bank_lane = 0; bank_lane < BE_WIDTH; bank_lane = bank_lane + 1) begin
-                if (alloc_fire_o[bank_lane]) begin
-                    bank_alloc_slot = tail_reg + alloc_count_before_lane(bank_lane, alloc_fire_o);
-                    if (bank_alloc_slot >= LSQ_ENTRIES) bank_alloc_slot = bank_alloc_slot - LSQ_ENTRIES;
-                    bank_next_generation = generation_next_mem[bank_alloc_slot];
-                    if (bank_next_generation == {GENERATION_WIDTH{1'b0}})
-                        bank_next_generation = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
-                    begin generation_mem_write_data[bank_alloc_slot] = bank_next_generation; generation_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin generation_next_mem_write_data[bank_alloc_slot] = (bank_next_generation == {GENERATION_WIDTH{1'b1}}) ?
-                        {{(GENERATION_WIDTH-1){1'b0}}, 1'b1} : bank_next_generation + 1'b1; generation_next_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin valid_mem_write_data[bank_alloc_slot] = 1'b1; valid_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin load_mem_write_data[bank_alloc_slot] = alloc_is_load_i[bank_lane]; load_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin store_mem_write_data[bank_alloc_slot] = alloc_is_store_i[bank_lane]; store_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    ;
-                    begin retired_mem_write_data[bank_alloc_slot] = 1'b0; retired_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin size_mem_write_data[bank_alloc_slot] = alloc_size_i[(bank_lane*2) +: 2]; size_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin unsigned_mem_write_data[bank_alloc_slot] = alloc_unsigned_i[bank_lane]; unsigned_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin addr_ready_mem_write_data[bank_alloc_slot] = alloc_addr_valid_i[bank_lane]; addr_ready_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin data_ready_mem_write_data[bank_alloc_slot] = alloc_data_valid_i[bank_lane] || alloc_is_load_i[bank_lane]; data_ready_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    ;
-                    ;
-                    begin mask_mem_write_data[bank_alloc_slot] = (alloc_store_mask_i[(bank_lane*4) +: 4] != 4'b0) ?
-                        alloc_store_mask_i[(bank_lane*4) +: 4] :
-                        ((alloc_is_store_i[bank_lane] && alloc_addr_valid_i[bank_lane]) ?
-                         access_mask(alloc_size_i[(bank_lane*2) +: 2]) : 4'b0); mask_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin request_sent_mem_write_data[bank_alloc_slot] = 1'b0; request_sent_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin response_wait_mem_write_data[bank_alloc_slot] = 1'b0; response_wait_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin complete_mem_write_data[bank_alloc_slot] = 1'b0; complete_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin load_reported_mem_write_data[bank_alloc_slot] = 1'b0; load_reported_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    ;
-                    begin complete_error_mem_write_data[bank_alloc_slot] = 1'b0; complete_error_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin forward_mask_mem_write_data[bank_alloc_slot] = 4'b0; forward_mask_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    ;
-                    begin store_commit_mem_write_data[bank_alloc_slot] = 1'b0; store_commit_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin store_ack_mem_write_data[bank_alloc_slot] = 1'b0; store_ack_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                    begin store_ack_error_mem_write_data[bank_alloc_slot] = 1'b0; store_ack_error_mem_write_enable[bank_alloc_slot] = 1'b1; end
-                end
-            end
-
-            bank_alloc_count_calc = alloc_count_o;
-            bank_pop_count_calc = ((occupancy_reg != 0) && valid_mem[head_reg] &&
-                              ((load_mem[head_reg] && complete_mem[head_reg] &&
-                                (load_reported_mem[head_reg] ||
-                                 (load_complete_valid_o && load_complete_ready_i &&
-                                  (complete_slot_select == head_reg)))) ||
-                               (store_mem[head_reg] && store_ack_mem[head_reg] && store_ack_ready_i))) ? 1 : 0;
-            ;
-            ;
-            ;
         end
-    end
+        always @* begin:g_ready_commands
+            integer update_lane;
+            update_lane=0;
+                addr_ready_mem_write_data[metadata_row]=0; addr_ready_mem_write_enable[metadata_row]=0;
+                data_ready_mem_write_data[metadata_row]=0; data_ready_mem_write_enable[metadata_row]=0;
+                mask_mem_write_data[metadata_row]=0; mask_mem_write_enable[metadata_row]=0;
+            if(!modes[3] && !modes[4]) begin
+                if(!modes[5] && early_event) begin
+                    addr_ready_mem_write_data[metadata_row]=1'b1; addr_ready_mem_write_enable[metadata_row]=1'b1;
+                    if(mask_mem[metadata_row]==0) begin mask_mem_write_data[metadata_row]=access_mask(size_mem[metadata_row]); mask_mem_write_enable[metadata_row]=1'b1; end
+                end
+                // Both ordinary execution and recovery accept older live
+                // AGU/data/wakeup updates. Later lanes preserve old priority.
+                for(update_lane=0;update_lane<BE_WIDTH;update_lane=update_lane+1) begin
+                    if(addr_matches[update_lane]) begin
+                        addr_ready_mem_write_data[metadata_row]=1'b1; addr_ready_mem_write_enable[metadata_row]=1'b1;
+                        if(mask_mem[metadata_row]==0 && store_mem[metadata_row]) begin mask_mem_write_data[metadata_row]=access_mask(size_mem[metadata_row]); mask_mem_write_enable[metadata_row]=1'b1; end
+                    end
+                    if(data_matches[update_lane]) begin
+                        data_ready_mem_write_data[metadata_row]=1'b1; data_ready_mem_write_enable[metadata_row]=1'b1;
+                        if(data_mask_update_i[update_lane*4 +: 4]!=0) begin mask_mem_write_data[metadata_row]=data_mask_update_i[update_lane*4 +: 4]; mask_mem_write_enable[metadata_row]=1'b1; end
+                    end
+                    if(wake_matches[update_lane]) begin data_ready_mem_write_data[metadata_row]=1'b1; data_ready_mem_write_enable[metadata_row]=1'b1; end
+                end
+                if(!modes[5] && allocated) begin
+                    addr_ready_mem_write_data[metadata_row]=allocation[5]; addr_ready_mem_write_enable[metadata_row]=1'b1;
+                    data_ready_mem_write_data[metadata_row]=allocation[6]; data_ready_mem_write_enable[metadata_row]=1'b1;
+                    mask_mem_write_data[metadata_row]=(allocation[7 +: 4]!=0)?allocation[7 +: 4]:((allocation[1] && allocation[5])?access_mask(allocation[2 +: 2]):4'b0); mask_mem_write_enable[metadata_row]=1'b1;
+                end
+            end
+        end
+        always @* begin:g_lifecycle_commands
+                valid_mem_write_data[metadata_row]=0; valid_mem_write_enable[metadata_row]=0;
+                retired_mem_write_data[metadata_row]=0; retired_mem_write_enable[metadata_row]=0;
+                request_sent_mem_write_data[metadata_row]=0; request_sent_mem_write_enable[metadata_row]=0;
+                response_wait_mem_write_data[metadata_row]=0; response_wait_mem_write_enable[metadata_row]=0;
+                complete_mem_write_data[metadata_row]=0; complete_mem_write_enable[metadata_row]=0;
+                load_reported_mem_write_data[metadata_row]=0; load_reported_mem_write_enable[metadata_row]=0;
+                complete_error_mem_write_data[metadata_row]=0; complete_error_mem_write_enable[metadata_row]=0;
+                forward_mask_mem_write_data[metadata_row]=0; forward_mask_mem_write_enable[metadata_row]=0;
+                store_commit_mem_write_data[metadata_row]=0; store_commit_mem_write_enable[metadata_row]=0;
+                store_ack_mem_write_data[metadata_row]=0; store_ack_mem_write_enable[metadata_row]=0;
+                store_ack_error_mem_write_data[metadata_row]=0; store_ack_error_mem_write_enable[metadata_row]=0;
+            if(modes[6] || modes[7]) begin
+                    valid_mem_write_data[metadata_row]=1'b0; valid_mem_write_enable[metadata_row]=1'b1;
+                    retired_mem_write_data[metadata_row]=1'b0; retired_mem_write_enable[metadata_row]=1'b1;
+                    request_sent_mem_write_data[metadata_row]=1'b0; request_sent_mem_write_enable[metadata_row]=1'b1;
+                    response_wait_mem_write_data[metadata_row]=1'b0; response_wait_mem_write_enable[metadata_row]=1'b1;
+                    complete_mem_write_data[metadata_row]=1'b0; complete_mem_write_enable[metadata_row]=1'b1;
+                    load_reported_mem_write_data[metadata_row]=1'b0; load_reported_mem_write_enable[metadata_row]=1'b1;
+                    store_commit_mem_write_data[metadata_row]=1'b0; store_commit_mem_write_enable[metadata_row]=1'b1;
+                    store_ack_mem_write_data[metadata_row]=1'b0; store_ack_mem_write_enable[metadata_row]=1'b1;
+            end else if(modes[8]) begin
+                if(kill) begin
+                    valid_mem_write_data[metadata_row]=1'b0; valid_mem_write_enable[metadata_row]=1'b1;
+                    request_sent_mem_write_data[metadata_row]=1'b0; request_sent_mem_write_enable[metadata_row]=1'b1;
+                    response_wait_mem_write_data[metadata_row]=1'b0; response_wait_mem_write_enable[metadata_row]=1'b1;
+                    complete_mem_write_data[metadata_row]=1'b0; complete_mem_write_enable[metadata_row]=1'b1;
+                    load_reported_mem_write_data[metadata_row]=1'b0; load_reported_mem_write_enable[metadata_row]=1'b1;
+                    store_commit_mem_write_data[metadata_row]=1'b0; store_commit_mem_write_enable[metadata_row]=1'b1;
+                    store_ack_mem_write_data[metadata_row]=1'b0; store_ack_mem_write_enable[metadata_row]=1'b1;
+                end
+                if(ack_event) begin
+                    store_ack_mem_write_data[metadata_row]=1'b1; store_ack_mem_write_enable[metadata_row]=1'b1;
+                    store_ack_error_mem_write_data[metadata_row]=dcache_store_ack_error_i; store_ack_error_mem_write_enable[metadata_row]=1'b1;
+                    response_wait_mem_write_data[metadata_row]=1'b0; response_wait_mem_write_enable[metadata_row]=1'b1;
+                end
+                if(response_event && response_allowed) begin
+                    complete_error_mem_write_data[metadata_row]=dcache_resp_error_i; complete_error_mem_write_enable[metadata_row]=1'b1;
+                    complete_mem_write_data[metadata_row]=1'b1; complete_mem_write_enable[metadata_row]=1'b1;
+                    response_wait_mem_write_data[metadata_row]=1'b0; response_wait_mem_write_enable[metadata_row]=1'b1;
+                end
+            end else begin
+                if(commit_event) begin store_commit_mem_write_data[metadata_row]=1'b1; store_commit_mem_write_enable[metadata_row]=1'b1; end
+                if(|retire_matches) begin retired_mem_write_data[metadata_row]=1'b1; retired_mem_write_enable[metadata_row]=1'b1; end
+                if(forward_event) begin
+                    complete_error_mem_write_data[metadata_row]=1'b0; complete_error_mem_write_enable[metadata_row]=1'b1;
+                    complete_mem_write_data[metadata_row]=1'b1; complete_mem_write_enable[metadata_row]=1'b1;
+                end
+                if(request_event) begin
+                    request_sent_mem_write_data[metadata_row]=1'b1; request_sent_mem_write_enable[metadata_row]=1'b1;
+                    response_wait_mem_write_data[metadata_row]=1'b1; response_wait_mem_write_enable[metadata_row]=1'b1;
+                    if(load_mem[metadata_row]) begin forward_mask_mem_write_data[metadata_row]=fwd_mask; forward_mask_mem_write_enable[metadata_row]=1'b1; end
+                end
+                if(response_event) begin
+                    complete_error_mem_write_data[metadata_row]=dcache_resp_error_i; complete_error_mem_write_enable[metadata_row]=1'b1;
+                    complete_mem_write_data[metadata_row]=1'b1; complete_mem_write_enable[metadata_row]=1'b1;
+                    response_wait_mem_write_data[metadata_row]=1'b0; response_wait_mem_write_enable[metadata_row]=1'b1;
+                end
+                if(report_event) begin load_reported_mem_write_data[metadata_row]=1'b1; load_reported_mem_write_enable[metadata_row]=1'b1; end
+                if(ack_event) begin
+                    store_ack_mem_write_data[metadata_row]=1'b1; store_ack_mem_write_enable[metadata_row]=1'b1;
+                    store_ack_error_mem_write_data[metadata_row]=dcache_store_ack_error_i; store_ack_error_mem_write_enable[metadata_row]=1'b1;
+                    response_wait_mem_write_data[metadata_row]=1'b0; response_wait_mem_write_enable[metadata_row]=1'b1;
+                end
+                if(pop_event) begin
+                    valid_mem_write_data[metadata_row]=1'b0; valid_mem_write_enable[metadata_row]=1'b1;
+                    request_sent_mem_write_data[metadata_row]=1'b0; request_sent_mem_write_enable[metadata_row]=1'b1;
+                    response_wait_mem_write_data[metadata_row]=1'b0; response_wait_mem_write_enable[metadata_row]=1'b1;
+                    complete_mem_write_data[metadata_row]=1'b0; complete_mem_write_enable[metadata_row]=1'b1;
+                    load_reported_mem_write_data[metadata_row]=1'b0; load_reported_mem_write_enable[metadata_row]=1'b1;
+                    store_ack_mem_write_data[metadata_row]=1'b0; store_ack_mem_write_enable[metadata_row]=1'b1;
+                end
+                if(allocated) begin
+                    valid_mem_write_data[metadata_row]=1'b1; valid_mem_write_enable[metadata_row]=1'b1;
+                    retired_mem_write_data[metadata_row]=1'b0; retired_mem_write_enable[metadata_row]=1'b1;
+                    request_sent_mem_write_data[metadata_row]=1'b0; request_sent_mem_write_enable[metadata_row]=1'b1;
+                    response_wait_mem_write_data[metadata_row]=1'b0; response_wait_mem_write_enable[metadata_row]=1'b1;
+                    complete_mem_write_data[metadata_row]=1'b0; complete_mem_write_enable[metadata_row]=1'b1;
+                    load_reported_mem_write_data[metadata_row]=1'b0; load_reported_mem_write_enable[metadata_row]=1'b1;
+                    complete_error_mem_write_data[metadata_row]=1'b0; complete_error_mem_write_enable[metadata_row]=1'b1;
+                    forward_mask_mem_write_data[metadata_row]=1'b0; forward_mask_mem_write_enable[metadata_row]=1'b1;
+                    store_commit_mem_write_data[metadata_row]=1'b0; store_commit_mem_write_enable[metadata_row]=1'b1;
+                    store_ack_mem_write_data[metadata_row]=1'b0; store_ack_mem_write_enable[metadata_row]=1'b1;
+                    store_ack_error_mem_write_data[metadata_row]=1'b0; store_ack_error_mem_write_enable[metadata_row]=1'b1;
+                end
+            end
+        end
+    end endgenerate
 
     always @(posedge clk_i) begin
         if (reset_i) begin
