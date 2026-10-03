@@ -1007,7 +1007,7 @@ module rv32_decode_bundle_register #(
     input wire [LANES-1:0] ready_i,
     output wire [LANES*PAYLOAD_WIDTH-1:0] data_o
 );
-    localparam integer WORDS=(PAYLOAD_WIDTH+31)/32;
+    localparam integer WORDS=(PAYLOAD_WIDTH+15)/16;
     reg [CW-1:0] count;
     reg [PW-1:0] head,tail;
     reg [CW-1:0] consumed,accepted;
@@ -1055,14 +1055,14 @@ module rv32_decode_bundle_register #(
     genvar slot,word_id,read_lane;
     generate for(slot=0;slot<CAPACITY;slot=slot+1) begin:g_slot
         for(word_id=0;word_id<WORDS;word_id=word_id+1) begin:g_field
-            localparam integer W=((PAYLOAD_WIDTH-word_id*32)<32)?(PAYLOAD_WIDTH-word_id*32):32;
+            localparam integer W=((PAYLOAD_WIDTH-word_id*16)<16)?(PAYLOAD_WIDTH-word_id*16):16;
             wire [LANES*W-1:0] inputs;
             for(genvar writer=0;writer<LANES;writer=writer+1) begin:g_input
-                assign inputs[writer*W +: W]=data_i[writer*PAYLOAD_WIDTH+word_id*32 +: W];
+                assign inputs[writer*W +: W]=data_i[writer*PAYLOAD_WIDTH+word_id*16 +: W];
             end
             rv32_decode_field_bank #(.LANES(LANES),.WIDTH(W),.ROW(slot),.PW(PW),.CAPACITY(CAPACITY)) bank (
                 .clk_i(clk_i),.reset_i(1'b0),.flush_i(1'b0),.tail_i(tail),
-                .push_i(storage_push),.data_i(inputs),.data_o(rows[slot*PAYLOAD_WIDTH+word_id*32 +: W]));
+                .push_i(storage_push),.data_i(inputs),.data_o(rows[slot*PAYLOAD_WIDTH+word_id*16 +: W]));
         end
     end
 
@@ -1080,8 +1080,8 @@ module rv32_decode_bundle_register #(
             if(read_row<CAPACITY) begin:g_present
                 localparam integer HEAD_ROW=(read_row+CAPACITY-read_lane)%CAPACITY;
                 for(read_word=0;read_word<WORDS;read_word=read_word+1) begin:g_word
-                    localparam integer LOW=read_word*32;
-                    localparam integer BITS=PAYLOAD_WIDTH-LOW>=32 ? 32 : PAYLOAD_WIDTH-LOW;
+                    localparam integer LOW=read_word*16;
+                    localparam integer BITS=PAYLOAD_WIDTH-LOW>=16 ? 16 : PAYLOAD_WIDTH-LOW;
                     assign payload_tree[READ_LEAVES+read_row][LOW +: BITS]=
                         {BITS{read_selections[(HEAD_ROW*LANES+read_lane)*WORDS+read_word]}} &
                         rows[read_row*PAYLOAD_WIDTH+LOW +: BITS];

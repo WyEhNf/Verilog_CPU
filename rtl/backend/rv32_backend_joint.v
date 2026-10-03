@@ -1810,7 +1810,7 @@ module rv32_issue_pipeline_slot #(
     input wire ready_i,
     output wire [PAYLOAD_WIDTH-1:0] data_o
 );
-    localparam integer CHUNKS=(PAYLOAD_WIDTH+31)/32;
+    localparam integer CHUNKS=(PAYLOAD_WIDTH+15)/16;
     reg [1:0] count,entry_valid;
     reg read_slot,write_slot;
     reg [PAYLOAD_WIDTH-1:0] payload [0:1];
@@ -1836,15 +1836,15 @@ module rv32_issue_pipeline_slot #(
             .signal_i(push && write_slot==queue_row),.views_o(write_views));
         always @(posedge clk_i) if(write_views[CHUNKS]) saved_tag[queue_row]<=tag_i;
         for(chunk=0;chunk<CHUNKS;chunk=chunk+1) begin:g_chunk
-            localparam integer LOW=chunk*32;
-            localparam integer BITS=(PAYLOAD_WIDTH-LOW>=32)?32:PAYLOAD_WIDTH-LOW;
+            localparam integer LOW=chunk*16;
+            localparam integer BITS=(PAYLOAD_WIDTH-LOW>=16)?16:PAYLOAD_WIDTH-LOW;
             always @(posedge clk_i) if(write_views[chunk])
                 payload[queue_row][LOW +: BITS]<=data_i[LOW +: BITS];
         end
     end
     for(chunk=0;chunk<CHUNKS;chunk=chunk+1) begin:g_read
-        localparam integer LOW=chunk*32;
-        localparam integer BITS=(PAYLOAD_WIDTH-LOW>=32)?32:PAYLOAD_WIDTH-LOW;
+        localparam integer LOW=chunk*16;
+        localparam integer BITS=(PAYLOAD_WIDTH-LOW>=16)?16:PAYLOAD_WIDTH-LOW;
         assign data_o[LOW +: BITS]=read_views[chunk]?
             payload[1][LOW +: BITS]:payload[0][LOW +: BITS];
     end endgenerate

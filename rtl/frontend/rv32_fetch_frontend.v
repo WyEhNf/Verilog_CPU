@@ -120,7 +120,7 @@ module rv32_fetch_frontend #(
     wire [FE_WIDTH*16-1:0] queue_read_metadata;
 
     localparam integer READ_DATA_WIDTH=PACKET_WIDTH+16;
-    localparam integer READ_WORDS=(READ_DATA_WIDTH+31)/32;
+    localparam integer READ_WORDS=(READ_DATA_WIDTH+15)/16;
     localparam integer READ_LEAVES=1<<$clog2(FQ_DEPTH);
     wire [FQ_DEPTH*FE_WIDTH*READ_WORDS-1:0] head_word_select;
     genvar read_row,read_lane,read_word,read_node;
@@ -143,8 +143,8 @@ module rv32_fetch_frontend #(
                             fq_pred_btb_hit[read_row],fq_epoch[read_row]),
                         ((PREDICTOR_META!=0)?fq_pred_metadata[read_row]:16'b0)};
                     for(read_word=0;read_word<READ_WORDS;read_word=read_word+1) begin:g_word
-                        localparam integer LOW=read_word*32;
-                        localparam integer BITS=READ_DATA_WIDTH-LOW>=32 ? 32 : READ_DATA_WIDTH-LOW;
+                        localparam integer LOW=read_word*16;
+                        localparam integer BITS=READ_DATA_WIDTH-LOW>=16 ? 16 : READ_DATA_WIDTH-LOW;
                         assign payload_tree[READ_LEAVES+read_row][LOW +: BITS]=
                             {BITS{head_word_select[(HEAD_ROW*FE_WIDTH+read_lane)*READ_WORDS+read_word]}} & payload[LOW +: BITS];
                     end

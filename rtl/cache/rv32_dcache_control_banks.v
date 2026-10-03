@@ -56,7 +56,7 @@ module rv32_dcache_metadata_bank #(
     reg query_request_active, query_prefetch_active;
     generate if (LOCAL_QUERY != 0) begin : g_local_query
         always @(posedge clk_i) begin
-            if (!reset_i && query_fire_i) begin
+            if (!reset_views[RESET_DOMAINS-1] && query_fire_i) begin
                 query_request_row <= query_request_set_i % GROUP_SETS;
                 query_prefetch_row <= query_prefetch_set_i % GROUP_SETS;
                 query_request_active <= query_request_set_i / GROUP_SETS == GROUP_ID;
@@ -91,6 +91,10 @@ module rv32_dcache_metadata_bank #(
     wire store_action = LOCAL_ACTION_DECODE ? request_action_i == 4'd2 : store_hit_i;
     wire hit_action = LOCAL_ACTION_DECODE ?
         (request_action_i == 4'd1 || request_action_i == 4'd2) : hit_valid_i;
+    localparam integer RESET_DOMAINS=GROUP_ROWS+GROUP_ROWS/CACHE_WAYS+1;
+    wire [RESET_DOMAINS-1:0] reset_views;
+    rv32_frequency_control_tree #(.LEAVES(RESET_DOMAINS)) reset_tree (
+        .signal_i(reset_i),.views_o(reset_views));
     genvar row, set_id;
     generate
         for (row = 0; row < GROUP_ROWS; row = row + 1) begin : g_row
@@ -107,7 +111,7 @@ module rv32_dcache_metadata_bank #(
                 (query_request_active && query_request_row == row/CACHE_WAYS &&
                  hit_entry_i % CACHE_WAYS == row%CACHE_WAYS) : hit_entry_i == ABS_ROW);
             always @(posedge clk_i) begin
-                if (reset_i) begin
+                if (reset_views[row]) begin
                     valid_o[row] <= 1'b0;
                     // Original dirty metadata has no global reset value.
                 end else if (refill) begin
@@ -127,7 +131,7 @@ module rv32_dcache_metadata_bank #(
         for (set_id = 0; set_id < GROUP_ROWS/CACHE_WAYS; set_id = set_id + 1) begin : g_set
             localparam integer ABS_SET = GROUP_ID * (GROUP_ROWS/CACHE_WAYS) + set_id;
             always @(posedge clk_i) begin
-                if (reset_i) lru_o[set_id] <= 1'b0;
+                if (reset_views[GROUP_ROWS+set_id]) lru_o[set_id] <= 1'b0;
                 else if (CACHE_WAYS == 2) begin
                     // Original request order: prefetch allocation wins over
                     // demand allocation, which wins over a load/store hit.
@@ -171,19 +175,27 @@ module rv32_dcache_mshr_data_bank #(
     input wire [2:0] matching_i,
     input wire [15:0] write_mask_i,
     input wire [127:0] write_data_i,
-    output reg [127:0] data_o
+    output wire [127:0] data_o
 );
     wire write_zero = prefetch_allocate_i && second_free_i == MSHR_ID;
     wire write_word = (request_action_i == 4'd8 && free_i == MSHR_ID) ||
                       (request_action_i == 4'd6 && matching_i == MSHR_ID);
     wire merge_word = request_action_i == 4'd7 && matching_i == MSHR_ID;
+    wire [15:0] zero_views;
+    rv32_frequency_control_tree #(.LEAVES(16)) zero_tree (
+        .signal_i(reset_i || write_zero),.views_o(zero_views));
     genvar byte_id;
-    generate for (byte_id = 0; byte_id < 16; byte_id = byte_id + 1) begin : g_byte
-        always @(posedge clk_i) begin
-            if (reset_i || write_zero) data_o[byte_id*8 +: 8] <= 8'd0;
-            else if (write_word || (merge_word && write_mask_i[byte_id]))
-                data_o[byte_id*8 +: 8] <= write_data_i[byte_id*8 +: 8];
-        end
+    generate for(byte_id=0;byte_id<16;byte_id=byte_id+1) begin:g_byte
+        wire write_enable;
+        wire [7:0] next_byte,saved_byte;
+        wire update=write_word || (merge_word && write_mask_i[byte_id]);
+        rv32_frequency_event_select #(.WIDTH(8),.EVENTS(2)) selector (
+            .events_i({zero_views[byte_id],update}),
+            .values_i({8'b0,write_data_i[byte_id*8 +: 8]}),
+            .write_o(write_enable),.value_o(next_byte));
+        rv32_frequency_word_bank #(.WIDTH(8)) owner (
+            .clk_i(clk_i),.write_i(write_enable),.data_i(next_byte),.data_o(saved_byte));
+        assign data_o[byte_id*8 +: 8]=saved_byte;
     end endgenerate
     initial begin
         if (MSHR_ID < 0 || MSHR_ID > 7) begin

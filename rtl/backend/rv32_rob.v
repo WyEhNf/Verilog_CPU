@@ -464,7 +464,7 @@ module rv32_rob #(
     genvar alloc_bank,alloc_source,alloc_word,alloc_node;
     localparam integer ALLOC_DATA_WIDTH=ALLOC_PACKET_WIDTH-CHECKPOINT_WIDTH+
         ((CHECKPOINT_IMPL==0)?CHECKPOINT_WIDTH:0);
-    localparam integer ALLOC_DATA_WORDS=(ALLOC_DATA_WIDTH+31)/32;
+    localparam integer ALLOC_DATA_WORDS=(ALLOC_DATA_WIDTH+15)/16;
     localparam integer ALLOC_DATA_LEAVES=1<<$clog2(BE_WIDTH);
     generate
         for(alloc_bank=0;alloc_bank<BE_WIDTH;alloc_bank=alloc_bank+1) begin:g_bank_allocation
@@ -502,8 +502,8 @@ module rv32_rob #(
                             .signal_i(grants[alloc_source]),.views_o(selected_words));
                         assign slots[ALLOC_DATA_LEAVES+alloc_source]={SLOT_WIDTH{grants[alloc_source]}} & target_slot;
                         for(alloc_word=0;alloc_word<ALLOC_DATA_WORDS;alloc_word=alloc_word+1) begin:g_word
-                            localparam integer LOW=alloc_word*32;
-                            localparam integer BITS=ALLOC_DATA_WIDTH-LOW>=32 ? 32 : ALLOC_DATA_WIDTH-LOW;
+                            localparam integer LOW=alloc_word*16;
+                            localparam integer BITS=ALLOC_DATA_WIDTH-LOW>=16 ? 16 : ALLOC_DATA_WIDTH-LOW;
                             assign packets[ALLOC_DATA_LEAVES+alloc_source][LOW +: BITS]=
                                 {BITS{selected_words[alloc_word]}} & active_payload[LOW +: BITS];
                         end
@@ -860,7 +860,7 @@ module rv32_rob #(
                     wire c_valid,c_done,c_error;
                     wire [TAG_WIDTH-1:0] c_tag;
                     wire [LOCAL_COMPLETION_DATA_WIDTH-1:0] c_data;
-                    wire [3:0] c_select;
+                    wire [(LOCAL_COMPLETION_DATA_WIDTH+15)/16-1:0] c_select;
                     assign {c_valid,c_done,c_error,c_tag,c_data}=
                         local_completion_domains[(DOMAIN*BE_WIDTH+command_lane)*LOCAL_COMPLETION_WIDTH +: LOCAL_COMPLETION_WIDTH];
                     assign completion_match[command_lane]=!row_reset && c_valid && c_done &&
@@ -872,13 +872,15 @@ module rv32_rob #(
                             !(|completion_match[BE_WIDTH-1:command_lane+1]);
                     end
                     assign completion_errors[command_lane]=completion_match[command_lane] && c_error;
-                    rv32_frequency_control_tree #(.LEAVES(4)) select_tree (
+                    rv32_frequency_control_tree #(.LEAVES((LOCAL_COMPLETION_DATA_WIDTH+15)/16)) select_tree (
                         .signal_i(completion_grant[command_lane]),.views_o(c_select));
-                    assign completion_mux[LOCAL_COMPLETION_LEAVES+command_lane]={
-                        {32{c_select[3]}} & c_data[100:69],
-                        {32{c_select[2]}} & c_data[68:37],
-                        {32{c_select[1]}} & c_data[36:5],
-                        {5{c_select[0]}} & c_data[4:0]};
+                    for(genvar completion_word=0;completion_word<(LOCAL_COMPLETION_DATA_WIDTH+15)/16;
+                        completion_word=completion_word+1) begin:g_word
+                        localparam integer LOW=completion_word*16;
+                        localparam integer BITS=LOCAL_COMPLETION_DATA_WIDTH-LOW>=16?16:LOCAL_COMPLETION_DATA_WIDTH-LOW;
+                        assign completion_mux[LOCAL_COMPLETION_LEAVES+command_lane][LOW +: BITS]=
+                            {BITS{c_select[completion_word]}} & c_data[LOW +: BITS];
+                    end
                     wire [31:0] commit_offset=row_commit_head+command_lane;
                     wire [31:0] commit_slot=(commit_offset>=ROB_ENTRIES)?commit_offset-ROB_ENTRIES:commit_offset;
                     assign retire_match[command_lane]=normal &&

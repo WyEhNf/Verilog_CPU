@@ -126,7 +126,7 @@ module rv32_rename_unit #(
         else pool_count<=pool_next_count;
     end
 
-    localparam integer FREE_WORDS=(PHYS_REGS+31)/32;
+    localparam integer FREE_WORDS=(PHYS_REGS+15)/16;
     wire [32+FREE_WORDS-1:0] rename_reset_views,rename_restore_views;
     wire [4*BE_WIDTH*5-1:0] map_address_views;
     wire [4*BE_WIDTH*PHYS_ADDR_WIDTH-1:0] map_value_views;
@@ -163,8 +163,8 @@ module rv32_rename_unit #(
             end
         end
         for(free_word=0;free_word<FREE_WORDS;free_word=free_word+1) begin:g_free_word
-            localparam integer LOW=free_word*32;
-            localparam integer BITS=PHYS_REGS-LOW>=32 ? 32 : PHYS_REGS-LOW;
+            localparam integer LOW=free_word*16;
+            localparam integer BITS=PHYS_REGS-LOW>=16 ? 16 : PHYS_REGS-LOW;
             reg [BITS-1:0] bits_q,bits_next;
             integer writer,phys_index;
             always @* begin

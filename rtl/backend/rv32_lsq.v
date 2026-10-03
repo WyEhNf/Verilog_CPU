@@ -705,8 +705,8 @@ module rv32_lsq #(
     localparam integer REPORT_ROWS=(LSQ_ENTRIES<=1)?1:(1<<$clog2(LSQ_ENTRIES));
     localparam integer REPORT_WIDTH=ROB_TAG_WIDTH+TAG_WIDTH+33;
     localparam integer ACK_WIDTH=ROB_TAG_WIDTH+TAG_WIDTH+1;
-    localparam integer REPORT_WORDS=(REPORT_WIDTH+31)/32;
-    localparam integer ACK_WORDS=(ACK_WIDTH+31)/32;
+    localparam integer REPORT_WORDS=(REPORT_WIDTH+15)/16;
+    localparam integer ACK_WORDS=(ACK_WIDTH+15)/16;
     wire report_valid_tree [1:2*REPORT_ROWS-1];
     wire [SLOT_WIDTH-1:0] report_slot_tree [1:2*REPORT_ROWS-1],report_age_tree [1:2*REPORT_ROWS-1];
     wire commit_valid_tree [1:2*REPORT_ROWS-1];
@@ -739,14 +739,14 @@ module rv32_lsq #(
                 rv32_frequency_control_tree #(.LEAVES(ACK_WORDS)) ack_selection_tree (
                     .signal_i(ack_valid_tree[REPORT_ROWS+report_row]),.views_o(ack_select));
                 for(report_word=0;report_word<REPORT_WORDS;report_word=report_word+1) begin:g_result_word
-                    localparam integer LOW=report_word*32;
-                    localparam integer BITS=REPORT_WIDTH-LOW>=32?32:REPORT_WIDTH-LOW;
+                    localparam integer LOW=report_word*16;
+                    localparam integer BITS=REPORT_WIDTH-LOW>=16?16:REPORT_WIDTH-LOW;
                     assign report_payload_tree[REPORT_ROWS+report_row][LOW +: BITS]=
                         {BITS{report_select[report_word]}} & report_payload[LOW +: BITS];
                 end
                 for(report_word=0;report_word<ACK_WORDS;report_word=report_word+1) begin:g_ack_word
-                    localparam integer LOW=report_word*32;
-                    localparam integer BITS=ACK_WIDTH-LOW>=32?32:ACK_WIDTH-LOW;
+                    localparam integer LOW=report_word*16;
+                    localparam integer BITS=ACK_WIDTH-LOW>=16?16:ACK_WIDTH-LOW;
                     assign ack_payload_tree[REPORT_ROWS+report_row][LOW +: BITS]=
                         {BITS{ack_select[report_word]}} & ack_payload[LOW +: BITS];
                 end

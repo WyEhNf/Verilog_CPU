@@ -185,13 +185,27 @@ module rv32_reservation_station #(
     wire [31:0] wake2_first [0:ENTRIES-1], wake2_last [0:ENTRIES-1];
     genvar wr, wl;
     generate if (WAKE_MUX_IMPL != 0) begin : g_parallel_wake
+        localparam integer WAKE_DOMAINS=(ENTRIES+3)/4;
+        wire [WAKE_DOMAINS*WAKE_WIDTH-1:0] valid_views;
+        wire [WAKE_DOMAINS*WAKE_WIDTH*TAG_WIDTH-1:0] tag_views;
+        wire [WAKE_DOMAINS*WAKE_WIDTH*32-1:0] value_views;
+        rv32_frequency_control_tree #(.WIDTH(WAKE_WIDTH),.LEAVES(WAKE_DOMAINS)) valid_tree (
+            .signal_i(wake_valid_i),.views_o(valid_views));
+        rv32_frequency_control_tree #(.WIDTH(WAKE_WIDTH*TAG_WIDTH),.LEAVES(WAKE_DOMAINS)) tag_tree (
+            .signal_i(wake_tag_i),.views_o(tag_views));
+        rv32_frequency_control_tree #(.WIDTH(WAKE_WIDTH*32),.LEAVES(WAKE_DOMAINS)) value_tree (
+            .signal_i(wake_value_i),.views_o(value_views));
         for (wr = 0; wr < ENTRIES; wr = wr + 1) begin : g_entry
+            localparam integer DOMAIN=wr/4;
             wire [WAKE_WIDTH-1:0] first1, last1, first2, last2;
+            wire [WAKE_WIDTH-1:0] local_valid=valid_views[DOMAIN*WAKE_WIDTH +: WAKE_WIDTH];
+            wire [WAKE_WIDTH*TAG_WIDTH-1:0] local_tags=tag_views[DOMAIN*WAKE_WIDTH*TAG_WIDTH +: WAKE_WIDTH*TAG_WIDTH];
+            wire [WAKE_WIDTH*32-1:0] local_values=value_views[DOMAIN*WAKE_WIDTH*32 +: WAKE_WIDTH*32];
             for (wl = 0; wl < WAKE_WIDTH; wl = wl + 1) begin : g_lane
-                assign wake1_match[wr][wl] = wake_valid_i[wl] && wake_tag_i[wl*TAG_WIDTH] &&
-                    src1_tag_mem[wr][0] && wake_tag_i[wl*TAG_WIDTH +: TAG_WIDTH] == src1_tag_mem[wr];
-                assign wake2_match[wr][wl] = wake_valid_i[wl] && wake_tag_i[wl*TAG_WIDTH] &&
-                    src2_tag_mem[wr][0] && wake_tag_i[wl*TAG_WIDTH +: TAG_WIDTH] == src2_tag_mem[wr];
+                assign wake1_match[wr][wl] = local_valid[wl] && local_tags[wl*TAG_WIDTH] &&
+                    src1_tag_mem[wr][0] && local_tags[wl*TAG_WIDTH +: TAG_WIDTH] == src1_tag_mem[wr];
+                assign wake2_match[wr][wl] = local_valid[wl] && local_tags[wl*TAG_WIDTH] &&
+                    src2_tag_mem[wr][0] && local_tags[wl*TAG_WIDTH +: TAG_WIDTH] == src2_tag_mem[wr];
                 if (wl == 0) begin : g_first
                     assign first1[wl] = wake1_match[wr][wl];
                     assign first2[wl] = wake2_match[wr][wl];
@@ -207,22 +221,16 @@ module rv32_reservation_station #(
                     assign last2[wl] = wake2_match[wr][wl] && !(|wake2_match[wr][WAKE_WIDTH-1:wl+1]);
                 end
             end
-            reg [31:0] f1, l1, f2, l2;
-            integer k;
-            always @* begin
-                f1 = 0; l1 = 0; f2 = 0; l2 = 0;
-                for (k = 0; k < WAKE_WIDTH; k = k + 1) begin
-                    f1 = f1 | ({32{first1[k]}} & wake_value_i[k*32 +: 32]);
-                    l1 = l1 | ({32{last1[k]}} & wake_value_i[k*32 +: 32]);
-                    f2 = f2 | ({32{first2[k]}} & wake_value_i[k*32 +: 32]);
-                    l2 = l2 | ({32{last2[k]}} & wake_value_i[k*32 +: 32]);
-                end
-            end
-            assign wake1_first[wr] = f1;
-            assign wake1_last[wr] = l1;
-            assign wake2_first[wr] = f2;
-            assign wake2_last[wr] = l2;
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(WAKE_WIDTH)) first1_selector (
+                .events_i(first1),.values_i(local_values),.write_o(),.value_o(wake1_first[wr]));
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(WAKE_WIDTH)) last1_selector (
+                .events_i(last1),.values_i(local_values),.write_o(),.value_o(wake1_last[wr]));
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(WAKE_WIDTH)) first2_selector (
+                .events_i(first2),.values_i(local_values),.write_o(),.value_o(wake2_first[wr]));
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(WAKE_WIDTH)) last2_selector (
+                .events_i(last2),.values_i(local_values),.write_o(),.value_o(wake2_last[wr]));
         end
+
     end endgenerate
 
     // Select allocation slots exactly as the legacy cursor walk, then decode
@@ -307,14 +315,14 @@ module rv32_reservation_station #(
                 if (al == BE_WIDTH-1) assign grants[al] = allocation_match_bits[al];
                 else assign grants[al] = allocation_match_bits[al] && !(|allocation_match_bits[BE_WIDTH-1:al+1]);
             end
-            localparam integer WORDS=(ALLOC_PAYLOAD_WIDTH+31)/32;
+            localparam integer WORDS=(ALLOC_PAYLOAD_WIDTH+15)/16;
             wire [BE_WIDTH*WORDS-1:0] payload_grants;
             rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(WORDS)) grant_tree (
                 .signal_i(grants),.views_o(payload_grants));
             wire [ALLOC_PAYLOAD_WIDTH-1:0] payload;
             for(alloc_word=0;alloc_word<WORDS;alloc_word=alloc_word+1) begin:g_word
-                localparam integer LOW=alloc_word*32;
-                localparam integer BITS=ALLOC_PAYLOAD_WIDTH-LOW>=32 ? 32 : ALLOC_PAYLOAD_WIDTH-LOW;
+                localparam integer LOW=alloc_word*16;
+                localparam integer BITS=ALLOC_PAYLOAD_WIDTH-LOW>=16 ? 16 : ALLOC_PAYLOAD_WIDTH-LOW;
                 reg [BITS-1:0] selected_word;
                 integer mux_lane;
                 always @* begin
@@ -455,7 +463,7 @@ module rv32_reservation_station #(
     // it is distributed into <=32-bit words before balanced payload reduction.
     localparam integer ISSUE_DATA_WIDTH=OP_WIDTH+32+TAG_WIDTH+PHYS_ADDR_WIDTH+
         64+STORE_DATA_WIDTH+METADATA_WIDTH+SLOT_WIDTH;
-    localparam integer ISSUE_DATA_WORDS=(ISSUE_DATA_WIDTH+31)/32;
+    localparam integer ISSUE_DATA_WORDS=(ISSUE_DATA_WIDTH+15)/16;
     localparam integer ISSUE_DATA_LEAVES=1<<$clog2(ENTRIES);
     genvar issue_lane,issue_row,issue_word,issue_node;
     generate for(issue_lane=0;issue_lane<BE_WIDTH;issue_lane=issue_lane+1) begin:g_issue_payload
@@ -472,8 +480,8 @@ module rv32_reservation_station #(
                 rv32_frequency_control_tree #(.LEAVES(ISSUE_DATA_WORDS)) selection_tree (
                     .signal_i(selections[issue_row]),.views_o(selected_words));
                 for(issue_word=0;issue_word<ISSUE_DATA_WORDS;issue_word=issue_word+1) begin:g_word
-                    localparam integer LOW=issue_word*32;
-                    localparam integer BITS=ISSUE_DATA_WIDTH-LOW>=32 ? 32 : ISSUE_DATA_WIDTH-LOW;
+                    localparam integer LOW=issue_word*16;
+                    localparam integer BITS=ISSUE_DATA_WIDTH-LOW>=16 ? 16 : ISSUE_DATA_WIDTH-LOW;
                     assign payload_tree[ISSUE_DATA_LEAVES+issue_row][LOW +: BITS]=
                         {BITS{selected_words[issue_word]}} & payload[LOW +: BITS];
                 end

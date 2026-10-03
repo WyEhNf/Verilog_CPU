@@ -120,16 +120,17 @@ module rv32_physical_register_file #(
             wire ready_tree [1:2*READ_ROWS-1];
             wire [BE_WIDTH-1:0] bypass_match;
             wire [31:0] bypass_value;
-            wire bypass_write,bypass_select;
+            wire bypass_write;
+            wire [1:0] bypass_select;
             for(row=0;row<READ_ROWS;row=row+1) begin:g_word
                 if(row>0 && row<PHYS_REGS) begin:g_present
                     localparam integer DOMAIN=(row*READ_DOMAINS)/PHYS_REGS;
                     wire selected=read_domain_queries[(DOMAIN*2*BE_WIDTH+rp)*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==row;
-                    wire [1:0] select_views;
-                    rv32_frequency_control_tree #(.LEAVES(2)) selection_tree (
+                    wire [2:0] select_views;
+                    rv32_frequency_control_tree #(.LEAVES(3)) selection_tree (
                         .signal_i(selected),.views_o(select_views));
-                    assign stored_tree[READ_ROWS+row]={32{select_views[0]}} & value[row];
-                    assign ready_tree[READ_ROWS+row]=select_views[1] && ready[row];
+                    assign stored_tree[READ_ROWS+row]={{16{select_views[1]}} & value[row][31:16],{16{select_views[0]}} & value[row][15:0]};
+                    assign ready_tree[READ_ROWS+row]=select_views[2] && ready[row];
                 end else begin:g_zero_or_padding
                     assign stored_tree[READ_ROWS+row]=0;
                     assign ready_tree[READ_ROWS+row]=0;
@@ -145,10 +146,10 @@ module rv32_physical_register_file #(
             end
             rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH)) bypass_selector (
                 .events_i(bypass_match),.values_i(write_data_i),.write_o(bypass_write),.value_o(bypass_value));
-            rv32_frequency_control_tree #(.LEAVES(1)) bypass_choice_tree (
+            rv32_frequency_control_tree #(.LEAVES(2)) bypass_choice_tree (
                 .signal_i(bypass_write),.views_o(bypass_select));
             always @* begin
-                read_data_o[rp*32 +: 32]=bypass_select?bypass_value:stored_tree[1];
+                read_data_o[rp*32 +: 32]={bypass_select[1]?bypass_value[31:16]:stored_tree[1][31:16],bypass_select[0]?bypass_value[15:0]:stored_tree[1][15:0]};
                 read_ready_o[rp]=(address==0) || ready_tree[1] || bypass_write;
             end
         end
@@ -223,25 +224,15 @@ module rv32_prf_value_row #(parameter integer LANES=4) (
     output reg [31:0] value_o,
     output reg ready_o
 );
-    wire [LANES-1:0] grants,local_grants;
-    wire write_local;
-    genvar lane;
-    generate for(lane=0;lane<LANES;lane=lane+1) begin:g_grant
-        if(lane==LANES-1) assign grants[lane]=write_matches_i[lane];
-        else assign grants[lane]=write_matches_i[lane] && !(|write_matches_i[LANES-1:lane+1]);
-    end endgenerate
-    rv32_frequency_control_tree #(.WIDTH(LANES),.LEAVES(1)) grant_tree (
-        .signal_i(grants),.views_o(local_grants));
-    rv32_frequency_control_tree #(.LEAVES(1)) write_tree (
-        .signal_i(!reset_i && (|write_matches_i)),.views_o(write_local));
-    reg [31:0] next_value;
-    integer port;
-    always @* begin
-        next_value=0;
-        for(port=0;port<LANES;port=port+1)
-            next_value=next_value | ({32{local_grants[port]}} & write_values_i[port*32 +: 32]);
-    end
-    always @(posedge clk_i) if(write_local) value_o<=next_value;
+    wire [1:0] write_views;
+    wire write_event;
+    wire [31:0] next_value;
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(LANES)) value_selector (
+        .events_i(write_matches_i),.values_i(write_values_i),.write_o(write_event),.value_o(next_value));
+    rv32_frequency_control_tree #(.LEAVES(2)) write_tree (
+        .signal_i(!reset_i && write_event),.views_o(write_views));
+    always @(posedge clk_i) if(write_views[0]) value_o[15:0]<=next_value[15:0];
+    always @(posedge clk_i) if(write_views[1]) value_o[31:16]<=next_value[31:16];
     always @(posedge clk_i) begin
         if(reset_i) ready_o<=0;
         else if(|write_matches_i) ready_o<=1;

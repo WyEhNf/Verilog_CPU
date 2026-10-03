@@ -206,31 +206,38 @@ module rv32_completion_network #(
     wire [DIRECT_META_WIDTH-1:0] direct_meta [0:CDB_WIDTH-1];
     wire [31:0] direct_value [0:CDB_WIDTH-1],direct_target [0:CDB_WIDTH-1];
     wire [63:0] direct_memory [0:CDB_WIDTH-1];
-    genvar payload_lane,payload_source,payload_node;
+    genvar payload_lane,payload_source,payload_node,payload_word;
     generate for(payload_lane=0;payload_lane<CDB_WIDTH;payload_lane=payload_lane+1) begin:g_direct_payload
         wire [DIRECT_META_WIDTH-1:0] meta_tree [1:2*RANK_LEAVES-1];
         wire [31:0] value_tree [1:2*RANK_LEAVES-1],target_tree [1:2*RANK_LEAVES-1];
         wire [63:0] memory_tree [1:2*RANK_LEAVES-1];
         for(payload_source=0;payload_source<RANK_LEAVES;payload_source=payload_source+1) begin:g_source
             if(payload_source<SOURCES) begin:g_live
-                wire [4:0] selected_views;
-                rv32_frequency_control_tree #(.LEAVES(5)) select_tree (
+                localparam integer DATA_WIDTH=DIRECT_META_WIDTH+128;
+                localparam integer WORDS=(DATA_WIDTH+15)/16;
+                wire [WORDS-1:0] selected_views;
+                wire [DATA_WIDTH-1:0] data={
+                    producer_tag_i[payload_source*TAG_WIDTH +: TAG_WIDTH],
+                    producer_phys_rd_i[payload_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
+                    producer_rd_we_i[payload_source] && !producer_is_store_i[payload_source],
+                    producer_is_store_i[payload_source],producer_is_branch_i[payload_source],
+                    producer_branch_taken_i[payload_source],producer_redirect_valid_i[payload_source],
+                    producer_is_memory_i[payload_source],producer_is_load_i[payload_source],
+                    producer_value_i[payload_source*32 +: 32],producer_addr_i[payload_source*32 +: 32],
+                    producer_store_data_i[payload_source*32 +: 32],producer_branch_target_i[payload_source*32 +: 32]};
+                wire [DATA_WIDTH-1:0] selected_data;
+                rv32_frequency_control_tree #(.LEAVES(WORDS)) select_tree (
                     .signal_i(selected_mask[payload_lane][payload_source] && !reset_i && !flush_i),
                     .views_o(selected_views));
-                assign meta_tree[RANK_LEAVES+payload_source]={DIRECT_META_WIDTH{selected_views[0]}} &
-                    {producer_tag_i[payload_source*TAG_WIDTH +: TAG_WIDTH],
-                     producer_phys_rd_i[payload_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
-                     producer_rd_we_i[payload_source] && !producer_is_store_i[payload_source],
-                     producer_is_store_i[payload_source],producer_is_branch_i[payload_source],
-                     producer_branch_taken_i[payload_source],producer_redirect_valid_i[payload_source],
-                     producer_is_memory_i[payload_source],producer_is_load_i[payload_source]};
-                assign value_tree[RANK_LEAVES+payload_source]={32{selected_views[1]}} &
-                    producer_value_i[payload_source*32 +: 32];
-                assign memory_tree[RANK_LEAVES+payload_source]={
-                    {32{selected_views[2]}} & producer_addr_i[payload_source*32 +: 32],
-                    {32{selected_views[3]}} & producer_store_data_i[payload_source*32 +: 32]};
-                assign target_tree[RANK_LEAVES+payload_source]={32{selected_views[4]}} &
-                    producer_branch_target_i[payload_source*32 +: 32];
+                for(payload_word=0;payload_word<WORDS;payload_word=payload_word+1) begin:g_word
+                    localparam integer LOW=payload_word*16;
+                    localparam integer BITS=DATA_WIDTH-LOW>=16?16:DATA_WIDTH-LOW;
+                    assign selected_data[LOW +: BITS]={BITS{selected_views[payload_word]}} & data[LOW +: BITS];
+                end
+                assign meta_tree[RANK_LEAVES+payload_source]=selected_data[128 +: DIRECT_META_WIDTH];
+                assign value_tree[RANK_LEAVES+payload_source]=selected_data[96 +: 32];
+                assign memory_tree[RANK_LEAVES+payload_source]=selected_data[32 +: 64];
+                assign target_tree[RANK_LEAVES+payload_source]=selected_data[0 +: 32];
             end else begin:g_zero
                 assign meta_tree[RANK_LEAVES+payload_source]=0;
                 assign value_tree[RANK_LEAVES+payload_source]=0;

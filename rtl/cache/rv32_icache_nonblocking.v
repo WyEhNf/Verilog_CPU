@@ -69,9 +69,9 @@ module rv32_icache_nonblocking #(
         assign lookup_req_pc=if_req_pc_i;assign lookup_req_epoch=if_req_epoch_i;
     end endgenerate
 
-    reg [CACHE_LINES-1:0] valid_bits;
+    wire [CACHE_LINES-1:0] valid_bits;
     reg [CACHE_TAG_WIDTH-1:0] tag_mem [0:CACHE_LINES-1];
-    reg lru_mem [0:CACHE_SETS-1];
+    wire lru_mem [0:CACHE_SETS-1];
 
     function [CACHE_ENTRY_WIDTH-1:0] cache_entry;
         input [CACHE_SET_WIDTH-1:0] set_index;
@@ -425,17 +425,54 @@ module rv32_icache_nonblocking #(
         ((response_promoted && lookup_req_epoch==current_epoch_i) ||
          (!response_promoted && !mshr_prefetch[response_index] && mshr_demand_epoch[response_index]==current_epoch_i));
     wire response_sram_copy=!reset_i && resp_from_sram && resp_valid_reg;
-    wire [3:0] response_data_write,response_data_memory;
-    rv32_frequency_control_tree #(.LEAVES(4)) response_write_tree (
+    wire [7:0] response_data_write,response_data_memory;
+    rv32_frequency_control_tree #(.LEAVES(8)) response_write_tree (
         .signal_i(response_memory_write || response_sram_copy),.views_o(response_data_write));
-    rv32_frequency_control_tree #(.LEAVES(4)) response_select_tree (
+    rv32_frequency_control_tree #(.LEAVES(8)) response_select_tree (
         .signal_i(response_memory_write),.views_o(response_data_memory));
     genvar response_word;
-    generate for(response_word=0;response_word<4;response_word=response_word+1) begin:g_response_data
+    generate for(response_word=0;response_word<8;response_word=response_word+1) begin:g_response_data
         always @(posedge clk_i) if(response_data_write[response_word])
-            resp_data_reg[response_word*32 +: 32]<=response_data_memory[response_word]?
-                mem_resp_data_i[response_word*32 +: 32]:data_rdata[response_word*32 +: 32];
+            resp_data_reg[response_word*16 +: 16]<=response_data_memory[response_word]?
+                mem_resp_data_i[response_word*16 +: 16]:data_rdata[response_word*16 +: 16];
     end endgenerate
+
+
+    wire [CACHE_LINES+CACHE_SETS-1:0] metadata_reset;
+    wire [CACHE_LINES-1:0] metadata_refill;
+    wire [CACHE_SETS-1:0] metadata_hit_lru,metadata_refill_lru;
+    rv32_frequency_control_tree #(.LEAVES(CACHE_LINES+CACHE_SETS)) metadata_reset_tree (
+        .signal_i(reset_i),.views_o(metadata_reset));
+    rv32_frequency_control_tree #(.LEAVES(CACHE_LINES)) metadata_refill_tree (
+        .signal_i(refill_array_write),.views_o(metadata_refill));
+    rv32_frequency_control_tree #(.LEAVES(CACHE_SETS)) metadata_hit_lru_tree (
+        .signal_i(hit_array_read),.views_o(metadata_hit_lru));
+    rv32_frequency_control_tree #(.LEAVES(CACHE_SETS)) metadata_refill_lru_tree (
+        .signal_i(refill_array_write),.views_o(metadata_refill_lru));
+    genvar metadata_entry,metadata_set;
+    generate
+        for(metadata_entry=0;metadata_entry<CACHE_LINES;metadata_entry=metadata_entry+1) begin:g_valid_owner
+            reg valid_q;
+            assign valid_bits[metadata_entry]=valid_q;
+            always @(posedge clk_i) begin
+                if(metadata_reset[metadata_entry]) valid_q<=1'b0;
+                else if(metadata_refill[metadata_entry] && refill_entry==metadata_entry) valid_q<=1'b1;
+            end
+        end
+        for(metadata_set=0;metadata_set<CACHE_SETS;metadata_set=metadata_set+1) begin:g_lru_owner
+            reg lru_q;
+            assign lru_mem[metadata_set]=lru_q;
+            always @(posedge clk_i) begin
+                if(metadata_reset[CACHE_LINES+metadata_set]) lru_q<=1'b0;
+                else if(CACHE_WAYS==2) begin
+                    // Successful refill is later than same-edge hit in the
+                    // original process and therefore retains higher priority.
+                    if(metadata_refill_lru[metadata_set] && refill_set==metadata_set) lru_q<=~refill_entry[0];
+                    else if(metadata_hit_lru[metadata_set] && request_set==metadata_set) lru_q<=~request_entry[0];
+                end
+            end
+        end
+    endgenerate
 
     integer reset_index;
     integer prefetch_count;
@@ -459,9 +496,6 @@ module rv32_icache_nonblocking #(
             event_miss_o <= 1'b0;
             event_refill_o <= 1'b0;
             event_stall_o <= 1'b0;
-            valid_bits <= {CACHE_LINES{1'b0}};
-            for (reset_index = 0; reset_index < CACHE_SETS; reset_index = reset_index + 1)
-                lru_mem[reset_index] <= 1'b0;
             for (reset_index = 0; reset_index < MSHR_ENTRIES; reset_index = reset_index + 1) begin
                 if (MSHR_STATIC_WRITES == 0) begin
                     mshr_valid[reset_index] <= 1'b0;
@@ -516,8 +550,6 @@ module rv32_icache_nonblocking #(
                         resp_from_sram <= 1'b1;
                         resp_epoch_reg <= lookup_req_epoch;
                         resp_error_reg <= 1'b0;
-                        if (CACHE_WAYS == 2)
-                            lru_mem[request_set] <= ~request_entry[0];
                     end
                 end else begin
                     event_miss_o <= 1'b1;
@@ -599,11 +631,8 @@ module rv32_icache_nonblocking #(
                 end
                 event_refill_o <= !mem_resp_error_i && response_matches;
                 if (!mem_resp_error_i && response_matches) begin
-                    valid_bits[refill_entry] <= 1'b1;
                     tag_mem[refill_entry] <=
                         mem_resp_line_addr_i[31:CACHE_SET_WIDTH+4];
-                    if (CACHE_WAYS == 2)
-                        lru_mem[refill_set] <= ~refill_entry[0];
                 end
 
                 if (request_fire && request_match_found &&
