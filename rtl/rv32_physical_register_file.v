@@ -9,6 +9,7 @@
 module rv32_physical_register_file #(
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
+    parameter integer READ_MUX_IMPL = 0,
     parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS)
 ) (
     input  wire                         clk_i,
@@ -45,10 +46,45 @@ module rv32_physical_register_file #(
         end
     end
 
+    // Decode each read word once and select data in parallel. Preserve zero
+    // register, out-of-range behavior, and last-lane write bypass priority.
+    genvar rp, row, wl;
+    generate if (READ_MUX_IMPL != 0) begin : g_parallel_read
+        for (rp = 0; rp < 2*BE_WIDTH; rp = rp + 1) begin : g_port
+            wire [PHYS_ADDR_WIDTH-1:0] address = read_phys_i[rp*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
+            wire legal = address != 0 && address < PHYS_REGS;
+            wire [PHYS_REGS-1:0] word_select;
+            wire [BE_WIDTH-1:0] bypass_match, bypass_grant;
+            for (row = 0; row < PHYS_REGS; row = row + 1) begin : g_word
+                assign word_select[row] = (row != 0) && address == row;
+            end
+            for (wl = 0; wl < BE_WIDTH; wl = wl + 1) begin : g_bypass
+                assign bypass_match[wl] = legal && write_valid_i[wl] &&
+                    write_phys_i[wl*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH] == address;
+                if (wl == BE_WIDTH-1) assign bypass_grant[wl] = bypass_match[wl];
+                else assign bypass_grant[wl] = bypass_match[wl] && !(|bypass_match[BE_WIDTH-1:wl+1]);
+            end
+            reg [31:0] stored_value, bypass_value;
+            reg stored_ready;
+            integer read_word, bypass_index;
+            always @* begin
+                stored_value = 0;
+                stored_ready = address == 0;
+                bypass_value = 0;
+                for (read_word = 1; read_word < PHYS_REGS; read_word = read_word + 1) begin
+                    stored_value = stored_value | ({32{word_select[read_word]}} & value[read_word]);
+                    stored_ready = stored_ready | (word_select[read_word] && ready[read_word]);
+                end
+                for (bypass_index = 0; bypass_index < BE_WIDTH; bypass_index = bypass_index + 1)
+                    bypass_value = bypass_value | ({32{bypass_grant[bypass_index]}} & write_data_i[bypass_index*32 +: 32]);
+                read_data_o[rp*32 +: 32] = (|bypass_match) ? bypass_value : stored_value;
+                read_ready_o[rp] = stored_ready || (|bypass_match);
+            end
+        end
+    end else begin : g_original_read
     // Reads are combinational.  Each generated process has constant output
     // slices; @* also expands the word-array dependency for simulators.
     genvar read_port;
-    generate
         for (read_port = 0; read_port < (2*BE_WIDTH); read_port = read_port + 1) begin : g_read_port
             integer bypass_lane;
             always @* begin
@@ -74,7 +110,8 @@ module rv32_physical_register_file #(
                 end
             end
         end
-    endgenerate
+
+    end endgenerate
 
     always @(posedge clk_i) begin
         if (reset_i) begin
