@@ -14,6 +14,7 @@ module rv32_lsq #(
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer STORE_ADMISSION_BYPASS = 0,
     parameter integer STORE_ADDRESS_PROBE = 0,
+    parameter integer REQUEST_PIPELINE = 0,
     parameter integer SLOT_WIDTH = (LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES),
     parameter integer GENERATION_WIDTH = (TAG_WIDTH > (SLOT_WIDTH + 3)) ?
                                           (TAG_WIDTH - SLOT_WIDTH - 3) : 1,
@@ -353,6 +354,76 @@ module rv32_lsq #(
     // Recovery cannot record a fresh cache request on its trimming edge.
     wire store_admission_fire = store_commit_valid_i && store_commit_ready_o &&
         !reset_i && !flush_i && !recovery_valid_i;
+    // Selection and forwarding belong to separate clock stages. A stalled
+    // load also retains the forwarding snapshot, rather than re-evaluating
+    // its public request as older stores depart the queue.
+    reg selection_valid,selection_load,selection_unsigned;
+    reg [SLOT_WIDTH-1:0] selection_slot;
+    reg [TAG_WIDTH-1:0] selection_lsq_tag;
+    reg [ROB_TAG_WIDTH-1:0] selection_rob_tag;
+    reg [31:0] selection_addr,selection_store_data;
+    reg [1:0] selection_size;
+    reg [3:0] selection_store_mask;
+    reg forwarding_hold_valid;
+    reg [3:0] forwarding_hold_mask;
+    reg [31:0] forwarding_hold_data;
+    wire selection_live=selection_valid && tag_matches_slot(selection_lsq_tag,selection_slot) &&
+        !request_sent_mem[selection_slot] && !complete_mem[selection_slot] && !response_wait_mem[selection_slot];
+    wire selection_discard=selection_valid && !selection_live;
+    wire [SLOT_WIDTH-1:0] selected_slot=(REQUEST_PIPELINE!=0)?selection_slot:pick_slot[1];
+    wire [31:0] selected_addr=(REQUEST_PIPELINE!=0)?selection_addr:pick_addr[1];
+    wire [SLOT_WIDTH-1:0] selected_age=selected_slot-head_reg;
+    wire [1:0] selected_size=(REQUEST_PIPELINE!=0)?selection_size:size_mem[pick_slot[1]];
+    wire selected_unsigned=(REQUEST_PIPELINE!=0)?selection_unsigned:unsigned_mem[pick_slot[1]];
+    wire selected_load=(REQUEST_PIPELINE!=0)?selection_load:load_mem[pick_slot[1]];
+    wire [3:0] selected_store_mask=(REQUEST_PIPELINE!=0)?selection_store_mask:mask_mem[pick_slot[1]];
+    wire [31:0] selected_store_data=(REQUEST_PIPELINE!=0)?selection_store_data:data_mem[pick_slot[1]];
+    wire [ROB_TAG_WIDTH-1:0] selected_rob_tag=(REQUEST_PIPELINE!=0)?selection_rob_tag:rob_tag_mem[pick_slot[1]];
+    wire [TAG_WIDTH-1:0] selected_lsq_tag=(REQUEST_PIPELINE!=0)?selection_lsq_tag:
+        make_lsq_tag(pick_slot[1],generation_mem[pick_slot[1]]);
+    wire selection_done=selection_live && (request_fire ||
+        (selection_load && candidate_found && ((fwd_mask & target_mask)==target_mask)));
+    wire selection_input_fire=(REQUEST_PIPELINE!=0) && !reset_i && !flush_i && !recovery_valid_i &&
+        (!selection_valid || selection_discard || selection_done) && pick_valid[1];
+    wire [4:0] selection_write_views;
+    rv32_frequency_control_tree #(.LEAVES(5)) selection_write_tree (
+        .signal_i(selection_input_fire),.views_o(selection_write_views));
+    wire forwarding_hold_write=(REQUEST_PIPELINE!=0) && candidate_found && selected_load &&
+        dcache_req_valid_o && !dcache_req_ready_i && !forwarding_hold_valid;
+    wire forwarding_payload_write;
+    rv32_frequency_control_tree #(.LEAVES(1)) forwarding_hold_tree (
+        .signal_i(forwarding_hold_write),.views_o(forwarding_payload_write));
+    wire [ROB_SLOT_WIDTH-1:0] selection_rob_age=selection_rob_tag[3 +: ROB_SLOT_WIDTH]-recovery_head_i;
+    wire [ROB_SLOT_WIDTH-1:0] selection_branch_age=recovery_tag_i[3 +: ROB_SLOT_WIDTH]-recovery_head_i;
+    wire selection_recovery_kill=selection_valid &&
+        !(store_mem[selection_slot] && store_commit_mem[selection_slot]) &&
+        !(load_mem[selection_slot] && retired_mem[selection_slot]) &&
+        selection_rob_age>selection_branch_age && selection_rob_age<recovery_occupancy_i;
+    always @(posedge clk_i) begin
+        if(reset_i || flush_i) begin selection_valid<=0;forwarding_hold_valid<=0;end
+        else if(recovery_valid_i) begin
+            if(selection_recovery_kill) begin selection_valid<=0;forwarding_hold_valid<=0;end
+        end else begin
+            if(selection_input_fire) selection_valid<=1;
+            else if(selection_done || selection_discard) selection_valid<=0;
+            if(selection_input_fire || selection_done || selection_discard) forwarding_hold_valid<=0;
+            else if(forwarding_hold_write) forwarding_hold_valid<=1;
+        end
+        if(selection_write_views[0]) begin
+            selection_slot<=pick_slot[1];
+            selection_lsq_tag<=make_lsq_tag(pick_slot[1],generation_mem[pick_slot[1]]);
+            selection_rob_tag<=rob_tag_mem[pick_slot[1]];
+        end
+        if(selection_write_views[1]) selection_addr<=pick_addr[1];
+        if(selection_write_views[2]) begin
+            selection_load<=load_mem[pick_slot[1]];selection_size<=size_mem[pick_slot[1]];
+            selection_unsigned<=unsigned_mem[pick_slot[1]];
+        end
+        if(selection_write_views[3]) selection_store_mask<=mask_mem[pick_slot[1]];
+        if(selection_write_views[4]) selection_store_data<=data_mem[pick_slot[1]];
+        if(forwarding_payload_write) begin forwarding_hold_mask<=fwd_mask;forwarding_hold_data<=fwd_data;end
+    end
+
     genvar age_slot;
     generate
         for (age_slot = 0; age_slot < LSQ_ENTRIES; age_slot = age_slot + 1) begin : g_entry_age
@@ -376,13 +447,13 @@ module rv32_lsq #(
             assign store_overlap[age_slot] =
                 valid_mem[age_slot] && store_mem[age_slot] &&
                 addr_ready_mem[age_slot] && data_ready_mem[age_slot] &&
-                (entry_age[age_slot] < pick_age[1]) &&
-                (addr_mem[age_slot][31:4] == pick_addr[1][31:4]) ?
+                (entry_age[age_slot] < selected_age) &&
+                (addr_mem[age_slot][31:4] == selected_addr[31:4]) ?
                 relative_overlap(addr_mem[age_slot][3:0], mask_mem[age_slot],
-                    pick_addr[1][3:0], access_mask(size_mem[pick_slot[1]])) : 4'b0;
+                    selected_addr[3:0], access_mask(selected_size)) : 4'b0;
             assign store_forward_data[age_slot] = store_data_relative_to_load(
                 data_mem[age_slot], addr_mem[age_slot][3:0], mask_mem[age_slot],
-                pick_addr[1][3:0], access_mask(size_mem[pick_slot[1]]));
+                selected_addr[3:0], access_mask(selected_size));
         end
     endgenerate
 
@@ -410,6 +481,7 @@ module rv32_lsq #(
             assign request_eligible[request_slot] =
                 (entry_age[request_slot] < occupancy_reg) &&
                 valid_mem[request_slot] &&
+                !(REQUEST_PIPELINE!=0 && selection_valid && selection_slot==request_slot) &&
                 ((load_mem[request_slot] && addr_ready_mem[request_slot] &&
                   !request_sent_mem[request_slot] &&
                   !complete_mem[request_slot] && !(|older_hazard)) ||
@@ -524,9 +596,9 @@ module rv32_lsq #(
         end
 
         // The eligibility bits above feed the balanced oldest-first tree.
-        candidate_found = pick_valid[1];
-        candidate = pick_valid[1] ? pick_slot[1] : 0;
-        candidate_age = pick_valid[1] ? pick_age[1] : LSQ_ENTRIES + 1;
+        candidate_found = (REQUEST_PIPELINE!=0)?selection_live:pick_valid[1];
+        candidate = candidate_found ? selected_slot : 0;
+        candidate_age = candidate_found ? selected_age : LSQ_ENTRIES + 1;
 
         dcache_req_valid_o = 1'b0;
         dcache_req_is_load_o = 1'b0;
@@ -534,7 +606,7 @@ module rv32_lsq #(
         // Payload is meaningful only with valid. Expose the selected address
         // directly so forwarding and recovery gates do not sit on the cache
         // index path.
-        dcache_req_addr_o = pick_addr[1];
+        dcache_req_addr_o = selected_addr;
         dcache_req_size_o = 2'b0;
         dcache_req_unsigned_o = 1'b0;
         dcache_req_mask_o = 16'b0;
@@ -545,31 +617,31 @@ module rv32_lsq #(
         // Recovery updates retained responses but cannot record a new request.
         // Do not let the cache (or request register) accept an untracked send.
         if (!flush_i && !recovery_valid_i && candidate_found && !response_wait_mem[candidate]) begin
-            if (load_mem[candidate]) begin
-                target_mask = access_mask(size_mem[candidate]);
-                fwd_mask = tree_forward_mask;
-                fwd_data = tree_forward_data;
+            if (selected_load) begin
+                target_mask = access_mask(selected_size);
+                fwd_mask = (REQUEST_PIPELINE!=0 && forwarding_hold_valid)?forwarding_hold_mask:tree_forward_mask;
+                fwd_data = (REQUEST_PIPELINE!=0 && forwarding_hold_valid)?forwarding_hold_data:tree_forward_data;
                 if ((fwd_mask & target_mask) != target_mask) begin
                     dcache_req_valid_o = 1'b1;
                     dcache_req_is_load_o = 1'b1;
-                    dcache_req_size_o = size_mem[candidate];
-                    dcache_req_unsigned_o = unsigned_mem[candidate];
+                    dcache_req_size_o = selected_size;
+                    dcache_req_unsigned_o = selected_unsigned;
                     dcache_req_mask_o = line_mask_from_relative(target_mask & ~fwd_mask,
-                                                                 pick_addr[1]);
-                    dcache_req_wdata_o = line_data_from_relative(fwd_data, pick_addr[1]);
-                    dcache_req_rob_tag_o = rob_tag_mem[candidate];
-                    dcache_req_lsq_tag_o = make_lsq_tag(candidate, generation_mem[candidate]);
+                                                                 selected_addr);
+                    dcache_req_wdata_o = line_data_from_relative(fwd_data, selected_addr);
+                    dcache_req_rob_tag_o = selected_rob_tag;
+                    dcache_req_lsq_tag_o = selected_lsq_tag;
                     request_fire = dcache_req_ready_i;
                 end
             end else begin
                 dcache_req_valid_o = 1'b1;
                 dcache_req_is_store_o = 1'b1;
-                dcache_req_size_o = size_mem[candidate];
+                dcache_req_size_o = selected_size;
                 dcache_req_unsigned_o = 1'b0;
-                dcache_req_mask_o = line_mask_from_relative(mask_mem[candidate], pick_addr[1]);
-                dcache_req_wdata_o = line_data_from_relative(data_mem[candidate], pick_addr[1]);
-                dcache_req_rob_tag_o = rob_tag_mem[candidate];
-                dcache_req_lsq_tag_o = make_lsq_tag(candidate, generation_mem[candidate]);
+                dcache_req_mask_o = line_mask_from_relative(selected_store_mask, selected_addr);
+                dcache_req_wdata_o = line_data_from_relative(selected_store_data, selected_addr);
+                dcache_req_rob_tag_o = selected_rob_tag;
+                dcache_req_lsq_tag_o = selected_lsq_tag;
                 request_fire = dcache_req_ready_i;
             end
         end
@@ -828,7 +900,7 @@ module rv32_lsq #(
             if (candidate_found && load_mem[candidate] && !request_sent_mem[candidate] && !complete_mem[candidate]) begin
                 if ((fwd_mask & target_mask) == target_mask) begin
                     complete_value_mem[candidate] <= format_relative_value(
-                        fwd_data, size_mem[candidate], unsigned_mem[candidate]);
+                        fwd_data, selected_size, selected_unsigned);
                     complete_error_mem[candidate] <= 1'b0;
                     complete_mem[candidate] <= 1'b1;
                 end
