@@ -231,7 +231,7 @@ module rv32_reservation_station #(
     localparam integer ALLOC_PAYLOAD_WIDTH = 1 + OP_WIDTH + 32 + TAG_WIDTH +
         PHYS_ADDR_WIDTH + 32 + TAG_WIDTH + 1 + 32 + TAG_WIDTH + 1 +
         STORE_DATA_WIDTH + METADATA_WIDTH + AGE_WIDTH;
-    reg [SLOT_WIDTH-1:0] allocation_slots [0:BE_WIDTH-1];
+    wire [SLOT_WIDTH-1:0] allocation_slots [0:BE_WIDTH-1];
     wire [ALLOC_PAYLOAD_WIDTH-1:0] alloc_lane_payload [0:BE_WIDTH-1];
     wire [ALLOC_PAYLOAD_WIDTH-1:0] alloc_row_payload [0:ENTRIES-1];
     wire [ENTRIES-1:0] alloc_row_write;
@@ -241,25 +241,51 @@ module rv32_reservation_station #(
     reg pick_found;
     genvar ar, al, alloc_word;
     generate if (ALLOC_STATIC_WRITE != 0) begin : g_static_allocation
-        always @* begin
-            pick_cursor = 0;
-            pick_slot = 0;
-            pick_found = 0;
-            for (pick_lane = 0; pick_lane < BE_WIDTH; pick_lane = pick_lane + 1) begin
-                allocation_slots[pick_lane] = 0;
-                if (alloc_fire_o[pick_lane]) begin
-                    pick_slot = 0;
-                    pick_found = 0;
-                    for (pick_search = 0; pick_search < ENTRIES; pick_search = pick_search + 1) begin
-                        if (!pick_found && pick_search >= pick_cursor && !valid_mem[pick_search]) begin
-                            pick_slot = pick_search;
-                            pick_found = 1;
-                        end
-                    end
-                    allocation_slots[pick_lane] = pick_slot;
-                    pick_cursor = pick_slot + 1;
-                end
+        localparam integer SLOT_LEAVES=1<<$clog2(ENTRIES);
+        localparam integer LANE_LEAVES=(BE_WIDTH<=1)?1:(1<<$clog2(BE_WIDTH));
+        wire [COUNT_WIDTH-1:0] free_before [0:ENTRIES-1];
+        wire [COUNT_WIDTH-1:0] accepted_before [0:BE_WIDTH-1];
+        wire [BE_WIDTH-1:0] slot_grants [0:ENTRIES-1];
+        genvar rank_row,rank_lane,rank_source,rank_node;
+        // The kth accepted lane owns the kth free physical row. Both counts
+        // use balanced population-count trees; no lane waits for another
+        // lane's encoded slot or search cursor.
+        for(rank_row=0;rank_row<ENTRIES;rank_row=rank_row+1) begin:g_free_rank
+            wire [COUNT_WIDTH-1:0] tree [1:2*SLOT_LEAVES-1];
+            for(rank_source=0;rank_source<SLOT_LEAVES;rank_source=rank_source+1) begin:g_leaf
+                if(rank_source<rank_row) assign tree[SLOT_LEAVES+rank_source]=!valid_mem[rank_source];
+                else assign tree[SLOT_LEAVES+rank_source]=0;
             end
+            for(rank_node=1;rank_node<SLOT_LEAVES;rank_node=rank_node+1) begin:g_sum
+                assign tree[rank_node]=tree[2*rank_node]+tree[2*rank_node+1];
+            end
+            assign free_before[rank_row]=tree[1];
+            for(rank_lane=0;rank_lane<BE_WIDTH;rank_lane=rank_lane+1) begin:g_grant
+                assign slot_grants[rank_row][rank_lane]=!valid_mem[rank_row] &&
+                    alloc_fire_o[rank_lane] && free_before[rank_row]==accepted_before[rank_lane];
+            end
+        end
+        for(rank_lane=0;rank_lane<BE_WIDTH;rank_lane=rank_lane+1) begin:g_lane_rank
+            wire [COUNT_WIDTH-1:0] count_tree [1:2*LANE_LEAVES-1];
+            wire [SLOT_WIDTH-1:0] slot_tree [1:2*SLOT_LEAVES-1];
+            for(rank_source=0;rank_source<LANE_LEAVES;rank_source=rank_source+1) begin:g_count_leaf
+                if(rank_source<rank_lane) assign count_tree[LANE_LEAVES+rank_source]=alloc_fire_o[rank_source];
+                else assign count_tree[LANE_LEAVES+rank_source]=0;
+            end
+            for(rank_node=1;rank_node<LANE_LEAVES;rank_node=rank_node+1) begin:g_count_sum
+                assign count_tree[rank_node]=count_tree[2*rank_node]+count_tree[2*rank_node+1];
+            end
+            assign accepted_before[rank_lane]=count_tree[1];
+            for(rank_source=0;rank_source<SLOT_LEAVES;rank_source=rank_source+1) begin:g_slot_leaf
+                if(rank_source<ENTRIES)
+                    assign slot_tree[SLOT_LEAVES+rank_source]={SLOT_WIDTH{slot_grants[rank_source][rank_lane]}} &
+                        rank_source[SLOT_WIDTH-1:0];
+                else assign slot_tree[SLOT_LEAVES+rank_source]=0;
+            end
+            for(rank_node=1;rank_node<SLOT_LEAVES;rank_node=rank_node+1) begin:g_slot_or
+                assign slot_tree[rank_node]=slot_tree[2*rank_node] | slot_tree[2*rank_node+1];
+            end
+            assign allocation_slots[rank_lane]=slot_tree[1];
         end
         for (al = 0; al < BE_WIDTH; al = al + 1) begin : g_payload
             wire [AGE_WIDTH-1:0] lane_age = age_counter + al;
@@ -277,7 +303,7 @@ module rv32_reservation_station #(
         for (ar = 0; ar < ENTRIES; ar = ar + 1) begin : g_row
             wire [BE_WIDTH-1:0] allocation_match_bits, grants;
             for (al = 0; al < BE_WIDTH; al = al + 1) begin : g_grant
-                assign allocation_match_bits[al] = alloc_fire_o[al] && allocation_slots[al] == ar;
+                assign allocation_match_bits[al] = slot_grants[ar][al];
                 if (al == BE_WIDTH-1) assign grants[al] = allocation_match_bits[al];
                 else assign grants[al] = allocation_match_bits[al] && !(|allocation_match_bits[BE_WIDTH-1:al+1]);
             end
