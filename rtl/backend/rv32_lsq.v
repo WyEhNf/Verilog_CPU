@@ -12,6 +12,8 @@ module rv32_lsq #(
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer ROB_TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
+    parameter integer STORE_ADMISSION_BYPASS = 0,
+    parameter integer STORE_ADDRESS_PROBE = 0,
     parameter integer SLOT_WIDTH = (LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES),
     parameter integer GENERATION_WIDTH = (TAG_WIDTH > (SLOT_WIDTH + 3)) ?
                                           (TAG_WIDTH - SLOT_WIDTH - 3) : 1,
@@ -47,6 +49,15 @@ module rv32_lsq #(
     input  wire [BE_WIDTH-1:0]           alloc_data_valid_i,
     input  wire [(BE_WIDTH*32)-1:0]      alloc_store_data_i,
     input  wire [(BE_WIDTH*4)-1:0]       alloc_store_mask_i,
+
+    // One shared AGU may publish an address independently of store data.
+    // The full LSQ generation tag protects slot reuse. This is not a commit.
+    input  wire                         early_addr_valid_i,
+    input  wire [TAG_WIDTH-1:0]          early_addr_tag_i,
+    input  wire [31:0]                   early_addr_i,
+    output wire [LSQ_ENTRIES-1:0]        store_addr_pending_o,
+    output wire [LSQ_ENTRIES*ROB_TAG_WIDTH-1:0] store_addr_rob_tag_o,
+    output wire [LSQ_ENTRIES*TAG_WIDTH-1:0] store_addr_lsq_tag_o,
 
     input  wire [BE_WIDTH-1:0]           addr_update_valid_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] addr_update_tag_i,
@@ -336,10 +347,23 @@ module rv32_lsq #(
     wire [31:0] store_forward_data [0:LSQ_ENTRIES-1];
     wire [3:0] tree_forward_mask;
     wire [31:0] tree_forward_data;
+    // This is an architectural admission, not speculative store execution.
+    // Only the exact ROB tag with ready address/data can obtain ready below.
+    // Recovery cannot record a fresh cache request on its trimming edge.
+    wire store_admission_fire = store_commit_valid_i && store_commit_ready_o &&
+        !reset_i && !flush_i && !recovery_valid_i;
     genvar age_slot;
     generate
         for (age_slot = 0; age_slot < LSQ_ENTRIES; age_slot = age_slot + 1) begin : g_entry_age
             assign entry_age[age_slot] = (age_slot - head_reg) & (LSQ_ENTRIES - 1);
+            assign store_addr_pending_o[age_slot] = (STORE_ADDRESS_PROBE != 0) &&
+                !reset_i && !flush_i && !recovery_valid_i &&
+                (entry_age[age_slot] < occupancy_reg) && valid_mem[age_slot] &&
+                store_mem[age_slot] && !addr_ready_mem[age_slot] &&
+                !request_sent_mem[age_slot] && !complete_mem[age_slot];
+            assign store_addr_rob_tag_o[age_slot*ROB_TAG_WIDTH +: ROB_TAG_WIDTH] = rob_tag_mem[age_slot];
+            assign store_addr_lsq_tag_o[age_slot*TAG_WIDTH +: TAG_WIDTH] =
+                make_lsq_tag(age_slot, generation_mem[age_slot]);
             assign load_line_mask[age_slot] =
                 {12'b0, access_mask(size_mem[age_slot])} << addr_mem[age_slot][3:0];
             assign store_line_mask[age_slot] =
@@ -390,7 +414,9 @@ module rv32_lsq #(
                   !complete_mem[request_slot] && !(|older_hazard)) ||
                  (store_mem[request_slot] && addr_ready_mem[request_slot] &&
                   data_ready_mem[request_slot] &&
-                  store_commit_mem[request_slot] &&
+                  (store_commit_mem[request_slot] ||
+                   ((STORE_ADMISSION_BYPASS != 0) && store_admission_fire &&
+                    (commit_slot_select == request_slot))) &&
                   !request_sent_mem[request_slot]));
         end
     endgenerate
@@ -765,6 +791,17 @@ module rv32_lsq #(
             // Independent address/data wakeups are tag-qualified.  An old
             // response cannot update a reused LSQ slot after wrap/flush.
             for (update_slot = 0; update_slot < LSQ_ENTRIES; update_slot = update_slot + 1) begin
+                // Ordinary ALU updates below take priority on the same edge.
+                // Neither data-ready nor store admission/completion changes.
+                if ((STORE_ADDRESS_PROBE != 0) && early_addr_valid_i &&
+                    tag_matches_slot(early_addr_tag_i, update_slot) &&
+                    store_mem[update_slot] && !addr_ready_mem[update_slot] &&
+                    !request_sent_mem[update_slot] && !complete_mem[update_slot]) begin
+                    addr_ready_mem[update_slot] <= 1'b1;
+                    addr_mem[update_slot] <= early_addr_i;
+                    if (mask_mem[update_slot] == 4'b0)
+                        mask_mem[update_slot] <= access_mask(size_mem[update_slot]);
+                end
                 for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
                     if (addr_update_valid_i[lane] && tag_matches_slot(addr_update_tag_i[(lane*TAG_WIDTH) +: TAG_WIDTH], update_slot)) begin
                         addr_ready_mem[update_slot] <= 1'b1;
