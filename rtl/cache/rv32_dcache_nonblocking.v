@@ -257,6 +257,28 @@ module rv32_dcache_nonblocking #(
         wire deferred_data_read = query_valid && !query_data_valid &&
             request_dirty_victim && !data_we && !tag_array_write;
         wire [31:0] input_prefetch_line = {dcache_req_addr_i[31:4],4'b0} + 32'd16;
+        wire [8:0] query_write_views;
+        rv32_frequency_control_tree #(.LEAVES(9)) query_write_tree (
+            .signal_i(input_fire),.views_o(query_write_views));
+        // input_fire already includes !reset and !flush. These data fields
+        // have one local write owner without a later global control mux.
+        always @(posedge clk_i) begin
+            if(query_write_views[0]) query_wdata[0 +: 32]<=dcache_req_wdata_i[0 +: 32];
+            if(query_write_views[1]) query_wdata[32 +: 32]<=dcache_req_wdata_i[32 +: 32];
+            if(query_write_views[2]) query_wdata[64 +: 32]<=dcache_req_wdata_i[64 +: 32];
+            if(query_write_views[3]) query_wdata[96 +: 32]<=dcache_req_wdata_i[96 +: 32];
+            if(query_write_views[4]) begin query_rob<=dcache_req_rob_tag_i;query_lsq<=dcache_req_lsq_tag_i;end
+            if(query_write_views[5]) query_addr<=dcache_req_addr_i;
+            if(query_write_views[6] && REGISTERED_INDEX!=0) begin
+                query_request_index<=cache_index(dcache_req_addr_i);
+                query_prefetch_index<=cache_index(input_prefetch_line);
+            end
+            if(query_write_views[7]) begin
+                query_load<=dcache_req_is_load_i;query_store<=dcache_req_is_store_i;
+                query_size<=dcache_req_size_i;query_unsigned<=dcache_req_unsigned_i;
+            end
+            if(query_write_views[8]) query_mask<=dcache_req_mask_i;
+        end
         integer forward_way;
         assign dcache_req_ready_o = !reset_i && !flush_i && !tag_array_write &&
                                    (!data_we || dcache_req_is_store_i) &&
@@ -372,21 +394,6 @@ module rv32_dcache_nonblocking #(
                 if (input_fire) begin
                     query_valid <= 1'b1;
                     query_data_valid <= !data_we;
-                    query_load <= dcache_req_is_load_i;
-                    query_store <= dcache_req_is_store_i;
-                    query_addr <= dcache_req_addr_i;
-                    // Follow exactly the same acceptance/hold/warm-reset
-                    // ownership as query_addr. Invalid payload stays undefined.
-                    if (REGISTERED_INDEX != 0) begin
-                        query_request_index <= cache_index(dcache_req_addr_i);
-                        query_prefetch_index <= cache_index(input_prefetch_line);
-                    end
-                    query_size <= dcache_req_size_i;
-                    query_unsigned <= dcache_req_unsigned_i;
-                    query_mask <= dcache_req_mask_i;
-                    query_wdata <= dcache_req_wdata_i;
-                    query_rob <= dcache_req_rob_tag_i;
-                    query_lsq <= dcache_req_lsq_tag_i;
                 end
             end
         end
