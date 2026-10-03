@@ -62,23 +62,23 @@ module rv32i_alu #(
     input  wire [TAG_WIDTH-1:0]         live_tag_i
 );
     reg result_valid_reg;
-    reg [31:0] result_value_reg;
-    reg [PHYS_ADDR_WIDTH-1:0] result_phys_rd_reg;
-    reg [TAG_WIDTH-1:0] result_rob_tag_reg;
-    reg [EPOCH_WIDTH-1:0] result_epoch_reg;
-    reg result_rd_we_reg;
-    reg result_is_branch_reg;
-    reg result_branch_taken_reg;
-    reg [31:0] result_branch_target_reg;
-    reg result_redirect_valid_reg;
-    reg [31:0] result_redirect_pc_reg;
-    reg result_is_memory_reg;
-    reg result_is_load_reg;
-    reg result_is_store_reg;
-    reg [31:0] result_mem_addr_reg;
-    reg [1:0] result_mem_size_reg;
-    reg result_mem_unsigned_reg;
-    reg [31:0] result_store_data_reg;
+    wire [31:0] result_value_reg;
+    wire [PHYS_ADDR_WIDTH-1:0] result_phys_rd_reg;
+    wire [TAG_WIDTH-1:0] result_rob_tag_reg;
+    wire [EPOCH_WIDTH-1:0] result_epoch_reg;
+    wire result_rd_we_reg;
+    wire result_is_branch_reg;
+    wire result_branch_taken_reg;
+    wire [31:0] result_branch_target_reg;
+    wire result_redirect_valid_reg;
+    wire [31:0] result_redirect_pc_reg;
+    wire result_is_memory_reg;
+    wire result_is_load_reg;
+    wire result_is_store_reg;
+    wire [31:0] result_mem_addr_reg;
+    wire [1:0] result_mem_size_reg;
+    wire result_mem_unsigned_reg;
+    wire [31:0] result_store_data_reg;
 
     reg [31:0] calc_value;
     reg calc_rd_we;
@@ -224,32 +224,40 @@ module rv32i_alu #(
     assign exec_mem_unsigned_o = result_mem_unsigned_reg;
     assign exec_store_data_o = result_store_data_reg;
 
+
+    // Invalid execution data is not architectural state. Reset/flush only
+    // clear result validity and shift control; every newly valid result has
+    // a complete payload write on its original acceptance edge.
+    wire payload_stale=live_tag_valid_i && result_rob_tag_reg!=live_tag_i;
+    wire payload_cancel=result_valid_reg && payload_stale && !exec_ready_i;
+    wire payload_accept=!reset_i && !flush_i && !shift_busy && !payload_cancel &&
+        issue_ready_o && issue_valid_i;
+    wire payload_shift=!reset_i && !flush_i && shift_busy && !payload_stale;
+    wire [31:0] shifted_payload=shift_right ?
+        {(shift_arithmetic && result_value_reg[31]),result_value_reg[31:1]} :
+        {result_value_reg[30:0],1'b0};
+    wire [31:0] value_payload;
+    wire value_write;
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(2)) value_selector (
+        .events_i({payload_accept,payload_shift}),.values_i({calc_value,shifted_payload}),
+        .write_o(value_write),.value_o(value_payload));
+    rv32_frequency_word_bank #(.WIDTH(32)) value_owner (
+        .clk_i(clk_i),.write_i(value_write),.data_i(value_payload),.data_o(result_value_reg));
+
     // Capture on the original result acceptance edge, with the original stall,
     // stale-result and iterative-shift priority. No added execution cycle.
     generate if (FORWARD_METADATA != 0) begin : g_forward_metadata
-        reg [31:0] source_pc_reg, pred_target_reg;
-        reg pred_taken_reg;
-        reg [1:0] pred_kind_reg;
+        wire [31:0] source_pc_reg, pred_target_reg;
+        wire pred_taken_reg;
+        wire [1:0] pred_kind_reg;
         assign exec_source_pc_o = source_pc_reg;
         assign exec_pred_taken_o = pred_taken_reg;
         assign exec_pred_target_o = pred_target_reg;
         assign exec_pred_kind_o = pred_kind_reg;
-        always @(posedge clk_i) begin
-            if (reset_i || flush_i) begin
-                source_pc_reg <= 32'b0;
-                pred_taken_reg <= 1'b0;
-                pred_target_reg <= 32'b0;
-                pred_kind_reg <= 2'b0;
-            end else if (!shift_busy &&
-                         !(result_valid_reg && live_tag_valid_i &&
-                           (result_rob_tag_reg != live_tag_i) && !exec_ready_i) &&
-                         issue_ready_o && issue_valid_i) begin
-                source_pc_reg <= issue_pc_i;
-                pred_taken_reg <= issue_pred_taken_i;
-                pred_target_reg <= issue_pred_target_i;
-                pred_kind_reg <= issue_pred_kind_i;
-            end
-        end
+        rv32_frequency_word_bank #(.WIDTH(67)) prediction_owner (
+            .clk_i(clk_i),.write_i(payload_accept),
+            .data_i({issue_pc_i,issue_pred_target_i,issue_pred_taken_i,issue_pred_kind_i}),
+            .data_o({source_pc_reg,pred_target_reg,pred_taken_reg,pred_kind_reg}));
     end else begin : g_no_forward_metadata
         assign exec_source_pc_o = 32'b0;
         assign exec_pred_taken_o = 1'b0;
@@ -417,38 +425,43 @@ module rv32i_alu #(
         end
     end
 
+    localparam integer RESULT_METADATA_WIDTH=PHYS_ADDR_WIDTH+TAG_WIDTH+EPOCH_WIDTH+1+1+1+32+1+32+1+1+1+32+2+1+32;
+    rv32_frequency_word_bank #(.WIDTH(RESULT_METADATA_WIDTH)) result_metadata_owner (
+        .clk_i(clk_i),.write_i(payload_accept),
+        .data_i({issue_phys_rd_i,issue_rob_tag_i,issue_epoch_i,calc_rd_we,calc_is_branch,calc_branch_taken,calc_branch_target,calc_redirect_valid,calc_redirect_pc,calc_is_memory,calc_is_load,calc_is_store,calc_mem_addr,calc_mem_size,calc_mem_unsigned,calc_store_data}),.data_o({result_phys_rd_reg,result_rob_tag_reg,result_epoch_reg,result_rd_we_reg,result_is_branch_reg,result_branch_taken_reg,result_branch_target_reg,result_redirect_valid_reg,result_redirect_pc_reg,result_is_memory_reg,result_is_load_reg,result_is_store_reg,result_mem_addr_reg,result_mem_size_reg,result_mem_unsigned_reg,result_store_data_reg}));
+
     always @(posedge clk_i) begin
         if (reset_i || flush_i) begin
             result_valid_reg <= 1'b0;
             shift_busy <= 1'b0;
-            result_value_reg <= 32'b0;
-            result_phys_rd_reg <= {PHYS_ADDR_WIDTH{1'b0}};
-            result_rob_tag_reg <= {TAG_WIDTH{1'b0}};
-            result_epoch_reg <= {EPOCH_WIDTH{1'b0}};
-            result_rd_we_reg <= 1'b0;
-            result_is_branch_reg <= 1'b0;
-            result_branch_taken_reg <= 1'b0;
-            result_branch_target_reg <= 32'b0;
-            result_redirect_valid_reg <= 1'b0;
-            result_redirect_pc_reg <= 32'b0;
-            result_is_memory_reg <= 1'b0;
-            result_is_load_reg <= 1'b0;
-            result_is_store_reg <= 1'b0;
-            result_mem_addr_reg <= 32'b0;
-            result_mem_size_reg <= `RV32IM_MEM_NONE;
-            result_mem_unsigned_reg <= 1'b0;
-            result_store_data_reg <= 32'b0;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
+            ;
         end else if (shift_busy) begin
             if (live_tag_valid_i && (result_rob_tag_reg != live_tag_i)) begin
                 shift_busy <= 1'b0;
             end else begin
                 if (shift_right) begin
                     if (shift_arithmetic)
-                        result_value_reg <= $signed(result_value_reg) >>> 1;
+                        ;
                     else
-                        result_value_reg <= result_value_reg >> 1;
+                        ;
                 end else begin
-                    result_value_reg <= result_value_reg << 1;
+                    ;
                 end
                 shift_remaining <= shift_remaining - 1'b1;
                 if (shift_remaining == 5'd1) begin
@@ -477,23 +490,23 @@ module rv32i_alu #(
                     result_valid_reg <= issue_target_live_i && issue_rob_tag_i[0];
                     shift_busy <= 1'b0;
                 end
-                result_value_reg <= calc_value;
-                result_phys_rd_reg <= issue_phys_rd_i;
-                result_rob_tag_reg <= issue_rob_tag_i;
-                result_epoch_reg <= issue_epoch_i;
-                result_rd_we_reg <= calc_rd_we;
-                result_is_branch_reg <= calc_is_branch;
-                result_branch_taken_reg <= calc_branch_taken;
-                result_branch_target_reg <= calc_branch_target;
-                result_redirect_valid_reg <= calc_redirect_valid;
-                result_redirect_pc_reg <= calc_redirect_pc;
-                result_is_memory_reg <= calc_is_memory;
-                result_is_load_reg <= calc_is_load;
-                result_is_store_reg <= calc_is_store;
-                result_mem_addr_reg <= calc_mem_addr;
-                result_mem_size_reg <= calc_mem_size;
-                result_mem_unsigned_reg <= calc_mem_unsigned;
-                result_store_data_reg <= calc_store_data;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
+                ;
             end else if (exec_ready_i) begin
                 result_valid_reg <= 1'b0;
             end

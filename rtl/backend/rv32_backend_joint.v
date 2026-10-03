@@ -1455,7 +1455,11 @@ module rv32_backend_joint #(
         alu_exec_ready_r = {BE_WIDTH{1'b0}};
         redirect_ready_found = 0;
         for (alu_ready_lane = 0; alu_ready_lane < BE_WIDTH; alu_ready_lane = alu_ready_lane + 1) begin
-            if (alu_exec_is_load[alu_ready_lane]) begin
+            // Payload may retain a former result after its valid bit
+            // clears. An empty slot cannot reserve the single redirect grant.
+            if (!alu_exec_valid[alu_ready_lane]) begin
+                alu_exec_ready_r[alu_ready_lane] = 1'b1;
+            end else if (alu_exec_is_load[alu_ready_lane]) begin
                 alu_exec_ready_r[alu_ready_lane] = 1'b1;
             end else if (alu_exec_redirect_valid[alu_ready_lane]) begin
                 // branch_pending is a one-entry recovery queue.  Consume only
