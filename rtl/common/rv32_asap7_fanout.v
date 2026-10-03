@@ -135,3 +135,91 @@ module rv32_frequency_event_select #(
         end
     endgenerate
 endmodule
+
+
+// Merge the first two entries of each half concurrently. Every node owns
+// only two short indices; payload routing is a separate bounded operation.
+module rv32_frequency_first_two #(
+    parameter integer ENTRIES=8,
+    parameter integer INDEX_WIDTH=(ENTRIES<=1)?1:$clog2(ENTRIES),
+    parameter integer LEAVES=1<<$clog2(ENTRIES)
+) (
+    input wire [ENTRIES-1:0] candidates_i,
+    output wire first_valid_o,second_valid_o,
+    output wire [INDEX_WIDTH-1:0] first_index_o,second_index_o
+);
+    wire first_valid [1:2*LEAVES-1];
+    wire second_valid [1:2*LEAVES-1];
+    wire [INDEX_WIDTH-1:0] first_index [1:2*LEAVES-1];
+    wire [INDEX_WIDTH-1:0] second_index [1:2*LEAVES-1];
+    assign first_valid_o=first_valid[1];
+    assign second_valid_o=second_valid[1];
+    assign first_index_o=first_index[1];
+    assign second_index_o=second_index[1];
+    genvar slot,node;
+    generate
+        for(slot=0;slot<LEAVES;slot=slot+1) begin:g_leaf
+            if(slot<ENTRIES) begin:g_present
+                assign first_valid[LEAVES+slot]=candidates_i[slot];
+                assign first_index[LEAVES+slot]=candidates_i[slot]?INDEX_WIDTH'(slot):{INDEX_WIDTH{1'b0}};
+            end else begin:g_padding
+                assign first_valid[LEAVES+slot]=1'b0;
+                assign first_index[LEAVES+slot]=0;
+            end
+            assign second_valid[LEAVES+slot]=1'b0;
+            assign second_index[LEAVES+slot]=0;
+        end
+        for(node=1;node<LEAVES;node=node+1) begin:g_merge
+            assign first_valid[node]=first_valid[2*node] || first_valid[2*node+1];
+            assign second_valid[node]=second_valid[2*node] ||
+                (first_valid[2*node] && first_valid[2*node+1]) || second_valid[2*node+1];
+            assign first_index[node]=first_valid[2*node]?first_index[2*node]:first_index[2*node+1];
+            assign second_index[node]=second_valid[2*node]?second_index[2*node]:
+                (first_valid[2*node]?first_index[2*node+1]:second_index[2*node+1]);
+        end
+    endgenerate
+endmodule
+
+
+// Four-row query domains, sixteen-bit selection leaves and a binary OR tree.
+// Payload remains unqualified here: its transaction validity is checked by
+// the consumer at the same point as the former dynamic array read.
+module rv32_frequency_array_read #(
+    parameter integer WIDTH=32,ENTRIES=8,
+    parameter integer INDEX_WIDTH=(ENTRIES<=1)?1:$clog2(ENTRIES),
+    parameter integer DOMAINS=(ENTRIES+3)/4,
+    parameter integer WORDS=(WIDTH+15)/16,
+    parameter integer LEAVES=1<<$clog2(ENTRIES)
+) (
+    input wire [ENTRIES*WIDTH-1:0] rows_i,
+    input wire [INDEX_WIDTH-1:0] index_i,
+    output wire [WIDTH-1:0] value_o
+);
+    wire [DOMAINS*INDEX_WIDTH-1:0] query_views;
+    wire [WIDTH-1:0] reads [1:2*LEAVES-1];
+    rv32_frequency_control_tree #(.WIDTH(INDEX_WIDTH),.LEAVES(DOMAINS)) query_tree (
+        .signal_i(index_i),.views_o(query_views));
+    assign value_o=reads[1];
+    genvar row,word,node;
+    generate
+        for(row=0;row<LEAVES;row=row+1) begin:g_row
+            if(row<ENTRIES) begin:g_present
+                wire [WORDS-1:0] selects;
+                wire hit=query_views[(row/4)*INDEX_WIDTH +: INDEX_WIDTH]==row;
+                rv32_frequency_control_tree #(.LEAVES(WORDS)) select_tree (
+                    .signal_i(hit),.views_o(selects));
+                for(word=0;word<WORDS;word=word+1) begin:g_word
+                    localparam integer LOW=word*16;
+                    localparam integer BITS=(WIDTH-LOW>=16)?16:WIDTH-LOW;
+                    assign reads[LEAVES+row][LOW +: BITS]=
+                        {BITS{selects[word]}} & rows_i[row*WIDTH+LOW +: BITS];
+                end
+            end else begin:g_padding
+                assign reads[LEAVES+row]=0;
+            end
+        end
+        for(node=1;node<LEAVES;node=node+1) begin:g_reduce
+            assign reads[node]=reads[2*node] | reads[2*node+1];
+        end
+    endgenerate
+endmodule

@@ -97,27 +97,33 @@ module rv32i_alu #(
     reg actual_control;
     reg [31:0] actual_next_pc;
     reg live_match;
-    reg [31:0] adder_lhs;
-    reg [31:0] adder_rhs;
-    reg adder_subtract;
-    reg [31:0] shared_sum;
+    // Target and AGU adders have fixed operands, so opcode selection is
+    // after arithmetic instead of being in front of all thirty-two bits.
+    // They trade combinational area for a shorter operation-to-result path.
+    wire [2:0] integer_subtract_views;
+    wire [31:0] integer_adjusted_rhs;
+    rv32_frequency_control_tree #(.LEAVES(3)) integer_subtract_tree (
+        .signal_i(issue_op_i==`RV32IM_OP_SUB),.views_o(integer_subtract_views));
+    assign integer_adjusted_rhs[15:0]=issue_src2_value_i[15:0] ^ {16{integer_subtract_views[0]}};
+    assign integer_adjusted_rhs[31:16]=issue_src2_value_i[31:16] ^ {16{integer_subtract_views[1]}};
+    wire [31:0] integer_sum=fast_add_carry(issue_src1_value_i,integer_adjusted_rhs,integer_subtract_views[2]);
+    wire [31:0] address_sum=fast_add_carry(issue_src1_value_i,issue_imm_i,1'b0);
+    wire [31:0] pc_relative_sum=fast_add_carry(issue_pc_i,issue_imm_i,1'b0);
     reg [31:0] pc_plus_four;
     reg shift_busy;
     reg [4:0] shift_remaining;
     reg shift_right;
     reg shift_arithmetic;
 
-    function [31:0] fast_add_sub;
+    function [31:0] fast_add_carry;
         input [31:0] lhs;
-        input [31:0] rhs;
-        input subtract;
-        reg [31:0] adjusted_rhs;
+        input [31:0] adjusted_rhs;
+        input carry_in;
         reg [7:0] g0, p0, g1, p1, g2, p2, g3, p3;
         reg [8:0] carry;
         reg [4:0] chunk_sum;
         integer chunk;
         begin
-            adjusted_rhs = rhs ^ {32{subtract}};
             for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
                 chunk_sum = {1'b0, lhs[chunk*4 +: 4]} +
                             {1'b0, adjusted_rhs[chunk*4 +: 4]};
@@ -145,10 +151,10 @@ module rv32i_alu #(
                     p3[chunk] = p2[chunk] & p2[chunk-4];
                 end
             end
-            carry[0] = subtract;
+            carry[0] = carry_in;
             for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
-                carry[chunk+1] = g3[chunk] | (p3[chunk] & subtract);
-                fast_add_sub[chunk*4 +: 4] = lhs[chunk*4 +: 4] +
+                carry[chunk+1] = g3[chunk] | (p3[chunk] & carry_in);
+                fast_add_carry[chunk*4 +: 4] = lhs[chunk*4 +: 4] +
                     adjusted_rhs[chunk*4 +: 4] + carry[chunk];
             end
         end
@@ -269,40 +275,6 @@ module rv32i_alu #(
     // The resulting fields are latched below, making completion visible one
     // cycle after issue and stable while the consumer applies backpressure.
     always @* begin
-        // Only one operation is accepted per cycle.  Select the operands up
-        // front so address generation, branch targets and integer add/sub all
-        // share one 32-bit adder instead of inferring parallel adders.
-        adder_lhs = issue_src1_value_i;
-        adder_rhs = issue_src2_value_i;
-        adder_subtract = (issue_op_i == `RV32IM_OP_SUB);
-        case (issue_op_i)
-            `RV32IM_OP_AUIPC,
-            `RV32IM_OP_JAL,
-            `RV32IM_OP_BEQ,
-            `RV32IM_OP_BNE,
-            `RV32IM_OP_BLT,
-            `RV32IM_OP_BGE,
-            `RV32IM_OP_BLTU,
-            `RV32IM_OP_BGEU: begin
-                adder_lhs = issue_pc_i;
-                adder_rhs = issue_imm_i;
-            end
-            `RV32IM_OP_JALR,
-            `RV32IM_OP_LB,
-            `RV32IM_OP_LH,
-            `RV32IM_OP_LW,
-            `RV32IM_OP_LBU,
-            `RV32IM_OP_LHU,
-            `RV32IM_OP_SB,
-            `RV32IM_OP_SH,
-            `RV32IM_OP_SW,
-            `RV32IM_OP_ADDI: begin
-                adder_lhs = issue_src1_value_i;
-                adder_rhs = issue_imm_i;
-            end
-            default: begin end
-        endcase
-        shared_sum = fast_add_sub(adder_lhs, adder_rhs, adder_subtract);
         pc_plus_four = issue_pc_i + 32'd4;
 
         calc_value = 32'b0;
@@ -328,7 +300,7 @@ module rv32i_alu #(
                 calc_rd_we = 1'b1;
             end
             `RV32IM_OP_AUIPC: begin
-                calc_value = shared_sum;
+                calc_value = pc_relative_sum;
                 calc_rd_we = 1'b1;
             end
             `RV32IM_OP_JAL: begin
@@ -337,7 +309,7 @@ module rv32i_alu #(
                 calc_is_branch = 1'b1;
                 calc_branch_taken = 1'b1;
                 actual_control = 1'b1;
-                actual_next_pc = shared_sum;
+                actual_next_pc = pc_relative_sum;
                 calc_branch_target = actual_next_pc;
             end
             `RV32IM_OP_JALR: begin
@@ -346,7 +318,7 @@ module rv32i_alu #(
                 calc_is_branch = 1'b1;
                 calc_branch_taken = 1'b1;
                 actual_control = 1'b1;
-                actual_next_pc = shared_sum & 32'hfffffffe;
+                actual_next_pc = address_sum & 32'hfffffffe;
                 calc_branch_target = actual_next_pc;
             end
             `RV32IM_OP_BEQ: begin calc_is_branch = 1'b1; calc_branch_taken = cmp_equal; end
@@ -363,22 +335,22 @@ module rv32i_alu #(
                 calc_is_memory = 1'b1;
                 calc_is_load = 1'b1;
                 calc_rd_we = 1'b1;
-                calc_mem_addr = shared_sum;
+                calc_mem_addr = address_sum;
             end
             `RV32IM_OP_SB,
             `RV32IM_OP_SH,
             `RV32IM_OP_SW: begin
                 calc_is_memory = 1'b1;
                 calc_is_store = 1'b1;
-                calc_mem_addr = shared_sum;
+                calc_mem_addr = address_sum;
                 // Store data remains access-relative inside the backend.
                 // A zero predecoded payload selects the live rs2 value; the
                 // LSQ expands it to cache-line coordinates at its boundary.
                 if (issue_store_data_i == 32'b0)
                     calc_store_data = issue_src2_value_i;
             end
-            `RV32IM_OP_ADDI,
-            `RV32IM_OP_ADD: begin calc_value = shared_sum; calc_rd_we = 1'b1; end
+            `RV32IM_OP_ADDI: begin calc_value = address_sum; calc_rd_we = 1'b1; end
+            `RV32IM_OP_ADD: begin calc_value = integer_sum; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLTI: begin calc_value = ($signed(issue_src1_value_i) < $signed(issue_imm_i)) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLTIU: begin calc_value = (issue_src1_value_i < issue_imm_i) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
             `RV32IM_OP_XORI: begin calc_value = issue_src1_value_i ^ issue_imm_i; calc_rd_we = 1'b1; end
@@ -393,7 +365,7 @@ module rv32i_alu #(
                     calc_value = issue_src1_value_i;
                 calc_rd_we = 1'b1;
             end
-            `RV32IM_OP_SUB: begin calc_value = shared_sum; calc_rd_we = 1'b1; end
+            `RV32IM_OP_SUB: begin calc_value = integer_sum; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLL: begin calc_value = (SHIFT_IMPL == 0) ? (issue_src1_value_i << issue_src2_value_i[4:0]) : issue_src1_value_i; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLT: begin calc_value = {31'd0, cmp_signed_lt}; calc_rd_we = 1'b1; end
             `RV32IM_OP_SLTU: begin calc_value = {31'd0, cmp_unsigned_lt}; calc_rd_we = 1'b1; end
@@ -415,8 +387,8 @@ module rv32i_alu #(
             (issue_op_i == `RV32IM_OP_BLT) || (issue_op_i == `RV32IM_OP_BGE) ||
             (issue_op_i == `RV32IM_OP_BLTU) || (issue_op_i == `RV32IM_OP_BGEU)) begin
             actual_control = 1'b1;
-            calc_branch_target = shared_sum;
-            actual_next_pc = calc_branch_taken ? shared_sum : pc_plus_four;
+            calc_branch_target = pc_relative_sum;
+            actual_next_pc = calc_branch_taken ? pc_relative_sum : pc_plus_four;
         end
         if (actual_control) begin
             calc_redirect_pc = actual_next_pc;

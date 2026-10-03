@@ -128,24 +128,24 @@ module rv32_dcache_nonblocking #(
     wire waiter_error [0:WAITER_ENTRIES-1];
 
     reg resp_valid_reg;
-    reg [TAG_WIDTH-1:0] resp_lsq_reg;
-    reg [31:0] resp_addr_reg;
-    reg [127:0] resp_line_reg;
-    reg [31:0] resp_word_reg;
-    reg resp_line_valid_reg;
-    reg resp_error_reg;
+    wire [TAG_WIDTH-1:0] resp_lsq_reg;
+    wire [31:0] resp_addr_reg;
+    wire [127:0] resp_line_reg;
+    wire [31:0] resp_word_reg;
+    wire resp_line_valid_reg;
+    wire resp_error_reg;
     // The synchronous SRAM result and hit metadata become valid together.
     // Capture the result on the following edge before the macro can make its
     // output undefined during an idle/write cycle or a backpressured response.
     reg resp_from_sram;
-    reg [1:0] resp_size_reg;
-    reg resp_unsigned_reg;
+    wire [1:0] resp_size_reg;
+    wire resp_unsigned_reg;
     reg victim_from_sram;
     reg [2:0] victim_mshr_reg;
     wire [127:0] data_rdata;
     reg ack_valid_reg;
-    reg [TAG_WIDTH-1:0] ack_lsq_reg;
-    reg ack_error_reg;
+    wire [TAG_WIDTH-1:0] ack_lsq_reg;
+    wire ack_error_reg;
 
     // Keep the original high address tag. XOR index folding is reversible
     // given that tag, so dirty victims retain their exact physical address.
@@ -187,7 +187,7 @@ module rv32_dcache_nonblocking #(
     wire [TAG_WIDTH-1:0] core_req_rob_tag, core_req_lsq_tag;
     wire [(CACHE_WAYS*CACHE_TAG_WIDTH)-1:0] request_tags, prefetch_tags;
     integer response_index;
-    integer local_fill_index;
+    wire [2:0] local_fill_index;
     wire refill_array_write, local_array_write;
     wire data_we;
     wire [CACHE_ENTRY_WIDTH-1:0] data_addr;
@@ -198,11 +198,11 @@ module rv32_dcache_nonblocking #(
     wire request_dirty_victim;
     wire tag_array_write = refill_array_write || local_array_write;
     wire [CACHE_ENTRY_WIDTH-1:0] tag_write_entry = local_array_write ?
-        mshr_victim_entry[local_fill_index] : mshr_victim_entry[response_index];
+        query_local_mshr_victim_entry : query_response_mshr_victim_entry;
     wire [CACHE_INDEX_WIDTH-1:0] tag_write_set = tag_write_entry / CACHE_WAYS;
     wire [CACHE_TAG_WIDTH-1:0] tag_write_value = local_array_write ?
-        mshr_addr[local_fill_index][31:CACHE_INDEX_WIDTH+4] :
-        mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
+        query_local_mshr_addr[31:CACHE_INDEX_WIDTH+4] :
+        query_response_mshr_addr[31:CACHE_INDEX_WIDTH+4];
     wire [CACHE_WAYS-1:0] tag_write_mask = (CACHE_WAYS == 1) ? 1'b1 :
         (2'b01 << tag_write_entry[0]);
     reg request_hit;
@@ -310,14 +310,14 @@ module rv32_dcache_nonblocking #(
                         .refill_i(refill_array_write),.local_i(local_array_write),
                         .store_i(request_fire && request_is_store && request_hit),
                         .input_read_i(input_data_read),.deferred_read_i(deferred_data_read),
-                        .refill_entry_i(mshr_victim_entry[response_index]),
-                        .local_entry_i(mshr_victim_entry[local_fill_index]),.hit_entry_i(request_hit_entry),
+                        .refill_entry_i(query_response_mshr_victim_entry),
+                        .local_entry_i(query_local_mshr_victim_entry),.hit_entry_i(request_hit_entry),
                         .input_index_i(cache_index(dcache_req_addr_i)),.deferred_index_i(core_request_index),
                         .response_data_i(mem_resp_data_i[word_lane*32 +: 32]),
-                        .response_store_i(mshr_store[response_index]),
-                        .response_store_data_i(mshr_wdata[response_index][word_lane*32 +: 32]),
-                        .response_mask_i(mshr_mask[response_index][word_lane*4 +: 4]),
-                        .local_data_i(mshr_wdata[local_fill_index][word_lane*32 +: 32]),
+                        .response_store_i(query_response_mshr_store),
+                        .response_store_data_i(query_response_mshr_wdata[word_lane*32 +: 32]),
+                        .response_mask_i(query_response_mshr_mask[word_lane*4 +: 4]),
+                        .local_data_i(query_local_mshr_wdata[word_lane*32 +: 32]),
                         .store_data_i(core_req_wdata[word_lane*32 +: 32]),
                         .store_mask_i(core_req_mask[word_lane*4 +: 4]),
                         .data_o(bank_rdata[tag_way*128+word_lane*32 +: 32]));
@@ -411,28 +411,28 @@ module rv32_dcache_nonblocking #(
     wire ack_slot_free = !ack_valid_reg || dcache_store_ack_ready_i;
 
     integer k;
-    integer free_index;
-    integer second_free_index;
-    integer send_index;
-    integer matching_index;
-    integer waiter_free_index;
-    integer waiter_load_ready_index;
-    integer waiter_store_ready_index;
-    reg free_found;
-    reg second_free_found;
-    reg send_found;
-    reg local_fill_found;
-    reg any_mshr;
-    reg store_mshr_present;
+    wire [2:0] free_index;
+    wire [2:0] second_free_index;
+    wire [2:0] send_index;
+    wire [2:0] matching_index;
+    wire [WAITER_SLOT_WIDTH-1:0] waiter_free_index;
+    wire [WAITER_SLOT_WIDTH-1:0] waiter_load_ready_index;
+    wire [WAITER_SLOT_WIDTH-1:0] waiter_store_ready_index;
+    wire free_found;
+    wire second_free_found;
+    wire send_found;
+    wire local_fill_found;
+    wire any_mshr;
+    wire store_mshr_present;
     reg response_found;
-    reg matching_found;
-    reg matching_prefetch;
-    reg prefetch_line_present;
-    reg request_index_conflict;
-    reg prefetch_index_conflict;
-    reg waiter_free_found;
-    reg waiter_load_ready_found;
-    reg waiter_store_ready_found;
+    wire matching_found;
+    wire matching_prefetch;
+    wire prefetch_line_present;
+    wire request_index_conflict;
+    wire prefetch_index_conflict;
+    wire waiter_free_found;
+    wire waiter_load_ready_found;
+    wire waiter_store_ready_found;
     wire [31:0] request_line_addr = {core_req_addr[31:4], 4'b0};
     wire [31:0] prefetch_line_addr = request_line_addr + 32'd16;
     wire [CACHE_INDEX_WIDTH-1:0] prefetch_index = core_prefetch_index;
@@ -492,137 +492,106 @@ module rv32_dcache_nonblocking #(
             end
         end
     end
+
+    wire [MSHR_ENTRIES-1:0] free_candidates,send_candidates,local_candidates,matching_candidates;
+    wire [MSHR_ENTRIES-1:0] live_candidates,store_candidates,prefetch_present_candidates,request_conflict_candidates,prefetch_conflict_candidates;
+    wire [WAITER_ENTRIES-1:0] waiter_free_candidates,waiter_load_candidates,waiter_store_candidates;
+    wire unlocked_send_found;
+    wire [2:0] unlocked_send_index;
+    genvar scan_mshr,scan_waiter;
+    generate
+        for(scan_mshr=0;scan_mshr<MSHR_ENTRIES;scan_mshr=scan_mshr+1) begin:g_mshr_candidates
+            assign live_candidates[scan_mshr]=mshr_valid[scan_mshr];
+            assign store_candidates[scan_mshr]=mshr_valid[scan_mshr] && mshr_store[scan_mshr];
+            assign free_candidates[scan_mshr]=!mshr_valid[scan_mshr];
+            assign local_candidates[scan_mshr]=STORE_MERGE_DELAY!=0 && mshr_valid[scan_mshr] &&
+                mshr_store[scan_mshr] && !mshr_sent[scan_mshr] && !mshr_writeback[scan_mshr] &&
+                !mshr_rfo_offered[scan_mshr] && mshr_mask[scan_mshr]==16'hffff;
+            assign send_candidates[scan_mshr]=mshr_valid[scan_mshr] && !mshr_sent[scan_mshr] &&
+                (mshr_writeback[scan_mshr] || !mshr_store[scan_mshr] || STORE_MERGE_DELAY==0 ||
+                 mshr_rfo_offered[scan_mshr] || (mshr_merge_delay[scan_mshr]==0 && mshr_mask[scan_mshr]!=16'hffff));
+            assign matching_candidates[scan_mshr]=mshr_valid[scan_mshr] && !mshr_writeback[scan_mshr] &&
+                {mshr_addr[scan_mshr][31:4],4'b0}==request_line_addr;
+            assign prefetch_present_candidates[scan_mshr]=mshr_valid[scan_mshr] && !mshr_writeback[scan_mshr] &&
+                {mshr_addr[scan_mshr][31:4],4'b0}==prefetch_line_addr;
+            assign request_conflict_candidates[scan_mshr]=mshr_valid[scan_mshr] && cache_index(mshr_addr[scan_mshr])==request_index;
+            assign prefetch_conflict_candidates[scan_mshr]=mshr_valid[scan_mshr] && cache_index(mshr_addr[scan_mshr])==prefetch_index;
+        end
+        for(scan_waiter=0;scan_waiter<WAITER_ENTRIES;scan_waiter=scan_waiter+1) begin:g_waiter_candidates
+            assign waiter_free_candidates[scan_waiter]=!waiter_valid[scan_waiter];
+            assign waiter_load_candidates[scan_waiter]=waiter_valid[scan_waiter] && waiter_ready[scan_waiter] && !waiter_store[scan_waiter];
+            assign waiter_store_candidates[scan_waiter]=waiter_valid[scan_waiter] && waiter_ready[scan_waiter] && waiter_store[scan_waiter];
+        end
+    endgenerate
+    rv32_frequency_first_two #(.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(3)) free_selector (
+        .candidates_i(free_candidates),.first_valid_o(free_found),.second_valid_o(second_free_found),
+        .first_index_o(free_index),.second_index_o(second_free_index));
+    rv32_frequency_first_two #(.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(3)) send_selector (
+        .candidates_i(send_candidates),.first_valid_o(unlocked_send_found),.first_index_o(unlocked_send_index),
+        .second_valid_o(),.second_index_o());
+    rv32_frequency_first_two #(.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(3)) local_selector (
+        .candidates_i(local_candidates),.first_valid_o(local_fill_found),.first_index_o(local_fill_index),
+        .second_valid_o(),.second_index_o());
+    rv32_frequency_first_two #(.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(3)) matching_selector (
+        .candidates_i(matching_candidates),.first_valid_o(matching_found),.first_index_o(matching_index),
+        .second_valid_o(),.second_index_o());
+    rv32_frequency_first_two #(.ENTRIES(WAITER_ENTRIES),.INDEX_WIDTH(WAITER_SLOT_WIDTH)) waiter_free_selector (
+        .candidates_i(waiter_free_candidates),.first_valid_o(waiter_free_found),.first_index_o(waiter_free_index),
+        .second_valid_o(),.second_index_o());
+    rv32_frequency_first_two #(.ENTRIES(WAITER_ENTRIES),.INDEX_WIDTH(WAITER_SLOT_WIDTH)) waiter_load_selector (
+        .candidates_i(waiter_load_candidates),.first_valid_o(waiter_load_ready_found),.first_index_o(waiter_load_ready_index),
+        .second_valid_o(),.second_index_o());
+    rv32_frequency_first_two #(.ENTRIES(WAITER_ENTRIES),.INDEX_WIDTH(WAITER_SLOT_WIDTH)) waiter_store_selector (
+        .candidates_i(waiter_store_candidates),.first_valid_o(waiter_store_ready_found),.first_index_o(waiter_store_ready_index),
+        .second_valid_o(),.second_index_o());
+    assign send_found=send_locked || unlocked_send_found;
+    assign send_index=send_locked?send_locked_index:unlocked_send_index;
+    assign any_mshr=|live_candidates;
+    assign store_mshr_present=|store_candidates;
+    assign matching_prefetch=matching_found && query_matching_mshr_prefetch;
+    assign prefetch_line_present=|prefetch_present_candidates;
+    assign request_index_conflict=|request_conflict_candidates;
+    assign prefetch_index_conflict=|prefetch_conflict_candidates;
     always @* begin
-        free_found = 1'b0;
-        free_index = 0;
-        second_free_found = 1'b0;
-        second_free_index = 0;
-        send_found = 1'b0;
-        send_index = 0;
-        local_fill_found = 1'b0;
-        local_fill_index = 0;
-        any_mshr = 1'b0;
-        store_mshr_present = 1'b0;
-        matching_found = 1'b0;
-        matching_index = 0;
-        matching_prefetch = 1'b0;
-        prefetch_line_present = 1'b0;
-        request_index_conflict = 1'b0;
-        prefetch_index_conflict = 1'b0;
-        waiter_free_found = 1'b0;
-        waiter_free_index = 0;
-        waiter_load_ready_found = 1'b0;
-        waiter_load_ready_index = 0;
-        waiter_store_ready_found = 1'b0;
-        waiter_store_ready_index = 0;
-        for (k = 0; k < MSHR_ENTRIES; k = k + 1) begin
-            if (mshr_valid[k])
-                any_mshr = 1'b1;
-            if (mshr_valid[k] && mshr_store[k])
-                store_mshr_present = 1'b1;
-            if (!free_found && !mshr_valid[k]) begin
-                free_found = 1'b1;
-                free_index = k;
-            end else if (!second_free_found && !mshr_valid[k]) begin
-                second_free_found = 1'b1;
-                second_free_index = k;
-            end
-            if (!local_fill_found && STORE_MERGE_DELAY != 0 &&
-                mshr_valid[k] && mshr_store[k] && !mshr_sent[k] &&
-                !mshr_writeback[k] && !mshr_rfo_offered[k] &&
-                mshr_mask[k] == 16'hffff) begin
-                local_fill_found = 1'b1;
-                local_fill_index = k;
-            end
-            if (!send_found && mshr_valid[k] && !mshr_sent[k] &&
-                (mshr_writeback[k] || !mshr_store[k] ||
-                 STORE_MERGE_DELAY == 0 || mshr_rfo_offered[k] ||
-                 (mshr_merge_delay[k] == 0 && mshr_mask[k] != 16'hffff))) begin
-                send_found = 1'b1;
-                send_index = k;
-            end
-            if (!matching_found && mshr_valid[k] && !mshr_writeback[k] &&
-                ({mshr_addr[k][31:4], 4'b0} == request_line_addr)) begin
-                matching_found = 1'b1;
-                matching_index = k;
-                matching_prefetch = mshr_prefetch[k];
-            end
-            if (mshr_valid[k] && !mshr_writeback[k] &&
-                ({mshr_addr[k][31:4], 4'b0} == prefetch_line_addr))
-                prefetch_line_present = 1'b1;
-            // A refill into the same direct-mapped slot could overwrite a
-            // store hit accepted now.  Other in-flight lines are independent
-            // and must not serialize a cache-resident committed store.
-            if (mshr_valid[k] &&
-                (cache_index(mshr_addr[k]) == request_index))
-                request_index_conflict = 1'b1;
-            if (mshr_valid[k] &&
-                (cache_index(mshr_addr[k]) == prefetch_index))
-                prefetch_index_conflict = 1'b1;
-        end
-        // Keep all offered request fields stable across memory backpressure.
-        // A new lower-index MSHR must not replace the selected transaction.
-        if (send_locked) begin
-            send_found = 1'b1;
-            send_index = send_locked_index;
-        end
-        for (k = 0; k < WAITER_ENTRIES; k = k + 1) begin
-            if (!waiter_free_found && !waiter_valid[k]) begin
-                waiter_free_found = 1'b1;
-                waiter_free_index = k;
-            end
-            if (!waiter_load_ready_found && waiter_valid[k] &&
-                waiter_ready[k] && !waiter_store[k]) begin
-                waiter_load_ready_found = 1'b1;
-                waiter_load_ready_index = k;
-            end
-            if (!waiter_store_ready_found && waiter_valid[k] &&
-                waiter_ready[k] && waiter_store[k]) begin
-                waiter_store_ready_found = 1'b1;
-                waiter_store_ready_index = k;
-            end
-        end
-        response_index = mem_resp_id_i;
-        response_found = (response_index >= 0) &&
-                         (response_index < MSHR_ENTRIES) &&
-                         mshr_valid[response_index] &&
-                         mshr_sent[response_index];
+        response_index=mem_resp_id_i;
+        response_found=(response_index>=0) && (response_index<MSHR_ENTRIES) &&
+            mshr_valid[response_index] && mshr_sent[response_index];
     end
 
     assign request_is_store = core_req_is_store && !core_req_is_load;
     wire request_is_load = core_req_is_load && !core_req_is_store;
     wire response_matches = response_found &&
                             (mem_resp_line_addr_i ==
-                             (mshr_writeback[response_index] ?
-                              mshr_victim_addr[response_index] :
-                              {mshr_addr[response_index][31:4], 4'b0}));
+                             (query_response_mshr_writeback ?
+                              query_response_mshr_victim_addr :
+                              {query_response_mshr_addr[31:4], 4'b0}));
     wire response_writeback_failed = response_found &&
-                                     mshr_writeback[response_index] &&
+                                     query_response_mshr_writeback &&
                                      (mem_resp_error_i || !response_matches);
     // The hit path, a completed waiter, and a returning MSHR all share one
     // registered output slot.  Admit a hit only when neither of the other
     // producers can claim that slot this cycle; otherwise the later
     // nonblocking assignment would silently overwrite the hit response.
     wire response_emits_load = mem_resp_valid_i && response_found &&
-                               ((!mshr_writeback[response_index] &&
-                                 !mshr_store[response_index] &&
-                                 !mshr_prefetch[response_index]) ||
+                               ((!query_response_mshr_writeback &&
+                                 !query_response_mshr_store &&
+                                 !query_response_mshr_prefetch) ||
                                 (response_writeback_failed &&
-                                 !mshr_store[response_index]));
+                                 !query_response_mshr_store));
     // A committed store is acknowledged when its bytes are absorbed into an
     // MSHR.  The MSHR is the durable store buffer, so its later refill does
     // not produce a second LSQ acknowledgement.
     wire response_emits_store = 1'b0;
     wire matching_store_covers_load = matching_found &&
-        mshr_store[matching_index] &&
-        ((mshr_mask[matching_index] & core_req_mask) ==
+        query_matching_mshr_store &&
+        ((query_matching_mshr_mask & core_req_mask) ==
          core_req_mask);
     wire load_can_accept = (request_hit ?
                             (resp_slot_free && !waiter_load_ready_found &&
                              !response_emits_load) :
                             (matching_found ?
                              ((matching_prefetch ||
-                               (mshr_store[matching_index] ?
+                               (query_matching_mshr_store ?
                                 (matching_store_covers_load ?
                                  (resp_slot_free &&
                                   !waiter_load_ready_found &&
@@ -637,24 +606,24 @@ module rv32_dcache_nonblocking #(
                             (request_hit ? !request_index_conflict :
                              (matching_found ?
                               ((matching_prefetch ||
-                                mshr_store[matching_index]) &&
+                                query_matching_mshr_store) &&
                                !(mem_resp_valid_i && response_found &&
                                  (response_index == matching_index))) :
                               (free_found && !request_index_conflict)));
     assign request_fire = core_req_valid && core_req_ready;
     wire response_needs_output = response_found &&
-                                 (mshr_store[response_index] ? 1'b0 :
-                                  (mshr_prefetch[response_index] ? 1'b0 :
+                                 (query_response_mshr_store ? 1'b0 :
+                                  (query_response_mshr_prefetch ? 1'b0 :
                                    !resp_slot_free));
     wire demand_response_fire = mem_resp_valid_i && mem_resp_ready_o &&
                                 response_found &&
-                                !mshr_writeback[response_index] &&
-                                !mshr_store[response_index] &&
-                                !mshr_prefetch[response_index];
+                                !query_response_mshr_writeback &&
+                                !query_response_mshr_store &&
+                                !query_response_mshr_prefetch;
     wire store_response_fire = mem_resp_valid_i && mem_resp_ready_o &&
                                response_found &&
-                               !mshr_writeback[response_index] &&
-                               mshr_store[response_index];
+                               !query_response_mshr_writeback &&
+                               query_response_mshr_store;
 
     assign request_dirty_victim = !request_hit && !matching_found &&
         request_victim_valid && request_victim_dirty;
@@ -662,18 +631,18 @@ module rv32_dcache_nonblocking #(
         (request_hit && request_is_store) : (request_hit || request_dirty_victim);
     assign refill_array_write = !reset_i && mem_resp_valid_i &&
         mem_resp_ready_o && response_matches && !mem_resp_error_i &&
-        !mshr_writeback[response_index];
+        !query_response_mshr_writeback;
     assign local_array_write = !reset_i && local_fill_found && !refill_array_write;
     wire request_array_access = request_fire && request_needs_array;
     assign data_we = refill_array_write || local_array_write ||
         (request_array_access && request_is_store && request_hit);
     assign data_addr = refill_array_write ?
-        mshr_victim_entry[response_index] : local_array_write ?
-        mshr_victim_entry[local_fill_index] : request_data_entry;
+        query_response_mshr_victim_entry : local_array_write ?
+        query_local_mshr_victim_entry : request_data_entry;
     assign data_wdata = refill_array_write ?
-        (mshr_store[response_index] ? merge_store(mem_resp_data_i,
-            mshr_wdata[response_index], mshr_mask[response_index]) : mem_resp_data_i) :
-        local_array_write ? mshr_wdata[local_fill_index] : core_req_wdata;
+        (query_response_mshr_store ? merge_store(mem_resp_data_i,
+            query_response_mshr_wdata, query_response_mshr_mask) : mem_resp_data_i) :
+        local_array_write ? query_local_mshr_wdata : core_req_wdata;
     assign data_wmask = (refill_array_write || local_array_write) ?
         16'hffff : core_req_mask;
     generate if (TAG_SRAM == 0) begin : g_selected_data
@@ -697,15 +666,42 @@ module rv32_dcache_nonblocking #(
         request_is_load && request_hit && !resp_valid_reg &&
         !waiter_load_ready_found && !response_emits_load;
     assign dcache_resp_valid_o = resp_valid_reg || bypass_load_hit;
-    assign dcache_resp_lsq_tag_o = bypass_load_hit ? core_req_lsq_tag : resp_lsq_reg;
-    assign dcache_resp_addr_o = bypass_load_hit ? core_req_addr : resp_addr_reg;
-    assign dcache_resp_line_data_o = bypass_load_hit ? data_rdata :
-        (resp_from_sram ? data_rdata : resp_line_reg);
-    assign dcache_resp_word_data_o = bypass_load_hit ?
-        extract_value(data_rdata, core_req_addr, core_req_size, core_req_unsigned) :
-        (resp_from_sram ? extract_value(data_rdata, resp_addr_reg, resp_size_reg, resp_unsigned_reg) : resp_word_reg);
-    assign dcache_resp_line_valid_o = bypass_load_hit || resp_line_valid_reg;
-    assign dcache_resp_error_o = !bypass_load_hit && resp_error_reg;
+
+    localparam integer RESPONSE_TAG_WORDS=(TAG_WIDTH+15)/16;
+    localparam integer RESPONSE_OUTPUT_WORDS=RESPONSE_TAG_WORDS+13;
+    wire [2*RESPONSE_OUTPUT_WORDS-1:0] response_output_views;
+    rv32_frequency_control_tree #(.WIDTH(2),.LEAVES(RESPONSE_OUTPUT_WORDS)) response_output_tree (
+        .signal_i({resp_from_sram,bypass_load_hit}),.views_o(response_output_views));
+    wire [31:0] response_hit_word=extract_value(data_rdata,core_req_addr,core_req_size,core_req_unsigned);
+    wire [31:0] response_deferred_word=extract_value(data_rdata,resp_addr_reg,resp_size_reg,resp_unsigned_reg);
+    genvar response_word;
+    generate
+        for(response_word=0;response_word<RESPONSE_TAG_WORDS;response_word=response_word+1) begin:g_response_tag_word
+            localparam integer LOW=response_word*16;
+            localparam integer BITS=(TAG_WIDTH-LOW>=16)?16:TAG_WIDTH-LOW;
+            assign dcache_resp_lsq_tag_o[LOW +: BITS]=response_output_views[2*response_word]?
+                core_req_lsq_tag[LOW +: BITS]:resp_lsq_reg[LOW +: BITS];
+        end
+        for(response_word=0;response_word<2;response_word=response_word+1) begin:g_response_address_word
+            assign dcache_resp_addr_o[response_word*16 +: 16]=response_output_views[2*(RESPONSE_TAG_WORDS+response_word)]?
+                core_req_addr[response_word*16 +: 16]:resp_addr_reg[response_word*16 +: 16];
+        end
+        for(response_word=0;response_word<8;response_word=response_word+1) begin:g_response_line_word
+            wire bypass=response_output_views[2*(RESPONSE_TAG_WORDS+2+response_word)];
+            wire deferred=response_output_views[2*(RESPONSE_TAG_WORDS+2+response_word)+1];
+            assign dcache_resp_line_data_o[response_word*16 +: 16]=(bypass || deferred)?
+                data_rdata[response_word*16 +: 16]:resp_line_reg[response_word*16 +: 16];
+        end
+        for(response_word=0;response_word<2;response_word=response_word+1) begin:g_response_value_word
+            wire bypass=response_output_views[2*(RESPONSE_TAG_WORDS+10+response_word)];
+            wire deferred=response_output_views[2*(RESPONSE_TAG_WORDS+10+response_word)+1];
+            assign dcache_resp_word_data_o[response_word*16 +: 16]=bypass?
+                response_hit_word[response_word*16 +: 16]:(deferred?
+                    response_deferred_word[response_word*16 +: 16]:resp_word_reg[response_word*16 +: 16]);
+        end
+    endgenerate
+    assign dcache_resp_line_valid_o=response_output_views[2*(RESPONSE_OUTPUT_WORDS-1)] || resp_line_valid_reg;
+    assign dcache_resp_error_o=!response_output_views[2*(RESPONSE_OUTPUT_WORDS-1)] && resp_error_reg;
     // The synchronous tag query already holds an accepted committed store.
     // Acknowledge at the SAME edge that writes its hit bytes or transfers
     // ownership into an MSHR. Do not add a second registered reply cycle.
@@ -713,19 +709,45 @@ module rv32_dcache_nonblocking #(
     wire bypass_store_ack = (TAG_SRAM != 0) && request_fire &&
                             request_is_store && !ack_valid_reg;
     assign dcache_store_ack_valid_o = ack_valid_reg || bypass_store_ack;
-    assign dcache_store_ack_lsq_tag_o = bypass_store_ack ? core_req_lsq_tag : ack_lsq_reg;
-    assign dcache_store_ack_error_o = !bypass_store_ack && ack_error_reg;
+    wire [RESPONSE_TAG_WORDS:0] ack_output_views;
+    rv32_frequency_control_tree #(.LEAVES(RESPONSE_TAG_WORDS+1)) ack_output_tree (
+        .signal_i(bypass_store_ack),.views_o(ack_output_views));
+    generate for(response_word=0;response_word<RESPONSE_TAG_WORDS;response_word=response_word+1) begin:g_ack_tag_word
+        localparam integer LOW=response_word*16;
+        localparam integer BITS=(TAG_WIDTH-LOW>=16)?16:TAG_WIDTH-LOW;
+        assign dcache_store_ack_lsq_tag_o[LOW +: BITS]=ack_output_views[response_word]?
+            core_req_lsq_tag[LOW +: BITS]:ack_lsq_reg[LOW +: BITS];
+    end endgenerate
+    assign dcache_store_ack_error_o = !ack_output_views[RESPONSE_TAG_WORDS] && ack_error_reg;
 
     assign mem_req_valid_o = send_found;
-    assign mem_req_write_o = send_found && mshr_writeback[send_index];
-    assign mem_req_line_addr_o = send_found ?
-                                  (mshr_writeback[send_index] ?
-                                   mshr_victim_addr[send_index] :
-                                   {mshr_addr[send_index][31:4], 4'b0}) : 32'd0;
-    assign mem_req_wdata_o = send_found && mshr_writeback[send_index] ?
-                             ((victim_from_sram && victim_mshr_reg == send_index) ?
-                              data_rdata : mshr_victim_data[send_index]) : 128'd0;
-    assign mem_req_wmask_o = send_found && mshr_writeback[send_index] ?
+    assign mem_req_write_o = send_found && query_send_mshr_writeback;
+    wire [7:0] memory_write_data_enable,memory_victim_bypass;
+    wire [1:0] memory_line_enable,memory_line_victim;
+    wire memory_write=send_found && query_send_mshr_writeback;
+    rv32_frequency_control_tree #(.LEAVES(8)) memory_write_tree (
+        .signal_i(memory_write),.views_o(memory_write_data_enable));
+    rv32_frequency_control_tree #(.LEAVES(8)) memory_victim_bypass_tree (
+        .signal_i(victim_from_sram && victim_mshr_reg==send_index),.views_o(memory_victim_bypass));
+    rv32_frequency_control_tree #(.LEAVES(2)) memory_line_enable_tree (
+        .signal_i(send_found),.views_o(memory_line_enable));
+    rv32_frequency_control_tree #(.LEAVES(2)) memory_line_victim_tree (
+        .signal_i(query_send_mshr_writeback),.views_o(memory_line_victim));
+    genvar memory_word;
+    generate
+        for(memory_word=0;memory_word<8;memory_word=memory_word+1) begin:g_memory_write_word
+            wire [15:0] selected_data=memory_victim_bypass[memory_word]?
+                data_rdata[memory_word*16 +: 16]:query_send_mshr_victim_data[memory_word*16 +: 16];
+            assign mem_req_wdata_o[memory_word*16 +: 16]={16{memory_write_data_enable[memory_word]}} & selected_data;
+        end
+        for(memory_word=0;memory_word<2;memory_word=memory_word+1) begin:g_memory_address_word
+            wire [31:0] demand_line={query_send_mshr_addr[31:4],4'b0};
+            wire [15:0] selected_address=memory_line_victim[memory_word]?
+                query_send_mshr_victim_addr[memory_word*16 +: 16]:demand_line[memory_word*16 +: 16];
+            assign mem_req_line_addr_o[memory_word*16 +: 16]={16{memory_line_enable[memory_word]}} & selected_address;
+        end
+    endgenerate
+    assign mem_req_wmask_o = send_found && query_send_mshr_writeback ?
                              16'hffff : 16'd0;
     assign mem_req_id_o = send_found ? send_index : 8'd0;
     assign mem_resp_ready_o = response_found && !response_needs_output;
@@ -765,6 +787,93 @@ module rv32_dcache_nonblocking #(
         end
     endfunction
 
+    localparam integer MSHR_READ_WIDTH=TAG_WIDTH+CACHE_ENTRY_WIDTH+342;
+    wire [MSHR_ENTRIES*MSHR_READ_WIDTH-1:0] mshr_read_rows;
+    genvar mshr_read_row;
+    generate for(mshr_read_row=0;mshr_read_row<MSHR_ENTRIES;mshr_read_row=mshr_read_row+1) begin:g_mshr_read_rows
+        assign mshr_read_rows[mshr_read_row*MSHR_READ_WIDTH +: MSHR_READ_WIDTH]={mshr_victim_data[mshr_read_row],mshr_victim_entry[mshr_read_row],mshr_victim_addr[mshr_read_row],mshr_lsq[mshr_read_row],mshr_wdata[mshr_read_row],mshr_mask[mshr_read_row],mshr_unsigned[mshr_read_row],mshr_size[mshr_read_row],mshr_addr[mshr_read_row],mshr_writeback[mshr_read_row],mshr_prefetch[mshr_read_row],mshr_store[mshr_read_row]};
+    end endgenerate
+    wire [127:0] query_send_mshr_victim_data;
+    wire [CACHE_ENTRY_WIDTH-1:0] query_send_mshr_victim_entry;
+    wire [31:0] query_send_mshr_victim_addr;
+    wire [TAG_WIDTH-1:0] query_send_mshr_lsq;
+    wire [127:0] query_send_mshr_wdata;
+    wire [15:0] query_send_mshr_mask;
+    wire query_send_mshr_unsigned;
+    wire [1:0] query_send_mshr_size;
+    wire [31:0] query_send_mshr_addr;
+    wire query_send_mshr_writeback;
+    wire query_send_mshr_prefetch;
+    wire query_send_mshr_store;
+    rv32_frequency_array_read #(.WIDTH(MSHR_READ_WIDTH),.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(3)) send_read (
+        .rows_i(mshr_read_rows),.index_i(send_index),.value_o({query_send_mshr_victim_data,query_send_mshr_victim_entry,query_send_mshr_victim_addr,query_send_mshr_lsq,query_send_mshr_wdata,query_send_mshr_mask,query_send_mshr_unsigned,query_send_mshr_size,query_send_mshr_addr,query_send_mshr_writeback,query_send_mshr_prefetch,query_send_mshr_store}));
+    wire [127:0] query_matching_mshr_victim_data;
+    wire [CACHE_ENTRY_WIDTH-1:0] query_matching_mshr_victim_entry;
+    wire [31:0] query_matching_mshr_victim_addr;
+    wire [TAG_WIDTH-1:0] query_matching_mshr_lsq;
+    wire [127:0] query_matching_mshr_wdata;
+    wire [15:0] query_matching_mshr_mask;
+    wire query_matching_mshr_unsigned;
+    wire [1:0] query_matching_mshr_size;
+    wire [31:0] query_matching_mshr_addr;
+    wire query_matching_mshr_writeback;
+    wire query_matching_mshr_prefetch;
+    wire query_matching_mshr_store;
+    rv32_frequency_array_read #(.WIDTH(MSHR_READ_WIDTH),.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(3)) matching_read (
+        .rows_i(mshr_read_rows),.index_i(matching_index),.value_o({query_matching_mshr_victim_data,query_matching_mshr_victim_entry,query_matching_mshr_victim_addr,query_matching_mshr_lsq,query_matching_mshr_wdata,query_matching_mshr_mask,query_matching_mshr_unsigned,query_matching_mshr_size,query_matching_mshr_addr,query_matching_mshr_writeback,query_matching_mshr_prefetch,query_matching_mshr_store}));
+    wire [127:0] query_local_mshr_victim_data;
+    wire [CACHE_ENTRY_WIDTH-1:0] query_local_mshr_victim_entry;
+    wire [31:0] query_local_mshr_victim_addr;
+    wire [TAG_WIDTH-1:0] query_local_mshr_lsq;
+    wire [127:0] query_local_mshr_wdata;
+    wire [15:0] query_local_mshr_mask;
+    wire query_local_mshr_unsigned;
+    wire [1:0] query_local_mshr_size;
+    wire [31:0] query_local_mshr_addr;
+    wire query_local_mshr_writeback;
+    wire query_local_mshr_prefetch;
+    wire query_local_mshr_store;
+    rv32_frequency_array_read #(.WIDTH(MSHR_READ_WIDTH),.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(3)) local_read (
+        .rows_i(mshr_read_rows),.index_i(local_fill_index),.value_o({query_local_mshr_victim_data,query_local_mshr_victim_entry,query_local_mshr_victim_addr,query_local_mshr_lsq,query_local_mshr_wdata,query_local_mshr_mask,query_local_mshr_unsigned,query_local_mshr_size,query_local_mshr_addr,query_local_mshr_writeback,query_local_mshr_prefetch,query_local_mshr_store}));
+    wire [127:0] query_response_mshr_victim_data;
+    wire [CACHE_ENTRY_WIDTH-1:0] query_response_mshr_victim_entry;
+    wire [31:0] query_response_mshr_victim_addr;
+    wire [TAG_WIDTH-1:0] query_response_mshr_lsq;
+    wire [127:0] query_response_mshr_wdata;
+    wire [15:0] query_response_mshr_mask;
+    wire query_response_mshr_unsigned;
+    wire [1:0] query_response_mshr_size;
+    wire [31:0] query_response_mshr_addr;
+    wire query_response_mshr_writeback;
+    wire query_response_mshr_prefetch;
+    wire query_response_mshr_store;
+    rv32_frequency_array_read #(.WIDTH(MSHR_READ_WIDTH),.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(32)) response_read (
+        .rows_i(mshr_read_rows),.index_i(response_index),.value_o({query_response_mshr_victim_data,query_response_mshr_victim_entry,query_response_mshr_victim_addr,query_response_mshr_lsq,query_response_mshr_wdata,query_response_mshr_mask,query_response_mshr_unsigned,query_response_mshr_size,query_response_mshr_addr,query_response_mshr_writeback,query_response_mshr_prefetch,query_response_mshr_store}));
+    localparam integer WAITER_READ_WIDTH=TAG_WIDTH+167;
+    wire [WAITER_ENTRIES*WAITER_READ_WIDTH-1:0] waiter_read_rows;
+    genvar waiter_read_row;
+    generate for(waiter_read_row=0;waiter_read_row<WAITER_ENTRIES;waiter_read_row=waiter_read_row+1) begin:g_waiter_read_rows
+        assign waiter_read_rows[waiter_read_row*WAITER_READ_WIDTH +: WAITER_READ_WIDTH]={waiter_line[waiter_read_row],waiter_lsq[waiter_read_row],waiter_unsigned[waiter_read_row],waiter_size[waiter_read_row],waiter_addr[waiter_read_row],waiter_mshr[waiter_read_row],waiter_error[waiter_read_row]};
+    end endgenerate
+    wire [127:0] query_waiter_load_waiter_line;
+    wire [TAG_WIDTH-1:0] query_waiter_load_waiter_lsq;
+    wire query_waiter_load_waiter_unsigned;
+    wire [1:0] query_waiter_load_waiter_size;
+    wire [31:0] query_waiter_load_waiter_addr;
+    wire [2:0] query_waiter_load_waiter_mshr;
+    wire query_waiter_load_waiter_error;
+    rv32_frequency_array_read #(.WIDTH(WAITER_READ_WIDTH),.ENTRIES(WAITER_ENTRIES),.INDEX_WIDTH(WAITER_SLOT_WIDTH)) waiter_load_read (
+        .rows_i(waiter_read_rows),.index_i(waiter_load_ready_index),.value_o({query_waiter_load_waiter_line,query_waiter_load_waiter_lsq,query_waiter_load_waiter_unsigned,query_waiter_load_waiter_size,query_waiter_load_waiter_addr,query_waiter_load_waiter_mshr,query_waiter_load_waiter_error}));
+    wire [127:0] query_waiter_store_waiter_line;
+    wire [TAG_WIDTH-1:0] query_waiter_store_waiter_lsq;
+    wire query_waiter_store_waiter_unsigned;
+    wire [1:0] query_waiter_store_waiter_size;
+    wire [31:0] query_waiter_store_waiter_addr;
+    wire [2:0] query_waiter_store_waiter_mshr;
+    wire query_waiter_store_waiter_error;
+    rv32_frequency_array_read #(.WIDTH(WAITER_READ_WIDTH),.ENTRIES(WAITER_ENTRIES),.INDEX_WIDTH(WAITER_SLOT_WIDTH)) waiter_store_read (
+        .rows_i(waiter_read_rows),.index_i(waiter_store_ready_index),.value_o({query_waiter_store_waiter_line,query_waiter_store_waiter_lsq,query_waiter_store_waiter_unsigned,query_waiter_store_waiter_size,query_waiter_store_waiter_addr,query_waiter_store_waiter_mshr,query_waiter_store_waiter_error}));
+
     integer reset_index;
     integer line_index;
 
@@ -780,7 +889,7 @@ module rv32_dcache_nonblocking #(
             else if (request_is_store && request_hit)
                 static_request_action = 4'd2;
             else if (request_is_load && matching_found &&
-                     mshr_store[matching_index] && matching_store_covers_load)
+                     query_matching_mshr_store && matching_store_covers_load)
                 static_request_action = 4'd3;
             else if (request_is_load && matching_found && matching_prefetch)
                 static_request_action = 4'd4;
@@ -788,7 +897,7 @@ module rv32_dcache_nonblocking #(
                 static_request_action = 4'd5;
             else if (request_is_store && matching_found && matching_prefetch)
                 static_request_action = 4'd6;
-            else if (request_is_store && matching_found && mshr_store[matching_index])
+            else if (request_is_store && matching_found && query_matching_mshr_store)
                 static_request_action = 4'd7;
             else
                 static_request_action = 4'd8;
@@ -824,8 +933,8 @@ module rv32_dcache_nonblocking #(
         (* keep = 1 *) wire [GROUP_COUNT-1:0] store_group, local_group, refill_group;
         (* keep = 1 *) wire [GROUP_ROWS-1:0] miss_row, prefetch_row, store_row;
         (* keep = 1 *) wire [GROUP_ROWS-1:0] local_row, refill_row;
-        wire [CACHE_ENTRY_WIDTH-1:0] local_entry = mshr_victim_entry[local_fill_index];
-        wire [CACHE_ENTRY_WIDTH-1:0] refill_entry = mshr_victim_entry[response_index];
+        wire [CACHE_ENTRY_WIDTH-1:0] local_entry = query_local_mshr_victim_entry;
+        wire [CACHE_ENTRY_WIDTH-1:0] refill_entry = query_response_mshr_victim_entry;
         for (update_group = 0; update_group < GROUP_COUNT; update_group = update_group + 1) begin : g_group
             assign miss_group[update_group] = (static_request_action == 4'd8) &&
                 (request_victim_entry / GROUP_ROWS == update_group);
@@ -860,7 +969,7 @@ module rv32_dcache_nonblocking #(
                     // then local fill, then prefetch/miss, then store hit.
                     if (refill_install) begin
                         static_valid_bits[update_row] <= 1'b1;
-                        static_dirty_bits[update_row] <= mshr_store[response_index];
+                        static_dirty_bits[update_row] <= query_response_mshr_store;
                     end else if (local_install) begin
                         static_valid_bits[update_row] <= 1'b1;
                         static_dirty_bits[update_row] <= 1'b1;
@@ -937,8 +1046,8 @@ module rv32_dcache_nonblocking #(
             assign request_query_lru = |group_request_lru;
             assign prefetch_query_lru = |group_prefetch_lru;
         end
-        wire [CACHE_ENTRY_WIDTH-1:0] local_entry = mshr_victim_entry[local_fill_index];
-        wire [CACHE_ENTRY_WIDTH-1:0] refill_entry = mshr_victim_entry[response_index];
+        wire [CACHE_ENTRY_WIDTH-1:0] local_entry = query_local_mshr_victim_entry;
+        wire [CACHE_ENTRY_WIDTH-1:0] refill_entry = query_response_mshr_victim_entry;
         // These modules own the actual state and its address-qualified write
         // logic. No extra cycle, buffer-cell stub or replacement SRAM is used.
         for (update_group = 0; update_group < GROUP_COUNT; update_group = update_group + 1) begin : g_metadata
@@ -951,7 +1060,7 @@ module rv32_dcache_nonblocking #(
                 .clk_i(clk_i), .reset_i(reset_i),
                 .request_action_i(static_request_action),
                 .refill_valid_i(refill_array_write), .refill_entry_i(refill_entry),
-                .refill_dirty_i(mshr_store[response_index]),
+                .refill_dirty_i(query_response_mshr_store),
                 .local_valid_i(local_array_write), .local_entry_i(local_entry),
                 .miss_valid_i(static_request_action == 4'd8), .miss_entry_i(request_victim_entry),
                 .prefetch_valid_i(static_prefetch_allocate), .prefetch_entry_i(prefetch_victim_entry),
@@ -1072,7 +1181,7 @@ module rv32_dcache_nonblocking #(
             waiter_load_consume,waiter_store_consume,waiter_free_index[WAITER_SLOT_WIDTH-1:0],
             waiter_load_ready_index[WAITER_SLOT_WIDTH-1:0],waiter_store_ready_index[WAITER_SLOT_WIDTH-1:0],
             local_fill_index[2:0],response_index[2:0]}),.views_o(waiter_event_views));
-    wire [127:0] waiter_store_fill=merge_store(mem_resp_data_i,mshr_wdata[response_index],mshr_mask[response_index]);
+    wire [127:0] waiter_store_fill=merge_store(mem_resp_data_i,query_response_mshr_wdata,query_response_mshr_mask);
     genvar waiter_row;
     generate for(waiter_row=0;waiter_row<WAITER_ENTRIES;waiter_row=waiter_row+1) begin:g_waiter_owner
         wire local_reset,allocate_event,local_event,store_event,demand_event,load_consume,store_consume;
@@ -1101,7 +1210,7 @@ module rv32_dcache_nonblocking #(
         wire [127:0] line_next;
         rv32_frequency_event_select #(.WIDTH(128),.EVENTS(2)) line_selector (
             .events_i({response_fill && !waiter_store[waiter_row],local_fill && !waiter_store[waiter_row]}),
-            .values_i({(store_event?waiter_store_fill:mem_resp_data_i),mshr_wdata[local_fill_index]}),
+            .values_i({(store_event?waiter_store_fill:mem_resp_data_i),query_local_mshr_wdata}),
             .write_o(line_write),.value_o(line_next));
         rv32_frequency_word_bank #(.WIDTH(128)) line_owner (
             .clk_i(clk_i),.write_i(line_write),.data_i(line_next),.data_o(waiter_line[waiter_row]));
@@ -1204,12 +1313,70 @@ module rv32_dcache_nonblocking #(
         end
     end endgenerate
 
+
+    localparam integer DCACHE_RESPONSE_META_WIDTH=TAG_WIDTH+34;
+    wire response_hit_capture=!reset_i && static_request_action==4'd1;
+    wire response_forward_capture=!reset_i && static_request_action==4'd3;
+    wire response_waiter_capture=!reset_i && waiter_load_consume;
+    wire response_victim_failure=!reset_i && mem_resp_valid_i && mem_resp_ready_o &&
+        query_response_mshr_writeback && (mem_resp_error_i || !response_matches);
+    wire response_failed_load=response_victim_failure && !query_response_mshr_store;
+    wire response_failed_store=response_victim_failure && query_response_mshr_store;
+    wire response_demand_capture=!reset_i && demand_response_fire;
+    wire response_metadata_write;
+    wire [DCACHE_RESPONSE_META_WIDTH-1:0] response_metadata_next,response_metadata_saved;
+    rv32_frequency_event_select #(.WIDTH(DCACHE_RESPONSE_META_WIDTH),.EVENTS(5)) response_metadata_selector (
+        .events_i({response_demand_capture,response_failed_load,response_waiter_capture,response_forward_capture,response_hit_capture}),
+        .values_i({
+            query_response_mshr_lsq,query_response_mshr_addr,(!mem_resp_error_i && response_matches),(mem_resp_error_i || !response_matches),
+            query_response_mshr_lsq,query_response_mshr_addr,1'b0,1'b1,
+            query_waiter_load_waiter_lsq,query_waiter_load_waiter_addr,!query_waiter_load_waiter_error,query_waiter_load_waiter_error,
+            core_req_lsq_tag,core_req_addr,1'b1,1'b0,
+            core_req_lsq_tag,core_req_addr,1'b1,1'b0}),
+        .write_o(response_metadata_write),.value_o(response_metadata_next));
+    rv32_frequency_word_bank #(.WIDTH(DCACHE_RESPONSE_META_WIDTH)) response_metadata_owner (
+        .clk_i(clk_i),.write_i(response_metadata_write),.data_i(response_metadata_next),.data_o(response_metadata_saved));
+    assign {resp_lsq_reg,resp_addr_reg,resp_line_valid_reg,resp_error_reg}=response_metadata_saved;
+
+    wire response_data_write;
+    wire [159:0] response_data_next,response_data_saved;
+    wire response_sram_capture=!reset_i && resp_from_sram && resp_valid_reg;
+    rv32_frequency_event_select #(.WIDTH(160),.EVENTS(6)) response_data_selector (
+        .events_i({response_demand_capture,response_failed_load,response_waiter_capture,response_forward_capture,
+                   response_hit_capture && TAG_SRAM!=0,response_sram_capture}),
+        .values_i({
+            mem_resp_data_i,extract_value(mem_resp_data_i,query_response_mshr_addr,query_response_mshr_size,query_response_mshr_unsigned),
+            128'b0,32'b0,
+            query_waiter_load_waiter_line,extract_value(query_waiter_load_waiter_line,query_waiter_load_waiter_addr,query_waiter_load_waiter_size,query_waiter_load_waiter_unsigned),
+            query_matching_mshr_wdata,extract_value(query_matching_mshr_wdata,core_req_addr,core_req_size,core_req_unsigned),
+            data_rdata,extract_value(data_rdata,core_req_addr,core_req_size,core_req_unsigned),
+            data_rdata,extract_value(data_rdata,resp_addr_reg,resp_size_reg,resp_unsigned_reg)}),
+        .write_o(response_data_write),.value_o(response_data_next));
+    rv32_frequency_word_bank #(.WIDTH(160)) response_data_owner (
+        .clk_i(clk_i),.write_i(response_data_write),.data_i(response_data_next),.data_o(response_data_saved));
+    assign {resp_line_reg,resp_word_reg}=response_data_saved;
+    // This metadata is read only while the deferred synchronous hit is live;
+    // the accepting hit initializes it before resp_from_sram exposes it.
+    wire [2:0] response_size_saved;
+    rv32_frequency_word_bank #(.WIDTH(3)) response_size_owner (
+        .clk_i(clk_i),.write_i(response_hit_capture),.data_i({core_req_size,core_req_unsigned}),.data_o(response_size_saved));
+    assign {resp_size_reg,resp_unsigned_reg}=response_size_saved;
+
+    wire ack_payload_write;
+    wire [TAG_WIDTH:0] ack_payload_next,ack_payload_saved;
+    rv32_frequency_event_select #(.WIDTH(TAG_WIDTH+1),.EVENTS(3)) acknowledgement_selector (
+        .events_i({response_failed_store,!reset_i && waiter_store_consume,!reset_i && request_fire && request_is_store}),
+        .values_i({query_response_mshr_lsq,1'b1,
+                   query_waiter_store_waiter_lsq,query_waiter_store_waiter_error,core_req_lsq_tag,1'b0}),
+        .write_o(ack_payload_write),.value_o(ack_payload_next));
+    rv32_frequency_word_bank #(.WIDTH(TAG_WIDTH+1)) acknowledgement_owner (
+        .clk_i(clk_i),.write_i(ack_payload_write),.data_i(ack_payload_next),.data_o(ack_payload_saved));
+    assign {ack_lsq_reg,ack_error_reg}=ack_payload_saved;
+
     always @(posedge clk_i) begin
         if (reset_i) begin
             resp_valid_reg <= 1'b0;
             resp_from_sram <= 1'b0;
-            resp_size_reg <= 2'd0;
-            resp_unsigned_reg <= 1'b0;
             victim_from_sram <= 1'b0;
             victim_mshr_reg <= 3'd0;
             ack_valid_reg <= 1'b0;
@@ -1236,11 +1403,6 @@ module rv32_dcache_nonblocking #(
             end
             resp_from_sram <= 1'b0;
             victim_from_sram <= 1'b0;
-            if (resp_from_sram && resp_valid_reg) begin
-                resp_line_reg <= data_rdata;
-                resp_word_reg <= extract_value(data_rdata, resp_addr_reg,
-                                               resp_size_reg, resp_unsigned_reg);
-            end
             event_request_o <= request_fire;
             event_hit_o <= 1'b0;
             event_miss_o <= 1'b0;
@@ -1258,18 +1420,7 @@ module rv32_dcache_nonblocking #(
                     // A bypass accepted on this edge is already delivered.
                     // Otherwise capture it once for a stable held response.
                     resp_valid_reg <= !(bypass_load_hit && dcache_resp_ready_i);
-                    resp_lsq_reg <= core_req_lsq_tag;
-                    resp_addr_reg <= core_req_addr;
                     resp_from_sram <= (TAG_SRAM == 0);
-                    if (TAG_SRAM != 0) begin
-                        resp_line_reg <= data_rdata;
-                        resp_word_reg <= extract_value(data_rdata, core_req_addr,
-                                                       core_req_size, core_req_unsigned);
-                    end
-                    resp_size_reg <= core_req_size;
-                    resp_unsigned_reg <= core_req_unsigned;
-                    resp_line_valid_reg <= 1'b1;
-                    resp_error_reg <= 1'b0;
                     if (STATIC_UPDATES == 0 && CACHE_WAYS == 2)
                         legacy_lru_way_mem[request_index] <= !request_hit_entry[0];
                 end else if (request_is_store && request_hit) begin
@@ -1278,25 +1429,14 @@ module rv32_dcache_nonblocking #(
                     if (STATIC_UPDATES == 0 && CACHE_WAYS == 2)
                         legacy_lru_way_mem[request_index] <= !request_hit_entry[0];
                     ack_valid_reg <= !(bypass_store_ack && dcache_store_ack_ready_i);
-                    ack_lsq_reg <= core_req_lsq_tag;
-                    ack_error_reg <= 1'b0;
                 end else if (request_is_load && matching_found &&
-                             mshr_store[matching_index] &&
+                             query_matching_mshr_store &&
                              matching_store_covers_load) begin
                     // The older committed store has already supplied every
                     // byte this load still needs.  Forward directly from the
                     // store-buffer MSHR without waiting for read-for-ownership.
                     event_hit_o <= 1'b1;
                     resp_valid_reg <= 1'b1;
-                    resp_lsq_reg <= core_req_lsq_tag;
-                    resp_addr_reg <= core_req_addr;
-                    resp_line_reg <= mshr_wdata[matching_index];
-                    resp_word_reg <= extract_value(mshr_wdata[matching_index],
-                                                   core_req_addr,
-                                                   core_req_size,
-                                                   core_req_unsigned);
-                    resp_line_valid_reg <= 1'b1;
-                    resp_error_reg <= 1'b0;
                 end else if (request_is_load && matching_found && matching_prefetch) begin
                     // Turn the speculative line into the demand transaction;
                     // its memory request and ID remain unchanged.
@@ -1313,14 +1453,14 @@ module rv32_dcache_nonblocking #(
                     event_miss_o <= 1'b1;
                     if (STATIC_UPDATES == 0) legacy_mshr_wdata[matching_index] <= core_req_wdata;
                 end else if (request_is_store && matching_found &&
-                             mshr_store[matching_index]) begin
+                             query_matching_mshr_store) begin
                     // Consecutive committed stores to one missing line share
                     // the refill.  Later bytes override earlier bytes while
                     // every LSQ entry retains its own completion ack.
                     event_miss_o <= 1'b1;
                     if (STATIC_UPDATES == 0)
                         legacy_mshr_wdata[matching_index] <=
-                            merge_store(mshr_wdata[matching_index],
+                            merge_store(query_matching_mshr_wdata,
                                         core_req_wdata,
                                         core_req_mask);
                 end else begin
@@ -1363,8 +1503,6 @@ module rv32_dcache_nonblocking #(
                     // Ownership has transferred to the cache/store buffer;
                     // the LSQ no longer needs to retain the committed entry.
                     ack_valid_reg <= !(bypass_store_ack && dcache_store_ack_ready_i);
-                    ack_lsq_reg <= core_req_lsq_tag;
-                    ack_error_reg <= 1'b0;
                 end
             end
 
@@ -1374,93 +1512,65 @@ module rv32_dcache_nonblocking #(
                 // contents. Stores were acknowledged on ownership transfer;
                 // local completion installs dirty data, never a second ack.
                 if (STATIC_UPDATES == 0) begin
-                    legacy_valid_bits[mshr_victim_entry[local_fill_index]] <= 1'b1;
-                    legacy_dirty_bits[mshr_victim_entry[local_fill_index]] <= 1'b1;
+                    legacy_valid_bits[query_local_mshr_victim_entry] <= 1'b1;
+                    legacy_dirty_bits[query_local_mshr_victim_entry] <= 1'b1;
                 end
                 if (TAG_SRAM == 0)
-                    tag_mem[mshr_victim_entry[local_fill_index]] <=
-                        mshr_addr[local_fill_index][31:CACHE_INDEX_WIDTH+4];
+                    tag_mem[query_local_mshr_victim_entry] <=
+                        query_local_mshr_addr[31:CACHE_INDEX_WIDTH+4];
                 event_refill_o <= 1'b1;
             end
 
             if (resp_slot_free && waiter_load_ready_found &&
                 !demand_response_fire) begin
                 resp_valid_reg <= 1'b1;
-                resp_lsq_reg <= waiter_lsq[waiter_load_ready_index];
-                resp_addr_reg <= waiter_addr[waiter_load_ready_index];
-                resp_line_reg <= waiter_line[waiter_load_ready_index];
-                resp_word_reg <= extract_value(waiter_line[waiter_load_ready_index],
-                                               waiter_addr[waiter_load_ready_index],
-                                               waiter_size[waiter_load_ready_index],
-                                               waiter_unsigned[waiter_load_ready_index]);
-                resp_line_valid_reg <= !waiter_error[waiter_load_ready_index];
-                resp_error_reg <= waiter_error[waiter_load_ready_index];
             end
 
             if (ack_slot_free && waiter_store_ready_found &&
                 !store_response_fire) begin
                 ack_valid_reg <= 1'b1;
-                ack_lsq_reg <= waiter_lsq[waiter_store_ready_index];
-                ack_error_reg <= waiter_error[waiter_store_ready_index];
             end
 
             if (mem_resp_valid_i && mem_resp_ready_o) begin
-                if (mshr_writeback[response_index] &&
+                if (query_response_mshr_writeback &&
                     !mem_resp_error_i && response_matches) begin
                     event_writeback_o <= 1'b1;
-                end else if (mshr_writeback[response_index]) begin
-                    if (mshr_store[response_index]) begin
+                end else if (query_response_mshr_writeback) begin
+                    if (query_response_mshr_store) begin
                         ack_valid_reg <= 1'b1;
-                        ack_lsq_reg <= mshr_lsq[response_index];
-                        ack_error_reg <= 1'b1;
                     end else begin
                         resp_valid_reg <= 1'b1;
-                        resp_lsq_reg <= mshr_lsq[response_index];
-                        resp_addr_reg <= mshr_addr[response_index];
-                        resp_line_reg <= 128'd0;
-                        resp_word_reg <= 32'd0;
-                        resp_line_valid_reg <= 1'b0;
-                        resp_error_reg <= 1'b1;
                     end
-                end else if (mshr_store[response_index]) begin
+                end else if (query_response_mshr_store) begin
                     if (!mem_resp_error_i && response_matches) begin
-                        line_index = mshr_victim_entry[response_index];
+                        line_index = query_response_mshr_victim_entry;
                         if (STATIC_UPDATES == 0) begin
                             legacy_valid_bits[line_index] <= 1'b1;
                             legacy_dirty_bits[line_index] <= 1'b1;
                         end
                         if (TAG_SRAM == 0)
-                            tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
+                            tag_mem[line_index] <= query_response_mshr_addr[31:CACHE_INDEX_WIDTH+4];
                         event_refill_o <= 1'b1;
                     end
-                end else if (mshr_prefetch[response_index]) begin
+                end else if (query_response_mshr_prefetch) begin
                     if (!mem_resp_error_i && response_matches) begin
-                        line_index = mshr_victim_entry[response_index];
+                        line_index = query_response_mshr_victim_entry;
                         if (STATIC_UPDATES == 0) legacy_valid_bits[line_index] <= 1'b1;
                         if (TAG_SRAM == 0)
-                            tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
+                            tag_mem[line_index] <= query_response_mshr_addr[31:CACHE_INDEX_WIDTH+4];
                         if (STATIC_UPDATES == 0) legacy_dirty_bits[line_index] <= 1'b0;
                         event_refill_o <= 1'b1;
                     end
                 end else begin
                     if (!mem_resp_error_i && response_matches) begin
-                        line_index = mshr_victim_entry[response_index];
+                        line_index = query_response_mshr_victim_entry;
                         if (STATIC_UPDATES == 0) legacy_valid_bits[line_index] <= 1'b1;
                         if (TAG_SRAM == 0)
-                            tag_mem[line_index] <= mshr_addr[response_index][31:CACHE_INDEX_WIDTH+4];
+                            tag_mem[line_index] <= query_response_mshr_addr[31:CACHE_INDEX_WIDTH+4];
                         if (STATIC_UPDATES == 0) legacy_dirty_bits[line_index] <= 1'b0;
                         event_refill_o <= 1'b1;
                     end
                     resp_valid_reg <= 1'b1;
-                    resp_lsq_reg <= mshr_lsq[response_index];
-                    resp_addr_reg <= mshr_addr[response_index];
-                    resp_line_reg <= mem_resp_data_i;
-                    resp_word_reg <= extract_value(mem_resp_data_i,
-                                                   mshr_addr[response_index],
-                                                   mshr_size[response_index],
-                                                   mshr_unsigned[response_index]);
-                    resp_line_valid_reg <= !mem_resp_error_i && response_matches;
-                    resp_error_reg <= mem_resp_error_i || !response_matches;
                 end
             end
         end
