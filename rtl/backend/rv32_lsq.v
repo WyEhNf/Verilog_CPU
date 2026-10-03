@@ -316,13 +316,14 @@ module rv32_lsq #(
         integer p;
         integer n;
         begin
-            p = start;
-            for (n = 0; n < LSQ_ENTRIES; n = n + 1) begin
-                if (n < amount) begin
-                    if (p == LSQ_ENTRIES - 1) p = 0; else p = p + 1;
-                end
-            end
-            advance_slot = p[SLOT_WIDTH-1:0];
+            // Depth is a power of two; the original loop clamps amount
+            // to [0,depth]. A full traversal returns to the same slot.
+            if(LSQ_ENTRIES==1)
+                advance_slot=(amount>0)?{SLOT_WIDTH{1'b0}}:start;
+            else if(amount<=0 || amount>=LSQ_ENTRIES)
+                advance_slot=start;
+            else
+                advance_slot=start+amount;
         end
     endfunction
 

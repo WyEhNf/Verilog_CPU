@@ -143,7 +143,7 @@ module rv32_backend_joint #(
     localparam integer MDU_SOURCE = BE_WIDTH;
     localparam integer LSQ_SOURCE = BE_WIDTH + 1;
 
-    wire [BE_WIDTH-1:0] dec_valid = trace_valid_i;
+    wire [BE_WIDTH-1:0] dec_valid = trace_valid_i & trace_ready_o;
     wire [BE_WIDTH-1:0] dec_rd_we = trace_rd_we_i;
     wire [BE_WIDTH-1:0] dec_rs1_used = trace_rs1_used_i;
     wire [BE_WIDTH-1:0] dec_rs2_used = trace_rs2_used_i;
@@ -211,7 +211,8 @@ module rv32_backend_joint #(
             rv32_asap7_fanout #(.WIDTH(ROB_SLOT_WIDTH), .LEAVES(6), .ENABLED(1)) tree(
                 .signal_i(rob_head_source), .replicas_o(rob_head_views));
         end else begin : g_head_wires
-            assign rob_head_views = {6{rob_head_source}};
+            rv32_frequency_control_tree #(.WIDTH(ROB_SLOT_WIDTH),.LEAVES(6)) tree (
+                .signal_i(rob_head_source),.views_o(rob_head_views));
         end
     endgenerate
     wire [ROB_COUNT_WIDTH-1:0] rob_occupancy;
@@ -536,6 +537,44 @@ module rv32_backend_joint #(
     reg [BE_WIDTH-1:0] alu_exec_ready_r;
     reg [BE_WIDTH-1:0] alu_flush_r;
     reg [BE_WIDTH-1:0] trace_ready_r;
+    localparam integer CREDIT_WIDTH=(BE_WIDTH<=1)?1:$clog2(BE_WIDTH+1);
+    reg [CREDIT_WIDTH-1:0] rob_credit, rs_credit, lsq_credit, phys_credit;
+    reg [CREDIT_WIDTH-1:0] used_rob_credit, used_rs_credit, used_lsq_credit, used_phys_credit;
+    integer credit_lane;
+    function [CREDIT_WIDTH-1:0] bounded_credit;
+        input [15:0] available;
+        input [CREDIT_WIDTH-1:0] consumed;
+        reg [15:0] remaining;
+        begin
+            remaining=(available>=consumed)?available-consumed:16'b0;
+            bounded_credit=(remaining>=BE_WIDTH)?BE_WIDTH:remaining;
+        end
+    endfunction
+    // At the next edge actual free slots F' = F - accepted + releases.
+    // Advertise min(BE_WIDTH,F-accepted), omitting this edge's releases.
+    // Thus registered credits never promise more than actual capacity.
+    always @* begin
+        used_rob_credit=0; used_rs_credit=0; used_lsq_credit=0; used_phys_credit=0;
+        for(credit_lane=0;credit_lane<BE_WIDTH;credit_lane=credit_lane+1) begin
+            if(dispatch_valid[credit_lane]) begin
+                used_rob_credit=used_rob_credit+1'b1;
+                used_rs_credit=used_rs_credit+1'b1;
+                if(trace_is_load_i[credit_lane] || trace_is_store_i[credit_lane])
+                    used_lsq_credit=used_lsq_credit+1'b1;
+                if(rename_rd_we[credit_lane]) used_phys_credit=used_phys_credit+1'b1;
+            end
+        end
+    end
+    always @(posedge clk_i) begin
+        if(reset_i || flush_i) begin
+            rob_credit<=0;rs_credit<=0;lsq_credit<=0;phys_credit<=0;
+        end else begin
+            rob_credit<=bounded_credit(rob_free_count,used_rob_credit);
+            rs_credit<=bounded_credit(rs_free_count,used_rs_credit);
+            lsq_credit<=bounded_credit(lsq_free_count,used_lsq_credit);
+            phys_credit<=bounded_credit({{(16-FREE_COUNT_WIDTH){1'b0}},free_count},used_phys_credit);
+        end
+    end
     reg [BE_WIDTH-1:0] completion_valid_r, completion_done_r, completion_error_r;
     reg [BE_WIDTH*TAG_WIDTH-1:0] completion_tag_r;
     reg [BE_WIDTH*32-1:0] completion_value_r, completion_store_addr_r;
@@ -670,10 +709,10 @@ module rv32_backend_joint #(
                 (trace_rd_i[ready_lane*5 +: 5] != 0))
                 ready_phys_used = ready_phys_used + 1;
             if (!halted_o && !flush_i && !branch_busy_domains[0] &&
-                (ready_rob_used <= rob_free_count) &&
-                (ready_rs_used <= rs_free_count) &&
-                (ready_lsq_used <= lsq_free_count) &&
-                (ready_phys_used <= free_count))
+                (ready_rob_used <= rob_credit) &&
+                (ready_rs_used <= rs_credit) &&
+                (ready_lsq_used <= lsq_credit) &&
+                (ready_phys_used <= phys_credit))
                 trace_ready_r[ready_lane] = 1'b1;
         end
     end
@@ -972,7 +1011,9 @@ module rv32_backend_joint #(
         .clk_i(clk_i), .reset_i(reset_i), .rename_ready_i(!halted_o && !flush_i && !branch_busy_domains[1]),
         .decoded_valid_i(dec_valid), .decoded_rd_we_i(dec_rd_we), .decoded_rs1_used_i(dec_rs1_used), .decoded_rs2_used_i(dec_rs2_used),
         .decoded_rs_need_i(dec_rs_need), .decoded_lsq_need_i(dec_lsq_need), .decoded_rd_i(dec_rd), .decoded_rs1_i(dec_rs1), .decoded_rs2_i(dec_rs2),
-        .rob_free_count_i(rob_free_count), .rs_free_count_i(rs_free_count), .lsq_free_count_i(lsq_free_count),
+        .rob_free_count_i({{(16-CREDIT_WIDTH){1'b0}},rob_credit}),
+        .rs_free_count_i({{(16-CREDIT_WIDTH){1'b0}},rs_credit}),
+        .lsq_free_count_i({{(16-CREDIT_WIDTH){1'b0}},lsq_credit}),
         .rename_valid_o(rename_valid), .rename_rd_we_o(rename_rd_we), .rename_rd_o(rename_rd), .rename_old_phys_o(rename_old_phys), .rename_new_phys_o(rename_new_phys),
         .rename_rs1_phys_o(rename_rs1_phys), .rename_rs2_phys_o(rename_rs2_phys), .rename_count_o(rename_count), .rat_state_o(rat_state), .rrat_state_o(rrat_state),
         .free_bitmap_state_o(free_bitmap_state), .free_count_o(free_count),

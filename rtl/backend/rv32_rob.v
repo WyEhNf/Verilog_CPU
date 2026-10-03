@@ -168,7 +168,8 @@ module rv32_rob #(
                 .signal_i(head_reg), .replicas_o(head_views));
             assign head_domains_o = {6{head_reg}};
         end else begin : g_head_wires
-            assign head_views = {5{head_reg}};
+            rv32_frequency_control_tree #(.WIDTH(SLOT_WIDTH),.LEAVES(5)) tree (
+                .signal_i(head_reg),.views_o(head_views));
             assign head_domains_o = {6{head_reg}};
         end
     endgenerate
