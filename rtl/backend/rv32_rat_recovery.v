@@ -1,0 +1,88 @@
+`timescale 1ns/1ps
+// Combinational recovery candidate, selected by the CPU's optional
+// RAT_RECOVERY_IMPL. Both implementations preserve the branch mapping.
+module rv32_rat_recovery #(
+    parameter integer ROB_ENTRIES = 32,
+    parameter integer PAW = 6,
+    parameter integer IMPL = 1,
+    parameter integer SLOT_WIDTH = $clog2(ROB_ENTRIES),
+    parameter integer COUNT_WIDTH = $clog2(ROB_ENTRIES + 1)
+) (
+    input wire [32*PAW-1:0] rat_i,
+    input wire [SLOT_WIDTH-1:0] head_i,
+    input wire [SLOT_WIDTH-1:0] branch_slot_i,
+    input wire [COUNT_WIDTH-1:0] occupancy_i,
+    input wire [ROB_ENTRIES-1:0] valid_i,
+    input wire [ROB_ENTRIES-1:0] rd_we_i,
+    input wire [ROB_ENTRIES*5-1:0] rd_i,
+    input wire [ROB_ENTRIES*PAW-1:0] old_phys_i,
+    input wire branch_rd_we_i,
+    input wire [4:0] branch_rd_i,
+    input wire [PAW-1:0] branch_new_phys_i,
+    output wire [32*PAW-1:0] restore_o
+);
+    wire [32*PAW-1:0] undo_result;
+    genvar row, arch, bit_id;
+    generate if (IMPL == 0) begin : g_undo_loop
+        reg [32*PAW-1:0] result;
+        integer age, slot, branch_age;
+        always @* begin
+            result = rat_i;
+            branch_age = branch_slot_i - head_i;
+            if (branch_age < 0) branch_age = branch_age + ROB_ENTRIES;
+            for (age = ROB_ENTRIES - 1; age >= 0; age = age - 1) begin
+                slot = head_i + age;
+                if (slot >= ROB_ENTRIES) slot = slot - ROB_ENTRIES;
+                if (age > branch_age && age < occupancy_i && valid_i[slot] &&
+                    rd_we_i[slot] && rd_i[slot*5 +: 5] != 0)
+                    result[rd_i[slot*5 +: 5]*PAW +: PAW] = old_phys_i[slot*PAW +: PAW];
+            end
+        end
+        assign undo_result = result;
+    end else begin : g_parallel_oldest
+        wire [COUNT_WIDTH-1:0] branch_age = (branch_slot_i >= head_i) ?
+            branch_slot_i - head_i : ROB_ENTRIES + branch_slot_i - head_i;
+        (* keep = 1 *) wire [ROB_ENTRIES-1:0] killed_writer;
+        wire [ROB_ENTRIES-1:0] above_branch;
+        for (row = 0; row < ROB_ENTRIES; row = row + 1) begin : g_age
+            wire [COUNT_WIDTH-1:0] row_age = (row >= head_i) ?
+                row - head_i : ROB_ENTRIES + row - head_i;
+            assign killed_writer[row] = valid_i[row] && rd_we_i[row] &&
+                (row_age > branch_age) && (row_age < occupancy_i);
+            assign above_branch[row] = (row > branch_slot_i);
+        end
+        assign undo_result[0 +: PAW] = rat_i[0 +: PAW];
+        for (arch = 1; arch < 32; arch = arch + 1) begin : g_arch
+            wire [ROB_ENTRIES-1:0] writer_matches, upper_matches, choices, first;
+            wire upper_found = |upper_matches;
+            wire found = |writer_matches;
+            for (row = 0; row < ROB_ENTRIES; row = row + 1) begin : g_match
+                assign writer_matches[row] = killed_writer[row] && rd_i[row*5 +: 5] == arch;
+                assign upper_matches[row] = writer_matches[row] && above_branch[row];
+                assign choices[row] = upper_found ? upper_matches[row] : writer_matches[row];
+                if (row == 0) assign first[row] = choices[row];
+                else assign first[row] = choices[row] && !(|choices[row-1:0]);
+            end
+            // The oldest killed writer is the last link applied by a
+            // youngest-to-oldest undo. No sequential chain of RAT writes.
+            for (bit_id = 0; bit_id < PAW; bit_id = bit_id + 1) begin : g_value
+                wire [ROB_ENTRIES-1:0] column;
+                for (row = 0; row < ROB_ENTRIES; row = row + 1) begin : g_row
+                    assign column[row] = first[row] && old_phys_i[row*PAW + bit_id];
+                end
+                assign undo_result[arch*PAW + bit_id] = found ? (|column) : rat_i[arch*PAW + bit_id];
+            end
+        end
+    end endgenerate
+    generate for (arch = 0; arch < 32; arch = arch + 1) begin : g_keep_branch
+        assign restore_o[arch*PAW +: PAW] = (arch != 0 && branch_rd_we_i && branch_rd_i == arch) ?
+            branch_new_phys_i : undo_result[arch*PAW +: PAW];
+    end endgenerate
+    initial begin
+        if (ROB_ENTRIES < 2 || (ROB_ENTRIES & (ROB_ENTRIES-1)) != 0 ||
+            PAW < 1 || (IMPL != 0 && IMPL != 1)) begin
+            $display("ERROR: invalid standalone RAT recovery geometry");
+            $finish;
+        end
+    end
+endmodule
