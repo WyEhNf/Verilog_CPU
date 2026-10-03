@@ -1347,6 +1347,13 @@ module rv32_backend_joint #(
         producer_tag_r = 0; producer_phys_r = 0; producer_value_r = 0; producer_addr_r = 0; producer_branch_target_r = 0; producer_store_data_r = 0;
         producer_recovery_index = 0;
         for (producer_index = 0; producer_index < BE_WIDTH; producer_index = producer_index + 1) begin
+            producer_tag_r[producer_index*TAG_WIDTH +: TAG_WIDTH] = alu_exec_tag[producer_index*TAG_WIDTH +: TAG_WIDTH];
+            producer_phys_r[producer_index*PAW +: PAW] = alu_exec_phys[producer_index*PAW +: PAW];
+            producer_value_r[producer_index*32 +: 32] = alu_exec_value[producer_index*32 +: 32];
+            producer_addr_r[producer_index*32 +: 32] = alu_exec_mem_addr[producer_index*32 +: 32];
+            producer_branch_target_r[producer_index*32 +: 32] = alu_exec_branch_target[producer_index*32 +: 32];
+            producer_store_data_r[producer_index*32 +: 32] = alu_exec_store_data[producer_index*32 +: 32];
+            // Payload follows its retained source independently of valid.
             if (alu_exec_valid[producer_index] &&
                 // A redirecting branch is captured into branch_pending and
                 // completed together with ROB recovery on the next edge.  Do
@@ -1357,12 +1364,6 @@ module rv32_backend_joint #(
                 (!alu_exec_is_load[producer_index] || alu_exec_is_store[producer_index])) begin
                 producer_valid_r[producer_index] = 1'b1;
                 producer_target_live_r[producer_index] = 1'b1;
-                producer_tag_r[producer_index*TAG_WIDTH +: TAG_WIDTH] = alu_exec_tag[producer_index*TAG_WIDTH +: TAG_WIDTH];
-                producer_phys_r[producer_index*PAW +: PAW] = alu_exec_phys[producer_index*PAW +: PAW];
-                producer_value_r[producer_index*32 +: 32] = alu_exec_value[producer_index*32 +: 32];
-                producer_addr_r[producer_index*32 +: 32] = alu_exec_mem_addr[producer_index*32 +: 32];
-                producer_branch_target_r[producer_index*32 +: 32] = alu_exec_branch_target[producer_index*32 +: 32];
-                producer_store_data_r[producer_index*32 +: 32] = alu_exec_store_data[producer_index*32 +: 32];
                 producer_rd_we_r[producer_index] = alu_exec_rd_we[producer_index];
                 producer_store_r[producer_index] = alu_exec_is_store[producer_index];
                 producer_branch_r[producer_index] = alu_exec_is_branch[producer_index];
@@ -1371,11 +1372,23 @@ module rv32_backend_joint #(
                 producer_memory_r[producer_index] = alu_exec_is_memory[producer_index];
             end
         end
+        producer_tag_r[MDU_SOURCE*TAG_WIDTH +: TAG_WIDTH]=mdu_completion_tag;
+        producer_phys_r[MDU_SOURCE*PAW +: PAW]=mdu_completion_phys;
+        producer_value_r[MDU_SOURCE*32 +: 32]=mdu_completion_value;
+        producer_tag_r[LSQ_SOURCE*TAG_WIDTH +: TAG_WIDTH]=lsq_load_complete_tag;
+        producer_phys_r[LSQ_SOURCE*PAW +: PAW]=lsq_phys_mem[lsq_load_complete_lsq_tag[3 +: LSQ_SLOT_WIDTH]];
+        producer_value_r[LSQ_SOURCE*32 +: 32]=lsq_load_complete_value;
         if (mdu_completion_valid) begin
-            producer_valid_r[MDU_SOURCE] = 1'b1; producer_target_live_r[MDU_SOURCE] = 1'b1; producer_tag_r[MDU_SOURCE*TAG_WIDTH +: TAG_WIDTH] = mdu_completion_tag; producer_phys_r[MDU_SOURCE*PAW +: PAW] = mdu_completion_phys; producer_value_r[MDU_SOURCE*32 +: 32] = mdu_completion_value; producer_rd_we_r[MDU_SOURCE] = mdu_completion_rd_we;
+            producer_valid_r[MDU_SOURCE]=1'b1;
+            producer_target_live_r[MDU_SOURCE]=1'b1;
+            producer_rd_we_r[MDU_SOURCE]=mdu_completion_rd_we;
         end
         if (lsq_load_complete_valid) begin
-            producer_valid_r[LSQ_SOURCE] = 1'b1; producer_target_live_r[LSQ_SOURCE] = 1'b1; producer_tag_r[LSQ_SOURCE*TAG_WIDTH +: TAG_WIDTH] = lsq_load_complete_tag; producer_phys_r[LSQ_SOURCE*PAW +: PAW] = lsq_phys_mem[lsq_load_complete_lsq_tag[3 +: LSQ_SLOT_WIDTH]]; producer_value_r[LSQ_SOURCE*32 +: 32] = lsq_load_complete_value; producer_rd_we_r[LSQ_SOURCE] = 1'b1; producer_load_r[LSQ_SOURCE] = 1'b1; producer_memory_r[LSQ_SOURCE] = 1'b1;
+            producer_valid_r[LSQ_SOURCE]=1'b1;
+            producer_target_live_r[LSQ_SOURCE]=1'b1;
+            producer_rd_we_r[LSQ_SOURCE]=1'b1;
+            producer_load_r[LSQ_SOURCE]=1'b1;
+            producer_memory_r[LSQ_SOURCE]=1'b1;
         end
         // A long-latency unit may still hold work older than a resolving
         // branch. Keep that work alive, while continuously rejecting stale

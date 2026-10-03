@@ -49,11 +49,26 @@ module rv32_physical_register_file #(
         end
     end
 
+
+    localparam integer READ_DOMAINS=4;
     wire [2*BE_WIDTH*PHYS_ADDR_WIDTH-1:0] read_phys_local;
-    rv32_frequency_control_tree #(.WIDTH(2*BE_WIDTH*PHYS_ADDR_WIDTH),.LEAVES(1)) read_query_tree (
-        .signal_i(read_phys_i),.views_o(read_phys_local));
+    wire [READ_DOMAINS*2*BE_WIDTH*PHYS_ADDR_WIDTH-1:0] read_domain_queries;
+    generate if(READ_MUX_IMPL!=0) begin:g_query_domains
+        wire [(READ_DOMAINS+1)*2*BE_WIDTH*PHYS_ADDR_WIDTH-1:0] queries;
+        rv32_frequency_control_tree #(.WIDTH(2*BE_WIDTH*PHYS_ADDR_WIDTH),.LEAVES(READ_DOMAINS+1)) query_tree (
+            .signal_i(read_phys_i),.views_o(queries));
+        assign read_domain_queries=queries[0 +: READ_DOMAINS*2*BE_WIDTH*PHYS_ADDR_WIDTH];
+        assign read_phys_local=queries[READ_DOMAINS*2*BE_WIDTH*PHYS_ADDR_WIDTH +: 2*BE_WIDTH*PHYS_ADDR_WIDTH];
+    end else begin:g_legacy_query
+        rv32_frequency_control_tree #(.WIDTH(2*BE_WIDTH*PHYS_ADDR_WIDTH),.LEAVES(1)) query_tree (
+            .signal_i(read_phys_i),.views_o(read_phys_local));
+        assign read_domain_queries=0;
+    end endgenerate
     genvar owner_row,owner_lane;
     generate if(LOCAL_VALUE_ROWS!=0) begin:g_local_storage
+        wire [PHYS_REGS-1:0] reset_views;
+        rv32_frequency_control_tree #(.LEAVES(PHYS_REGS)) reset_tree (
+            .signal_i(reset_i),.views_o(reset_views));
         wire [4*BE_WIDTH*32-1:0] write_values;
         wire [4*BE_WIDTH*PHYS_ADDR_WIDTH-1:0] write_addresses,alloc_addresses;
         wire [4*BE_WIDTH-1:0] write_valids,alloc_valids;
@@ -80,7 +95,7 @@ module rv32_physical_register_file #(
                         alloc_addresses[(DOMAIN*BE_WIDTH+owner_lane)*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==owner_row;
                 end
                 rv32_prf_value_row #(.LANES(BE_WIDTH)) contents (
-                    .clk_i(clk_i),.reset_i(reset_i),.alloc_i(|allocations),.write_matches_i(writes),
+                    .clk_i(clk_i),.reset_i(reset_views[owner_row]),.alloc_i(|allocations),.write_matches_i(writes),
                     .write_values_i(write_values[DOMAIN*BE_WIDTH*32 +: BE_WIDTH*32]),
                     .value_o(value[owner_row]),.ready_o(ready[owner_row]));
             end
@@ -92,39 +107,49 @@ module rv32_physical_register_file #(
         assign ready=ready_legacy;
     end endgenerate
 
-    // Decode each read word once and select data in parallel. Preserve zero
-    // register, out-of-range behavior, and last-lane write bypass priority.
-    genvar rp, row, wl;
-    generate if (READ_MUX_IMPL != 0) begin : g_parallel_read
-        for (rp = 0; rp < 2*BE_WIDTH; rp = rp + 1) begin : g_port
-            wire [PHYS_ADDR_WIDTH-1:0] address = read_phys_local[rp*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
-            wire legal = address != 0 && address < PHYS_REGS;
-            wire [PHYS_REGS-1:0] word_select;
-            wire [BE_WIDTH-1:0] bypass_match, bypass_grant;
-            for (row = 0; row < PHYS_REGS; row = row + 1) begin : g_word
-                assign word_select[row] = (row != 0) && address == row;
-            end
-            for (wl = 0; wl < BE_WIDTH; wl = wl + 1) begin : g_bypass
-                assign bypass_match[wl] = legal && write_valid_i[wl] &&
-                    write_phys_i[wl*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH] == address;
-                if (wl == BE_WIDTH-1) assign bypass_grant[wl] = bypass_match[wl];
-                else assign bypass_grant[wl] = bypass_match[wl] && !(|bypass_match[BE_WIDTH-1:wl+1]);
-            end
-            reg [31:0] stored_value, bypass_value;
-            reg stored_ready;
-            integer read_word, bypass_index;
-            always @* begin
-                stored_value = 0;
-                stored_ready = address == 0;
-                bypass_value = 0;
-                for (read_word = 1; read_word < PHYS_REGS; read_word = read_word + 1) begin
-                    stored_value = stored_value | ({32{word_select[read_word]}} & value[read_word]);
-                    stored_ready = stored_ready | (word_select[read_word] && ready[read_word]);
+
+    // Four query domains decode physical words independently. Data and ready
+    // use separate bounded select leaves; the reductions have explicit depth.
+    localparam integer READ_ROWS=(PHYS_REGS<=1)?1:(1<<$clog2(PHYS_REGS));
+    genvar rp,row,wl,read_node;
+    generate if(READ_MUX_IMPL!=0) begin:g_parallel_read
+        for(rp=0;rp<2*BE_WIDTH;rp=rp+1) begin:g_port
+            wire [PHYS_ADDR_WIDTH-1:0] address=read_phys_local[rp*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
+            wire legal=address!=0 && address<PHYS_REGS;
+            wire [31:0] stored_tree [1:2*READ_ROWS-1];
+            wire ready_tree [1:2*READ_ROWS-1];
+            wire [BE_WIDTH-1:0] bypass_match;
+            wire [31:0] bypass_value;
+            wire bypass_write,bypass_select;
+            for(row=0;row<READ_ROWS;row=row+1) begin:g_word
+                if(row>0 && row<PHYS_REGS) begin:g_present
+                    localparam integer DOMAIN=(row*READ_DOMAINS)/PHYS_REGS;
+                    wire selected=read_domain_queries[(DOMAIN*2*BE_WIDTH+rp)*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==row;
+                    wire [1:0] select_views;
+                    rv32_frequency_control_tree #(.LEAVES(2)) selection_tree (
+                        .signal_i(selected),.views_o(select_views));
+                    assign stored_tree[READ_ROWS+row]={32{select_views[0]}} & value[row];
+                    assign ready_tree[READ_ROWS+row]=select_views[1] && ready[row];
+                end else begin:g_zero_or_padding
+                    assign stored_tree[READ_ROWS+row]=0;
+                    assign ready_tree[READ_ROWS+row]=0;
                 end
-                for (bypass_index = 0; bypass_index < BE_WIDTH; bypass_index = bypass_index + 1)
-                    bypass_value = bypass_value | ({32{bypass_grant[bypass_index]}} & write_data_i[bypass_index*32 +: 32]);
-                read_data_o[rp*32 +: 32] = (|bypass_match) ? bypass_value : stored_value;
-                read_ready_o[rp] = stored_ready || (|bypass_match);
+            end
+            for(read_node=1;read_node<READ_ROWS;read_node=read_node+1) begin:g_reduce
+                assign stored_tree[read_node]=stored_tree[2*read_node] | stored_tree[2*read_node+1];
+                assign ready_tree[read_node]=ready_tree[2*read_node] | ready_tree[2*read_node+1];
+            end
+            for(wl=0;wl<BE_WIDTH;wl=wl+1) begin:g_bypass
+                assign bypass_match[wl]=legal && write_valid_i[wl] &&
+                    write_phys_i[wl*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==address;
+            end
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH)) bypass_selector (
+                .events_i(bypass_match),.values_i(write_data_i),.write_o(bypass_write),.value_o(bypass_value));
+            rv32_frequency_control_tree #(.LEAVES(1)) bypass_choice_tree (
+                .signal_i(bypass_write),.views_o(bypass_select));
+            always @* begin
+                read_data_o[rp*32 +: 32]=bypass_select?bypass_value:stored_tree[1];
+                read_ready_o[rp]=(address==0) || ready_tree[1] || bypass_write;
             end
         end
     end else begin : g_original_read

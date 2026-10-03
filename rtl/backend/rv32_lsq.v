@@ -628,24 +628,10 @@ module rv32_lsq #(
             end
         end
 
-        // ROB presents stores in architectural order.  Match by ROB tag
-        // instead of requiring the LSQ entry itself to be at the queue head:
-        // older committed stores may still be waiting for the cache.
-        store_commit_ready_o = 1'b0;
-        commit_slot_select = 0;
-        commit_slot_found = 1'b0;
-        if (!flush_i && occupancy_reg != 0) begin
-            for (scan = 0; scan < LSQ_ENTRIES; scan = scan + 1) begin
-                if (!commit_slot_found && valid_mem[scan] && store_mem[scan] &&
-                    addr_ready_mem[scan] && data_ready_mem[scan] &&
-                    !store_commit_mem[scan] &&
-                    (rob_tag_mem[scan] == store_commit_rob_tag_i)) begin
-                    store_commit_ready_o = 1'b1;
-                    commit_slot_select = scan;
-                    commit_slot_found = 1'b1;
-                end
-            end
-        end
+        // Preserve lowest physical-slot matching priority, with a balanced selector.
+        commit_slot_found=!flush_i && occupancy_reg!=0 && commit_valid_tree[1];
+        store_commit_ready_o=commit_slot_found;
+        commit_slot_select=commit_slot_found?commit_slot_tree[1]:0;
 
         // The eligibility bits above feed the balanced oldest-first tree.
         candidate_found = (REQUEST_PIPELINE!=0)?selection_live:pick_valid[1];
@@ -713,50 +699,90 @@ module rv32_lsq #(
         response_fire = dcache_resp_valid_i && response_match;
     end
 
+
+    // Load reporting follows queue age; store admission preserves the former
+    // lowest physical-slot priority. Neither selection is a serial scan.
+    localparam integer REPORT_ROWS=(LSQ_ENTRIES<=1)?1:(1<<$clog2(LSQ_ENTRIES));
+    localparam integer REPORT_WIDTH=ROB_TAG_WIDTH+TAG_WIDTH+33;
+    localparam integer ACK_WIDTH=ROB_TAG_WIDTH+TAG_WIDTH+1;
+    localparam integer REPORT_WORDS=(REPORT_WIDTH+31)/32;
+    localparam integer ACK_WORDS=(ACK_WIDTH+31)/32;
+    wire report_valid_tree [1:2*REPORT_ROWS-1];
+    wire [SLOT_WIDTH-1:0] report_slot_tree [1:2*REPORT_ROWS-1],report_age_tree [1:2*REPORT_ROWS-1];
+    wire commit_valid_tree [1:2*REPORT_ROWS-1];
+    wire [SLOT_WIDTH-1:0] commit_slot_tree [1:2*REPORT_ROWS-1];
+    wire [REPORT_WIDTH-1:0] report_payload_tree [1:2*REPORT_ROWS-1];
+    wire [ACK_WIDTH-1:0] ack_payload_tree [1:2*REPORT_ROWS-1];
+    wire ack_valid_tree [1:2*REPORT_ROWS-1];
+    genvar report_row,report_word,report_node;
+    generate
+        for(report_row=0;report_row<REPORT_ROWS;report_row=report_row+1) begin:g_report_row
+            if(report_row<LSQ_ENTRIES) begin:g_present
+                wire [REPORT_WORDS-1:0] report_select;
+                wire [ACK_WORDS-1:0] ack_select;
+                wire [REPORT_WIDTH-1:0] report_payload={complete_error_mem[report_row],complete_value_mem[report_row],
+                    make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
+                wire [ACK_WIDTH-1:0] ack_payload={store_ack_error_mem[report_row],
+                    make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
+                assign report_valid_tree[REPORT_ROWS+report_row]=entry_age[report_row]<occupancy_reg &&
+                    valid_mem[report_row] && load_mem[report_row] && complete_mem[report_row] && !load_reported_mem[report_row];
+                assign report_slot_tree[REPORT_ROWS+report_row]=report_row;
+                assign report_age_tree[REPORT_ROWS+report_row]=entry_age[report_row];
+                assign commit_valid_tree[REPORT_ROWS+report_row]=valid_mem[report_row] && store_mem[report_row] &&
+                    addr_ready_mem[report_row] && data_ready_mem[report_row] && !store_commit_mem[report_row] &&
+                    rob_tag_mem[report_row]==store_commit_rob_tag_i;
+                assign commit_slot_tree[REPORT_ROWS+report_row]=report_row;
+                assign ack_valid_tree[REPORT_ROWS+report_row]=occupancy_reg!=0 && head_reg==report_row &&
+                    valid_mem[report_row] && store_mem[report_row] && store_ack_mem[report_row];
+                rv32_frequency_control_tree #(.LEAVES(REPORT_WORDS)) report_selection_tree (
+                    .signal_i(report_valid_tree[1] && report_slot_tree[1]==report_row),.views_o(report_select));
+                rv32_frequency_control_tree #(.LEAVES(ACK_WORDS)) ack_selection_tree (
+                    .signal_i(ack_valid_tree[REPORT_ROWS+report_row]),.views_o(ack_select));
+                for(report_word=0;report_word<REPORT_WORDS;report_word=report_word+1) begin:g_result_word
+                    localparam integer LOW=report_word*32;
+                    localparam integer BITS=REPORT_WIDTH-LOW>=32?32:REPORT_WIDTH-LOW;
+                    assign report_payload_tree[REPORT_ROWS+report_row][LOW +: BITS]=
+                        {BITS{report_select[report_word]}} & report_payload[LOW +: BITS];
+                end
+                for(report_word=0;report_word<ACK_WORDS;report_word=report_word+1) begin:g_ack_word
+                    localparam integer LOW=report_word*32;
+                    localparam integer BITS=ACK_WIDTH-LOW>=32?32:ACK_WIDTH-LOW;
+                    assign ack_payload_tree[REPORT_ROWS+report_row][LOW +: BITS]=
+                        {BITS{ack_select[report_word]}} & ack_payload[LOW +: BITS];
+                end
+            end else begin:g_padding
+                assign report_valid_tree[REPORT_ROWS+report_row]=0;
+                assign report_slot_tree[REPORT_ROWS+report_row]=0;
+                assign report_age_tree[REPORT_ROWS+report_row]=0;
+                assign commit_valid_tree[REPORT_ROWS+report_row]=0;
+                assign commit_slot_tree[REPORT_ROWS+report_row]=0;
+                assign report_payload_tree[REPORT_ROWS+report_row]=0;
+                assign ack_payload_tree[REPORT_ROWS+report_row]=0;
+                assign ack_valid_tree[REPORT_ROWS+report_row]=0;
+            end
+        end
+        for(report_node=1;report_node<REPORT_ROWS;report_node=report_node+1) begin:g_report_merge
+            wire choose_left=report_valid_tree[2*report_node] &&
+                (!report_valid_tree[2*report_node+1] || report_age_tree[2*report_node]<=report_age_tree[2*report_node+1]);
+            assign report_valid_tree[report_node]=report_valid_tree[2*report_node] || report_valid_tree[2*report_node+1];
+            assign report_slot_tree[report_node]=choose_left?report_slot_tree[2*report_node]:report_slot_tree[2*report_node+1];
+            assign report_age_tree[report_node]=choose_left?report_age_tree[2*report_node]:report_age_tree[2*report_node+1];
+            assign commit_valid_tree[report_node]=commit_valid_tree[2*report_node] || commit_valid_tree[2*report_node+1];
+            assign commit_slot_tree[report_node]=commit_valid_tree[2*report_node]?
+                commit_slot_tree[2*report_node]:commit_slot_tree[2*report_node+1];
+            assign report_payload_tree[report_node]=report_payload_tree[2*report_node] | report_payload_tree[2*report_node+1];
+            assign ack_payload_tree[report_node]=ack_payload_tree[2*report_node] | ack_payload_tree[2*report_node+1];
+            assign ack_valid_tree[report_node]=ack_valid_tree[2*report_node] || ack_valid_tree[2*report_node+1];
+        end
+    endgenerate
+
     always @* begin
-        load_complete_valid_o = 1'b0;
-        load_complete_rob_tag_o = {ROB_TAG_WIDTH{1'b0}};
-        load_complete_lsq_tag_o = {TAG_WIDTH{1'b0}};
-        load_complete_value_o = 32'b0;
-        load_complete_error_o = 1'b0;
-        store_ack_valid_o = 1'b0;
-        store_ack_rob_tag_o = {ROB_TAG_WIDTH{1'b0}};
-        store_ack_lsq_tag_o = {TAG_WIDTH{1'b0}};
-        store_ack_error_o = 1'b0;
-        complete_slot_found = 1'b0;
-        complete_slot_select = head_reg;
-        // Loads already obeyed all older-store hazards when they issued.
-        // Report the oldest completed, not-yet-reported load even when an
-        // older committed store is still occupying the LSQ head.
-        for (complete_scan = 0; complete_scan < LSQ_ENTRIES;
-             complete_scan = complete_scan + 1) begin
-            complete_index = head_reg + complete_scan;
-            if (complete_index >= LSQ_ENTRIES)
-                complete_index = complete_index - LSQ_ENTRIES;
-            if (!complete_slot_found && (complete_scan < occupancy_reg) &&
-                valid_mem[complete_index] && load_mem[complete_index] &&
-                complete_mem[complete_index] &&
-                !load_reported_mem[complete_index]) begin
-                complete_slot_found = 1'b1;
-                complete_slot_select = complete_index;
-            end
-        end
-        if (complete_slot_found) begin
-            load_complete_valid_o = 1'b1;
-            load_complete_rob_tag_o = rob_tag_mem[complete_slot_select];
-            load_complete_lsq_tag_o = make_lsq_tag(
-                complete_slot_select, generation_mem[complete_slot_select]);
-            load_complete_value_o = complete_value_mem[complete_slot_select];
-            load_complete_error_o = complete_error_mem[complete_slot_select];
-        end
-        if (occupancy_reg != 0 && valid_mem[head_reg]) begin
-            if (store_mem[head_reg] && store_ack_mem[head_reg]) begin
-                store_ack_valid_o = 1'b1;
-                store_ack_rob_tag_o = rob_tag_mem[head_reg];
-                store_ack_lsq_tag_o = make_lsq_tag(head_reg, generation_mem[head_reg]);
-                store_ack_error_o = store_ack_error_mem[head_reg];
-            end
-        end
+        complete_slot_found=report_valid_tree[1];
+        complete_slot_select=complete_slot_found?report_slot_tree[1]:head_reg;
+        load_complete_valid_o=complete_slot_found;
+        {load_complete_error_o,load_complete_value_o,load_complete_lsq_tag_o,load_complete_rob_tag_o}=report_payload_tree[1];
+        store_ack_valid_o=ack_valid_tree[1];
+        {store_ack_error_o,store_ack_lsq_tag_o,store_ack_rob_tag_o}=ack_payload_tree[1];
     end
 
 
