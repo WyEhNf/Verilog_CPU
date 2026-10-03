@@ -14,6 +14,7 @@ module rv32_reservation_station #(
     parameter integer METADATA_WIDTH = 1,
     parameter integer WAKE_MUX_IMPL = 0,
     parameter integer ALLOC_STATIC_WRITE = 0,
+    parameter integer AGE_ORDER_MATRIX = 0,
     parameter integer SLOT_WIDTH = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES),
     parameter integer AGE_WIDTH = 32
 ) (
@@ -110,6 +111,7 @@ module rv32_reservation_station #(
     reg alloc_found;
     wire [ENTRIES-1:0] ready_candidates;
     wire [COUNT_WIDTH-1:0] ready_rank [0:ENTRIES-1];
+    wire [ENTRIES-1:0] cached_age_precedes [0:ENTRIES-1];
 
     assign occupancy_o = occupancy_reg;
     assign alloc_ready_o = (alloc_count_o != 0) && !flush_valid_i;
@@ -142,8 +144,10 @@ module rv32_reservation_station #(
             wire [COUNT_WIDTH-1:0] count_tree [1:2*RANK_LEAVES-1];
             for (rank_other = 0; rank_other < RANK_LEAVES; rank_other = rank_other + 1) begin : g_leaf
                 if (rank_other < ENTRIES && rank_other != rank_slot) begin : g_compare
-                    wire older = (age_mem[rank_other] < age_mem[rank_slot]) ||
-                        ((rank_other < rank_slot) && (age_mem[rank_other] == age_mem[rank_slot]));
+                    wire older = ((AGE_ORDER_MATRIX != 0) && (ALLOC_STATIC_WRITE != 0)) ?
+                        cached_age_precedes[rank_other][rank_slot] :
+                        ((age_mem[rank_other] < age_mem[rank_slot]) ||
+                         ((rank_other < rank_slot) && (age_mem[rank_other] == age_mem[rank_slot])));
                     assign count_tree[RANK_LEAVES+rank_other] =
                         ready_candidates[rank_other] && older;
                 end else begin : g_zero
@@ -216,6 +220,7 @@ module rv32_reservation_station #(
     wire [ALLOC_PAYLOAD_WIDTH-1:0] alloc_lane_payload [0:BE_WIDTH-1];
     wire [ALLOC_PAYLOAD_WIDTH-1:0] alloc_row_payload [0:ENTRIES-1];
     wire [ENTRIES-1:0] alloc_row_write;
+    wire [BE_WIDTH-1:0] alloc_row_grants [0:ENTRIES-1];
     integer pick_lane, pick_search, pick_cursor, pick_slot;
     integer alloc_static_row;
     reg pick_found;
@@ -268,8 +273,65 @@ module rv32_reservation_station #(
                 for (mux_lane = 0; mux_lane < BE_WIDTH; mux_lane = mux_lane + 1)
                     payload = payload | ({ALLOC_PAYLOAD_WIDTH{grants[mux_lane]}} & alloc_lane_payload[mux_lane]);
             end
+            assign alloc_row_grants[ar] = grants;
             assign alloc_row_write[ar] = |allocation_match_bits;
             assign alloc_row_payload[ar] = payload;
+        end
+    end endgenerate
+
+    // Cache the exact unsigned numeric comparison, including age-counter
+    // wrap and equal-age slot tie breaks. Only allocation changes an age;
+    // flush and issue preserve both age words and their derived relation.
+    // Shared new-age/old-age comparisons are computed once per lane/row.
+    genvar age_lane, age_row, age_peer, pair_low, pair_high;
+    generate if ((AGE_ORDER_MATRIX != 0) && (ALLOC_STATIC_WRITE != 0)) begin : g_age_order_matrix
+        wire [AGE_WIDTH-1:0] new_age [0:BE_WIDTH-1];
+        wire [BE_WIDTH-1:0] new_le_old [0:ENTRIES-1];
+        wire [BE_WIDTH-1:0] new_lt_old [0:ENTRIES-1];
+        wire [BE_WIDTH-1:0] new_le_new [0:BE_WIDTH-1];
+        for (age_lane = 0; age_lane < BE_WIDTH; age_lane = age_lane + 1) begin : g_new_age
+            assign new_age[age_lane] = age_counter + age_lane;
+            for (age_row = 0; age_row < ENTRIES; age_row = age_row + 1) begin : g_old_age
+                assign new_le_old[age_row][age_lane] = new_age[age_lane] <= age_mem[age_row];
+                assign new_lt_old[age_row][age_lane] = new_age[age_lane] < age_mem[age_row];
+            end
+            for (age_peer = 0; age_peer < BE_WIDTH; age_peer = age_peer + 1) begin : g_peer_age
+                assign new_le_new[age_lane][age_peer] = new_age[age_lane] <= new_age[age_peer];
+            end
+        end
+        for (pair_low = 0; pair_low < ENTRIES; pair_low = pair_low + 1) begin : g_low
+            assign cached_age_precedes[pair_low][pair_low] = 1'b0;
+            for (pair_high = pair_low + 1; pair_high < ENTRIES; pair_high = pair_high + 1) begin : g_high
+                reg low_precedes_high;
+                reg left_new_order, right_new_order, both_new_order;
+                integer left_lane, right_lane;
+                always @* begin
+                    left_new_order = 1'b0;
+                    right_new_order = 1'b0;
+                    both_new_order = 1'b0;
+                    for (left_lane = 0; left_lane < BE_WIDTH; left_lane = left_lane + 1) begin
+                        left_new_order = left_new_order |
+                            (alloc_row_grants[pair_low][left_lane] && new_le_old[pair_high][left_lane]);
+                        right_new_order = right_new_order |
+                            (alloc_row_grants[pair_high][left_lane] && !new_lt_old[pair_low][left_lane]);
+                        for (right_lane = 0; right_lane < BE_WIDTH; right_lane = right_lane + 1)
+                            both_new_order = both_new_order | (alloc_row_grants[pair_low][left_lane] &&
+                                alloc_row_grants[pair_high][right_lane] && new_le_new[left_lane][right_lane]);
+                    end
+                end
+                always @(posedge clk_i) begin
+                    if (reset_i)
+                        low_precedes_high <= 1'b1;
+                    else if (!flush_valid_i) begin
+                        if (alloc_row_write[pair_low])
+                            low_precedes_high <= alloc_row_write[pair_high] ? both_new_order : left_new_order;
+                        else if (alloc_row_write[pair_high])
+                            low_precedes_high <= right_new_order;
+                    end
+                end
+                assign cached_age_precedes[pair_low][pair_high] = low_precedes_high;
+                assign cached_age_precedes[pair_high][pair_low] = !low_precedes_high;
+            end
         end
     end endgenerate
 
