@@ -418,6 +418,25 @@ module rv32_icache_nonblocking #(
                               (!response_target_found ||
                                (!response_needs_slot || response_slot_free));
 
+    // Preserve the old NBA priority: a live memory response overwrites
+    // copying the previous SRAM response. Invalid payload need not reset.
+    wire response_promoted=request_fire && request_match_found && request_match_index==response_index;
+    wire response_memory_write=!reset_i && mem_resp_valid_i && mem_resp_ready_o && response_target_found &&
+        ((response_promoted && lookup_req_epoch==current_epoch_i) ||
+         (!response_promoted && !mshr_prefetch[response_index] && mshr_demand_epoch[response_index]==current_epoch_i));
+    wire response_sram_copy=!reset_i && resp_from_sram && resp_valid_reg;
+    wire [3:0] response_data_write,response_data_memory;
+    rv32_frequency_control_tree #(.LEAVES(4)) response_write_tree (
+        .signal_i(response_memory_write || response_sram_copy),.views_o(response_data_write));
+    rv32_frequency_control_tree #(.LEAVES(4)) response_select_tree (
+        .signal_i(response_memory_write),.views_o(response_data_memory));
+    genvar response_word;
+    generate for(response_word=0;response_word<4;response_word=response_word+1) begin:g_response_data
+        always @(posedge clk_i) if(response_data_write[response_word])
+            resp_data_reg[response_word*32 +: 32]<=response_data_memory[response_word]?
+                mem_resp_data_i[response_word*32 +: 32]:data_rdata[response_word*32 +: 32];
+    end endgenerate
+
     integer reset_index;
     integer prefetch_count;
     always @(posedge clk_i) begin
@@ -426,7 +445,6 @@ module rv32_icache_nonblocking #(
             resp_from_sram <= 1'b0;
             resp_pc_reg <= 32'd0;
             resp_line_reg <= 32'd0;
-            resp_data_reg <= 128'd0;
             resp_epoch_reg <= {EPOCH_WIDTH{1'b0}};
             resp_error_reg <= 1'b0;
             prefetch_active <= 1'b0;
@@ -458,8 +476,6 @@ module rv32_icache_nonblocking #(
             end
         end else begin
             resp_from_sram <= 1'b0;
-            if (resp_from_sram && resp_valid_reg)
-                resp_data_reg <= data_rdata;
             event_request_o <= request_fire;
             event_hit_o <= 1'b0;
             event_miss_o <= 1'b0;
@@ -596,7 +612,6 @@ module rv32_icache_nonblocking #(
                         resp_valid_reg <= 1'b1;
                         resp_pc_reg <= lookup_req_pc;
                         resp_line_reg <= mem_resp_line_addr_i;
-                        resp_data_reg <= mem_resp_data_i;
                         resp_epoch_reg <= lookup_req_epoch;
                         resp_error_reg <= mem_resp_error_i || !response_matches;
                     end
@@ -605,7 +620,6 @@ module rv32_icache_nonblocking #(
                     resp_valid_reg <= 1'b1;
                     resp_pc_reg <= mshr_pc[response_index];
                     resp_line_reg <= mshr_line[response_index];
-                    resp_data_reg <= mem_resp_data_i;
                     resp_epoch_reg <= mshr_demand_epoch[response_index];
                     resp_error_reg <= mem_resp_error_i || !response_matches;
                 end
