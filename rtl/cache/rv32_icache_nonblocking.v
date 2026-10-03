@@ -7,6 +7,11 @@
 module rv32_icache_nonblocking #(
     parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH,
     parameter integer MSHR_ENTRIES = 4,
+    parameter integer MSHR_STATE_BANKS = 0,
+    parameter integer MSHR_STATIC_WRITES = 0,
+    parameter integer TAG_MATCH_PARALLEL = 0,
+    parameter integer LOCAL_RESPONSE_READY = 0,
+    parameter integer REFILL_PROTECT_PENDING_HIT = 1,
     parameter integer NEXT_LINE_PREFETCH = 1,
     parameter integer PREFETCH_DISTANCE = 3,
     parameter integer CACHE_LINES = 64,
@@ -52,7 +57,6 @@ module rv32_icache_nonblocking #(
 );
     reg [CACHE_LINES-1:0] valid_bits;
     reg [CACHE_TAG_WIDTH-1:0] tag_mem [0:CACHE_LINES-1];
-    reg [127:0] data_mem [0:CACHE_LINES-1];
     reg lru_mem [0:CACHE_SETS-1];
 
     function [CACHE_ENTRY_WIDTH-1:0] cache_entry;
@@ -76,6 +80,10 @@ module rv32_icache_nonblocking #(
     reg [31:0] resp_pc_reg;
     reg [31:0] resp_line_reg;
     reg [127:0] resp_data_reg;
+    // A synchronous hit and its metadata become valid after the same edge.
+    // Capture the macro result before idle/write makes rdata undefined.
+    reg resp_from_sram;
+    wire [127:0] data_rdata;
     reg [EPOCH_WIDTH-1:0] resp_epoch_reg;
     reg resp_error_reg;
 
@@ -92,10 +100,14 @@ module rv32_icache_nonblocking #(
     wire [CACHE_TAG_WIDTH-1:0] request_tag = if_req_pc_i[31:CACHE_SET_WIDTH+4];
     wire [CACHE_ENTRY_WIDTH-1:0] request_way0 = cache_entry(request_set, 0);
     wire [CACHE_ENTRY_WIDTH-1:0] request_way1 = cache_entry(request_set, 1);
-    wire request_hit_way0 = valid_bits[request_way0] &&
-                            (tag_mem[request_way0] == request_tag);
-    wire request_hit_way1 = (CACHE_WAYS == 2) && valid_bits[request_way1] &&
-                            (tag_mem[request_way1] == request_tag);
+    wire [CACHE_LINES-1:0] demand_match_way0, demand_match_way1;
+    wire [CACHE_LINES-1:0] prefetch_match_rows, control_match_rows;
+    wire request_hit_way0 = (TAG_MATCH_PARALLEL != 0) ? (|demand_match_way0) :
+                            (valid_bits[request_way0] &&
+                             (tag_mem[request_way0] == request_tag));
+    wire request_hit_way1 = (CACHE_WAYS == 2) && ((TAG_MATCH_PARALLEL != 0) ?
+                            (|demand_match_way1) : (valid_bits[request_way1] &&
+                             (tag_mem[request_way1] == request_tag)));
     wire request_hit = request_hit_way0 || request_hit_way1;
     wire [CACHE_ENTRY_WIDTH-1:0] request_entry =
         request_hit_way1 ? request_way1 : request_way0;
@@ -250,14 +262,19 @@ module rv32_icache_nonblocking #(
         if (control_target_valid) begin
             control_target_present = request_fire &&
                 (request_line == {control_target[31:4], 4'b0});
-            for (control_way = 0; control_way < CACHE_WAYS;
-                 control_way = control_way + 1)
-                if (valid_bits[cache_entry(
-                        control_target[CACHE_SET_WIDTH+3:4], control_way)] &&
-                    (tag_mem[cache_entry(
-                        control_target[CACHE_SET_WIDTH+3:4], control_way)] ==
-                     control_target[31:CACHE_SET_WIDTH+4]))
+            if (TAG_MATCH_PARALLEL != 0) begin
+                if (|control_match_rows)
                     control_target_present = 1'b1;
+            end else begin
+                for (control_way = 0; control_way < CACHE_WAYS;
+                     control_way = control_way + 1)
+                    if (valid_bits[cache_entry(
+                            control_target[CACHE_SET_WIDTH+3:4], control_way)] &&
+                        (tag_mem[cache_entry(
+                            control_target[CACHE_SET_WIDTH+3:4], control_way)] ==
+                         control_target[31:CACHE_SET_WIDTH+4]))
+                        control_target_present = 1'b1;
+            end
             for (control_check = 0; control_check < MSHR_ENTRIES;
                  control_check = control_check + 1)
                 if (mshr_valid[control_check] &&
@@ -282,11 +299,35 @@ module rv32_icache_nonblocking #(
         prefetch_next_line[31:CACHE_SET_WIDTH+4];
     wire [CACHE_ENTRY_WIDTH-1:0] prefetch_way0 = cache_entry(prefetch_set, 0);
     wire [CACHE_ENTRY_WIDTH-1:0] prefetch_way1 = cache_entry(prefetch_set, 1);
-    wire prefetch_line_resident =
-        (valid_bits[prefetch_way0] &&
-         (tag_mem[prefetch_way0] == prefetch_tag)) ||
-        ((CACHE_WAYS == 2) && valid_bits[prefetch_way1] &&
-         (tag_mem[prefetch_way1] == prefetch_tag));
+    // Each row owns a fixed stored tag. Query indices qualify a one-bit
+    // match instead of steering every stored tag bit through a large mux.
+    // This changes only combinational layout, with no additional state.
+    genvar match_row;
+    generate for (match_row=0; match_row<CACHE_LINES; match_row=match_row+1) begin:g_match_row
+        if (TAG_MATCH_PARALLEL != 0) begin:g_parallel
+            wire demand_hit = valid_bits[match_row] &&
+                (request_set == (match_row / CACHE_WAYS)) &&
+                (tag_mem[match_row] == request_tag);
+            assign demand_match_way0[match_row] = (match_row % CACHE_WAYS == 0) && demand_hit;
+            assign demand_match_way1[match_row] = (match_row % CACHE_WAYS == 1) && demand_hit;
+            assign prefetch_match_rows[match_row] = valid_bits[match_row] &&
+                (prefetch_set == (match_row / CACHE_WAYS)) &&
+                (tag_mem[match_row] == prefetch_tag);
+            assign control_match_rows[match_row] = valid_bits[match_row] &&
+                (control_target[CACHE_SET_WIDTH+3:4] == (match_row / CACHE_WAYS)) &&
+                (tag_mem[match_row] == control_target[31:CACHE_SET_WIDTH+4]);
+        end else begin:g_disabled
+            assign demand_match_way0[match_row] = 1'b0;
+            assign demand_match_way1[match_row] = 1'b0;
+            assign prefetch_match_rows[match_row] = 1'b0;
+            assign control_match_rows[match_row] = 1'b0;
+        end
+    end endgenerate
+    wire prefetch_line_resident = (TAG_MATCH_PARALLEL != 0) ? (|prefetch_match_rows) :
+        ((valid_bits[prefetch_way0] &&
+          (tag_mem[prefetch_way0] == prefetch_tag)) ||
+         ((CACHE_WAYS == 2) && valid_bits[prefetch_way1] &&
+          (tag_mem[prefetch_way1] == prefetch_tag)));
     wire prefetch_step = prefetch_active && (prefetch_remaining > 0) &&
                          !request_allocates && !stream_reset &&
                          (prefetch_line_resident || prefetch_match_found ||
@@ -299,7 +340,9 @@ module rv32_icache_nonblocking #(
         mem_resp_line_addr_i[CACHE_SET_WIDTH+3:4];
     wire [CACHE_ENTRY_WIDTH-1:0] refill_way0 = cache_entry(refill_set, 0);
     wire [CACHE_ENTRY_WIDTH-1:0] refill_way1 = cache_entry(refill_set, 1);
-    wire refill_conflicts_with_hit = request_fire && request_hit &&
+    // Protect a pending hit even when a refill owns the single SRAM port.
+    wire refill_conflicts_with_hit = (REFILL_PROTECT_PENDING_HIT != 0) &&
+                                     if_req_valid_i && request_hit &&
                                      (request_set == refill_set);
     wire [CACHE_ENTRY_WIDTH-1:0] refill_entry =
                               (CACHE_WAYS == 1) ? refill_way0 :
@@ -309,13 +352,28 @@ module rv32_icache_nonblocking #(
                                 cache_entry(refill_set, !request_entry[0]) :
                                 cache_entry(refill_set, lru_mem[refill_set]))));
 
+    // Do not derive arbitration from mem_resp_ready_o: response-slot logic
+    // itself uses request_fire for same-cycle prefetch promotion.
+    wire refill_array_candidate = mem_resp_valid_i && response_target_found &&
+                                   response_matches && !mem_resp_error_i;
+    wire refill_array_write = !reset_i && refill_array_candidate && mem_resp_ready_o;
+    wire hit_array_read = request_fire && request_hit &&
+                          (if_req_epoch_i == current_epoch_i);
+    sram_fakeram #(.DEPTH(CACHE_LINES), .WIDTH(128), .WRITE_GRANULARITY(128)) data_array (
+        .clk(clk_i), .en(!reset_i && (refill_array_write || hit_array_read)),
+        .we(refill_array_write), .wmask(1'b1),
+        .addr(refill_array_write ? refill_entry : request_entry),
+        .wdata(mem_resp_data_i), .rdata(data_rdata)
+    );
+
     assign if_req_ready_o = !reset_i && response_slot_free &&
+                            !(refill_array_candidate && request_hit) &&
                             !request_would_conflict &&
                             (request_hit || request_match_found || free_found);
     assign if_resp_valid_o = response_live;
     assign if_resp_pc_o = resp_pc_reg;
     assign if_resp_line_addr_o = resp_line_reg;
-    assign if_resp_line_data_o = resp_data_reg;
+    assign if_resp_line_data_o = resp_from_sram ? data_rdata : resp_data_reg;
     assign if_resp_epoch_o = resp_epoch_reg;
     assign if_resp_error_o = resp_error_reg;
 
@@ -325,14 +383,22 @@ module rv32_icache_nonblocking #(
         ((send_index << EPOCH_WIDTH) | mshr_txn_epoch[send_index]) : 8'd0;
     // Responses from a cancelled epoch have no live MSHR.  Consume and drop
     // them so a stale transaction cannot block the memory response channel.
-    assign mem_resp_ready_o = !response_target_found ||
-                              (!response_needs_slot || response_slot_free);
+    // request_fire implies response_slot_free through if_req_ready_o.
+    // With no response slot, same-cycle promotion cannot be accepted; only
+    // the demand already stored in the MSHR can require an output slot.
+    assign mem_resp_ready_o = (LOCAL_RESPONSE_READY != 0) ?
+                              (response_slot_free || !response_target_found ||
+                               mshr_prefetch[response_index] ||
+                               (mshr_demand_epoch[response_index] != current_epoch_i)) :
+                              (!response_target_found ||
+                               (!response_needs_slot || response_slot_free));
 
     integer reset_index;
     integer prefetch_count;
     always @(posedge clk_i) begin
         if (reset_i) begin
             resp_valid_reg <= 1'b0;
+            resp_from_sram <= 1'b0;
             resp_pc_reg <= 32'd0;
             resp_line_reg <= 32'd0;
             resp_data_reg <= 128'd0;
@@ -354,16 +420,21 @@ module rv32_icache_nonblocking #(
             for (reset_index = 0; reset_index < CACHE_SETS; reset_index = reset_index + 1)
                 lru_mem[reset_index] <= 1'b0;
             for (reset_index = 0; reset_index < MSHR_ENTRIES; reset_index = reset_index + 1) begin
-                mshr_valid[reset_index] <= 1'b0;
-                mshr_sent[reset_index] <= 1'b0;
-                mshr_prefetch[reset_index] <= 1'b0;
-                mshr_control_prefetch[reset_index] <= 1'b0;
-                mshr_pc[reset_index] <= 32'd0;
-                mshr_line[reset_index] <= 32'd0;
-                mshr_demand_epoch[reset_index] <= {EPOCH_WIDTH{1'b0}};
-                mshr_txn_epoch[reset_index] <= {EPOCH_WIDTH{1'b0}};
+                if (MSHR_STATIC_WRITES == 0) begin
+                    mshr_valid[reset_index] <= 1'b0;
+                    mshr_sent[reset_index] <= 1'b0;
+                    mshr_prefetch[reset_index] <= 1'b0;
+                    mshr_control_prefetch[reset_index] <= 1'b0;
+                    mshr_pc[reset_index] <= 32'd0;
+                    mshr_line[reset_index] <= 32'd0;
+                    mshr_demand_epoch[reset_index] <= {EPOCH_WIDTH{1'b0}};
+                    mshr_txn_epoch[reset_index] <= {EPOCH_WIDTH{1'b0}};
+                end
             end
         end else begin
+            resp_from_sram <= 1'b0;
+            if (resp_from_sram && resp_valid_reg)
+                resp_data_reg <= data_rdata;
             event_request_o <= request_fire;
             event_hit_o <= 1'b0;
             event_miss_o <= 1'b0;
@@ -380,9 +451,11 @@ module rv32_icache_nonblocking #(
                 if (mshr_valid[k] &&
                     (mshr_txn_epoch[k] != current_epoch_i) &&
                     !mshr_control_prefetch[k]) begin
-                    mshr_valid[k] <= 1'b0;
-                    mshr_sent[k] <= 1'b0;
-                    mshr_control_prefetch[k] <= 1'b0;
+                    if (MSHR_STATIC_WRITES == 0) begin
+                        mshr_valid[k] <= 1'b0;
+                        mshr_sent[k] <= 1'b0;
+                        mshr_control_prefetch[k] <= 1'b0;
+                    end
                 end
             end
             if (prefetch_active && (prefetch_epoch != current_epoch_i) &&
@@ -399,7 +472,7 @@ module rv32_icache_nonblocking #(
                         resp_valid_reg <= 1'b1;
                         resp_pc_reg <= if_req_pc_i;
                         resp_line_reg <= request_line;
-                        resp_data_reg <= data_mem[request_entry];
+                        resp_from_sram <= 1'b1;
                         resp_epoch_reg <= if_req_epoch_i;
                         resp_error_reg <= 1'b0;
                         if (CACHE_WAYS == 2)
@@ -408,18 +481,22 @@ module rv32_icache_nonblocking #(
                 end else begin
                     event_miss_o <= 1'b1;
                     if (request_match_found) begin
-                        mshr_prefetch[request_match_index] <= 1'b0;
-                        mshr_pc[request_match_index] <= if_req_pc_i;
-                        mshr_demand_epoch[request_match_index] <= if_req_epoch_i;
+                        if (MSHR_STATIC_WRITES == 0) begin
+                            mshr_prefetch[request_match_index] <= 1'b0;
+                            mshr_pc[request_match_index] <= if_req_pc_i;
+                            mshr_demand_epoch[request_match_index] <= if_req_epoch_i;
+                        end
                     end else begin
-                        mshr_valid[free_index] <= 1'b1;
-                        mshr_sent[free_index] <= 1'b0;
-                        mshr_prefetch[free_index] <= 1'b0;
-                        mshr_control_prefetch[free_index] <= 1'b0;
-                        mshr_pc[free_index] <= if_req_pc_i;
-                        mshr_line[free_index] <= request_line;
-                        mshr_demand_epoch[free_index] <= if_req_epoch_i;
-                        mshr_txn_epoch[free_index] <= if_req_epoch_i;
+                        if (MSHR_STATIC_WRITES == 0) begin
+                            mshr_valid[free_index] <= 1'b1;
+                            mshr_sent[free_index] <= 1'b0;
+                            mshr_prefetch[free_index] <= 1'b0;
+                            mshr_control_prefetch[free_index] <= 1'b0;
+                            mshr_pc[free_index] <= if_req_pc_i;
+                            mshr_line[free_index] <= request_line;
+                            mshr_demand_epoch[free_index] <= if_req_epoch_i;
+                            mshr_txn_epoch[free_index] <= if_req_epoch_i;
+                        end
                     end
                 end
             end
@@ -436,14 +513,16 @@ module rv32_icache_nonblocking #(
                     prefetch_remaining <= prefetch_remaining - 1;
             end
             if (prefetch_step_allocates) begin
-                mshr_valid[free_index] <= 1'b1;
-                mshr_sent[free_index] <= 1'b0;
-                mshr_prefetch[free_index] <= 1'b1;
-                mshr_control_prefetch[free_index] <= prefetch_control_stream;
-                mshr_pc[free_index] <= prefetch_next_line;
-                mshr_line[free_index] <= prefetch_next_line;
-                mshr_demand_epoch[free_index] <= prefetch_epoch;
-                mshr_txn_epoch[free_index] <= prefetch_epoch;
+                if (MSHR_STATIC_WRITES == 0) begin
+                    mshr_valid[free_index] <= 1'b1;
+                    mshr_sent[free_index] <= 1'b0;
+                    mshr_prefetch[free_index] <= 1'b1;
+                    mshr_control_prefetch[free_index] <= prefetch_control_stream;
+                    mshr_pc[free_index] <= prefetch_next_line;
+                    mshr_line[free_index] <= prefetch_next_line;
+                    mshr_demand_epoch[free_index] <= prefetch_epoch;
+                    mshr_txn_epoch[free_index] <= prefetch_epoch;
+                end
             end
 
             if (stream_request) begin
@@ -466,19 +545,22 @@ module rv32_icache_nonblocking #(
             end
 
             if (mem_req_valid_o && mem_req_ready_i)
-                mshr_sent[send_index] <= 1'b1;
+                if (MSHR_STATIC_WRITES == 0) begin
+                    mshr_sent[send_index] <= 1'b1;
+                end
 
             if (mem_resp_valid_i && mem_resp_ready_o &&
                 response_target_found) begin
-                mshr_valid[response_index] <= 1'b0;
-                mshr_sent[response_index] <= 1'b0;
-                mshr_control_prefetch[response_index] <= 1'b0;
+                if (MSHR_STATIC_WRITES == 0) begin
+                    mshr_valid[response_index] <= 1'b0;
+                    mshr_sent[response_index] <= 1'b0;
+                    mshr_control_prefetch[response_index] <= 1'b0;
+                end
                 event_refill_o <= !mem_resp_error_i && response_matches;
                 if (!mem_resp_error_i && response_matches) begin
                     valid_bits[refill_entry] <= 1'b1;
                     tag_mem[refill_entry] <=
                         mem_resp_line_addr_i[31:CACHE_SET_WIDTH+4];
-                    data_mem[refill_entry] <= mem_resp_data_i;
                     if (CACHE_WAYS == 2)
                         lru_mem[refill_set] <= ~refill_entry[0];
                 end
@@ -505,15 +587,17 @@ module rv32_icache_nonblocking #(
             end
 
             if (control_target_allocate) begin
-                mshr_valid[response_index] <= 1'b1;
-                mshr_sent[response_index] <= 1'b0;
-                mshr_prefetch[response_index] <= 1'b1;
-                mshr_control_prefetch[response_index] <= 1'b1;
-                mshr_pc[response_index] <= control_target;
-                mshr_line[response_index] <=
-                    {control_target[31:4], 4'b0};
-                mshr_demand_epoch[response_index] <= current_epoch_i;
-                mshr_txn_epoch[response_index] <= current_epoch_i;
+                if (MSHR_STATIC_WRITES == 0) begin
+                    mshr_valid[response_index] <= 1'b1;
+                    mshr_sent[response_index] <= 1'b0;
+                    mshr_prefetch[response_index] <= 1'b1;
+                    mshr_control_prefetch[response_index] <= 1'b1;
+                    mshr_pc[response_index] <= control_target;
+                    mshr_line[response_index] <=
+                        {control_target[31:4], 4'b0};
+                    mshr_demand_epoch[response_index] <= current_epoch_i;
+                    mshr_txn_epoch[response_index] <= current_epoch_i;
+                end
                 prefetch_active <= 1'b1;
                 prefetch_next_line <=
                     {control_target[31:4], 4'b0} + 32'd16;
@@ -527,7 +611,139 @@ module rv32_icache_nonblocking #(
         end
     end
 
+    // Constant row indices avoid steering wide update payloads through
+    // variable memory write ports. Later clauses retain the original priority:
+    // cleanup, demand, sequential prefetch, send, response, control prefetch.
+    genvar mshr_row;
+    generate if (MSHR_STATIC_WRITES != 0) begin:g_static_mshr
+        for (mshr_row=0; mshr_row<MSHR_ENTRIES; mshr_row=mshr_row+1) begin:g_row
+            if (MSHR_STATE_BANKS != 0) begin:g_owned
+                wire bank_valid;
+                wire bank_sent;
+                wire bank_prefetch;
+                wire bank_control_prefetch;
+                wire [31:0] bank_pc;
+                wire [31:0] bank_line;
+                wire [EPOCH_WIDTH-1:0] bank_demand_epoch;
+                wire [EPOCH_WIDTH-1:0] bank_txn_epoch;
+                rv32_icache_mshr_state_bank #(.EPOCH_WIDTH(EPOCH_WIDTH), .ROW(mshr_row)) state_bank (
+                    .clk_i(clk_i),
+                    .reset_i(reset_i),
+                    .current_epoch_i(current_epoch_i),
+                    .request_fire_i(request_fire),
+                    .request_hit_i(request_hit),
+                    .request_match_found_i(request_match_found),
+                    .request_match_index_i(request_match_index),
+                    .free_index_i(free_index),
+                    .if_req_pc_i(if_req_pc_i),
+                    .request_line_i(request_line),
+                    .if_req_epoch_i(if_req_epoch_i),
+                    .prefetch_step_allocates_i(prefetch_step_allocates),
+                    .prefetch_control_stream_i(prefetch_control_stream),
+                    .prefetch_next_line_i(prefetch_next_line),
+                    .prefetch_epoch_i(prefetch_epoch),
+                    .mem_req_valid_i(mem_req_valid_o),
+                    .mem_req_ready_i(mem_req_ready_i),
+                    .send_index_i(send_index),
+                    .mem_resp_valid_i(mem_resp_valid_i),
+                    .mem_resp_ready_i(mem_resp_ready_o),
+                    .response_target_found_i(response_target_found),
+                    .response_index_i(response_index),
+                    .control_target_allocate_i(control_target_allocate),
+                    .control_target_i(control_target),
+                    .valid_o(bank_valid),
+                    .sent_o(bank_sent),
+                    .prefetch_o(bank_prefetch),
+                    .control_prefetch_o(bank_control_prefetch),
+                    .pc_o(bank_pc),
+                    .line_o(bank_line),
+                    .demand_epoch_o(bank_demand_epoch),
+                    .txn_epoch_o(bank_txn_epoch)
+                );
+                always @* begin
+                    mshr_valid[mshr_row] = bank_valid;
+                    mshr_sent[mshr_row] = bank_sent;
+                    mshr_prefetch[mshr_row] = bank_prefetch;
+                    mshr_control_prefetch[mshr_row] = bank_control_prefetch;
+                    mshr_pc[mshr_row] = bank_pc;
+                    mshr_line[mshr_row] = bank_line;
+                    mshr_demand_epoch[mshr_row] = bank_demand_epoch;
+                    mshr_txn_epoch[mshr_row] = bank_txn_epoch;
+                end
+            end else begin:g_flat
+                always @(posedge clk_i) begin
+                    if (reset_i) begin
+                        mshr_valid[mshr_row] <= 1'b0;
+                        mshr_sent[mshr_row] <= 1'b0;
+                        mshr_prefetch[mshr_row] <= 1'b0;
+                        mshr_control_prefetch[mshr_row] <= 1'b0;
+                        mshr_pc[mshr_row] <= 32'd0;
+                        mshr_line[mshr_row] <= 32'd0;
+                        mshr_demand_epoch[mshr_row] <= {EPOCH_WIDTH{1'b0}};
+                        mshr_txn_epoch[mshr_row] <= {EPOCH_WIDTH{1'b0}};
+                    end else begin
+                        if (mshr_valid[mshr_row] &&
+                            (mshr_txn_epoch[mshr_row] != current_epoch_i) &&
+                            !mshr_control_prefetch[mshr_row]) begin
+                            mshr_valid[mshr_row] <= 1'b0;
+                            mshr_sent[mshr_row] <= 1'b0;
+                            mshr_control_prefetch[mshr_row] <= 1'b0;
+                        end
+                        if (request_fire && !request_hit) begin
+                            if (request_match_found) begin
+                                if (request_match_index == mshr_row) begin
+                                    mshr_prefetch[mshr_row] <= 1'b0;
+                                    mshr_pc[mshr_row] <= if_req_pc_i;
+                                    mshr_demand_epoch[mshr_row] <= if_req_epoch_i;
+                                end
+                            end else if (free_index == mshr_row) begin
+                                mshr_valid[mshr_row] <= 1'b1;
+                                mshr_sent[mshr_row] <= 1'b0;
+                                mshr_prefetch[mshr_row] <= 1'b0;
+                                mshr_control_prefetch[mshr_row] <= 1'b0;
+                                mshr_pc[mshr_row] <= if_req_pc_i;
+                                mshr_line[mshr_row] <= request_line;
+                                mshr_demand_epoch[mshr_row] <= if_req_epoch_i;
+                                mshr_txn_epoch[mshr_row] <= if_req_epoch_i;
+                            end
+                        end
+                        if (prefetch_step_allocates && (free_index == mshr_row)) begin
+                            mshr_valid[mshr_row] <= 1'b1;
+                            mshr_sent[mshr_row] <= 1'b0;
+                            mshr_prefetch[mshr_row] <= 1'b1;
+                            mshr_control_prefetch[mshr_row] <= prefetch_control_stream;
+                            mshr_pc[mshr_row] <= prefetch_next_line;
+                            mshr_line[mshr_row] <= prefetch_next_line;
+                            mshr_demand_epoch[mshr_row] <= prefetch_epoch;
+                            mshr_txn_epoch[mshr_row] <= prefetch_epoch;
+                        end
+                        if (mem_req_valid_o && mem_req_ready_i && (send_index == mshr_row))
+                            mshr_sent[mshr_row] <= 1'b1;
+                        if (mem_resp_valid_i && mem_resp_ready_o &&
+                            response_target_found && (response_index == mshr_row)) begin
+                            mshr_valid[mshr_row] <= 1'b0;
+                            mshr_sent[mshr_row] <= 1'b0;
+                            mshr_control_prefetch[mshr_row] <= 1'b0;
+                        end
+                        if (control_target_allocate && (response_index == mshr_row)) begin
+                            mshr_valid[mshr_row] <= 1'b1;
+                            mshr_sent[mshr_row] <= 1'b0;
+                            mshr_prefetch[mshr_row] <= 1'b1;
+                            mshr_control_prefetch[mshr_row] <= 1'b1;
+                            mshr_pc[mshr_row] <= control_target;
+                            mshr_line[mshr_row] <= {control_target[31:4], 4'b0};
+                            mshr_demand_epoch[mshr_row] <= current_epoch_i;
+                            mshr_txn_epoch[mshr_row] <= current_epoch_i;
+                        end
+                    end
+                end
+            end
+        end
+    end endgenerate
+
     initial begin
+        if ((MSHR_STATE_BANKS != 0) && (MSHR_STATIC_WRITES == 0))
+            $fatal(1, "MSHR_STATE_BANKS requires fixed-slot writes");
         if (CACHE_LINES < 16 || CACHE_LINES > 4096 ||
             ((CACHE_LINES & (CACHE_LINES - 1)) != 0) ||
             ((CACHE_WAYS != 1) && (CACHE_WAYS != 2)) ||
@@ -542,6 +758,113 @@ module rv32_icache_nonblocking #(
         if (EPOCH_WIDTH > 4) begin
             $display("ERROR: rv32_icache_nonblocking requires EPOCH_WIDTH <= 4");
             $finish;
+        end
+    end
+endmodule
+
+// Functional storage row: owns all MSHR state and decodes updates locally.
+(* keep_hierarchy = 1 *)
+module rv32_icache_mshr_state_bank #(
+    parameter integer EPOCH_WIDTH = 4,
+    parameter integer ROW = 0
+) (
+    input wire clk_i,
+    input wire reset_i,
+    input wire [EPOCH_WIDTH-1:0] current_epoch_i,
+    input wire request_fire_i,
+    input wire request_hit_i,
+    input wire request_match_found_i,
+    input wire [31:0] request_match_index_i,
+    input wire [31:0] free_index_i,
+    input wire [31:0] if_req_pc_i,
+    input wire [31:0] request_line_i,
+    input wire [EPOCH_WIDTH-1:0] if_req_epoch_i,
+    input wire prefetch_step_allocates_i,
+    input wire prefetch_control_stream_i,
+    input wire [31:0] prefetch_next_line_i,
+    input wire [EPOCH_WIDTH-1:0] prefetch_epoch_i,
+    input wire mem_req_valid_i,
+    input wire mem_req_ready_i,
+    input wire [31:0] send_index_i,
+    input wire mem_resp_valid_i,
+    input wire mem_resp_ready_i,
+    input wire response_target_found_i,
+    input wire [31:0] response_index_i,
+    input wire control_target_allocate_i,
+    input wire [31:0] control_target_i,
+    output reg valid_o,
+    output reg sent_o,
+    output reg prefetch_o,
+    output reg control_prefetch_o,
+    output reg [31:0] pc_o,
+    output reg [31:0] line_o,
+    output reg [EPOCH_WIDTH-1:0] demand_epoch_o,
+    output reg [EPOCH_WIDTH-1:0] txn_epoch_o
+);
+    always @(posedge clk_i) begin
+        if (reset_i) begin
+            valid_o <= 1'b0;
+            sent_o <= 1'b0;
+            prefetch_o <= 1'b0;
+            control_prefetch_o <= 1'b0;
+            pc_o <= 32'd0;
+            line_o <= 32'd0;
+            demand_epoch_o <= {EPOCH_WIDTH{1'b0}};
+            txn_epoch_o <= {EPOCH_WIDTH{1'b0}};
+        end else begin
+            if (valid_o &&
+                (txn_epoch_o != current_epoch_i) &&
+                !control_prefetch_o) begin
+                valid_o <= 1'b0;
+                sent_o <= 1'b0;
+                control_prefetch_o <= 1'b0;
+            end
+            if (request_fire_i && !request_hit_i) begin
+                if (request_match_found_i) begin
+                    if (request_match_index_i == ROW) begin
+                        prefetch_o <= 1'b0;
+                        pc_o <= if_req_pc_i;
+                        demand_epoch_o <= if_req_epoch_i;
+                    end
+                end else if (free_index_i == ROW) begin
+                    valid_o <= 1'b1;
+                    sent_o <= 1'b0;
+                    prefetch_o <= 1'b0;
+                    control_prefetch_o <= 1'b0;
+                    pc_o <= if_req_pc_i;
+                    line_o <= request_line_i;
+                    demand_epoch_o <= if_req_epoch_i;
+                    txn_epoch_o <= if_req_epoch_i;
+                end
+            end
+            if (prefetch_step_allocates_i && (free_index_i == ROW)) begin
+                valid_o <= 1'b1;
+                sent_o <= 1'b0;
+                prefetch_o <= 1'b1;
+                control_prefetch_o <= prefetch_control_stream_i;
+                pc_o <= prefetch_next_line_i;
+                line_o <= prefetch_next_line_i;
+                demand_epoch_o <= prefetch_epoch_i;
+                txn_epoch_o <= prefetch_epoch_i;
+            end
+            if (mem_req_valid_i && mem_req_ready_i && (send_index_i == ROW))
+                sent_o <= 1'b1;
+            if (mem_resp_valid_i && mem_resp_ready_i &&
+                response_target_found_i && (response_index_i == ROW)) begin
+                valid_o <= 1'b0;
+                sent_o <= 1'b0;
+                control_prefetch_o <= 1'b0;
+            end
+            if (control_target_allocate_i && (response_index_i == ROW)) begin
+                valid_o <= 1'b1;
+                sent_o <= 1'b0;
+                prefetch_o <= 1'b1;
+                control_prefetch_o <= 1'b1;
+                pc_o <= control_target_i;
+                line_o <= {control_target_i[31:4], 4'b0};
+                demand_epoch_o <= current_epoch_i;
+                txn_epoch_o <= current_epoch_i;
+            end
         end
     end
 endmodule
