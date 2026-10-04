@@ -286,6 +286,12 @@ module rv32_backend_joint #(
     wire [RS_ENTRIES-1:0] rs_entry_valid;
     wire [RS_ENTRIES*TAG_WIDTH-1:0] rs_entry_rob_tag;
     wire [RS_ENTRIES-1:0] rs_entry_base_ready;
+    localparam integer STORE_RS_LINKS=(EARLY_STORE_ADDRESS==2) && (RS_ALLOC_STATIC_WRITE!=0);
+    localparam integer STORE_RS_SW=(RS_ENTRIES<=1)?1:$clog2(RS_ENTRIES);
+    wire [BE_WIDTH*STORE_RS_SW-1:0] rs_alloc_slot;
+    wire [RS_ENTRIES-1:0] rs_entry_release;
+    wire [LSQ_ENTRIES-1:0] store_rs_link_valid;
+    wire [LSQ_ENTRIES*STORE_RS_SW-1:0] store_rs_link_slot;
     wire [RS_ENTRIES*32-1:0] rs_entry_base_value;
     localparam integer RS_METADATA_WIDTH = (RS_ISSUE_METADATA != 0) ? 70 : 1;
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] rs_alloc_metadata, rs_issue_metadata;
@@ -488,6 +494,19 @@ module rv32_backend_joint #(
     // Mode 1 probes only at allocation; mode 2 also follows existing RS
     // base wakeups with a single shared adder and ROB immediate read port.
     // Store data, execution completion and in-order commit remain unchanged.
+    generate if(STORE_RS_LINKS!=0) begin:g_store_rs_links
+        rv32_store_rs_links #(.BE_WIDTH(BE_WIDTH),.LSQ_ENTRIES(LSQ_ENTRIES),
+            .RS_ENTRIES(RS_ENTRIES),.TAG_WIDTH(TAG_WIDTH)) owner (
+            .clk_i(clk_i),.reset_i(reset_i),.flush_i(flush_i),
+            .recovery_i(recovery_domains[4] || recovery_domains[5]),
+            .lsq_alloc_fire_i(lsq_alloc_fire),.rs_alloc_fire_i(rs_alloc_fire),
+            .alloc_is_store_i(d_is_store),.alloc_lsq_tag_i(lsq_alloc_tag),
+            .alloc_rs_slot_i(rs_alloc_slot),.rs_release_i(rs_entry_release),
+            .link_valid_o(store_rs_link_valid),.link_rs_slot_o(store_rs_link_slot));
+    end else begin:g_no_store_rs_links
+        assign store_rs_link_valid=0;
+        assign store_rs_link_slot=0;
+    end endgenerate
     generate if (EARLY_STORE_ADDRESS == 2) begin : g_shared_store_address
         wire selected;
         wire [TAG_WIDTH-1:0] selected_rob_tag;
@@ -500,7 +519,8 @@ module rv32_backend_joint #(
             .INDEX_WIDTH(ROB_SLOT_WIDTH)) live_read (
             .rows_i(rob_live_rows),.index_i(selected_slot),.value_o(selected_live));
         rv32_store_address_select #(.LSQ_ENTRIES(LSQ_ENTRIES), .RS_ENTRIES(RS_ENTRIES),
-            .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH)) selector (
+            .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH),.LINKED_RS(STORE_RS_LINKS)) selector (
+            .link_valid_i(store_rs_link_valid),.link_rs_slot_i(store_rs_link_slot),
             .head_i(lsq_head), .pending_i(lsq_store_addr_pending),
             .lsq_tag_i(lsq_store_addr_lsq_tag), .store_rob_tag_i(lsq_store_addr_rob_tag),
             .base_ready_i(rs_entry_base_ready), .rs_rob_tag_i(rs_entry_rob_tag),
@@ -1351,6 +1371,7 @@ module rv32_backend_joint #(
     rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH)) rs (
         .alloc_metadata_i(rs_alloc_metadata), .issue_metadata_o(raw_rs_issue_metadata), .entry_metadata_o(rs_entry_metadata),
         .entry_base_ready_o(rs_entry_base_ready), .entry_base_value_o(rs_entry_base_value),
+        .alloc_slot_o(rs_alloc_slot),.entry_release_o(rs_entry_release),
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rs_alloc_valid), .alloc_op_i(d_op), .alloc_pc_i(d_pc), .alloc_rob_tag_i(d_tag), .alloc_target_live_i(d_valid), .alloc_phys_rd_i(d_new_phys),
         .alloc_src1_value_i(rs_src1_value), .alloc_src1_tag_i(rs_source1_identity), .alloc_src1_ready_i(rs_src1_ready), .alloc_src2_value_i(rs_src2_value), .alloc_src2_tag_i(rs_source2_identity), .alloc_src2_ready_i(rs_src2_ready), .alloc_store_data_i(d_store_data), .alloc_ready_o(rs_alloc_ready), .alloc_fire_o(rs_alloc_fire), .alloc_count_o(rs_alloc_count),
         .wake_valid_i(rs_wake_valid), .wake_tag_i(rs_wake_tag), .wake_value_i(rs_wake_value), .issue_ready_i(raw_rs_issue_ready), .issue_valid_o(raw_rs_issue_valid), .issue_op_o(raw_rs_issue_op), .issue_pc_o(raw_rs_issue_pc), .issue_rob_tag_o(raw_rs_issue_tag), .issue_phys_rd_o(raw_rs_issue_phys), .issue_src1_value_o(raw_rs_issue_src1), .issue_src2_value_o(raw_rs_issue_src2), .issue_store_data_o(raw_rs_issue_store), .issue_slot_o(raw_rs_issue_slot), .flush_valid_i(flush_i || recovery_domains[4]), .flush_kill_mask_i(rs_flush_kill_mask), .entry_valid_o(rs_entry_valid), .entry_rob_tag_o(rs_entry_rob_tag), .occupancy_o(rs_occupancy)

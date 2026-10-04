@@ -891,6 +891,22 @@ module rv32_lsq #(
     localparam integer ACK_WIDTH=ROB_TAG_WIDTH+TAG_WIDTH+1;
     localparam integer REPORT_WORDS=(REPORT_WIDTH+15)/16;
     localparam integer ACK_WORDS=(ACK_WIDTH+15)/16;
+    localparam integer REPORT_BOUND_WIDTH=((COUNT_WIDTH>SLOT_WIDTH)?COUNT_WIDTH:SLOT_WIDTH)+1;
+    localparam integer REPORT_BOUND_DOMAINS=(LSQ_ENTRIES+3)/4;
+    // entry_age first masks by LSQ_ENTRIES-1, then truncates to
+    // SLOT_WIDTH. Keep their effective power-of-two modulus, including N=1.
+    localparam integer REPORT_AGE_MODULUS=
+        (LSQ_ENTRIES<(1<<SLOT_WIDTH))?LSQ_ENTRIES:(1<<SLOT_WIDTH);
+    // For fixed row r and modulo M: (r-head) mod M < count iff
+    // head+count > r (r>=head), or > M+r (r<head). Keep the sum unwrapped.
+    // This preserves the original guard without a head/tail state invariant.
+    wire [SLOT_WIDTH-1:0] report_head=head_reg & (REPORT_AGE_MODULUS-1);
+    wire [REPORT_BOUND_WIDTH-1:0] report_end=
+        {{(REPORT_BOUND_WIDTH-SLOT_WIDTH){1'b0}},report_head}+
+        {{(REPORT_BOUND_WIDTH-COUNT_WIDTH){1'b0}},occupancy_reg};
+    wire [REPORT_BOUND_DOMAINS*REPORT_BOUND_WIDTH-1:0] report_bound_views;
+    rv32_frequency_control_tree #(.WIDTH(REPORT_BOUND_WIDTH),.LEAVES(REPORT_BOUND_DOMAINS)) report_bound_tree (
+        .signal_i(report_end),.views_o(report_bound_views));
     wire report_valid_tree [1:2*REPORT_ROWS-1];
     wire [SLOT_WIDTH-1:0] report_slot_tree [1:2*REPORT_ROWS-1];
     wire report_wrap_tree [1:2*REPORT_ROWS-1];
@@ -927,7 +943,16 @@ module rv32_lsq #(
                     make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
                 wire [ACK_WIDTH-1:0] ack_payload={store_ack_error_mem[report_row],
                     make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
-                assign report_valid_tree[REPORT_ROWS+report_row]=entry_age[report_row]<occupancy_reg &&
+                localparam integer ROW_MOD=report_row%REPORT_AGE_MODULUS;
+                wire [REPORT_BOUND_WIDTH-1:0] row_end=
+                    report_bound_views[(report_row/4)*REPORT_BOUND_WIDTH +: REPORT_BOUND_WIDTH];
+                // Match the original queue mask and destination width
+                // in both head and row. No tail/occupancy invariant is used.
+                wire wrapped=ROW_MOD<
+                    (head_query_views[report_row*SLOT_WIDTH +: SLOT_WIDTH] & (REPORT_AGE_MODULUS-1));
+                wire row_in_report_range=wrapped ?
+                    (row_end>REPORT_AGE_MODULUS+ROW_MOD) : (row_end>ROW_MOD);
+                assign report_valid_tree[REPORT_ROWS+report_row]=row_in_report_range &&
                     valid_mem[report_row] && load_mem[report_row] && complete_mem[report_row] && !load_reported_mem[report_row];
                 assign report_slot_tree[REPORT_ROWS+report_row]=report_row;
                 assign report_wrap_tree[REPORT_ROWS+report_row]=circular_wrap_views[report_row*8+5];

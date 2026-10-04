@@ -70,7 +70,10 @@ module rv32_reservation_station #(
     output wire [ENTRIES-1:0]            entry_base_ready_o,
     output wire [(ENTRIES*32)-1:0]       entry_base_value_o,
     output wire [(ENTRIES*METADATA_WIDTH)-1:0] entry_metadata_o,
-    output wire [((ENTRIES <= 1) ? 1 : $clog2(ENTRIES + 1))-1:0] occupancy_o
+    output wire [((ENTRIES <= 1) ? 1 : $clog2(ENTRIES + 1))-1:0] occupancy_o,
+    // Read-only identities/events of existing state changes. No new RS state.
+    output wire [BE_WIDTH*SLOT_WIDTH-1:0] alloc_slot_o,
+    output wire [ENTRIES-1:0] entry_release_o
 );
     localparam integer COUNT_WIDTH = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES + 1);
     localparam integer ALLOC_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
@@ -292,6 +295,24 @@ module rv32_reservation_station #(
     wire [ALLOC_PAYLOAD_WIDTH-1:0] alloc_row_payload [0:ENTRIES-1];
     wire [ENTRIES-1:0] alloc_row_write;
     wire [BE_WIDTH-1:0] alloc_row_grants [0:ENTRIES-1];
+    genvar export_lane,export_row;
+    generate
+        for(export_lane=0;export_lane<BE_WIDTH;export_lane=export_lane+1) begin:g_allocation_identity
+            if(ALLOC_STATIC_WRITE!=0)
+                assign alloc_slot_o[export_lane*SLOT_WIDTH +: SLOT_WIDTH]=allocation_slots[export_lane];
+            else assign alloc_slot_o[export_lane*SLOT_WIDTH +: SLOT_WIDTH]=0;
+        end
+        for(export_row=0;export_row<ENTRIES;export_row=export_row+1) begin:g_release_identity
+            wire [BE_WIDTH-1:0] issued_here;
+            for(export_lane=0;export_lane<BE_WIDTH;export_lane=export_lane+1) begin:g_lane
+                assign issued_here[export_lane]=issue_valid_o[export_lane] && issue_ready_i[export_lane] &&
+                    issue_slot_o[export_lane*SLOT_WIDTH +: SLOT_WIDTH]==export_row;
+            end
+            // Mirrors valid_mem's reset / flush / ordinary issue priorities.
+            assign entry_release_o[export_row]=reset_i ||
+                (flush_valid_i ? flush_kill_mask_i[export_row] : (|issued_here));
+        end
+    endgenerate
     integer pick_lane, pick_search, pick_cursor, pick_slot;
     integer alloc_static_row;
     reg pick_found;
