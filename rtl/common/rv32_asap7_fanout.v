@@ -9,40 +9,81 @@ module rv32_frequency_inversion(input wire signal_i, output wire signal_o);
     assign signal_o = ~signal_i;
 endmodule
 
-// Four-way recursive distribution with a pair of real inversions at each
-// node. Every internal driver has at most four child consumers. Leaf outputs
-// must be attached to bounded groups of actual consumers by the caller.
-// Combinational only: the observable signal and cycle remain unchanged.
+// Internal distribution receives a NEGATIVE representation and returns
+// positive leaves. Every leaf has its own inverter; internal nodes retain a
+// negative representation using two real inverters and at most four children.
+// Thus no alias leaf can expose a parent directly to its payload consumer load.
+module rv32_frequency_negative_subtree #(
+    parameter integer WIDTH=1,LEAVES=1
+) (
+    input wire [WIDTH-1:0] negative_i,
+    output wire [WIDTH*LEAVES-1:0] views_o
+);
+    localparam integer CHILDREN=LEAVES>4?4:LEAVES;
+    localparam integer BASE_COUNT=LEAVES/CHILDREN;
+    localparam integer EXTRA_COUNT=LEAVES%CHILDREN;
+    genvar bit_id,child;
+    generate if(LEAVES==1) begin:g_leaf
+        for(bit_id=0;bit_id<WIDTH;bit_id=bit_id+1) begin:g_driver
+            (* keep=1,keep_hierarchy=1 *)
+            rv32_frequency_inversion restore_positive (
+                .signal_i(negative_i[bit_id]),.signal_o(views_o[bit_id]));
+        end
+    end else begin:g_internal
+        wire [WIDTH-1:0] positive,distributed_negative;
+        for(bit_id=0;bit_id<WIDTH;bit_id=bit_id+1) begin:g_driver
+            (* keep=1,keep_hierarchy=1 *)
+            rv32_frequency_inversion invert_root (
+                .signal_i(negative_i[bit_id]),.signal_o(positive[bit_id]));
+            (* keep=1,keep_hierarchy=1 *)
+            rv32_frequency_inversion invert_output (
+                .signal_i(positive[bit_id]),.signal_o(distributed_negative[bit_id]));
+        end
+        for(child=0;child<CHILDREN;child=child+1) begin:g_child
+            localparam integer COUNT=BASE_COUNT+(child<EXTRA_COUNT);
+            localparam integer OFFSET=child*BASE_COUNT+
+                (child<EXTRA_COUNT?child:EXTRA_COUNT);
+            rv32_frequency_negative_subtree #(.WIDTH(WIDTH),.LEAVES(COUNT)) subtree (
+                .negative_i(distributed_negative),
+                .views_o(views_o[OFFSET*WIDTH +: COUNT*WIDTH]));
+        end
+    end endgenerate
+endmodule
+
+// One inversion produces a negative representation at the root. Negative
+// internal nodes distribute it; individual leaf inverters restore the original
+// positive signal. For LEAVES>1 this removes two serial inversions on every
+// path and LEAVES+1 inverter instances per bit versus the old positive-node
+// tree. Each internal driver still owns at most four child gate inputs.
+// LEAVES=1 remains a two-inverter, positive-output leaf.
 module rv32_frequency_control_tree #(
-    parameter integer WIDTH = 1,
-    parameter integer LEAVES = 4
+    parameter integer WIDTH=1,
+    parameter integer LEAVES=4
 ) (
     input wire [WIDTH-1:0] signal_i,
     output wire [WIDTH*LEAVES-1:0] views_o
 );
-    localparam integer CHILDREN = LEAVES > 4 ? 4 : LEAVES;
-    localparam integer BASE_COUNT = LEAVES / CHILDREN;
-    localparam integer EXTRA_COUNT = LEAVES % CHILDREN;
-    wire [WIDTH-1:0] inverted, distributed;
-    genvar bit_id, child;
+    localparam integer CHILDREN=LEAVES>4?4:LEAVES;
+    localparam integer BASE_COUNT=LEAVES/CHILDREN;
+    localparam integer EXTRA_COUNT=LEAVES%CHILDREN;
+    wire [WIDTH-1:0] negative;
+    genvar bit_id,child;
     generate
-        for (bit_id=0; bit_id<WIDTH; bit_id=bit_id+1) begin:g_driver
-            (* keep = 1, keep_hierarchy = 1 *)
+        for(bit_id=0;bit_id<WIDTH;bit_id=bit_id+1) begin:g_driver
+            (* keep=1,keep_hierarchy=1 *)
             rv32_frequency_inversion invert_root (
-                .signal_i(signal_i[bit_id]), .signal_o(inverted[bit_id]));
-            (* keep = 1, keep_hierarchy = 1 *)
-            rv32_frequency_inversion invert_output (
-                .signal_i(inverted[bit_id]), .signal_o(distributed[bit_id]));
+                .signal_i(signal_i[bit_id]),.signal_o(negative[bit_id]));
         end
-        if (LEAVES == 1) begin:g_leaf
-            assign views_o = distributed;
+        if(LEAVES==1) begin:g_leaf
+            rv32_frequency_negative_subtree #(.WIDTH(WIDTH),.LEAVES(1)) subtree (
+                .negative_i(negative),.views_o(views_o));
         end else begin:g_branches
-            for (child=0; child<CHILDREN; child=child+1) begin:g_child
-                localparam integer COUNT = BASE_COUNT + (child < EXTRA_COUNT);
-                localparam integer OFFSET = child*BASE_COUNT +
-                    (child < EXTRA_COUNT ? child : EXTRA_COUNT);
-                rv32_frequency_control_tree #(.WIDTH(WIDTH), .LEAVES(COUNT)) subtree (
-                    .signal_i(distributed),
+            for(child=0;child<CHILDREN;child=child+1) begin:g_child
+                localparam integer COUNT=BASE_COUNT+(child<EXTRA_COUNT);
+                localparam integer OFFSET=child*BASE_COUNT+
+                    (child<EXTRA_COUNT?child:EXTRA_COUNT);
+                rv32_frequency_negative_subtree #(.WIDTH(WIDTH),.LEAVES(COUNT)) subtree (
+                    .negative_i(negative),
                     .views_o(views_o[OFFSET*WIDTH +: COUNT*WIDTH]));
             end
         end
@@ -504,6 +545,137 @@ module rv32_frequency_add32_select (
                     assign propagate_stage[prefix_level+1][block_index]=propagate_stage[prefix_level][block_index];
                 end
             end
+        end
+    endgenerate
+endmodule
+
+
+// Addition of an RV32 load/store signed 12-bit displacement. The low twelve
+// bits use three carry-select blocks. The upper word changes only by -1, 0,
+// or +1; its increment/decrement prefixes are independent of the low carry.
+// No state, and all arithmetic wraps modulo 2^32.
+(* keep_hierarchy = 1 *)
+module rv32_frequency_add_simm12 (
+    input wire [31:0] base_i,
+    input wire [11:0] immediate_i,
+    output wire [31:0] sum_o
+);
+    wire [2:0] generate_stage [0:2];
+    wire [2:0] propagate_stage [0:2];
+    wire [3:0] sum_zero [0:2],sum_one [0:2];
+    wire [19:0] ones_prefix [0:5],zeros_prefix [0:5];
+    wire increment = generate_stage[2][2] && !immediate_i[11];
+    wire decrement = !generate_stage[2][2] && immediate_i[11];
+    wire [9:0] adjustment_views;
+    rv32_frequency_control_tree #(.WIDTH(2),.LEAVES(5)) adjustment_tree (
+        .signal_i({decrement,increment}),.views_o(adjustment_views));
+    assign ones_prefix[0]=base_i[31:12];
+    assign zeros_prefix[0]=~base_i[31:12];
+    genvar block_index,prefix_level,upper_bit;
+    generate
+        for(block_index=0;block_index<3;block_index=block_index+1) begin:g_low_block
+            wire [4:0] block_sum={1'b0,base_i[block_index*4 +: 4]}+
+                {1'b0,immediate_i[block_index*4 +: 4]};
+            assign sum_zero[block_index]=block_sum[3:0];
+            assign sum_one[block_index]=block_sum[3:0]+4'd1;
+            assign generate_stage[0][block_index]=block_sum[4];
+            assign propagate_stage[0][block_index]=
+                &(base_i[block_index*4 +: 4] ^ immediate_i[block_index*4 +: 4]);
+            if(block_index==0) begin:g_first
+                assign sum_o[0 +: 4]=sum_zero[0];
+            end else begin:g_select
+                assign sum_o[block_index*4 +: 4]=generate_stage[2][block_index-1] ?
+                    sum_one[block_index] : sum_zero[block_index];
+            end
+        end
+        for(prefix_level=0;prefix_level<2;prefix_level=prefix_level+1) begin:g_low_prefix
+            localparam integer DISTANCE=1<<prefix_level;
+            for(block_index=0;block_index<3;block_index=block_index+1) begin:g_block
+                if(block_index>=DISTANCE) begin:g_combine
+                    assign generate_stage[prefix_level+1][block_index]=generate_stage[prefix_level][block_index] |
+                        (propagate_stage[prefix_level][block_index] && generate_stage[prefix_level][block_index-DISTANCE]);
+                    assign propagate_stage[prefix_level+1][block_index]=propagate_stage[prefix_level][block_index] &&
+                        propagate_stage[prefix_level][block_index-DISTANCE];
+                end else begin:g_copy
+                    assign generate_stage[prefix_level+1][block_index]=generate_stage[prefix_level][block_index];
+                    assign propagate_stage[prefix_level+1][block_index]=propagate_stage[prefix_level][block_index];
+                end
+            end
+        end
+        for(prefix_level=0;prefix_level<5;prefix_level=prefix_level+1) begin:g_upper_prefix
+            localparam integer DISTANCE=1<<prefix_level;
+            for(upper_bit=0;upper_bit<20;upper_bit=upper_bit+1) begin:g_bit
+                if(upper_bit>=DISTANCE) begin:g_combine
+                    assign ones_prefix[prefix_level+1][upper_bit]=ones_prefix[prefix_level][upper_bit] &&
+                        ones_prefix[prefix_level][upper_bit-DISTANCE];
+                    assign zeros_prefix[prefix_level+1][upper_bit]=zeros_prefix[prefix_level][upper_bit] &&
+                        zeros_prefix[prefix_level][upper_bit-DISTANCE];
+                end else begin:g_copy
+                    assign ones_prefix[prefix_level+1][upper_bit]=ones_prefix[prefix_level][upper_bit];
+                    assign zeros_prefix[prefix_level+1][upper_bit]=zeros_prefix[prefix_level][upper_bit];
+                end
+            end
+        end
+        for(upper_bit=0;upper_bit<20;upper_bit=upper_bit+1) begin:g_upper_sum
+            localparam integer DOMAIN=upper_bit/4;
+            wire increment_bit=adjustment_views[DOMAIN*2];
+            wire decrement_bit=adjustment_views[DOMAIN*2+1];
+            if(upper_bit==0) begin:g_first
+                assign sum_o[12]=base_i[12] ^ (increment_bit || decrement_bit);
+            end else begin:g_later
+                assign sum_o[12+upper_bit]=base_i[12+upper_bit] ^
+                    ((increment_bit && ones_prefix[5][upper_bit-1]) ||
+                     (decrement_bit && zeros_prefix[5][upper_bit-1]));
+            end
+        end
+    endgenerate
+endmodule
+
+
+// Read a packed row array using two already-decoded index banks. A selected
+// input bit drives bounded row groups; no encoded-index decode follows the
+// late report selection. The caller retains the full normal generation check.
+(* keep_hierarchy = 1 *)
+module rv32_frequency_array_read_bank_masks #(
+    parameter integer WIDTH=9,ENTRIES=64,
+    parameter integer INDEX_WIDTH=(ENTRIES<=1)?1:$clog2(ENTRIES),
+    parameter integer LOW_BITS=(INDEX_WIDTH+1)/2,
+    parameter integer HIGH_BITS=INDEX_WIDTH-LOW_BITS,
+    parameter integer LOW_ROWS=1<<LOW_BITS,HIGH_ROWS=1<<HIGH_BITS,
+    parameter integer WORDS=(WIDTH+15)/16,
+    parameter integer LEAVES=1<<$clog2(ENTRIES)
+) (
+    input wire [ENTRIES*WIDTH-1:0] rows_i,
+    input wire [LOW_ROWS+HIGH_ROWS-1:0] query_i,
+    output wire [WIDTH-1:0] value_o
+);
+    wire [2*(LOW_ROWS+HIGH_ROWS)-1:0] query_views;
+    wire [WIDTH-1:0] reads [1:2*LEAVES-1];
+    rv32_frequency_control_tree #(.WIDTH(LOW_ROWS+HIGH_ROWS),.LEAVES(2)) query_tree (
+        .signal_i(query_i),.views_o(query_views));
+    assign value_o=reads[1];
+    genvar row,word,node;
+    generate
+        for(row=0;row<LEAVES;row=row+1) begin:g_row
+            if(row<ENTRIES && row<(1<<INDEX_WIDTH)) begin:g_present
+                localparam integer DOMAIN=(row*2)/ENTRIES;
+                wire [WORDS-1:0] selects;
+                wire hit=query_views[DOMAIN*(LOW_ROWS+HIGH_ROWS)+(row%LOW_ROWS)] &&
+                    query_views[DOMAIN*(LOW_ROWS+HIGH_ROWS)+LOW_ROWS+(row/LOW_ROWS)];
+                rv32_frequency_control_tree #(.LEAVES(WORDS)) select_tree (
+                    .signal_i(hit),.views_o(selects));
+                for(word=0;word<WORDS;word=word+1) begin:g_word
+                    localparam integer LOW=word*16;
+                    localparam integer BITS=(WIDTH-LOW>=16)?16:WIDTH-LOW;
+                    assign reads[LEAVES+row][LOW +: BITS]=
+                        {BITS{selects[word]}} & rows_i[row*WIDTH+LOW +: BITS];
+                end
+            end else begin:g_padding
+                assign reads[LEAVES+row]=0;
+            end
+        end
+        for(node=1;node<LEAVES;node=node+1) begin:g_reduce
+            assign reads[node]=reads[2*node] | reads[2*node+1];
         end
     endgenerate
 endmodule

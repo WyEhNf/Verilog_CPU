@@ -23,7 +23,10 @@ module rv32_lsq #(
     parameter integer ALLOC_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1),
     parameter integer LOCAL_REPORT_CANCEL = 0,
     parameter integer REPORT_RECOVERY_WIDTH = 1 +
-        2*((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES)) + $clog2(ROB_ENTRIES+1)
+        2*((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES)) + $clog2(ROB_ENTRIES+1),
+    parameter integer REPORT_ROB_PREDECODE = 0,
+    parameter integer REPORT_ROB_LOW_BITS=(((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))+1)/2,
+    parameter integer REPORT_ROB_HIGH_BITS=((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))-REPORT_ROB_LOW_BITS
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -80,17 +83,17 @@ module rv32_lsq #(
     output reg                          store_commit_ready_o,
     input  wire [ROB_TAG_WIDTH-1:0]     store_commit_rob_tag_i,
 
-    output reg                          dcache_req_valid_o,
+    output wire                         dcache_req_valid_o,
     input  wire                         dcache_req_ready_i,
-    output reg                          dcache_req_is_load_o,
-    output reg                          dcache_req_is_store_o,
-    output reg  [31:0]                  dcache_req_addr_o,
-    output reg  [1:0]                   dcache_req_size_o,
-    output reg                          dcache_req_unsigned_o,
-    output reg  [15:0]                  dcache_req_mask_o,
+    output wire                         dcache_req_is_load_o,
+    output wire                         dcache_req_is_store_o,
+    output wire [31:0]                  dcache_req_addr_o,
+    output wire [1:0]                   dcache_req_size_o,
+    output wire                         dcache_req_unsigned_o,
+    output wire [15:0]                  dcache_req_mask_o,
     output wire [127:0]                 dcache_req_wdata_o,
-    output reg  [ROB_TAG_WIDTH-1:0]     dcache_req_rob_tag_o,
-    output reg  [TAG_WIDTH-1:0]         dcache_req_lsq_tag_o,
+    output wire [ROB_TAG_WIDTH-1:0]     dcache_req_rob_tag_o,
+    output wire [TAG_WIDTH-1:0]         dcache_req_lsq_tag_o,
 
     input  wire                         dcache_resp_valid_i,
     output reg                          dcache_resp_ready_o,
@@ -125,7 +128,9 @@ module rv32_lsq #(
     // Same execution recovery packet used by the backend's original guard:
     // {apply,occupancy,head,branch_relative_age}. Disabled by default.
     input  wire [REPORT_RECOVERY_WIDTH-1:0] report_recovery_packet_i,
-    output reg                          load_complete_cancel_o
+    output reg                          load_complete_cancel_o,
+    // {high-index bank one-hot,low-index bank one-hot}; default disabled.
+    output wire [(1<<REPORT_ROB_LOW_BITS)+(1<<REPORT_ROB_HIGH_BITS)-1:0] load_complete_rob_query_o
 );
     localparam integer TAG_SLOT_LSB = 3;
     localparam integer TAG_GEN_LSB = TAG_SLOT_LSB + SLOT_WIDTH;
@@ -260,12 +265,12 @@ module rv32_lsq #(
     integer recovery_first_killed;
     integer recovery_kill_found;
     reg candidate_found;
-    reg [3:0] target_mask;
-    reg [3:0] fwd_mask;
-    reg [31:0] fwd_data;
+    wire [3:0] target_mask;
+    wire [3:0] fwd_mask;
+    wire [31:0] fwd_data;
     reg [31:0] response_word;
     reg [31:0] merged_word;
-    reg request_fire;
+    wire request_fire;
     reg response_match;
     reg response_fire;
     reg complete_slot_found;
@@ -718,12 +723,7 @@ module rv32_lsq #(
     end
 
     always @* begin
-        // Unconditional defaults: these temporaries are written only inside
-        // nested conditions below, and a conditional-only write would infer
-        // latches (thousands of proc_dlatch candidates in synthesis).
-        target_mask = 4'b0;
-        fwd_mask = 4'b0;
-        fwd_data = 32'b0;
+        // Allocation/response temporaries retain unconditional defaults.
         alloc_slot = 0;
         free_count_calc = LSQ_ENTRIES - occupancy_reg;
         alloc_fire_o = {BE_WIDTH{1'b0}};
@@ -757,52 +757,6 @@ module rv32_lsq #(
         candidate = candidate_found ? selected_slot : 0;
         candidate_age = candidate_found ? selected_age : LSQ_ENTRIES + 1;
 
-        dcache_req_valid_o = 1'b0;
-        dcache_req_is_load_o = 1'b0;
-        dcache_req_is_store_o = 1'b0;
-        // Payload is meaningful only with valid. Expose the selected address
-        // directly so forwarding and recovery gates do not sit on the cache
-        // index path.
-        dcache_req_addr_o = selected_addr;
-        dcache_req_size_o = 2'b0;
-        dcache_req_unsigned_o = 1'b0;
-        dcache_req_mask_o = 16'b0;
-        // Wide request data is routed by the bounded combinational unit below.
-        dcache_req_rob_tag_o = {ROB_TAG_WIDTH{1'b0}};
-        dcache_req_lsq_tag_o = {TAG_WIDTH{1'b0}};
-        request_fire = 1'b0;
-        // Recovery updates retained responses but cannot record a new request.
-        // Do not let the cache (or request register) accept an untracked send.
-        if (!flush_i && !recovery_valid_i && candidate_found && !candidate_wait) begin
-            if (selected_load) begin
-                target_mask = access_mask(selected_size);
-                fwd_mask = (REQUEST_PIPELINE!=0 && forwarding_hold_valid)?forwarding_hold_mask:tree_forward_mask;
-                fwd_data = (REQUEST_PIPELINE!=0 && forwarding_hold_valid)?forwarding_hold_data:tree_forward_data;
-                if ((fwd_mask & target_mask) != target_mask) begin
-                    dcache_req_valid_o = 1'b1;
-                    dcache_req_is_load_o = 1'b1;
-                    dcache_req_size_o = selected_size;
-                    dcache_req_unsigned_o = selected_unsigned;
-                    dcache_req_mask_o = line_mask_from_relative(target_mask & ~fwd_mask,
-                                                                 selected_addr);
-                    // Forwarded request bytes use the shared insertion unit.
-                    dcache_req_rob_tag_o = selected_rob_tag;
-                    dcache_req_lsq_tag_o = selected_lsq_tag;
-                    request_fire = dcache_req_ready_i;
-                end
-            end else begin
-                dcache_req_valid_o = 1'b1;
-                dcache_req_is_store_o = 1'b1;
-                dcache_req_size_o = selected_size;
-                dcache_req_unsigned_o = 1'b0;
-                dcache_req_mask_o = line_mask_from_relative(selected_store_mask, selected_addr);
-                // Store request bytes use the shared insertion unit.
-                dcache_req_rob_tag_o = selected_rob_tag;
-                dcache_req_lsq_tag_o = selected_lsq_tag;
-                request_fire = dcache_req_ready_i;
-            end
-        end
-
         // A fully covered load never touches the cache.  It becomes a
         // completion at the next edge, preserving the same handshake timing.
         response_match = 1'b0;
@@ -819,28 +773,25 @@ module rv32_lsq #(
     end
 
 
-    // The old request-admission gate fed ~151 mapped pins and also happened
-    // to be named as AXI enabled_words bit0 after flattening. Keep admission
-    // itself unchanged. Select one relative32-bit source, then insert it;
-    // qualify AFTER insertion so late request-valid never traverses shifts.
-    wire [1:0] request_source_views;
-    wire [7:0] request_data_views;
-    wire [31:0] request_relative_data;
-    wire [127:0] request_inserted_data;
-    rv32_frequency_control_tree #(.LEAVES(2)) request_source_tree (
-        .signal_i(selected_load),.views_o(request_source_views));
-    rv32_frequency_control_tree #(.LEAVES(8)) request_data_tree (
-        .signal_i(dcache_req_valid_o),.views_o(request_data_views));
-    generate for(genvar request_source_word=0;request_source_word<2;request_source_word=request_source_word+1) begin:g_request_source_word
-        assign request_relative_data[request_source_word*16 +: 16]=request_source_views[request_source_word]?
-            fwd_data[request_source_word*16 +: 16]:selected_store_data[request_source_word*16 +: 16];
-    end endgenerate
-    rv32_frequency_line_insert32 request_insertion (
-        .value_i(request_relative_data),.offset_i(selected_addr[3:0]),.line_o(request_inserted_data));
-    generate for(genvar request_line_word=0;request_line_word<8;request_line_word=request_line_word+1) begin:g_request_line_word
-        assign dcache_req_wdata_o[request_line_word*16 +: 16]=
-            {16{request_data_views[request_line_word]}} & request_inserted_data[request_line_word*16 +: 16];
-    end endgenerate
+    // Admission is resolved beside bounded output groups. No new state.
+    wire [3:0] raw_forward_mask=(REQUEST_PIPELINE!=0 && forwarding_hold_valid)?
+        forwarding_hold_mask:tree_forward_mask;
+    wire [31:0] raw_forward_data=(REQUEST_PIPELINE!=0 && forwarding_hold_valid)?
+        forwarding_hold_data:tree_forward_data;
+    assign dcache_req_addr_o=selected_addr;
+    (* keep_hierarchy = 1 *)
+    rv32_lsq_request_owner #(.TAG_WIDTH(TAG_WIDTH),.ROB_TAG_WIDTH(ROB_TAG_WIDTH)) request_owner (
+        .flush_i(flush_i),.recovery_i(recovery_valid_i),.found_i(candidate_found),
+        .wait_i(candidate_wait),.load_i(selected_load),.ready_i(dcache_req_ready_i),
+        .size_i(selected_size),.unsigned_i(selected_unsigned),.address_i(selected_addr),
+        .store_data_i(selected_store_data),.store_mask_i(selected_store_mask),
+        .forward_data_i(raw_forward_data),.forward_mask_i(raw_forward_mask),
+        .rob_tag_i(selected_rob_tag),.lsq_tag_i(selected_lsq_tag),
+        .valid_o(dcache_req_valid_o),.load_o(dcache_req_is_load_o),.store_o(dcache_req_is_store_o),
+        .unsigned_o(dcache_req_unsigned_o),.fire_o(request_fire),.size_o(dcache_req_size_o),
+        .mask_o(dcache_req_mask_o),.data_o(dcache_req_wdata_o),
+        .rob_tag_o(dcache_req_rob_tag_o),.lsq_tag_o(dcache_req_lsq_tag_o),
+        .target_mask_o(target_mask),.forward_mask_o(fwd_mask),.forward_data_o(fwd_data));
 
     // Move the existing backend LSQ_ENTRIES x PHYS_ADDR_WIDTH map into its
     // transaction owner. These are the SAME unreset allocation payload bits.
@@ -887,7 +838,12 @@ module rv32_lsq #(
     localparam integer REPORT_ROWS=(LSQ_ENTRIES<=1)?1:(1<<$clog2(LSQ_ENTRIES));
     // Cancellation travels with the selected row's complete packet.
     // It is computed from that row's stored tag before head/age arbitration.
-    localparam integer REPORT_WIDTH=PHYS_ADDR_WIDTH+ROB_TAG_WIDTH+TAG_WIDTH+35;
+    localparam integer REPORT_BASE_WIDTH=PHYS_ADDR_WIDTH+ROB_TAG_WIDTH+TAG_WIDTH+35;
+    localparam integer REPORT_ROB_LOW_ROWS=1<<REPORT_ROB_LOW_BITS;
+    localparam integer REPORT_ROB_HIGH_ROWS=1<<REPORT_ROB_HIGH_BITS;
+    localparam integer REPORT_ROB_QUERY_WIDTH=REPORT_ROB_LOW_ROWS+REPORT_ROB_HIGH_ROWS;
+    localparam integer REPORT_WIDTH=REPORT_BASE_WIDTH+
+        ((REPORT_ROB_PREDECODE!=0)?REPORT_ROB_QUERY_WIDTH:0);
     localparam integer ACK_WIDTH=ROB_TAG_WIDTH+TAG_WIDTH+1;
     localparam integer REPORT_WORDS=(REPORT_WIDTH+15)/16;
     localparam integer ACK_WORDS=(ACK_WIDTH+15)/16;
@@ -922,7 +878,7 @@ module rv32_lsq #(
     end else begin:g_no_report_cancel_domains
         assign report_recovery_views=0;
     end endgenerate
-    genvar report_row,report_word,report_node;
+    genvar report_row,report_word,report_node,report_decode;
     generate
         for(report_row=0;report_row<REPORT_ROWS;report_row=report_row+1) begin:g_report_row
             if(report_row<LSQ_ENTRIES) begin:g_present
@@ -937,10 +893,30 @@ module rv32_lsq #(
                     .KILL_BRANCH(0),.WIDTH(REPORT_RECOVERY_WIDTH)) cancel_guard (
                     .packet_i(report_recovery_views[report_row*REPORT_RECOVERY_WIDTH +: REPORT_RECOVERY_WIDTH]),
                     .active_i(1'b1),.tag_i(rob_tag_mem[report_row]),.cancel_o(row_cancel));
-                wire [REPORT_WIDTH-1:0] report_payload={
+                wire [REPORT_BASE_WIDTH-1:0] base_report_payload={
                     row_cancel,!retired_mem[report_row],physical_destinations[report_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
                     complete_error_mem[report_row],complete_value_mem[report_row],
                     make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
+                wire [REPORT_WIDTH-1:0] report_payload;
+                if(REPORT_ROB_PREDECODE!=0) begin:g_predecoded_query
+                    wire [REPORT_ROB_QUERY_WIDTH-1:0] query;
+                    // Decode stored row tags before late head/report selection.
+                    // No new FF, and the original full tag is still reported.
+                    for(report_decode=0;report_decode<REPORT_ROB_LOW_ROWS;report_decode=report_decode+1) begin:g_low
+                        assign query[report_decode]=rob_tag_mem[report_row][3 +: REPORT_ROB_LOW_BITS]==report_decode;
+                    end
+                    for(report_decode=0;report_decode<REPORT_ROB_HIGH_ROWS;report_decode=report_decode+1) begin:g_high
+                        if(REPORT_ROB_HIGH_BITS>0) begin:g_bits
+                            assign query[REPORT_ROB_LOW_ROWS+report_decode]=
+                                rob_tag_mem[report_row][3+REPORT_ROB_LOW_BITS +: REPORT_ROB_HIGH_BITS]==report_decode;
+                        end else begin:g_single_bank
+                            assign query[REPORT_ROB_LOW_ROWS+report_decode]=1'b1;
+                        end
+                    end
+                    assign report_payload={query,base_report_payload};
+                end else begin:g_original_query
+                    assign report_payload=base_report_payload;
+                end
                 wire [ACK_WIDTH-1:0] ack_payload={store_ack_error_mem[report_row],
                     make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
                 localparam integer ROW_MOD=report_row%REPORT_AGE_MODULUS;
@@ -1005,11 +981,17 @@ module rv32_lsq #(
         end
     endgenerate
 
+    generate if(REPORT_ROB_PREDECODE!=0) begin:g_report_rob_query
+        assign load_complete_rob_query_o=report_payload_tree[1][REPORT_BASE_WIDTH +: REPORT_ROB_QUERY_WIDTH];
+    end else begin:g_no_report_rob_query
+        assign load_complete_rob_query_o=0;
+    end endgenerate
+
     always @* begin
         complete_slot_found=report_valid_tree[1];
         complete_slot_select=complete_slot_found?report_slot_tree[1]:head_reg;
         load_complete_valid_o=complete_slot_found;
-        {load_complete_cancel_o,load_complete_unretired_o,load_complete_phys_rd_o,load_complete_error_o,load_complete_value_o,load_complete_lsq_tag_o,load_complete_rob_tag_o}=report_payload_tree[1];
+        {load_complete_cancel_o,load_complete_unretired_o,load_complete_phys_rd_o,load_complete_error_o,load_complete_value_o,load_complete_lsq_tag_o,load_complete_rob_tag_o}=report_payload_tree[1][0 +: REPORT_BASE_WIDTH];
         store_ack_valid_o=ack_valid_tree[1];
         {store_ack_error_o,store_ack_lsq_tag_o,store_ack_rob_tag_o}=ack_payload_tree[1];
     end
@@ -1815,4 +1797,100 @@ module rv32_lsq_forward_window (
             assign data_o[load_byte*8 +: 8]=(routed[0] | routed[1]) | (routed[2] | routed[3]);
         end
     endgenerate
+endmodule
+
+
+// Construct one LSQ request with local control loads. Admission and partial
+// forwarding predicates never directly qualify a wide packet or barrel shift.
+// Each externally visible payload still equals zero when no request is sent.
+// Forwarding temporaries also retain their original admission/load gating.
+(* keep_hierarchy = 1 *)
+module rv32_lsq_request_owner #(
+    parameter integer TAG_WIDTH=17,ROB_TAG_WIDTH=17
+) (
+    input wire flush_i,recovery_i,found_i,wait_i,load_i,ready_i,
+    input wire [1:0] size_i,
+    input wire unsigned_i,
+    input wire [31:0] address_i,store_data_i,forward_data_i,
+    input wire [3:0] store_mask_i,forward_mask_i,
+    input wire [ROB_TAG_WIDTH-1:0] rob_tag_i,
+    input wire [TAG_WIDTH-1:0] lsq_tag_i,
+    output wire valid_o,load_o,store_o,unsigned_o,fire_o,
+    output wire [1:0] size_o,
+    output wire [15:0] mask_o,
+    output wire [127:0] data_o,
+    output wire [ROB_TAG_WIDTH-1:0] rob_tag_o,
+    output wire [TAG_WIDTH-1:0] lsq_tag_o,
+    output wire [3:0] target_mask_o,forward_mask_o,
+    output wire [31:0] forward_data_o
+);
+    localparam integer ROB_WORDS=(ROB_TAG_WIDTH+15)/16;
+    localparam integer LSQ_WORDS=(TAG_WIDTH+15)/16;
+    localparam integer ROB_START=3,LSQ_START=ROB_START+ROB_WORDS;
+    localparam integer DATA_START=LSQ_START+LSQ_WORDS;
+    localparam integer VALID_LEAVES=DATA_START+8;
+    wire admitted=!flush_i && !recovery_i && found_i && !wait_i;
+    wire admitted_load=admitted && load_i;
+    function [3:0] decode_access_mask;
+        input [1:0] size;
+        begin
+            case(size)
+                2'd0: decode_access_mask=4'b0001;
+                2'd1: decode_access_mask=4'b0011;
+                default: decode_access_mask=4'b1111;
+            endcase
+        end
+    endfunction
+    wire [3:0] access_mask=decode_access_mask(size_i);
+    wire incomplete_forward=(forward_mask_i & access_mask)!=access_mask;
+    wire request_valid=admitted && (!load_i || incomplete_forward);
+    wire [2:0] forward_enable;
+    wire [VALID_LEAVES-1:0] valid_views;
+    wire [3:0] load_views;
+    wire [31:0] relative_data;
+    wire [127:0] inserted_data;
+    wire [3:0] relative_mask=load_views[0]?
+        (access_mask & ~forward_mask_i):store_mask_i;
+    wire [15:0] inserted_mask={12'b0,relative_mask} << address_i[3:0];
+    rv32_frequency_control_tree #(.LEAVES(3)) forward_tree (
+        .signal_i(admitted_load),.views_o(forward_enable));
+    rv32_frequency_control_tree #(.LEAVES(VALID_LEAVES)) valid_tree (
+        .signal_i(request_valid),.views_o(valid_views));
+    rv32_frequency_control_tree #(.LEAVES(4)) source_tree (
+        .signal_i(load_i),.views_o(load_views));
+    // A leaf owns eight mask bits, sixteen data bits, or at most five flags.
+    assign target_mask_o={4{forward_enable[0]}} & access_mask;
+    assign forward_mask_o={4{forward_enable[0]}} & forward_mask_i;
+    assign valid_o=request_valid;
+    assign fire_o=valid_views[0] && ready_i;
+    assign load_o=valid_views[1] && load_views[3];
+    assign store_o=valid_views[1] && !load_views[3];
+    assign size_o={2{valid_views[1]}} & size_i;
+    assign unsigned_o=valid_views[1] && load_views[3] && unsigned_i;
+    assign mask_o={16{valid_views[2]}} & inserted_mask;
+    genvar word;
+    generate
+        for(word=0;word<2;word=word+1) begin:g_relative
+            assign forward_data_o[word*16 +: 16]=
+                {16{forward_enable[word+1]}} & forward_data_i[word*16 +: 16];
+            assign relative_data[word*16 +: 16]=load_views[word+1]?
+                forward_data_i[word*16 +: 16]:store_data_i[word*16 +: 16];
+        end
+        for(word=0;word<ROB_WORDS;word=word+1) begin:g_rob_tag
+            localparam integer LOW=word*16;
+            localparam integer BITS=(ROB_TAG_WIDTH-LOW>=16)?16:ROB_TAG_WIDTH-LOW;
+            assign rob_tag_o[LOW +: BITS]={BITS{valid_views[ROB_START+word]}} & rob_tag_i[LOW +: BITS];
+        end
+        for(word=0;word<LSQ_WORDS;word=word+1) begin:g_lsq_tag
+            localparam integer LOW=word*16;
+            localparam integer BITS=(TAG_WIDTH-LOW>=16)?16:TAG_WIDTH-LOW;
+            assign lsq_tag_o[LOW +: BITS]={BITS{valid_views[LSQ_START+word]}} & lsq_tag_i[LOW +: BITS];
+        end
+        for(word=0;word<8;word=word+1) begin:g_line
+            assign data_o[word*16 +: 16]=
+                {16{valid_views[DATA_START+word]}} & inserted_data[word*16 +: 16];
+        end
+    endgenerate
+    rv32_frequency_line_insert32 insertion (
+        .value_i(relative_data),.offset_i(address_i[3:0]),.line_o(inserted_data));
 endmodule
