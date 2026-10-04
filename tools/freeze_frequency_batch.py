@@ -90,9 +90,28 @@ def main():
     record.pop('measurement_started_at',None)
     # A frequency measured for the baseline must never look like a frequency
     # measured for the newly edited worktree.
+    record['previous_measurement']={key:previous.get(key) for key in [
+        'frozen_run','status','current_measured_fmax_mhz','current_measured_ipc',
+        'current_measured_area_um2','measured_metrics_report','current_correctness_status',
+        'current_correctness_passed','current_correctness_failed','current_correctness_failed_cases']}
+    if previous.get('current_measured_fmax_mhz') is not None:
+        record['last_observed_measurement']=record['previous_measurement']
+    elif previous.get('last_observed_measurement'):
+        record['last_observed_measurement']=previous['last_observed_measurement']
+    elif previous.get('previous_measurement',{}).get('current_measured_fmax_mhz') is not None:
+        record['last_observed_measurement']=previous['previous_measurement']
     record['current_measured_fmax_mhz']=None
+    record['current_measured_ipc']=None
+    record['current_measured_area_um2']=None
+    record['measured_metrics_report']=None
+    record['current_correctness_suite_passed']=None
+    record['current_correctness_status']='UNTESTED'
+    record['current_correctness_passed']=None
+    record['current_correctness_failed']=None
+    record['current_correctness_failed_cases']=[]
+    record.pop('next_unadopted_candidate',None)
     record['measured_frequency_belongs_to']=None
-    record['last_complete_course_standard_result']=str(BASE/'result/result.json')
+    record['last_complete_course_standard_result']=previous.get('last_complete_course_standard_result',str(BASE/'result/result.json'))
     write(record_path,record)
     print(json.dumps(dict(status='FROZEN_UNTESTED',implemented_files=len(names),frozen_files=len(files),run=str(RUN)),ensure_ascii=False))
 

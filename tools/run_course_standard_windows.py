@@ -24,7 +24,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=ROOT/'tools/course_windows_config.json')
     parser.add_argument('--correctness', action='store_true', help='Run the official full correctness suite once after the CPU build')
+    phases=parser.add_mutually_exclusive_group()
+    phases.add_argument('--timing-only',action='store_true',help='One course synth/STA/area run; do not build or run the CPU simulator')
+    phases.add_argument('--reuse-synth',action='store_true',help='Reuse this exact frozen timing-only report for a later IPC/correctness phase')
     args = parser.parse_args()
+    if args.timing_only and args.correctness:
+        parser.error('--timing-only cannot run correctness')
     if os.name != 'nt':
         raise SystemExit('Windows native measurement only')
     config = json.loads(args.config.read_text())
@@ -44,8 +49,18 @@ def main():
         for name, expected in manifest['snapshot_sha256'].items():
             assert sha(source / name) == expected, name
     check_inputs()
-    assert not out.exists(), 'Keep earlier measurement artifacts'
-    out.mkdir(parents=True)
+    if args.reuse_synth:
+        timing_phase=json.loads((out/'timing_only.json').read_text())
+        assert timing_phase['status']=='COURSE_STANDARD_WINDOWS_TIMING_ONLY_COMPLETE'
+        assert timing_phase['source_manifest_sha256']==sha(config['source_manifest'])
+        assert timing_phase['toolchain_manifest_sha256']==sha(tools_root/'toolchain_manifest.json')
+        assert timing_phase['config_sha256']==sha(args.config)
+        assert timing_phase['official_report_sha256']==sha(out/'synth/opt/report.json')
+        for name in ('result.json','ipc.json','perf.log','build_host.log','failure.json'):
+            assert not (out/name).exists(), 'Keep earlier measurement artifacts: '+name
+    else:
+        assert not out.exists(), 'Keep earlier measurement artifacts'
+        out.mkdir(parents=True)
     env = dict(os.environ)
     # Original course Python children must flush their case names as they
     # run, so a failing case is identifiable without restarting simulation.
@@ -110,6 +125,27 @@ def main():
         if result.returncode:
             raise RuntimeError(f'{name} failed: inspect {out/(name+".log")}')
         print(f'DONE course native {name} {time.monotonic()-began:.1f}s', flush=True)
+    if args.timing_only:
+        run('synth')
+        check_inputs()
+        official=json.loads((out/'synth/opt/report.json').read_text())
+        fmax=official['timing']['estimated_fmax_mhz']
+        assert fmax>0 and math.isfinite(fmax)
+        timing_phase=dict(status='COURSE_STANDARD_WINDOWS_TIMING_ONLY_COMPLETE',
+            environment='WINDOWS_NATIVE',source_manifest_sha256=sha(config['source_manifest']),
+            toolchain_manifest_sha256=sha(tools_root/'toolchain_manifest.json'),config_sha256=sha(args.config),
+            official_report_sha256=sha(out/'synth/opt/report.json'),
+            fmax_mhz=fmax,minimum_period_ns=official['timing']['minimum_period_ns'],
+            area_um2=official['area']['area_um2'],ipc=None,
+            cpu_build_started=False,simulation_started=False,
+            official_perf_expected_results_passed=False,official_correctness_suite_not_run=True)
+        (out/'timing_only.json').write_text(json.dumps(timing_phase,indent=2)+'\n')
+        identity.update(status='TIMING_ONLY_COMPLETE',timing_only_report_sha256=sha(out/'timing_only.json'),
+            official_report_sha256=timing_phase['official_report_sha256'],cpu_build_started=False,simulation_started=False)
+        (out/'measurement_identity.json').write_text(json.dumps(identity,indent=2)+'\n')
+        (out/'timing_identity.json').write_text(json.dumps(identity,indent=2)+'\n')
+        print(json.dumps(timing_phase,indent=2),flush=True)
+        return
     def performance():
         nonlocal prebuilt
         if prebuilt is None:
@@ -179,7 +215,11 @@ def main():
         return result
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         perf_future = pool.submit(performance)
-        synth_future = pool.submit(run, 'synth')
+        if args.reuse_synth:
+            print('REUSE exact frozen course synthesis/STA; no repeated synthesis',flush=True)
+            synth_future=pool.submit(lambda:None)
+        else:
+            synth_future = pool.submit(run, 'synth')
         failures = []
         results = {}
         for name, future in [('ipc', perf_future), ('synth', synth_future)]:
