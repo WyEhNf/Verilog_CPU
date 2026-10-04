@@ -465,8 +465,8 @@ module rv32_lsq #(
     reg [1:0] selection_size;
     reg [3:0] selection_store_mask;
     reg forwarding_hold_valid;
-    reg [3:0] forwarding_hold_mask;
-    reg [31:0] forwarding_hold_data;
+    wire [3:0] forwarding_hold_mask;
+    wire [31:0] forwarding_hold_data;
     localparam integer SELECT_STATE_WIDTH=GENERATION_WIDTH+8;
     localparam integer PICK_PAYLOAD_WIDTH=GENERATION_WIDTH+ROB_TAG_WIDTH+40;
     wire [LSQ_ENTRIES*SELECT_STATE_WIDTH-1:0] selection_state_rows;
@@ -537,9 +537,11 @@ module rv32_lsq #(
         .signal_i(selection_input_fire),.views_o(selection_write_views));
     wire forwarding_hold_write=(REQUEST_PIPELINE!=0) && candidate_found && selected_load &&
         dcache_req_valid_o && !dcache_req_ready_i && !forwarding_hold_valid;
-    wire forwarding_payload_write;
-    rv32_frequency_control_tree #(.LEAVES(1)) forwarding_hold_tree (
-        .signal_i(forwarding_hold_write),.views_o(forwarding_payload_write));
+    // Same 36 unreset payload bits and write edge, with existing word owners.
+    // A final enable drives <=16 hold muxes instead of all 36 (72 pins).
+    rv32_frequency_word_bank #(.WIDTH(36)) forwarding_hold_owner (
+        .clk_i(clk_i),.write_i(forwarding_hold_write),
+        .data_i({fwd_mask,fwd_data}),.data_o({forwarding_hold_mask,forwarding_hold_data}));
     wire [ROB_SLOT_WIDTH-1:0] selection_rob_age=selection_rob_tag[3 +: ROB_SLOT_WIDTH]-recovery_head_i;
     wire [ROB_SLOT_WIDTH-1:0] selection_branch_age=recovery_tag_i[3 +: ROB_SLOT_WIDTH]-recovery_head_i;
     wire selection_recovery_kill=selection_valid &&
@@ -568,7 +570,6 @@ module rv32_lsq #(
         end
         if(selection_write_views[3]) selection_store_mask<=pick_store_mask;
         if(selection_write_views[4]) selection_store_data<=pick_store_data;
-        if(forwarding_payload_write) begin forwarding_hold_mask<=fwd_mask;forwarding_hold_data<=fwd_data;end
     end
 
     genvar age_slot;
@@ -774,10 +775,16 @@ module rv32_lsq #(
 
 
     // Admission is resolved beside bounded output groups. No new state.
-    wire [3:0] raw_forward_mask=(REQUEST_PIPELINE!=0 && forwarding_hold_valid)?
+    wire [2:0] saved_forward_views;
+    rv32_frequency_control_tree #(.LEAVES(3)) saved_forward_tree (
+        .signal_i(REQUEST_PIPELINE!=0 && forwarding_hold_valid),.views_o(saved_forward_views));
+    wire [3:0] raw_forward_mask=saved_forward_views[2]?
         forwarding_hold_mask:tree_forward_mask;
-    wire [31:0] raw_forward_data=(REQUEST_PIPELINE!=0 && forwarding_hold_valid)?
-        forwarding_hold_data:tree_forward_data;
+    wire [31:0] raw_forward_data;
+    assign raw_forward_data[0 +: 16]=saved_forward_views[0]?
+        forwarding_hold_data[0 +: 16]:tree_forward_data[0 +: 16];
+    assign raw_forward_data[16 +: 16]=saved_forward_views[1]?
+        forwarding_hold_data[16 +: 16]:tree_forward_data[16 +: 16];
     assign dcache_req_addr_o=selected_addr;
     (* keep_hierarchy = 1 *)
     rv32_lsq_request_owner #(.TAG_WIDTH(TAG_WIDTH),.ROB_TAG_WIDTH(ROB_TAG_WIDTH)) request_owner (
@@ -878,6 +885,15 @@ module rv32_lsq #(
     end else begin:g_no_report_cancel_domains
         assign report_recovery_views=0;
     end endgenerate
+    // The original tournament orders candidates by (wrap, physical row).
+    // Choose the first eligible non-wrapped row, otherwise the first eligible
+    // row, directly as one-hot. Keep the original binary slot for metadata;
+    // wide report routing no longer waits for its encode/decode chain.
+    localparam integer REPORT_GRANT_DOMAINS=(LSQ_ENTRIES+3)/4;
+    wire [LSQ_ENTRIES-1:0] report_eligible,report_upper,report_first;
+    wire [REPORT_GRANT_DOMAINS-1:0] report_wrap_enable_views;
+    rv32_frequency_control_tree #(.LEAVES(REPORT_GRANT_DOMAINS)) report_wrap_enable_tree (
+        .signal_i(!(|report_upper)),.views_o(report_wrap_enable_views));
     genvar report_row,report_word,report_node,report_decode;
     generate
         for(report_row=0;report_row<REPORT_ROWS;report_row=report_row+1) begin:g_report_row
@@ -932,6 +948,18 @@ module rv32_lsq #(
                     valid_mem[report_row] && load_mem[report_row] && complete_mem[report_row] && !load_reported_mem[report_row];
                 assign report_slot_tree[REPORT_ROWS+report_row]=report_row;
                 assign report_wrap_tree[REPORT_ROWS+report_row]=circular_wrap_views[report_row*8+5];
+                assign report_eligible[report_row]=report_valid_tree[REPORT_ROWS+report_row];
+                assign report_upper[report_row]=report_eligible[report_row] &&
+                    !report_wrap_tree[REPORT_ROWS+report_row];
+                if(report_row==0) begin:g_first_direct_report
+                    assign report_first[report_row]=report_upper[report_row] ||
+                        (report_wrap_enable_views[report_row/4] && report_eligible[report_row]);
+                end else begin:g_later_direct_report
+                    assign report_first[report_row]=
+                        (report_upper[report_row] && !(|report_upper[report_row-1:0])) ||
+                        (report_wrap_enable_views[report_row/4] && report_eligible[report_row] &&
+                         !(|report_eligible[report_row-1:0]));
+                end
                 assign commit_valid_tree[REPORT_ROWS+report_row]=valid_mem[report_row] && store_mem[report_row] &&
                     addr_ready_mem[report_row] && data_ready_mem[report_row] && !store_commit_mem[report_row] &&
                     rob_tag_mem[report_row]==store_commit_rob_tag_i;
@@ -939,7 +967,7 @@ module rv32_lsq #(
                 assign ack_valid_tree[REPORT_ROWS+report_row]=occupancy_reg!=0 && head_query_views[report_row*SLOT_WIDTH +: SLOT_WIDTH]==report_row &&
                     valid_mem[report_row] && store_mem[report_row] && store_ack_mem[report_row];
                 rv32_frequency_control_tree #(.LEAVES(REPORT_WORDS)) report_selection_tree (
-                    .signal_i(report_valid_tree[1] && report_slot_tree[1]==report_row),.views_o(report_select));
+                    .signal_i(report_first[report_row]),.views_o(report_select));
                 rv32_frequency_control_tree #(.LEAVES(ACK_WORDS)) ack_selection_tree (
                     .signal_i(ack_valid_tree[REPORT_ROWS+report_row]),.views_o(ack_select));
                 for(report_word=0;report_word<REPORT_WORDS;report_word=report_word+1) begin:g_result_word

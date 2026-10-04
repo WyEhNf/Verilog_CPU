@@ -372,34 +372,33 @@ module rv32_rob #(
             ROB_CONTROL_REGISTER_BANKS == 0 && ASAP7_FANOUT_BUFFERS == 0) begin : g_banked_commit
             for (commit_bank = 0; commit_bank < BE_WIDTH; commit_bank = commit_bank + 1) begin : g_bank
                 wire [BANK_ROWS-1:0] row_select;
+                wire [BANK_ROWS*COMMIT_READ_WIDTH-1:0] row_packets;
                 for (bank_row = 0; bank_row < BANK_ROWS; bank_row = bank_row + 1) begin : g_row
                     wire [BE_WIDTH-1:0] possible_heads;
-                    // A window of BE_WIDTH consecutive rows contains exactly
-                    // one row of each bank, even across the ROB wrap boundary.
+                    // Preserve the original four-consecutive-heads query,
+                    // including the exact modulo indexing for every bank.
                     for (bank_offset = 0; bank_offset < BE_WIDTH; bank_offset = bank_offset + 1) begin : g_head
                         assign possible_heads[bank_offset] = head_row_select[
                             (bank_row*BE_WIDTH+commit_bank+ROB_ENTRIES-bank_offset)%ROB_ENTRIES];
                     end
                     assign row_select[bank_row] = |possible_heads;
+                    assign row_packets[bank_row*COMMIT_READ_WIDTH +: COMMIT_READ_WIDTH]={
+                        valid_mem[bank_row*BE_WIDTH+commit_bank], ready_mem[bank_row*BE_WIDTH+commit_bank],
+                        store_mem[bank_row*BE_WIDTH+commit_bank], halt_mem[bank_row*BE_WIDTH+commit_bank],
+                        error_mem[bank_row*BE_WIDTH+commit_bank], store_wait_mem[bank_row*BE_WIDTH+commit_bank],
+                        store_sent_mem[bank_row*BE_WIDTH+commit_bank], generation_mem[bank_row*BE_WIDTH+commit_bank],
+                        rd_we_mem[bank_row*BE_WIDTH+commit_bank], rd_mem[bank_row*BE_WIDTH+commit_bank],
+                        pc_mem[bank_row*BE_WIDTH+commit_bank], inst_mem[bank_row*BE_WIDTH+commit_bank],
+                        value_mem[bank_row*BE_WIDTH+commit_bank], store_addr_mem[bank_row*BE_WIDTH+commit_bank],
+                        store_mask_mem[bank_row*BE_WIDTH+commit_bank], store_data_mem[bank_row*BE_WIDTH+commit_bank],
+                        old_phys_mem[bank_row*BE_WIDTH+commit_bank], new_phys_mem[bank_row*BE_WIDTH+commit_bank]};
                 end
-                reg [COMMIT_READ_WIDTH-1:0] packet;
-                integer row;
-                always @* begin
-                    packet = {COMMIT_READ_WIDTH{1'b0}};
-                    for (row = 0; row < BANK_ROWS; row = row + 1) begin
-                        packet = packet | ({COMMIT_READ_WIDTH{row_select[row]}} &
-                            {valid_mem[row*BE_WIDTH+commit_bank], ready_mem[row*BE_WIDTH+commit_bank],
-                             store_mem[row*BE_WIDTH+commit_bank], halt_mem[row*BE_WIDTH+commit_bank],
-                             error_mem[row*BE_WIDTH+commit_bank], store_wait_mem[row*BE_WIDTH+commit_bank],
-                             store_sent_mem[row*BE_WIDTH+commit_bank], generation_mem[row*BE_WIDTH+commit_bank],
-                             rd_we_mem[row*BE_WIDTH+commit_bank], rd_mem[row*BE_WIDTH+commit_bank],
-                             pc_mem[row*BE_WIDTH+commit_bank], inst_mem[row*BE_WIDTH+commit_bank],
-                             value_mem[row*BE_WIDTH+commit_bank], store_addr_mem[row*BE_WIDTH+commit_bank],
-                             store_mask_mem[row*BE_WIDTH+commit_bank], store_data_mem[row*BE_WIDTH+commit_bank],
-                             old_phys_mem[row*BE_WIDTH+commit_bank], new_phys_mem[row*BE_WIDTH+commit_bank]});
-                    end
-                end
-                assign bank_packet[commit_bank] = packet;
+                // PRIORITY=0 is the same bitwise OR of masked row packets
+                // as the old loop, even for multiple asserted row_select bits.
+                // Its existing control trees bound each final data group.
+                rv32_frequency_event_select #(.WIDTH(COMMIT_READ_WIDTH),.EVENTS(BANK_ROWS),.PRIORITY(0)) packet_selector (
+                    .events_i(row_select),.values_i(row_packets),.write_o(),
+                    .value_o(bank_packet[commit_bank]));
             end
         end
     endgenerate

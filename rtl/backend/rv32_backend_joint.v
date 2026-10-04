@@ -45,6 +45,9 @@ module rv32_backend_joint #(
     // Default preserves unrestricted standalone trace immediates. The CPU
     // enables this for its decoder's signed twelve-bit store displacement.
     parameter integer STORE_ALLOC_IMM12 = 0,
+    // Independent control of the opportunistic allocation-edge address.
+    // Ordinary AGU and EARLY_STORE_ADDRESS=2 shared probing remain available.
+    parameter integer STORE_ALLOC_EARLY_ADDRESS = 1,
     parameter integer LSQ_ROB_QUERY_PREDECODE = 0
 ) (
     input  wire                         clk_i,
@@ -840,22 +843,26 @@ module rv32_backend_joint #(
             // while the backend stores only the access-relative low word.
             assign trace_store_data_relative[io_lane*32 +: 32] =
                 trace_store_data_i[io_lane*128 +: 32];
-            // Publish only an already-ready store base at allocation. This
-            // releases disjoint younger loads without issuing the store or
-            // declaring its data ready. Same-bundle producers explicitly
-            // clear rs_src1_ready below; unresolved bases keep the old AGU path.
-            assign lsq_alloc_addr_valid[io_lane] = (EARLY_STORE_ADDRESS != 0) &&
-                d_valid[io_lane] && d_is_store[io_lane] && rs_src1_ready[io_lane];
-            if(STORE_ALLOC_IMM12!=0) begin:g_store_alloc_simm12
-                // Only stores with alloc_addr_valid observe this payload.
-                // Loads leave addr_ready clear until their ordinary AGU update.
-                rv32_frequency_add_simm12 address_adder (
-                    .base_i(rs_src1_value[io_lane*32 +: 32]),
-                    .immediate_i(d_imm[io_lane*32 +: 12]),
-                    .sum_o(lsq_alloc_addr[io_lane*32 +: 32]));
-            end else begin:g_store_alloc_generic
-                assign lsq_alloc_addr[io_lane*32 +: 32] =
-                    rs_src1_value[io_lane*32 +: 32] + d_imm[io_lane*32 +: 32];
+            // An allocation may advertise an address only when this
+            // optional path is enabled. Disabled payload is constant as well,
+            // so an unused PRF -> adder -> LSQ write cone can be removed.
+            if(STORE_ALLOC_EARLY_ADDRESS!=0) begin:g_alloc_address_enabled
+                assign lsq_alloc_addr_valid[io_lane] = (EARLY_STORE_ADDRESS != 0) &&
+                    d_valid[io_lane] && d_is_store[io_lane] && rs_src1_ready[io_lane];
+                if(STORE_ALLOC_IMM12!=0) begin:g_store_alloc_simm12
+                    // Only stores with alloc_addr_valid observe this payload.
+                    // Loads leave addr_ready clear until their ordinary AGU update.
+                    rv32_frequency_add_simm12 address_adder (
+                        .base_i(rs_src1_value[io_lane*32 +: 32]),
+                        .immediate_i(d_imm[io_lane*32 +: 12]),
+                        .sum_o(lsq_alloc_addr[io_lane*32 +: 32]));
+                end else begin:g_store_alloc_generic
+                    assign lsq_alloc_addr[io_lane*32 +: 32] =
+                        rs_src1_value[io_lane*32 +: 32] + d_imm[io_lane*32 +: 32];
+                end
+            end else begin:g_shared_or_ordinary_address
+                assign lsq_alloc_addr_valid[io_lane]=1'b0;
+                assign lsq_alloc_addr[io_lane*32 +: 32]=32'b0;
             end
             assign prf_read_phys[(2*io_lane)*PAW +: PAW] =
                 d_src1_phys[io_lane*PAW +: PAW];
