@@ -12,6 +12,7 @@ module rv32_lsq #(
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer ROB_TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
+    parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
     parameter integer STORE_ADMISSION_BYPASS = 0,
     parameter integer STORE_ADDRESS_PROBE = 0,
     parameter integer REQUEST_PIPELINE = 0,
@@ -43,6 +44,7 @@ module rv32_lsq #(
     input  wire [BE_WIDTH-1:0]           alloc_is_load_i,
     input  wire [BE_WIDTH-1:0]           alloc_is_store_i,
     input  wire [(BE_WIDTH*ROB_TAG_WIDTH)-1:0] alloc_rob_tag_i,
+    input  wire [(BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] alloc_phys_rd_i,
     input  wire [(BE_WIDTH*2)-1:0]       alloc_size_i,
     input  wire [BE_WIDTH-1:0]           alloc_unsigned_i,
     input  wire [BE_WIDTH-1:0]           alloc_addr_valid_i,
@@ -101,6 +103,7 @@ module rv32_lsq #(
     output reg  [ROB_TAG_WIDTH-1:0]     load_complete_rob_tag_o,
     output reg  [TAG_WIDTH-1:0]         load_complete_lsq_tag_o,
     output reg  [31:0]                  load_complete_value_o,
+    output reg  [PHYS_ADDR_WIDTH-1:0]    load_complete_phys_rd_o,
     output reg                          load_complete_error_o,
 
     input  wire                         dcache_store_ack_valid_i,
@@ -773,10 +776,50 @@ module rv32_lsq #(
             {16{request_data_views[request_line_word]}} & request_inserted_data[request_line_word*16 +: 16];
     end endgenerate
 
+    // Move the existing backend LSQ_ENTRIES x PHYS_ADDR_WIDTH map into its
+    // transaction owner. These are the SAME unreset allocation payload bits.
+    // A valid report selects phys/value/full ROB+LSQ identity in parallel;
+    // it no longer selects a tag then uses that tag for a second table read.
+    localparam integer PHYS_MAP_DOMAINS=(LSQ_ENTRIES+3)/4;
+    wire [LSQ_ENTRIES*PHYS_ADDR_WIDTH-1:0] physical_destinations;
+    wire [PHYS_MAP_DOMAINS*BE_WIDTH-1:0] physical_alloc_views;
+    wire [PHYS_MAP_DOMAINS*BE_WIDTH*SLOT_WIDTH-1:0] physical_slot_views;
+    wire [PHYS_MAP_DOMAINS*BE_WIDTH*PHYS_ADDR_WIDTH-1:0] physical_value_views;
+    wire [BE_WIDTH*SLOT_WIDTH-1:0] physical_alloc_slots;
+    rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(PHYS_MAP_DOMAINS)) physical_alloc_tree (
+        .signal_i(alloc_fire_o & {BE_WIDTH{!reset_i}}),.views_o(physical_alloc_views));
+    rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*SLOT_WIDTH),.LEAVES(PHYS_MAP_DOMAINS)) physical_slot_tree (
+        .signal_i(physical_alloc_slots),.views_o(physical_slot_views));
+    rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*PHYS_ADDR_WIDTH),.LEAVES(PHYS_MAP_DOMAINS)) physical_value_tree (
+        .signal_i(alloc_phys_rd_i),.views_o(physical_value_views));
+    generate
+        for(genvar physical_lane=0;physical_lane<BE_WIDTH;physical_lane=physical_lane+1) begin:g_physical_alloc_slot
+            assign physical_alloc_slots[physical_lane*SLOT_WIDTH +: SLOT_WIDTH]=
+                alloc_lsq_tag_o[physical_lane*TAG_WIDTH+TAG_SLOT_LSB +: SLOT_WIDTH];
+        end
+        for(genvar physical_row=0;physical_row<LSQ_ENTRIES;physical_row=physical_row+1) begin:g_physical_destination_row
+            localparam integer DOMAIN=physical_row/4;
+            wire [BE_WIDTH-1:0] row_match_mask;
+            wire row_write;
+            wire [PHYS_ADDR_WIDTH-1:0] next_phys;
+            for(genvar physical_lane=0;physical_lane<BE_WIDTH;physical_lane=physical_lane+1) begin:g_match
+                assign row_match_mask[physical_lane]=physical_alloc_views[DOMAIN*BE_WIDTH+physical_lane] &&
+                    physical_slot_views[(DOMAIN*BE_WIDTH+physical_lane)*SLOT_WIDTH +: SLOT_WIDTH]==physical_row;
+            end
+            rv32_frequency_event_select #(.WIDTH(PHYS_ADDR_WIDTH),.EVENTS(BE_WIDTH)) selector (
+                .events_i(row_match_mask),
+                .values_i(physical_value_views[DOMAIN*BE_WIDTH*PHYS_ADDR_WIDTH +: BE_WIDTH*PHYS_ADDR_WIDTH]),
+                .write_o(row_write),.value_o(next_phys));
+            rv32_frequency_word_bank #(.WIDTH(PHYS_ADDR_WIDTH)) owner (
+                .clk_i(clk_i),.write_i(row_write),.data_i(next_phys),
+                .data_o(physical_destinations[physical_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]));
+        end
+    endgenerate
+
     // Load reporting follows queue age; store admission preserves the former
     // lowest physical-slot priority. Neither selection is a serial scan.
     localparam integer REPORT_ROWS=(LSQ_ENTRIES<=1)?1:(1<<$clog2(LSQ_ENTRIES));
-    localparam integer REPORT_WIDTH=ROB_TAG_WIDTH+TAG_WIDTH+33;
+    localparam integer REPORT_WIDTH=PHYS_ADDR_WIDTH+ROB_TAG_WIDTH+TAG_WIDTH+33;
     localparam integer ACK_WIDTH=ROB_TAG_WIDTH+TAG_WIDTH+1;
     localparam integer REPORT_WORDS=(REPORT_WIDTH+15)/16;
     localparam integer ACK_WORDS=(ACK_WIDTH+15)/16;
@@ -793,7 +836,9 @@ module rv32_lsq #(
             if(report_row<LSQ_ENTRIES) begin:g_present
                 wire [REPORT_WORDS-1:0] report_select;
                 wire [ACK_WORDS-1:0] ack_select;
-                wire [REPORT_WIDTH-1:0] report_payload={complete_error_mem[report_row],complete_value_mem[report_row],
+                wire [REPORT_WIDTH-1:0] report_payload={
+                    physical_destinations[report_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
+                    complete_error_mem[report_row],complete_value_mem[report_row],
                     make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
                 wire [ACK_WIDTH-1:0] ack_payload={store_ack_error_mem[report_row],
                     make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
@@ -853,7 +898,7 @@ module rv32_lsq #(
         complete_slot_found=report_valid_tree[1];
         complete_slot_select=complete_slot_found?report_slot_tree[1]:head_reg;
         load_complete_valid_o=complete_slot_found;
-        {load_complete_error_o,load_complete_value_o,load_complete_lsq_tag_o,load_complete_rob_tag_o}=report_payload_tree[1];
+        {load_complete_phys_rd_o,load_complete_error_o,load_complete_value_o,load_complete_lsq_tag_o,load_complete_rob_tag_o}=report_payload_tree[1];
         store_ack_valid_o=ack_valid_tree[1];
         {store_ack_error_o,store_ack_lsq_tag_o,store_ack_rob_tag_o}=ack_payload_tree[1];
     end
