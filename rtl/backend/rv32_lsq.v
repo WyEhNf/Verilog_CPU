@@ -206,6 +206,20 @@ module rv32_lsq #(
     reg store_ack_error_mem_write_enable [0:LSQ_ENTRIES-1];
 
     reg [SLOT_WIDTH-1:0] head_reg;
+    // Head address had shared decoded drivers feeding ~170 mapped pins.
+    // Every row owns its age/ack/pop query; non-row uses get one extra view.
+    wire [(LSQ_ENTRIES+1)*SLOT_WIDTH-1:0] head_query_views;
+    rv32_frequency_control_tree #(.WIDTH(SLOT_WIDTH),.LEAVES(LSQ_ENTRIES+1)) head_query_tree (
+        .signal_i(head_reg),.views_o(head_query_views));
+    wire [6*LSQ_ENTRIES-1:0] head_metadata_rows;
+    wire head_valid,head_load,head_complete,head_reported,head_store,head_ack;
+    rv32_frequency_array_read #(.WIDTH(6),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) head_metadata_read (
+        .rows_i(head_metadata_rows),.index_i(head_reg),
+        .value_o({head_valid,head_load,head_complete,head_reported,head_store,head_ack}));
+    generate for(genvar head_row=0;head_row<LSQ_ENTRIES;head_row=head_row+1) begin:g_head_metadata
+        assign head_metadata_rows[head_row*6 +: 6]={valid_mem[head_row],load_mem[head_row],
+            complete_mem[head_row],load_reported_mem[head_row],store_mem[head_row],store_ack_mem[head_row]};
+    end endgenerate
     reg [SLOT_WIDTH-1:0] tail_reg;
     reg [COUNT_WIDTH-1:0] occupancy_reg;
 
@@ -419,20 +433,56 @@ module rv32_lsq #(
     reg forwarding_hold_valid;
     reg [3:0] forwarding_hold_mask;
     reg [31:0] forwarding_hold_data;
-    wire selection_live=selection_valid && tag_matches_slot(selection_lsq_tag,selection_slot) &&
-        !request_sent_mem[selection_slot] && !complete_mem[selection_slot] && !response_wait_mem[selection_slot];
+    localparam integer SELECT_STATE_WIDTH=GENERATION_WIDTH+8;
+    localparam integer PICK_PAYLOAD_WIDTH=GENERATION_WIDTH+ROB_TAG_WIDTH+40;
+    wire [LSQ_ENTRIES*SELECT_STATE_WIDTH-1:0] selection_state_rows;
+    wire [LSQ_ENTRIES*PICK_PAYLOAD_WIDTH-1:0] pick_payload_rows;
+    wire [LSQ_ENTRIES*4-1:0] candidate_state_rows;
+    wire selection_row_valid,selection_row_sent,selection_row_complete,selection_row_wait,
+        selection_row_store,selection_row_commit,selection_row_load,selection_row_retired;
+    wire [GENERATION_WIDTH-1:0] selection_row_generation,pick_generation;
+    wire [ROB_TAG_WIDTH-1:0] pick_rob_tag;
+    wire [31:0] pick_store_data;
+    wire [3:0] pick_store_mask;
+    wire pick_load,pick_unsigned;
+    wire [1:0] pick_size;
+    wire candidate_wait,candidate_load,candidate_sent,candidate_complete;
+    rv32_frequency_array_read #(.WIDTH(SELECT_STATE_WIDTH),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) selection_state_read (
+        .rows_i(selection_state_rows),.index_i(selection_slot),
+        .value_o({selection_row_generation,selection_row_valid,selection_row_sent,selection_row_complete,selection_row_wait,
+                  selection_row_store,selection_row_commit,selection_row_load,selection_row_retired}));
+    rv32_frequency_array_read #(.WIDTH(PICK_PAYLOAD_WIDTH),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) pick_payload_read (
+        .rows_i(pick_payload_rows),.index_i(pick_slot[1]),
+        .value_o({pick_generation,pick_rob_tag,pick_store_data,pick_store_mask,pick_load,pick_size,pick_unsigned}));
+    rv32_frequency_array_read #(.WIDTH(4),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) candidate_state_read (
+        .rows_i(candidate_state_rows),.index_i(candidate[SLOT_WIDTH-1:0]),
+        .value_o({candidate_wait,candidate_load,candidate_sent,candidate_complete}));
+    generate for(genvar query_row=0;query_row<LSQ_ENTRIES;query_row=query_row+1) begin:g_selected_query
+        assign selection_state_rows[query_row*SELECT_STATE_WIDTH +: SELECT_STATE_WIDTH]={
+            generation_mem[query_row],valid_mem[query_row],request_sent_mem[query_row],complete_mem[query_row],response_wait_mem[query_row],
+            store_mem[query_row],store_commit_mem[query_row],load_mem[query_row],retired_mem[query_row]};
+        assign pick_payload_rows[query_row*PICK_PAYLOAD_WIDTH +: PICK_PAYLOAD_WIDTH]={
+            generation_mem[query_row],rob_tag_mem[query_row],data_mem[query_row],mask_mem[query_row],
+            load_mem[query_row],size_mem[query_row],unsigned_mem[query_row]};
+        assign candidate_state_rows[query_row*4 +: 4]={
+            response_wait_mem[query_row],load_mem[query_row],request_sent_mem[query_row],complete_mem[query_row]};
+    end endgenerate
+    wire selection_live=selection_valid && selection_row_valid && selection_lsq_tag[0] &&
+        selection_lsq_tag[3 +: SLOT_WIDTH]==selection_slot &&
+        selection_lsq_tag[3+SLOT_WIDTH +: GENERATION_WIDTH]==selection_row_generation &&
+        !selection_row_sent && !selection_row_complete && !selection_row_wait;
     wire selection_discard=selection_valid && !selection_live;
     wire [SLOT_WIDTH-1:0] selected_slot=(REQUEST_PIPELINE!=0)?selection_slot:pick_slot[1];
     wire [31:0] selected_addr=(REQUEST_PIPELINE!=0)?selection_addr:pick_addr[1];
-    wire [SLOT_WIDTH-1:0] selected_age=selected_slot-head_reg;
-    wire [1:0] selected_size=(REQUEST_PIPELINE!=0)?selection_size:size_mem[pick_slot[1]];
-    wire selected_unsigned=(REQUEST_PIPELINE!=0)?selection_unsigned:unsigned_mem[pick_slot[1]];
-    wire selected_load=(REQUEST_PIPELINE!=0)?selection_load:load_mem[pick_slot[1]];
-    wire [3:0] selected_store_mask=(REQUEST_PIPELINE!=0)?selection_store_mask:mask_mem[pick_slot[1]];
-    wire [31:0] selected_store_data=(REQUEST_PIPELINE!=0)?selection_store_data:data_mem[pick_slot[1]];
-    wire [ROB_TAG_WIDTH-1:0] selected_rob_tag=(REQUEST_PIPELINE!=0)?selection_rob_tag:rob_tag_mem[pick_slot[1]];
+    wire [SLOT_WIDTH-1:0] selected_age=selected_slot-head_query_views[LSQ_ENTRIES*SLOT_WIDTH +: SLOT_WIDTH];
+    wire [1:0] selected_size=(REQUEST_PIPELINE!=0)?selection_size:pick_size;
+    wire selected_unsigned=(REQUEST_PIPELINE!=0)?selection_unsigned:pick_unsigned;
+    wire selected_load=(REQUEST_PIPELINE!=0)?selection_load:pick_load;
+    wire [3:0] selected_store_mask=(REQUEST_PIPELINE!=0)?selection_store_mask:pick_store_mask;
+    wire [31:0] selected_store_data=(REQUEST_PIPELINE!=0)?selection_store_data:pick_store_data;
+    wire [ROB_TAG_WIDTH-1:0] selected_rob_tag=(REQUEST_PIPELINE!=0)?selection_rob_tag:pick_rob_tag;
     wire [TAG_WIDTH-1:0] selected_lsq_tag=(REQUEST_PIPELINE!=0)?selection_lsq_tag:
-        make_lsq_tag(pick_slot[1],generation_mem[pick_slot[1]]);
+        make_lsq_tag(pick_slot[1],pick_generation);
     wire selection_done=selection_live && (request_fire ||
         (selection_load && candidate_found && ((fwd_mask & target_mask)==target_mask)));
     wire selection_input_fire=(REQUEST_PIPELINE!=0) && !reset_i && !flush_i && !recovery_valid_i &&
@@ -448,8 +498,8 @@ module rv32_lsq #(
     wire [ROB_SLOT_WIDTH-1:0] selection_rob_age=selection_rob_tag[3 +: ROB_SLOT_WIDTH]-recovery_head_i;
     wire [ROB_SLOT_WIDTH-1:0] selection_branch_age=recovery_tag_i[3 +: ROB_SLOT_WIDTH]-recovery_head_i;
     wire selection_recovery_kill=selection_valid &&
-        !(store_mem[selection_slot] && store_commit_mem[selection_slot]) &&
-        !(load_mem[selection_slot] && retired_mem[selection_slot]) &&
+        !(selection_row_store && selection_row_commit) &&
+        !(selection_row_load && selection_row_retired) &&
         selection_rob_age>selection_branch_age && selection_rob_age<recovery_occupancy_i;
     always @(posedge clk_i) begin
         if(reset_i || flush_i) begin selection_valid<=0;forwarding_hold_valid<=0;end
@@ -463,23 +513,23 @@ module rv32_lsq #(
         end
         if(selection_write_views[0]) begin
             selection_slot<=pick_slot[1];
-            selection_lsq_tag<=make_lsq_tag(pick_slot[1],generation_mem[pick_slot[1]]);
-            selection_rob_tag<=rob_tag_mem[pick_slot[1]];
+            selection_lsq_tag<=make_lsq_tag(pick_slot[1],pick_generation);
+            selection_rob_tag<=pick_rob_tag;
         end
         if(selection_write_views[1]) selection_addr<=pick_addr[1];
         if(selection_write_views[2]) begin
-            selection_load<=load_mem[pick_slot[1]];selection_size<=size_mem[pick_slot[1]];
-            selection_unsigned<=unsigned_mem[pick_slot[1]];
+            selection_load<=pick_load;selection_size<=pick_size;
+            selection_unsigned<=pick_unsigned;
         end
-        if(selection_write_views[3]) selection_store_mask<=mask_mem[pick_slot[1]];
-        if(selection_write_views[4]) selection_store_data<=data_mem[pick_slot[1]];
+        if(selection_write_views[3]) selection_store_mask<=pick_store_mask;
+        if(selection_write_views[4]) selection_store_data<=pick_store_data;
         if(forwarding_payload_write) begin forwarding_hold_mask<=fwd_mask;forwarding_hold_data<=fwd_data;end
     end
 
     genvar age_slot;
     generate
         for (age_slot = 0; age_slot < LSQ_ENTRIES; age_slot = age_slot + 1) begin : g_entry_age
-            assign entry_age[age_slot] = (age_slot - head_reg) & (LSQ_ENTRIES - 1);
+            assign entry_age[age_slot] = (age_slot - head_query_views[age_slot*SLOT_WIDTH +: SLOT_WIDTH]) & (LSQ_ENTRIES - 1);
             assign store_addr_pending_o[age_slot] = (STORE_ADDRESS_PROBE != 0) &&
                 !reset_i && !flush_i && !recovery_valid_i &&
                 (entry_age[age_slot] < occupancy_reg) && valid_mem[age_slot] &&
@@ -654,7 +704,7 @@ module rv32_lsq #(
         request_fire = 1'b0;
         // Recovery updates retained responses but cannot record a new request.
         // Do not let the cache (or request register) accept an untracked send.
-        if (!flush_i && !recovery_valid_i && candidate_found && !response_wait_mem[candidate]) begin
+        if (!flush_i && !recovery_valid_i && candidate_found && !candidate_wait) begin
             if (selected_load) begin
                 target_mask = access_mask(selected_size);
                 fwd_mask = (REQUEST_PIPELINE!=0 && forwarding_hold_valid)?forwarding_hold_mask:tree_forward_mask;
@@ -732,7 +782,7 @@ module rv32_lsq #(
                     addr_ready_mem[report_row] && data_ready_mem[report_row] && !store_commit_mem[report_row] &&
                     rob_tag_mem[report_row]==store_commit_rob_tag_i;
                 assign commit_slot_tree[REPORT_ROWS+report_row]=report_row;
-                assign ack_valid_tree[REPORT_ROWS+report_row]=occupancy_reg!=0 && head_reg==report_row &&
+                assign ack_valid_tree[REPORT_ROWS+report_row]=occupancy_reg!=0 && head_query_views[report_row*SLOT_WIDTH +: SLOT_WIDTH]==report_row &&
                     valid_mem[report_row] && store_mem[report_row] && store_ack_mem[report_row];
                 rv32_frequency_control_tree #(.LEAVES(REPORT_WORDS)) report_selection_tree (
                     .signal_i(report_valid_tree[1] && report_slot_tree[1]==report_row),.views_o(report_select));
@@ -794,13 +844,44 @@ module rv32_lsq #(
     localparam integer FORWARD_EVENTS=1+BE_WIDTH;
     wire [3*LSQ_ENTRIES-1:0] payload_modes;
     wire [SLOT_WIDTH-1:0] payload_alloc_slot [0:BE_WIDTH-1];
-    wire [31:0] payload_response_word=dcache_resp_line_valid_i ?
-        relative_data_from_line(dcache_resp_line_data_i,addr_mem[response_slot]) : dcache_resp_word_data_i;
+    // Returning-cache identity previously selected separate dynamic arrays
+    // with shared, wide decoded drivers. One static packet query reads the
+    // exact same row; only the low address nibble is needed for extraction.
+    localparam integer RESPONSE_QUERY_WIDTH=ROB_TAG_WIDTH+43;
+    wire [LSQ_ENTRIES*RESPONSE_QUERY_WIDTH-1:0] response_query_rows;
+    wire [3:0] response_query_offset,response_query_mask;
+    wire [31:0] response_query_forward;
+    wire [1:0] response_query_size;
+    wire response_query_unsigned;
+    wire [ROB_TAG_WIDTH-1:0] response_query_rob_tag;
+    rv32_frequency_array_read #(.WIDTH(RESPONSE_QUERY_WIDTH),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) response_query_read (
+        .rows_i(response_query_rows),.index_i(response_slot[SLOT_WIDTH-1:0]),
+        .value_o({response_query_rob_tag,response_query_offset,response_query_forward,
+                  response_query_mask,response_query_size,response_query_unsigned}));
+    generate for(genvar response_row=0;response_row<LSQ_ENTRIES;response_row=response_row+1) begin:g_response_query
+        assign response_query_rows[response_row*RESPONSE_QUERY_WIDTH +: RESPONSE_QUERY_WIDTH]={
+            rob_tag_mem[response_row],addr_mem[response_row][3:0],forward_data_mem[response_row],
+            forward_mask_mem[response_row],size_mem[response_row],unsigned_mem[response_row]};
+    end endgenerate
+    wire [LSQ_ENTRIES*SLOT_WIDTH-1:0] response_slot_views;
+    rv32_frequency_control_tree #(.WIDTH(SLOT_WIDTH),.LEAVES(LSQ_ENTRIES)) response_slot_tree (
+        .signal_i(response_slot[SLOT_WIDTH-1:0]),.views_o(response_slot_views));
+    wire [31:0] response_line_word,payload_response_word;
+    rv32_frequency_line_extract32 response_extract (
+        .line_i(dcache_resp_line_data_i),.offset_i(response_query_offset),
+        .size_i(2'd2),.unsigned_i(1'b1),.value_o(response_line_word));
+    wire [1:0] response_line_views;
+    rv32_frequency_control_tree #(.LEAVES(2)) response_line_tree (
+        .signal_i(dcache_resp_line_valid_i),.views_o(response_line_views));
+    generate for(genvar response_word_id=0;response_word_id<2;response_word_id=response_word_id+1) begin:g_response_word
+        assign payload_response_word[response_word_id*16 +: 16]=response_line_views[response_word_id]?
+            response_line_word[response_word_id*16 +: 16]:dcache_resp_word_data_i[response_word_id*16 +: 16];
+    end endgenerate
     wire [31:0] payload_response_merge=
-        (forward_data_mem[response_slot] & expand_word_bytes(forward_mask_mem[response_slot])) |
-        (payload_response_word & ~expand_word_bytes(forward_mask_mem[response_slot]));
+        (response_query_forward & expand_word_bytes(response_query_mask)) |
+        (payload_response_word & ~expand_word_bytes(response_query_mask));
     wire [31:0] payload_response_value=format_relative_value(
-        payload_response_merge,size_mem[response_slot],unsigned_mem[response_slot]);
+        payload_response_merge,response_query_size,response_query_unsigned);
     wire [31:0] payload_forward_value=format_relative_value(fwd_data,selected_size,selected_unsigned);
     function [RECOVERY_ARITH_WIDTH-1:0] payload_recovery_age;
         input [ROB_TAG_WIDTH-1:0] tag;
@@ -813,6 +894,37 @@ module rv32_lsq #(
         end
     endfunction
     wire [RECOVERY_ARITH_WIDTH-1:0] payload_branch_age=payload_recovery_age(recovery_tag_i);
+    localparam integer OWNER_RECOVERY_WIDTH=ROB_SLOT_WIDTH+RECOVERY_ARITH_WIDTH+16;
+    wire [LSQ_ENTRIES*OWNER_RECOVERY_WIDTH-1:0] owner_recovery_views;
+    rv32_frequency_control_tree #(.WIDTH(OWNER_RECOVERY_WIDTH),.LEAVES(LSQ_ENTRIES)) owner_recovery_tree (
+        .signal_i({recovery_head_i,payload_branch_age,recovery_occupancy_i}),.views_o(owner_recovery_views));
+    function [RECOVERY_ARITH_WIDTH-1:0] payload_owner_recovery_age;
+        input [ROB_TAG_WIDTH-1:0] tag;
+        input [ROB_SLOT_WIDTH-1:0] local_head;
+        reg [RECOVERY_ARITH_WIDTH-1:0] difference;
+        begin
+            difference=tag[3 +: ROB_SLOT_WIDTH]-local_head;
+            if(((ROB_ENTRIES & (ROB_ENTRIES-1))!=0) && difference[RECOVERY_ARITH_WIDTH-1])
+                difference=difference+ROB_ENTRIES;
+            payload_owner_recovery_age=difference;
+        end
+    endfunction
+    // Count retained live rows and locate the oldest killed row in parallel.
+    // Four merge levels replace sixteen conditional integer accumulations
+    // for the current queue, on the same recovery edge and with no new FF.
+    wire [COUNT_WIDTH-1:0] recovery_keep_tree [1:2*LSQ_ENTRIES-1];
+    wire recovery_kill_tree [1:2*LSQ_ENTRIES-1];
+    wire [SLOT_WIDTH-1:0] recovery_kill_age_tree [1:2*LSQ_ENTRIES-1];
+    wire [SLOT_WIDTH-1:0] recovery_kill_slot_tree [1:2*LSQ_ENTRIES-1];
+    generate for(genvar trim_node=1;trim_node<LSQ_ENTRIES;trim_node=trim_node+1) begin:g_recovery_trim
+        wire choose_left=recovery_kill_tree[2*trim_node] &&
+            (!recovery_kill_tree[2*trim_node+1] ||
+             recovery_kill_age_tree[2*trim_node]<=recovery_kill_age_tree[2*trim_node+1]);
+        assign recovery_keep_tree[trim_node]=recovery_keep_tree[2*trim_node]+recovery_keep_tree[2*trim_node+1];
+        assign recovery_kill_tree[trim_node]=recovery_kill_tree[2*trim_node] || recovery_kill_tree[2*trim_node+1];
+        assign recovery_kill_age_tree[trim_node]=choose_left?recovery_kill_age_tree[2*trim_node]:recovery_kill_age_tree[2*trim_node+1];
+        assign recovery_kill_slot_tree[trim_node]=choose_left?recovery_kill_slot_tree[2*trim_node]:recovery_kill_slot_tree[2*trim_node+1];
+    end endgenerate
     rv32_frequency_control_tree #(.WIDTH(3),.LEAVES(LSQ_ENTRIES)) payload_mode_tree (
         .signal_i({recovery_valid_i,flush_i,reset_i}),.views_o(payload_modes));
     genvar payload_row,payload_lane;
@@ -847,9 +959,14 @@ module rv32_lsq #(
                 load_mem[payload_row] && !request_sent_mem[payload_row] && !complete_mem[payload_row] &&
                 ((fwd_mask & target_mask)==target_mask);
             assign result_values[0 +: 32]=payload_forward_value;
-            wire [RECOVERY_ARITH_WIDTH-1:0] row_age=payload_recovery_age(rob_tag_mem[payload_row]);
-            assign result_events[1]=enabled && response_fire && response_slot==payload_row &&
-                (!recovery || !(row_age>payload_branch_age && row_age<recovery_occupancy_i));
+            wire [ROB_SLOT_WIDTH-1:0] local_recovery_head;
+            wire [RECOVERY_ARITH_WIDTH-1:0] local_branch_age;
+            wire [15:0] local_recovery_occupancy;
+            assign {local_recovery_head,local_branch_age,local_recovery_occupancy}=
+                owner_recovery_views[payload_row*OWNER_RECOVERY_WIDTH +: OWNER_RECOVERY_WIDTH];
+            wire [RECOVERY_ARITH_WIDTH-1:0] row_age=payload_owner_recovery_age(rob_tag_mem[payload_row],local_recovery_head);
+            assign result_events[1]=enabled && response_fire && response_slot_views[payload_row*SLOT_WIDTH +: SLOT_WIDTH]==payload_row &&
+                (!recovery || !(row_age>local_branch_age && row_age<local_recovery_occupancy));
             assign result_values[32 +: 32]=payload_response_value;
             assign forward_events[0]=normal && request_fire && candidate==payload_row && load_mem[payload_row];
             assign forward_values[0 +: 32]=fwd_data;
@@ -904,12 +1021,12 @@ module rv32_lsq #(
     // leaves cannot collapse into one reset/recovery driver across all rows.
     localparam integer META_LSQ_AGE_WIDTH=((LSQ_ENTRIES & (LSQ_ENTRIES-1))==0)?SLOT_WIDTH:SLOT_WIDTH+1;
     wire [7*LSQ_ENTRIES-1:0] metadata_events;
-    wire metadata_pop=(occupancy_reg!=0) && valid_mem[head_reg] &&
-        ((load_mem[head_reg] && complete_mem[head_reg] &&
-          (load_reported_mem[head_reg] || (load_complete_valid_o && load_complete_ready_i && complete_slot_select==head_reg))) ||
-         (store_mem[head_reg] && store_ack_mem[head_reg] && store_ack_ready_i));
-    wire metadata_forward=candidate_found && load_mem[candidate] &&
-        !request_sent_mem[candidate] && !complete_mem[candidate] && ((fwd_mask & target_mask)==target_mask);
+    wire metadata_pop=(occupancy_reg!=0) && head_valid &&
+        ((head_load && head_complete &&
+          (head_reported || (load_complete_valid_o && load_complete_ready_i && complete_slot_select==head_reg))) ||
+         (head_store && head_ack && store_ack_ready_i));
+    wire metadata_forward=candidate_found && candidate_load &&
+        !candidate_sent && !candidate_complete && ((fwd_mask & target_mask)==target_mask);
     rv32_frequency_control_tree #(.WIDTH(7),.LEAVES(LSQ_ENTRIES)) metadata_event_tree (
         .signal_i({metadata_pop,metadata_forward,request_fire,response_fire,dcache_store_ack_valid_i,
                    load_complete_valid_o && load_complete_ready_i,store_commit_valid_i && store_commit_ready_o}),
@@ -944,25 +1061,35 @@ module rv32_lsq #(
             .events_i(alloc_matches),.values_i(alloc_values),.write_o(allocated),.value_o(allocation));
         wire [GENERATION_WIDTH-1:0] allocated_generation=(generation_next_mem[metadata_row]==0)?
             {{(GENERATION_WIDTH-1){1'b0}},1'b1}:generation_next_mem[metadata_row];
-        wire [META_LSQ_AGE_WIDTH-1:0] lsq_difference=metadata_row-head_reg;
+        wire [META_LSQ_AGE_WIDTH-1:0] lsq_difference=metadata_row-head_query_views[metadata_row*SLOT_WIDTH +: SLOT_WIDTH];
         wire [META_LSQ_AGE_WIDTH-1:0] lsq_age=
             (((LSQ_ENTRIES & (LSQ_ENTRIES-1))!=0) && lsq_difference[META_LSQ_AGE_WIDTH-1])?
             lsq_difference+LSQ_ENTRIES:lsq_difference;
-        wire [RECOVERY_ARITH_WIDTH-1:0] row_rob_age=payload_recovery_age(rob_tag_mem[metadata_row]);
+        wire [ROB_SLOT_WIDTH-1:0] local_recovery_head;
+        wire [RECOVERY_ARITH_WIDTH-1:0] local_branch_age;
+        wire [15:0] local_recovery_occupancy;
+        assign {local_recovery_head,local_branch_age,local_recovery_occupancy}=
+            owner_recovery_views[metadata_row*OWNER_RECOVERY_WIDTH +: OWNER_RECOVERY_WIDTH];
+        wire [RECOVERY_ARITH_WIDTH-1:0] row_rob_age=payload_owner_recovery_age(rob_tag_mem[metadata_row],local_recovery_head);
         wire kill=lsq_age<occupancy_reg && valid_mem[metadata_row] &&
             !(store_mem[metadata_row] && store_commit_mem[metadata_row]) &&
             !(load_mem[metadata_row] && retired_mem[metadata_row]) &&
-            row_rob_age>payload_branch_age && row_rob_age<recovery_occupancy_i;
-        wire response_allowed=!(row_rob_age>payload_branch_age && row_rob_age<recovery_occupancy_i);
+            row_rob_age>local_branch_age && row_rob_age<local_recovery_occupancy;
+        wire response_allowed=!(row_rob_age>local_branch_age && row_rob_age<local_recovery_occupancy);
+        assign recovery_keep_tree[LSQ_ENTRIES+metadata_row]=
+            (lsq_age<occupancy_reg && valid_mem[metadata_row] && !kill)?1:0;
+        assign recovery_kill_tree[LSQ_ENTRIES+metadata_row]=kill;
+        assign recovery_kill_age_tree[LSQ_ENTRIES+metadata_row]=lsq_age;
+        assign recovery_kill_slot_tree[LSQ_ENTRIES+metadata_row]=metadata_row;
         wire commit_event=metadata_events[metadata_row*7] && commit_slot_select==metadata_row;
         wire report_event=metadata_events[metadata_row*7+1] && complete_slot_select==metadata_row;
         wire ack_event=metadata_events[metadata_row*7+2] &&
             tag_matches_slot(dcache_store_ack_lsq_tag_i,metadata_row) &&
             request_sent_mem[metadata_row] && response_wait_mem[metadata_row];
-        wire response_event=metadata_events[metadata_row*7+3] && response_slot==metadata_row;
+        wire response_event=metadata_events[metadata_row*7+3] && response_slot_views[metadata_row*SLOT_WIDTH +: SLOT_WIDTH]==metadata_row;
         wire request_event=metadata_events[metadata_row*7+4] && candidate==metadata_row;
         wire forward_event=metadata_events[metadata_row*7+5] && candidate==metadata_row;
-        wire pop_event=metadata_events[metadata_row*7+6] && head_reg==metadata_row;
+        wire pop_event=metadata_events[metadata_row*7+6] && head_query_views[metadata_row*SLOT_WIDTH +: SLOT_WIDTH]==metadata_row;
         wire early_event=(STORE_ADDRESS_PROBE!=0) && early_addr_valid_i &&
             tag_matches_slot(early_addr_tag_i,metadata_row) && store_mem[metadata_row] &&
             !addr_ready_mem[metadata_row] && !request_sent_mem[metadata_row] && !complete_mem[metadata_row];
@@ -1145,49 +1272,9 @@ module rv32_lsq #(
             recovery_branch_slot = recovery_tag_i[3 +: ROB_SLOT_WIDTH];
             recovery_branch_age = recovery_branch_slot - recovery_head_i;
             if (((ROB_ENTRIES & (ROB_ENTRIES-1))!=0) && recovery_branch_age[RECOVERY_ARITH_WIDTH-1]) recovery_branch_age = recovery_branch_age + ROB_ENTRIES;
-            recovery_keep_count = 0;
-            recovery_first_killed = tail_reg;
-            recovery_kill_found = 0;
-            for (slot = 0; slot < LSQ_ENTRIES; slot = slot + 1) begin
-                scan = head_reg + slot;
-                if (scan >= LSQ_ENTRIES) scan = scan - LSQ_ENTRIES;
-                if ((slot < occupancy_reg) && valid_mem[scan]) begin
-                    entry_rob_slot = rob_tag_mem[scan][3 +: ROB_SLOT_WIDTH];
-                    recovery_entry_age = entry_rob_slot - recovery_head_i;
-                    if (((ROB_ENTRIES & (ROB_ENTRIES-1))!=0) && recovery_entry_age[RECOVERY_ARITH_WIDTH-1]) recovery_entry_age = recovery_entry_age + ROB_ENTRIES;
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    if (!(store_mem[scan] && store_commit_mem[scan]) &&
-                        !(load_mem[scan] && retired_mem[scan]) &&
-                        (recovery_entry_age > recovery_branch_age) &&
-                        (recovery_entry_age < recovery_occupancy_i)) begin
-                        if (!recovery_kill_found) begin
-                            recovery_first_killed = scan;
-                            recovery_kill_found = 1;
-                        end
-                        ;
-                        ;
-                        ;
-                        ;
-                        ;
-                        ;
-                        ;
-                    end else begin
-                        recovery_keep_count = recovery_keep_count + 1;
-                    end
-                end
-            end
-            
-            
-            
-            
-            
+            recovery_keep_count = recovery_keep_tree[1];
+            recovery_first_killed = recovery_kill_tree[1]?recovery_kill_slot_tree[1]:tail_reg;
+            recovery_kill_found = recovery_kill_tree[1];
             for (update_slot = 0; update_slot < LSQ_ENTRIES; update_slot = update_slot + 1) begin
                 for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
                     if (addr_update_valid_i[lane] &&
@@ -1227,18 +1314,16 @@ module rv32_lsq #(
             
             
             if (response_fire) begin
-                entry_rob_slot = rob_tag_mem[response_slot][3 +: ROB_SLOT_WIDTH];
+                entry_rob_slot = response_query_rob_tag[3 +: ROB_SLOT_WIDTH];
                 recovery_entry_age = entry_rob_slot - recovery_head_i;
                 if (((ROB_ENTRIES & (ROB_ENTRIES-1))!=0) && recovery_entry_age[RECOVERY_ARITH_WIDTH-1]) recovery_entry_age = recovery_entry_age + ROB_ENTRIES;
                 if (!((recovery_entry_age > recovery_branch_age) &&
                       (recovery_entry_age < recovery_occupancy_i))) begin
-                    response_word = dcache_resp_line_valid_i ?
-                        relative_data_from_line(dcache_resp_line_data_i, addr_mem[response_slot]) :
-                        dcache_resp_word_data_i;
-                    merged_word = (forward_data_mem[response_slot] &
-                                   expand_word_bytes(forward_mask_mem[response_slot])) |
+                    response_word = payload_response_word;
+                    merged_word = (response_query_forward &
+                                   expand_word_bytes(response_query_mask)) |
                                   (response_word &
-                                   ~expand_word_bytes(forward_mask_mem[response_slot]));
+                                   ~expand_word_bytes(response_query_mask));
                     ;
                     ;
                     ;
@@ -1295,7 +1380,7 @@ module rv32_lsq #(
 
             
             
-            if (candidate_found && load_mem[candidate] && !request_sent_mem[candidate] && !complete_mem[candidate]) begin
+            if (candidate_found && candidate_load && !candidate_sent && !candidate_complete) begin
                 if ((fwd_mask & target_mask) == target_mask) begin
                     ;
                     ;
@@ -1305,7 +1390,7 @@ module rv32_lsq #(
 
             if (request_fire) begin
                 ;
-                if (load_mem[candidate]) begin
+                if (candidate_load) begin
                     ;
                     ;
                     ;
@@ -1315,13 +1400,11 @@ module rv32_lsq #(
             end
 
             if (response_fire) begin
-                response_word = dcache_resp_line_valid_i ?
-                    relative_data_from_line(dcache_resp_line_data_i, addr_mem[response_slot]) :
-                    dcache_resp_word_data_i;
-                merged_word = (forward_data_mem[response_slot] &
-                               expand_word_bytes(forward_mask_mem[response_slot])) |
+                response_word = payload_response_word;
+                merged_word = (response_query_forward &
+                               expand_word_bytes(response_query_mask)) |
                               (response_word &
-                               ~expand_word_bytes(forward_mask_mem[response_slot]));
+                               ~expand_word_bytes(response_query_mask));
                 ;
                 ;
                 ;
@@ -1340,12 +1423,12 @@ module rv32_lsq #(
                 end
             end
 
-            if ((occupancy_reg != 0) && valid_mem[head_reg] &&
-                ((load_mem[head_reg] && complete_mem[head_reg] &&
-                  (load_reported_mem[head_reg] ||
+            if ((occupancy_reg != 0) && head_valid &&
+                ((head_load && head_complete &&
+                  (head_reported ||
                    (load_complete_valid_o && load_complete_ready_i &&
                     (complete_slot_select == head_reg)))) ||
-                 (store_mem[head_reg] && store_ack_mem[head_reg] && store_ack_ready_i))) begin
+                 (head_store && head_ack && store_ack_ready_i))) begin
                 ;
                 ;
                 ;
@@ -1391,12 +1474,12 @@ module rv32_lsq #(
             end
 
             alloc_count_calc = alloc_count_o;
-            pop_count_calc = ((occupancy_reg != 0) && valid_mem[head_reg] &&
-                              ((load_mem[head_reg] && complete_mem[head_reg] &&
-                                (load_reported_mem[head_reg] ||
+            pop_count_calc = ((occupancy_reg != 0) && head_valid &&
+                              ((head_load && head_complete &&
+                                (head_reported ||
                                  (load_complete_valid_o && load_complete_ready_i &&
                                   (complete_slot_select == head_reg)))) ||
-                               (store_mem[head_reg] && store_ack_mem[head_reg] && store_ack_ready_i))) ? 1 : 0;
+                               (head_store && head_ack && store_ack_ready_i))) ? 1 : 0;
             head_reg <= advance_slot(head_reg, pop_count_calc);
             tail_reg <= advance_slot(tail_reg, alloc_count_calc);
             occupancy_reg <= occupancy_reg - pop_count_calc + alloc_count_calc;

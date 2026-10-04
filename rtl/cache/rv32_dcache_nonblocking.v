@@ -693,8 +693,15 @@ module rv32_dcache_nonblocking #(
     wire [2*RESPONSE_OUTPUT_WORDS-1:0] response_output_views;
     rv32_frequency_control_tree #(.WIDTH(2),.LEAVES(RESPONSE_OUTPUT_WORDS)) response_output_tree (
         .signal_i({resp_from_sram,bypass_load_hit}),.views_o(response_output_views));
-    wire [31:0] response_hit_word=extract_value(data_rdata,core_req_addr,core_req_size,core_req_unsigned);
-    wire [31:0] response_deferred_word=extract_value(data_rdata,resp_addr_reg,resp_size_reg,resp_unsigned_reg);
+    // Share the same extracted word between immediate and captured hit
+    // replies. Byte-offset fanout stays bounded inside each routing unit.
+    wire [31:0] response_hit_word,response_deferred_word;
+    rv32_frequency_line_extract32 hit_extract (
+        .line_i(data_rdata),.offset_i(core_req_addr[3:0]),
+        .size_i(core_req_size),.unsigned_i(core_req_unsigned),.value_o(response_hit_word));
+    rv32_frequency_line_extract32 deferred_extract (
+        .line_i(data_rdata),.offset_i(resp_addr_reg[3:0]),
+        .size_i(resp_size_reg),.unsigned_i(resp_unsigned_reg),.value_o(response_deferred_word));
     genvar response_word;
     generate
         for(response_word=0;response_word<RESPONSE_TAG_WORDS;response_word=response_word+1) begin:g_response_tag_word
@@ -773,25 +780,7 @@ module rv32_dcache_nonblocking #(
     assign mem_req_id_o = send_found ? send_index : 8'd0;
     assign mem_resp_ready_o = response_found && !response_needs_output;
 
-    function [31:0] extract_value;
-        input [127:0] line_data;
-        input [31:0] address;
-        input [1:0] size;
-        input unsigned_load;
-        reg [31:0] value;
-        begin
-            value = line_data >> (address[3:0] * 8);
-            case (size)
-                `RV32IM_MEM_BYTE:
-                    extract_value = unsigned_load ? {24'd0, value[7:0]} :
-                                    {{24{value[7]}}, value[7:0]};
-                `RV32IM_MEM_HALF:
-                    extract_value = unsigned_load ? {16'd0, value[15:0]} :
-                                    {{16{value[15]}}, value[15:0]};
-                default: extract_value = value;
-            endcase
-        end
-    endfunction
+
 
     function [127:0] merge_store;
         input [127:0] line_data;
@@ -1069,9 +1058,52 @@ module rv32_dcache_nonblocking #(
         end
         wire [CACHE_ENTRY_WIDTH-1:0] local_entry = query_local_mshr_victim_entry;
         wire [CACHE_ENTRY_WIDTH-1:0] refill_entry = query_response_mshr_victim_entry;
+        // The CD1 mapped victim-way driver fed 1255 pins. A bank-local
+        // decode does not bound the shared input's load across 64 banks.
+        // Distribute every metadata input after its final qualification;
+        // each leaf feeds exactly one existing state owner on the same edge.
+        // Local-query owners already latched set/row identities. They
+        // consume only way bits of miss/prefetch/hit entries and never use
+        // the non-query request/prefetch set ports. Preserve full fields in
+        // the legacy query mode; current 1/2-way mode needs one way bit.
+        localparam integer METADATA_SELECT_WIDTH=LOCAL_METADATA_ACTIVE ? 1:CACHE_ENTRY_WIDTH;
+        localparam integer METADATA_SET_WIDTH=LOCAL_METADATA_ACTIVE ? 1:CACHE_INDEX_WIDTH;
+        localparam integer METADATA_INPUT_WIDTH=9+2*CACHE_ENTRY_WIDTH+3*METADATA_SELECT_WIDTH+
+            2*METADATA_SET_WIDTH+2*CACHE_INDEX_WIDTH;
+        wire [GROUP_COUNT*METADATA_INPUT_WIDTH-1:0] metadata_input_views;
+        rv32_frequency_control_tree #(.WIDTH(METADATA_INPUT_WIDTH),.LEAVES(GROUP_COUNT)) metadata_input_tree (
+            .signal_i({static_request_action,refill_array_write,refill_entry,query_response_mshr_store,
+                       local_array_write,local_entry,request_victim_entry[METADATA_SELECT_WIDTH-1:0],
+                       static_prefetch_allocate,prefetch_victim_entry[METADATA_SELECT_WIDTH-1:0],
+                       request_hit_entry[METADATA_SELECT_WIDTH-1:0],
+                       (LOCAL_METADATA_ACTIVE ? {METADATA_SET_WIDTH{1'b0}}:request_index[METADATA_SET_WIDTH-1:0]),
+                       (LOCAL_METADATA_ACTIVE ? {METADATA_SET_WIDTH{1'b0}}:prefetch_index[METADATA_SET_WIDTH-1:0]),
+                       dcache_req_valid_i && dcache_req_ready_o,
+                       cache_index(dcache_req_addr_i),
+                       cache_index({dcache_req_addr_i[31:4],4'b0}+32'd16)}),
+            .views_o(metadata_input_views));
         // These modules own the actual state and its address-qualified write
         // logic. No extra cycle, buffer-cell stub or replacement SRAM is used.
         for (update_group = 0; update_group < GROUP_COUNT; update_group = update_group + 1) begin : g_metadata
+            wire [3:0] metadata_action;
+            wire metadata_refill,metadata_refill_dirty,metadata_local,metadata_prefetch,metadata_query_fire;
+            wire [CACHE_ENTRY_WIDTH-1:0] metadata_refill_entry,metadata_local_entry,
+                metadata_miss_entry,metadata_prefetch_entry,metadata_hit_entry;
+            wire [CACHE_INDEX_WIDTH-1:0] metadata_request_set,metadata_prefetch_set,
+                metadata_query_request_set,metadata_query_prefetch_set;
+            wire [METADATA_SELECT_WIDTH-1:0] metadata_miss_select,metadata_prefetch_select,metadata_hit_select;
+            wire [METADATA_SET_WIDTH-1:0] metadata_request_set_field,metadata_prefetch_set_field;
+            assign metadata_miss_entry={{(CACHE_ENTRY_WIDTH-METADATA_SELECT_WIDTH){1'b0}},metadata_miss_select};
+            assign metadata_prefetch_entry={{(CACHE_ENTRY_WIDTH-METADATA_SELECT_WIDTH){1'b0}},metadata_prefetch_select};
+            assign metadata_hit_entry={{(CACHE_ENTRY_WIDTH-METADATA_SELECT_WIDTH){1'b0}},metadata_hit_select};
+            assign metadata_request_set={{(CACHE_INDEX_WIDTH-METADATA_SET_WIDTH){1'b0}},metadata_request_set_field};
+            assign metadata_prefetch_set={{(CACHE_INDEX_WIDTH-METADATA_SET_WIDTH){1'b0}},metadata_prefetch_set_field};
+            assign {metadata_action,metadata_refill,metadata_refill_entry,metadata_refill_dirty,
+                    metadata_local,metadata_local_entry,metadata_miss_select,
+                    metadata_prefetch,metadata_prefetch_select,metadata_hit_select,
+                    metadata_request_set_field,metadata_prefetch_set_field,metadata_query_fire,
+                    metadata_query_request_set,metadata_query_prefetch_set}=
+                metadata_input_views[update_group*METADATA_INPUT_WIDTH +: METADATA_INPUT_WIDTH];
             rv32_dcache_metadata_bank #(
                 .CACHE_LINES(CACHE_LINES), .CACHE_WAYS(CACHE_WAYS),
                 .GROUP_ROWS(GROUP_ROWS), .GROUP_ID(update_group), .LOCAL_QUERY(LOCAL_METADATA_ACTIVE),
@@ -1079,18 +1111,18 @@ module rv32_dcache_nonblocking #(
                 .ENTRY_WIDTH(CACHE_ENTRY_WIDTH), .SET_WIDTH(CACHE_INDEX_WIDTH)
             ) state_bank (
                 .clk_i(clk_i), .reset_i(reset_i),
-                .request_action_i(static_request_action),
-                .refill_valid_i(refill_array_write), .refill_entry_i(refill_entry),
-                .refill_dirty_i(query_response_mshr_store),
-                .local_valid_i(local_array_write), .local_entry_i(local_entry),
-                .miss_valid_i(static_request_action == 4'd8), .miss_entry_i(request_victim_entry),
-                .prefetch_valid_i(static_prefetch_allocate), .prefetch_entry_i(prefetch_victim_entry),
-                .store_hit_i(static_request_action == 4'd2), .hit_entry_i(request_hit_entry),
-                .hit_valid_i(static_request_action == 4'd1 || static_request_action == 4'd2),
-                .request_set_i(request_index), .prefetch_set_i(prefetch_index),
-                .query_fire_i(dcache_req_valid_i && dcache_req_ready_o),
-                .query_request_set_i(cache_index(dcache_req_addr_i)),
-                .query_prefetch_set_i(cache_index({dcache_req_addr_i[31:4],4'b0} + 32'd16)),
+                .request_action_i(metadata_action),
+                .refill_valid_i(metadata_refill), .refill_entry_i(metadata_refill_entry),
+                .refill_dirty_i(metadata_refill_dirty),
+                .local_valid_i(metadata_local), .local_entry_i(metadata_local_entry),
+                .miss_valid_i(metadata_action == 4'd8), .miss_entry_i(metadata_miss_entry),
+                .prefetch_valid_i(metadata_prefetch), .prefetch_entry_i(metadata_prefetch_entry),
+                .store_hit_i(metadata_action == 4'd2), .hit_entry_i(metadata_hit_entry),
+                .hit_valid_i(metadata_action == 4'd1 || metadata_action == 4'd2),
+                .request_set_i(metadata_request_set), .prefetch_set_i(metadata_prefetch_set),
+                .query_fire_i(metadata_query_fire),
+                .query_request_set_i(metadata_query_request_set),
+                .query_prefetch_set_i(metadata_query_prefetch_set),
                 .query_request_valid_o(group_request_valid[update_group*CACHE_WAYS +: CACHE_WAYS]),
                 .query_request_dirty_o(group_request_dirty[update_group*CACHE_WAYS +: CACHE_WAYS]),
                 .query_prefetch_valid_o(group_prefetch_valid[update_group*CACHE_WAYS +: CACHE_WAYS]),
@@ -1203,6 +1235,8 @@ module rv32_dcache_nonblocking #(
             waiter_load_ready_index[WAITER_SLOT_WIDTH-1:0],waiter_store_ready_index[WAITER_SLOT_WIDTH-1:0],
             local_fill_index[2:0],response_index[2:0]}),.views_o(waiter_event_views));
     wire [127:0] waiter_store_fill=merge_store(mem_resp_data_i,query_response_mshr_wdata,query_response_mshr_mask);
+    // A response-store flag formerly controlled 128 mux bits for every
+    // waiter group. Each waiter now receives eight sixteen-bit leaves.
     genvar waiter_row;
     generate for(waiter_row=0;waiter_row<WAITER_ENTRIES;waiter_row=waiter_row+1) begin:g_waiter_owner
         wire local_reset,allocate_event,local_event,store_event,demand_event,load_consume,store_consume;
@@ -1229,9 +1263,17 @@ module rv32_dcache_nonblocking #(
                 waiter_addr[waiter_row],waiter_mshr[waiter_row]}=saved_metadata;
         wire line_write;
         wire [127:0] line_next;
+        wire [7:0] store_data_views;
+        wire [127:0] response_line;
+        rv32_frequency_control_tree #(.LEAVES(8)) store_data_tree (
+            .signal_i(store_event),.views_o(store_data_views));
+        for(genvar line_word=0;line_word<8;line_word=line_word+1) begin:g_response_word
+            assign response_line[line_word*16 +: 16]=store_data_views[line_word]?
+                waiter_store_fill[line_word*16 +: 16]:mem_resp_data_i[line_word*16 +: 16];
+        end
         rv32_frequency_event_select #(.WIDTH(128),.EVENTS(2)) line_selector (
             .events_i({response_fill && !waiter_store[waiter_row],local_fill && !waiter_store[waiter_row]}),
-            .values_i({(store_event?waiter_store_fill:mem_resp_data_i),query_local_mshr_wdata}),
+            .values_i({response_line,query_local_mshr_wdata}),
             .write_o(line_write),.value_o(line_next));
         rv32_frequency_word_bank #(.WIDTH(128)) line_owner (
             .clk_i(clk_i),.write_i(line_write),.data_i(line_next),.data_o(waiter_line[waiter_row]));
@@ -1359,6 +1401,16 @@ module rv32_dcache_nonblocking #(
         .clk_i(clk_i),.write_i(response_metadata_write),.data_i(response_metadata_next),.data_o(response_metadata_saved));
     assign {resp_lsq_reg,resp_addr_reg,resp_line_valid_reg,resp_error_reg}=response_metadata_saved;
 
+    wire [31:0] response_memory_word,response_waiter_word,response_forward_word;
+    rv32_frequency_line_extract32 memory_extract (
+        .line_i(mem_resp_data_i),.offset_i(query_response_mshr_addr[3:0]),
+        .size_i(query_response_mshr_size),.unsigned_i(query_response_mshr_unsigned),.value_o(response_memory_word));
+    rv32_frequency_line_extract32 waiter_extract (
+        .line_i(query_waiter_load_waiter_line),.offset_i(query_waiter_load_waiter_addr[3:0]),
+        .size_i(query_waiter_load_waiter_size),.unsigned_i(query_waiter_load_waiter_unsigned),.value_o(response_waiter_word));
+    rv32_frequency_line_extract32 forward_extract (
+        .line_i(query_matching_mshr_wdata),.offset_i(core_req_addr[3:0]),
+        .size_i(core_req_size),.unsigned_i(core_req_unsigned),.value_o(response_forward_word));
     wire response_data_write;
     wire [159:0] response_data_next,response_data_saved;
     wire response_sram_capture=!reset_i && resp_from_sram && resp_valid_reg;
@@ -1366,12 +1418,12 @@ module rv32_dcache_nonblocking #(
         .events_i({response_demand_capture,response_failed_load,response_waiter_capture,response_forward_capture,
                    response_hit_capture && TAG_SRAM!=0,response_sram_capture}),
         .values_i({
-            mem_resp_data_i,extract_value(mem_resp_data_i,query_response_mshr_addr,query_response_mshr_size,query_response_mshr_unsigned),
+            mem_resp_data_i,response_memory_word,
             128'b0,32'b0,
-            query_waiter_load_waiter_line,extract_value(query_waiter_load_waiter_line,query_waiter_load_waiter_addr,query_waiter_load_waiter_size,query_waiter_load_waiter_unsigned),
-            query_matching_mshr_wdata,extract_value(query_matching_mshr_wdata,core_req_addr,core_req_size,core_req_unsigned),
-            data_rdata,extract_value(data_rdata,core_req_addr,core_req_size,core_req_unsigned),
-            data_rdata,extract_value(data_rdata,resp_addr_reg,resp_size_reg,resp_unsigned_reg)}),
+            query_waiter_load_waiter_line,response_waiter_word,
+            query_matching_mshr_wdata,response_forward_word,
+            data_rdata,response_hit_word,
+            data_rdata,response_deferred_word}),
         .write_o(response_data_write),.value_o(response_data_next));
     rv32_frequency_word_bank #(.WIDTH(160)) response_data_owner (
         .clk_i(clk_i),.write_i(response_data_write),.data_i(response_data_next),.data_o(response_data_saved));
