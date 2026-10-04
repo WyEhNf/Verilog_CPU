@@ -605,6 +605,15 @@ module rv32_backend_joint #(
     wire [8*TAG_WIDTH-1:0] recovery_tag_views;
     rv32_frequency_control_tree #(.WIDTH(TAG_WIDTH),.LEAVES(8)) recovery_tag_tree (
         .signal_i(branch_pending_tag),.views_o(recovery_tag_views));
+    // Local ownership is used only with the recovery-aware issue FIFO.
+    localparam integer LOCAL_EXEC_RECOVERY=(ISSUE_PIPELINE!=0);
+    localparam integer EXEC_RECOVERY_WIDTH=1+2*ROB_SLOT_WIDTH+ROB_COUNT_WIDTH;
+    wire [ROB_SLOT_WIDTH-1:0] execution_branch_age=
+        branch_pending_tag[3 +: ROB_SLOT_WIDTH]-recovery_descriptor_head;
+    wire [(BE_WIDTH+1)*EXEC_RECOVERY_WIDTH-1:0] execution_recovery_views;
+    rv32_frequency_control_tree #(.WIDTH(EXEC_RECOVERY_WIDTH),.LEAVES(BE_WIDTH+1)) execution_recovery_tree (
+        .signal_i({recovery_domains[6],recovery_descriptor_occupancy,recovery_descriptor_head,execution_branch_age}),
+        .views_o(execution_recovery_views));
     wire [31:0] branch_pending_value;
     wire [PAW-1:0] branch_pending_phys;
     wire branch_pending_rd_we;
@@ -1381,12 +1390,13 @@ module rv32_backend_joint #(
     genvar alu_lane;
     generate
         for (alu_lane = 0; alu_lane < BE_WIDTH; alu_lane = alu_lane + 1) begin : g_alu
-            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .FORWARD_METADATA(RS_ISSUE_METADATA)) alu (
+            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .FORWARD_METADATA(RS_ISSUE_METADATA), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY)) alu (
                 .exec_source_pc_o(alu_exec_source_pc[alu_lane*32 +: 32]),
                 .exec_pred_taken_o(alu_exec_pred_taken[alu_lane]),
                 .exec_pred_target_o(alu_exec_pred_target[alu_lane*32 +: 32]),
                 .exec_pred_kind_o(alu_exec_pred_kind[alu_lane*2 +: 2]),
                 .clk_i(clk_i), .reset_i(reset_i), .flush_i(alu_flush_r[alu_lane]),
+                .recovery_packet_i(execution_recovery_views[alu_lane*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]),
                 .issue_valid_i(!branch_busy_domains[2] &&
                                (alu_lane < INT_ISSUE_WIDTH) &&
                                rs_issue_valid[alu_lane] &&
@@ -1429,8 +1439,8 @@ module rv32_backend_joint #(
         end
     endgenerate
 
-    rv32m_mdu_reservation_station #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .MUL_IMPL(MUL_IMPL)) mdu (
-        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
+    rv32m_mdu_reservation_station #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .MUL_IMPL(MUL_IMPL), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY)) mdu (
+        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(execution_recovery_views[BE_WIDTH*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
     rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
@@ -1550,7 +1560,7 @@ module rv32_backend_joint #(
         alu_recovery_slot = 0;
         alu_recovery_age = 0;
         alu_recovery_branch_age = recovery_tag_views[7*TAG_WIDTH+3 +: ROB_SLOT_WIDTH] - recovery_head_views[5*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
-        if (recovery_domains[6]) begin
+        if (LOCAL_EXEC_RECOVERY==0 && recovery_domains[6]) begin
             for (alu_recovery_lane = 0; alu_recovery_lane < BE_WIDTH;
                  alu_recovery_lane = alu_recovery_lane + 1) begin
                 alu_recovery_slot =
@@ -1596,13 +1606,25 @@ module rv32_backend_joint #(
     // completion FIFO is temporarily full.  Keeping the wake path independent
     // of producer_ready also avoids the FIFO admission/backpressure chain on
     // the producer -> RS -> ALU same-cycle bypass path.  A producer killed by
-    // recovery is suppressed by producer_target_live_r; the ordinary CDB
-    // lanes remain in the bus for already-queued results.
+    // recovery is suppressed in each ALU/MDU owner, while LSQ retains
+    // producer_target_live_r. CDB/PRF/ROB generation filtering is unchanged.
+    // A locally owned ALU/MDU result loses valid on recovery BEFORE its
+    // destination can be reclaimed. Completion still uses the full ROB
+    // valid/generation authority above. Loads retain that authority for wake.
+    wire [PRODUCERS-1:0] producer_wake_live;
+    generate for(genvar wake_owner=0;wake_owner<PRODUCERS;wake_owner=wake_owner+1) begin:g_wake_owner
+        if(LOCAL_EXEC_RECOVERY!=0 && wake_owner<=MDU_SOURCE) begin:g_local_execution
+            assign producer_wake_live[wake_owner]=!reset_i && !flush_i &&
+                producer_tag[wake_owner*TAG_WIDTH];
+        end else begin:g_rob_authority
+            assign producer_wake_live[wake_owner]=producer_target_live_r[wake_owner];
+        end
+    end endgenerate
     generate if(RS_DIRECT_WAKE!=0) begin:g_direct_producer_wake
-        assign rs_wake_valid=producer_valid & producer_rd_we & producer_target_live_r;
+        assign rs_wake_valid=producer_valid & producer_rd_we & producer_wake_live;
         assign rs_wake_value=producer_value;
     end else begin:g_queued_or_legacy_wake
-        assign rs_wake_valid={producer_valid & producer_rd_we & producer_target_live_r,wake_wb_valid};
+        assign rs_wake_valid={producer_valid & producer_rd_we & producer_wake_live,wake_wb_valid};
         assign rs_wake_value={producer_value,wake_wb_value};
     end endgenerate
 

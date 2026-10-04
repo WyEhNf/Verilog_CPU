@@ -6,11 +6,15 @@
 module rv32m_multiplier_radix4 #(
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
-    parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT
+    parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
+    parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
+    parameter integer SELECTIVE_RECOVERY = 0,
+    parameter integer RECOVERY_WIDTH = 1+2*((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))+$clog2(ROB_ENTRIES+1)
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
     input  wire                         flush_i,
+    input  wire [RECOVERY_WIDTH-1:0]    recovery_packet_i,
     input  wire                         req_valid_i,
     output wire                         req_ready_o,
     input  wire [OP_WIDTH-1:0]          req_op_i,
@@ -19,6 +23,7 @@ module rv32m_multiplier_radix4 #(
     input  wire [TAG_WIDTH-1:0]         req_rob_tag_i,
     input  wire [PHYS_ADDR_WIDTH-1:0]   req_phys_rd_i,
     input  wire                         req_target_live_i,
+    output wire                         occupied_o,
     output wire                         resp_valid_o,
     input  wire                         resp_ready_i,
     output wire [31:0]                  resp_value_o,
@@ -59,7 +64,23 @@ module rv32m_multiplier_radix4 #(
     reg [63:0] radix_addend;
     reg [31:0] selected_value;
     wire [63:0] iteration_sum = accumulator + radix_addend;
-    wire out_discard = out_valid && (!out_live ||
+    wire [2*RECOVERY_WIDTH-1:0] recovery_views;
+    rv32_frequency_control_tree #(.WIDTH(RECOVERY_WIDTH),.LEAVES(2)) recovery_tree (
+        .signal_i(recovery_packet_i),.views_o(recovery_views));
+    assign occupied_o=busy || out_valid;
+    wire operation_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(0)) operation_cancel_guard (
+        .packet_i(recovery_views[0 +: RECOVERY_WIDTH]),.active_i(busy),.tag_i(operation_tag),.cancel_o(operation_cancel));
+    wire out_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(0)) out_cancel_guard (
+        .packet_i(recovery_views[RECOVERY_WIDTH +: RECOVERY_WIDTH]),.active_i(out_valid),.tag_i(out_tag),.cancel_o(out_cancel));
+    wire request_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(0)) request_cancel_guard (
+        .packet_i(recovery_packet_i),.active_i(req_valid_i),.tag_i(req_rob_tag_i),.cancel_o(request_cancel));
+    wire out_discard = out_valid && (out_cancel || !out_live ||
         (live_tag_valid_i && (out_tag != live_tag_i)));
     wire out_slot_ready = !out_valid || resp_ready_i || out_discard;
 
@@ -82,8 +103,8 @@ module rv32m_multiplier_radix4 #(
         endcase
     end
 
-    assign req_ready_o = !flush_i && !busy && out_slot_ready;
-    assign resp_valid_o = out_valid && out_live &&
+    assign req_ready_o = !flush_i && !operation_cancel && !request_cancel && !busy && out_slot_ready;
+    assign resp_valid_o = out_valid && !out_cancel && out_live &&
         (!live_tag_valid_i || (out_tag == live_tag_i));
     assign resp_value_o = selected_value;
     assign resp_rob_tag_o = out_tag;
@@ -112,7 +133,8 @@ module rv32m_multiplier_radix4 #(
             if (out_slot_ready)
                 out_valid <= 1'b0;
 
-            if (busy) begin
+            if(operation_cancel) busy<=1'b0;
+            if (busy && !operation_cancel) begin
                 accumulator <= iteration_sum;
                 multiplicand <= multiplicand << 2;
                 multiplier <= multiplier >> 2;

@@ -5,11 +5,15 @@
 module rv32m_multiplier #(
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
-    parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT
+    parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
+    parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
+    parameter integer SELECTIVE_RECOVERY = 0,
+    parameter integer RECOVERY_WIDTH = 1+2*((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))+$clog2(ROB_ENTRIES+1)
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
     input  wire                         flush_i,
+    input  wire [RECOVERY_WIDTH-1:0]    recovery_packet_i,
     input  wire                         req_valid_i,
     output wire                         req_ready_o,
     input  wire [OP_WIDTH-1:0]          req_op_i,
@@ -18,6 +22,7 @@ module rv32m_multiplier #(
     input  wire [TAG_WIDTH-1:0]         req_rob_tag_i,
     input  wire [PHYS_ADDR_WIDTH-1:0]   req_phys_rd_i,
     input  wire                         req_target_live_i,
+    output wire                         occupied_o,
     output wire                         resp_valid_o,
     input  wire                         resp_ready_i,
     output wire [31:0]                  resp_value_o,
@@ -148,12 +153,32 @@ module rv32m_multiplier #(
     wire [TAG_WIDTH-1:0] out_tag;
     wire [PHYS_ADDR_WIDTH-1:0] out_phys;
     wire out_live;
-    wire s1_discard=s1_valid && (!s1_live ||
+    wire [3*RECOVERY_WIDTH-1:0] recovery_views;
+    rv32_frequency_control_tree #(.WIDTH(RECOVERY_WIDTH),.LEAVES(3)) recovery_tree (
+        .signal_i(recovery_packet_i),.views_o(recovery_views));
+    assign occupied_o=s1_valid || s2_valid || out_valid;
+    wire s1_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(0)) s1_cancel_guard (
+        .packet_i(recovery_views[0*RECOVERY_WIDTH +: RECOVERY_WIDTH]),.active_i(s1_valid),.tag_i(s1_tag),.cancel_o(s1_cancel));
+    wire s2_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(0)) s2_cancel_guard (
+        .packet_i(recovery_views[1*RECOVERY_WIDTH +: RECOVERY_WIDTH]),.active_i(s2_valid),.tag_i(s2_tag),.cancel_o(s2_cancel));
+    wire out_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(0)) out_cancel_guard (
+        .packet_i(recovery_views[2*RECOVERY_WIDTH +: RECOVERY_WIDTH]),.active_i(out_valid),.tag_i(out_tag),.cancel_o(out_cancel));
+    wire request_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(0)) request_cancel_guard (
+        .packet_i(recovery_packet_i),.active_i(req_valid_i),.tag_i(req_rob_tag_i),.cancel_o(request_cancel));
+    wire s1_discard=s1_valid && (s1_cancel || !s1_live ||
         (live_tag_valid_i && s1_tag!=live_tag_i));
-    wire out_discard=out_valid && (!out_live ||
+    wire out_discard=out_valid && (out_cancel || !out_live ||
         (live_tag_valid_i && out_tag!=live_tag_i));
     wire out_ready=!out_valid || resp_ready_i || out_discard;
-    wire s2_discard=s2_valid && (!s2_live ||
+    wire s2_discard=s2_valid && (s2_cancel || !s2_live ||
         (live_tag_valid_i && s2_tag!=live_tag_i));
     wire s2_ready=!s2_valid || out_ready || s2_discard;
     wire s1_ready=!s1_valid || s2_ready || s1_discard;
@@ -166,8 +191,8 @@ module rv32m_multiplier #(
         .signal_i(req_valid_i && req_ready_o),.views_o(s1_write_domains));
     wire payload_active=!reset_i && !flush_i;
     wire out_write=payload_active && out_ready && s2_valid && !s2_discard;
-    assign req_ready_o=!flush_i && s1_ready;
-    assign resp_valid_o=out_valid && out_live &&
+    assign req_ready_o=!flush_i && !request_cancel && s1_ready;
+    assign resp_valid_o=out_valid && !out_cancel && out_live &&
         (!live_tag_valid_i || out_tag==live_tag_i);
     assign resp_value_o=out_value;
     assign resp_rob_tag_o=out_tag;

@@ -8,11 +8,15 @@
 module rv32m_divider #(
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
-    parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT
+    parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
+    parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
+    parameter integer SELECTIVE_RECOVERY = 0,
+    parameter integer RECOVERY_WIDTH = 1+2*((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))+$clog2(ROB_ENTRIES+1)
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
     input  wire                         flush_i,
+    input  wire [RECOVERY_WIDTH-1:0]    recovery_packet_i,
     input  wire                         req_valid_i,
     output wire                         req_ready_o,
     input  wire [OP_WIDTH-1:0]          req_op_i,
@@ -21,6 +25,7 @@ module rv32m_divider #(
     input  wire [TAG_WIDTH-1:0]         req_rob_tag_i,
     input  wire [PHYS_ADDR_WIDTH-1:0]   req_phys_rd_i,
     input  wire                         req_target_live_i,
+    output wire                         occupied_o,
     output wire                         resp_valid_o,
     input  wire                         resp_ready_i,
     output wire [31:0]                  resp_value_o,
@@ -131,14 +136,24 @@ module rv32m_divider #(
 
     // Mutually exclusive commands mirror the original nested state machine.
     // Reset/flush still write ZERO to every former reset payload register.
+    wire operation_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(0)) operation_cancel_guard (
+        .packet_i(recovery_packet_i),.active_i(busy_reg || result_valid_reg),.tag_i(result_tag_reg),.cancel_o(operation_cancel));
+    wire request_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(0)) request_cancel_guard (
+        .packet_i(recovery_packet_i),.active_i(req_valid_i),.tag_i(req_rob_tag_i),.cancel_o(request_cancel));
+    assign occupied_o=busy_reg || result_valid_reg;
     wire payload_clear=reset_i || flush_i;
-    wire payload_accept=!payload_clear && !busy_reg && req_valid_i && req_ready_o;
-    wire payload_prepare=!payload_clear && busy_reg && prepare_reg;
+    wire payload_active=!payload_clear && !operation_cancel;
+    wire payload_accept=payload_active && !busy_reg && req_valid_i && req_ready_o;
+    wire payload_prepare=payload_active && busy_reg && prepare_reg;
     wire magnitude_smaller=dividend_reg<divisor_reg;
     wire payload_normalize=payload_prepare && !magnitude_smaller;
     wire payload_early_result=payload_prepare && magnitude_smaller;
-    wire payload_finish=!payload_clear && busy_reg && !prepare_reg && finish_reg;
-    wire payload_iterate=!payload_clear && busy_reg && !prepare_reg && !finish_reg;
+    wire payload_finish=payload_active && busy_reg && !prepare_reg && finish_reg;
+    wire payload_iterate=payload_active && busy_reg && !prepare_reg && !finish_reg;
     wire payload_fast_result=payload_accept && req_fast_result;
     wire payload_normal_finish=payload_finish && !divide_zero_reg && !signed_overflow_reg;
     wire payload_signed_cache=payload_normal_finish && signed_mode_reg;
@@ -210,12 +225,12 @@ module rv32m_divider #(
         assign iterate_dividend[iterate_word*16 +: 16]=odd_views[8+iterate_word]?
             odd_dividend[iterate_word*16 +: 16]:even_dividend[iterate_word*16 +: 16];
     end endgenerate
-    wire result_discard = result_valid_reg && (!result_live_reg ||
+    wire result_discard = result_valid_reg && (operation_cancel || !result_live_reg ||
         (live_tag_valid_i && (result_tag_reg != live_tag_i)));
 
-    assign req_ready_o = !flush_i && !busy_reg &&
+    assign req_ready_o = !flush_i && !operation_cancel && !request_cancel && !busy_reg &&
         (!result_valid_reg || resp_ready_i || result_discard);
-    assign resp_valid_o = result_valid_reg && result_live_reg &&
+    assign resp_valid_o = result_valid_reg && !operation_cancel && result_live_reg &&
         (!live_tag_valid_i || (result_tag_reg == live_tag_i));
     assign resp_value_o = result_value_reg;
     assign resp_rob_tag_o = result_tag_reg;
@@ -329,6 +344,11 @@ module rv32m_divider #(
             divide_zero_reg<=0; signed_overflow_reg<=0;
             result_live_reg<=0;
             signed_cache_valid_reg<=1'b0; unsigned_cache_valid_reg<=1'b0;
+        end else if(operation_cancel) begin
+            // Payload/cache history is pure data; clear transaction ownership.
+            // No canceled prepare/finish/iteration may publish a new result.
+            busy_reg<=1'b0; prepare_reg<=1'b0; finish_reg<=1'b0;
+            result_valid_reg<=1'b0; result_live_reg<=1'b0;
         end else begin
             if(result_valid_reg && (result_discard || resp_ready_i))
                 result_valid_reg<=1'b0;

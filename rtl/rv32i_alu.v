@@ -10,11 +10,15 @@ module rv32i_alu #(
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
     parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH,
     parameter integer SHIFT_IMPL = 0,
-    parameter integer FORWARD_METADATA = 0
+    parameter integer FORWARD_METADATA = 0,
+    parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
+    parameter integer SELECTIVE_RECOVERY = 0,
+    parameter integer RECOVERY_WIDTH = 1+2*((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))+$clog2(ROB_ENTRIES+1)
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
     input  wire                         flush_i,
+    input  wire [RECOVERY_WIDTH-1:0]    recovery_packet_i,
 
     input  wire                         issue_valid_i,
     output wire                         issue_ready_o,
@@ -221,10 +225,18 @@ module rv32i_alu #(
     assign cmp_signed_lt = (issue_src1_value_i[31] ^ issue_src2_value_i[31]) ?
         issue_src1_value_i[31] : cmp_unsigned_lt;
 
-    wire result_visible = result_valid_reg &&
+    wire result_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(1)) result_cancel_guard (
+        .packet_i(recovery_packet_i),.active_i(result_valid_reg || shift_busy),.tag_i(result_rob_tag_reg),.cancel_o(result_cancel));
+    wire issue_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(1)) issue_cancel_guard (
+        .packet_i(recovery_packet_i),.active_i(issue_valid_i),.tag_i(issue_rob_tag_i),.cancel_o(issue_cancel));
+    wire result_visible = result_valid_reg && !result_cancel &&
         (!live_tag_valid_i || (result_rob_tag_reg == live_tag_i));
     assign exec_valid_o = result_visible;
-    assign issue_ready_o = !flush_i && !shift_busy &&
+    assign issue_ready_o = !flush_i && !result_cancel && !issue_cancel && !shift_busy &&
         (!result_valid_reg || exec_ready_i ||
          (live_tag_valid_i && (result_rob_tag_reg != live_tag_i)));
 
@@ -254,7 +266,7 @@ module rv32i_alu #(
     wire payload_cancel=result_valid_reg && payload_stale && !exec_ready_i;
     wire payload_accept=!reset_i && !flush_i && !shift_busy && !payload_cancel &&
         issue_ready_o && issue_valid_i;
-    wire payload_shift=!reset_i && !flush_i && shift_busy && !payload_stale;
+    wire payload_shift=!reset_i && !flush_i && !result_cancel && shift_busy && !payload_stale;
     wire [31:0] shifted_payload=shift_right ?
         {(shift_arithmetic && result_value_reg[31]),result_value_reg[31:1]} :
         {result_value_reg[30:0],1'b0};
@@ -379,7 +391,7 @@ module rv32i_alu #(
         .data_i({issue_phys_rd_i,issue_rob_tag_i,issue_epoch_i,calc_rd_we,calc_is_branch,calc_branch_taken,calc_branch_target,calc_redirect_valid,calc_redirect_pc,calc_is_memory,calc_is_load,calc_is_store,calc_mem_addr,calc_mem_size,calc_mem_unsigned,calc_store_data}),.data_o({result_phys_rd_reg,result_rob_tag_reg,result_epoch_reg,result_rd_we_reg,result_is_branch_reg,result_branch_taken_reg,result_branch_target_reg,result_redirect_valid_reg,result_redirect_pc_reg,result_is_memory_reg,result_is_load_reg,result_is_store_reg,result_mem_addr_reg,result_mem_size_reg,result_mem_unsigned_reg,result_store_data_reg}));
 
     always @(posedge clk_i) begin
-        if (reset_i || flush_i) begin
+        if (reset_i || flush_i || result_cancel) begin
             result_valid_reg <= 1'b0;
             shift_busy <= 1'b0;
             ;
