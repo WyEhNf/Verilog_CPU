@@ -20,7 +20,10 @@ module rv32_lsq #(
     parameter integer GENERATION_WIDTH = (TAG_WIDTH > (SLOT_WIDTH + 3)) ?
                                           (TAG_WIDTH - SLOT_WIDTH - 3) : 1,
     parameter integer COUNT_WIDTH = (LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES + 1),
-    parameter integer ALLOC_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1)
+    parameter integer ALLOC_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1),
+    parameter integer LOCAL_REPORT_CANCEL = 0,
+    parameter integer REPORT_RECOVERY_WIDTH = 1 +
+        2*((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES)) + $clog2(ROB_ENTRIES+1)
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -118,7 +121,11 @@ module rv32_lsq #(
 
     output wire [COUNT_WIDTH-1:0]       occupancy_o,
     output wire [SLOT_WIDTH-1:0]        head_o,
-    output wire [SLOT_WIDTH-1:0]        tail_o
+    output wire [SLOT_WIDTH-1:0]        tail_o,
+    // Same execution recovery packet used by the backend's original guard:
+    // {apply,occupancy,head,branch_relative_age}. Disabled by default.
+    input  wire [REPORT_RECOVERY_WIDTH-1:0] report_recovery_packet_i,
+    output reg                          load_complete_cancel_o
 );
     localparam integer TAG_SLOT_LSB = 3;
     localparam integer TAG_GEN_LSB = TAG_SLOT_LSB + SLOT_WIDTH;
@@ -878,7 +885,9 @@ module rv32_lsq #(
     // Load reporting follows queue age; store admission preserves the former
     // lowest physical-slot priority. Neither selection is a serial scan.
     localparam integer REPORT_ROWS=(LSQ_ENTRIES<=1)?1:(1<<$clog2(LSQ_ENTRIES));
-    localparam integer REPORT_WIDTH=PHYS_ADDR_WIDTH+ROB_TAG_WIDTH+TAG_WIDTH+34;
+    // Cancellation travels with the selected row's complete packet.
+    // It is computed from that row's stored tag before head/age arbitration.
+    localparam integer REPORT_WIDTH=PHYS_ADDR_WIDTH+ROB_TAG_WIDTH+TAG_WIDTH+35;
     localparam integer ACK_WIDTH=ROB_TAG_WIDTH+TAG_WIDTH+1;
     localparam integer REPORT_WORDS=(REPORT_WIDTH+15)/16;
     localparam integer ACK_WORDS=(ACK_WIDTH+15)/16;
@@ -890,14 +899,30 @@ module rv32_lsq #(
     wire [REPORT_WIDTH-1:0] report_payload_tree [1:2*REPORT_ROWS-1];
     wire [ACK_WIDTH-1:0] ack_payload_tree [1:2*REPORT_ROWS-1];
     wire ack_valid_tree [1:2*REPORT_ROWS-1];
+    wire [LSQ_ENTRIES*REPORT_RECOVERY_WIDTH-1:0] report_recovery_views;
+    generate if(LOCAL_REPORT_CANCEL!=0) begin:g_report_cancel_domains
+        rv32_frequency_control_tree #(.WIDTH(REPORT_RECOVERY_WIDTH),.LEAVES(LSQ_ENTRIES)) recovery_tree (
+            .signal_i(report_recovery_packet_i),.views_o(report_recovery_views));
+    end else begin:g_no_report_cancel_domains
+        assign report_recovery_views=0;
+    end endgenerate
     genvar report_row,report_word,report_node;
     generate
         for(report_row=0;report_row<REPORT_ROWS;report_row=report_row+1) begin:g_report_row
             if(report_row<LSQ_ENTRIES) begin:g_present
                 wire [REPORT_WORDS-1:0] report_select;
                 wire [ACK_WORDS-1:0] ack_select;
+                wire row_cancel;
+                // This local combinational owner prevents the exact guard
+                // from being reconstructed after the report payload mux.
+                (* keep_hierarchy = 1 *)
+                rv32_execution_recovery_cancel #(.TAG_WIDTH(ROB_TAG_WIDTH),
+                    .ROB_ENTRIES(ROB_ENTRIES),.ENABLED(LOCAL_REPORT_CANCEL),
+                    .KILL_BRANCH(0),.WIDTH(REPORT_RECOVERY_WIDTH)) cancel_guard (
+                    .packet_i(report_recovery_views[report_row*REPORT_RECOVERY_WIDTH +: REPORT_RECOVERY_WIDTH]),
+                    .active_i(1'b1),.tag_i(rob_tag_mem[report_row]),.cancel_o(row_cancel));
                 wire [REPORT_WIDTH-1:0] report_payload={
-                    !retired_mem[report_row],physical_destinations[report_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
+                    row_cancel,!retired_mem[report_row],physical_destinations[report_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
                     complete_error_mem[report_row],complete_value_mem[report_row],
                     make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
                 wire [ACK_WIDTH-1:0] ack_payload={store_ack_error_mem[report_row],
@@ -959,7 +984,7 @@ module rv32_lsq #(
         complete_slot_found=report_valid_tree[1];
         complete_slot_select=complete_slot_found?report_slot_tree[1]:head_reg;
         load_complete_valid_o=complete_slot_found;
-        {load_complete_unretired_o,load_complete_phys_rd_o,load_complete_error_o,load_complete_value_o,load_complete_lsq_tag_o,load_complete_rob_tag_o}=report_payload_tree[1];
+        {load_complete_cancel_o,load_complete_unretired_o,load_complete_phys_rd_o,load_complete_error_o,load_complete_value_o,load_complete_lsq_tag_o,load_complete_rob_tag_o}=report_payload_tree[1];
         store_ack_valid_o=ack_valid_tree[1];
         {store_ack_error_o,store_ack_lsq_tag_o,store_ack_rob_tag_o}=ack_payload_tree[1];
     end

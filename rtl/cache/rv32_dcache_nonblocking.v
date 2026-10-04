@@ -1837,7 +1837,14 @@ module rv32_dcache_command_line #(
             pin_views[byte_id*PIN_WIDTH +: PIN_WIDTH];
         wire refill_select=data_select_views[(byte_id/2)*2+1];
         wire local_select=data_select_views[(byte_id/2)*2];
-        wire [7:0] refill_data=(response_store_i && response_mask_i[byte_id])?
+        // Qualify before a preserved boundary. The raw store-response
+        // command reaches sixteen byte qualifications, not 128 data mux bits.
+        // Each final byte selection controls only eight payload mux bits.
+        wire merge_store_byte;
+        rv32_frequency_control_tree #(.LEAVES(1)) merge_selection_tree (
+            .signal_i(response_store_i && response_mask_i[byte_id]),
+            .views_o(merge_store_byte));
+        wire [7:0] refill_data=merge_store_byte?
             response_store_data_i[byte_id*8 +: 8]:response_data_i[byte_id*8 +: 8];
         wire [7:0] write_data=refill_select?refill_data:
             local_select?local_data_i[byte_id*8 +: 8]:store_data_i[byte_id*8 +: 8];

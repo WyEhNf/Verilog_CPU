@@ -364,6 +364,7 @@ module rv32_backend_joint #(
     wire [31:0] lsq_load_complete_value;
     wire [PAW-1:0] lsq_load_complete_phys;
     wire lsq_load_complete_unretired;
+    wire lsq_load_complete_cancel;
     wire lsq_load_complete_error;
     wire lsq_store_ack_valid;
     wire [TAG_WIDTH-1:0] lsq_store_ack_lsq_tag;
@@ -521,7 +522,8 @@ module rv32_backend_joint #(
         end else begin : g_rob_imm
             assign selected_imm = rob_imm_mem[selected_slot];
         end
-        assign shared_store_addr = selected_base + selected_imm;
+        rv32_frequency_add32_select address_adder (
+            .lhs_i(selected_base),.rhs_i(selected_imm),.sum_o(shared_store_addr));
     end else begin : g_no_shared_store_address
         assign shared_store_addr_valid = 1'b0;
         assign shared_store_addr_tag = {TAG_WIDTH{1'b0}};
@@ -1444,14 +1446,14 @@ module rv32_backend_joint #(
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(execution_recovery_views[BE_WIDTH*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
-    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
+    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
         .early_addr_valid_i(shared_store_addr_valid), .early_addr_tag_i(shared_store_addr_tag),
         .early_addr_i(shared_store_addr), .store_addr_pending_o(lsq_store_addr_pending),
         .store_addr_rob_tag_o(lsq_store_addr_rob_tag), .store_addr_lsq_tag_o(lsq_store_addr_lsq_tag),
         .head_o(lsq_head),
         .retire_valid_i(rob_commit_valid & {BE_WIDTH{commit_ready_i}}),
         .retire_rob_tag_i(rob_commit_tag),
-.clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_valid_i(recovery_domains[5]), .recovery_tag_i(recovery_tag_views[5*TAG_WIDTH +: TAG_WIDTH]), .recovery_head_i(recovery_head_views[3*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]), .recovery_occupancy_i({{(16-ROB_COUNT_WIDTH){1'b0}}, recovery_descriptor_occupancy}), .alloc_valid_i(lsq_alloc_valid), .alloc_ready_o(lsq_alloc_ready), .alloc_fire_o(lsq_alloc_fire), .alloc_count_o(lsq_alloc_count), .alloc_lsq_tag_o(lsq_alloc_tag), .alloc_is_load_i(d_is_load), .alloc_is_store_i(d_is_store), .alloc_rob_tag_i(d_tag), .alloc_phys_rd_i(d_new_phys), .alloc_size_i(d_mem_size), .alloc_unsigned_i(d_mem_unsigned), .alloc_addr_valid_i(lsq_alloc_addr_valid), .alloc_addr_i(lsq_alloc_addr), .alloc_data_valid_i(lsq_alloc_data_valid), .alloc_store_data_i(d_store_data), .alloc_store_mask_i({BE_WIDTH*4{1'b0}}), .addr_update_valid_i(lsq_addr_update_valid), .addr_update_tag_i(lsq_addr_update_tag), .addr_update_i(lsq_addr_update), .data_update_valid_i(lsq_data_update_valid), .data_update_tag_i(lsq_data_update_tag), .data_update_i(alu_exec_store_data), .data_mask_update_i({BE_WIDTH*4{1'b0}}), .wakeup_valid_i({BE_WIDTH{1'b0}}), .wakeup_tag_i({BE_WIDTH*TAG_WIDTH{1'b0}}), .wakeup_value_i({BE_WIDTH*32{1'b0}}), .store_commit_valid_i(rob_store_commit_valid), .store_commit_ready_o(rob_store_commit_ready), .store_commit_rob_tag_i(rob_store_commit_tag), .dcache_req_valid_o(dcache_req_valid_o), .dcache_req_ready_i(dcache_req_ready_i), .dcache_req_is_load_o(dcache_req_is_load_o), .dcache_req_is_store_o(dcache_req_is_store_o), .dcache_req_addr_o(dcache_req_addr_o), .dcache_req_size_o(dcache_req_size_o), .dcache_req_unsigned_o(dcache_req_unsigned_o), .dcache_req_mask_o(dcache_req_mask_o), .dcache_req_wdata_o(dcache_req_wdata_o), .dcache_req_rob_tag_o(dcache_req_rob_tag_o), .dcache_req_lsq_tag_o(dcache_req_lsq_tag_o), .dcache_resp_valid_i(dcache_resp_valid_i), .dcache_resp_ready_o(dcache_resp_ready_o), .dcache_resp_lsq_tag_i(dcache_resp_lsq_tag_i), .dcache_resp_addr_i(dcache_resp_addr_i), .dcache_resp_line_data_i(dcache_resp_line_data_i), .dcache_resp_word_data_i(dcache_resp_word_data_i), .dcache_resp_line_valid_i(dcache_resp_line_valid_i), .dcache_resp_error_i(dcache_resp_error_i), .load_complete_valid_o(lsq_load_complete_valid), .load_complete_ready_i(lsq_load_complete_ready), .load_complete_rob_tag_o(lsq_load_complete_tag), .load_complete_lsq_tag_o(lsq_load_complete_lsq_tag), .load_complete_value_o(lsq_load_complete_value), .load_complete_phys_rd_o(lsq_load_complete_phys), .load_complete_unretired_o(lsq_load_complete_unretired), .load_complete_error_o(lsq_load_complete_error), .dcache_store_ack_valid_i(dcache_store_ack_valid_i), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag_i), .dcache_store_ack_error_i(dcache_store_ack_error_i), .store_ack_valid_o(lsq_store_ack_valid), .store_ack_ready_i(1'b1), .store_ack_rob_tag_o(lsq_store_ack_rob_tag), .store_ack_lsq_tag_o(lsq_store_ack_lsq_tag), .store_ack_error_o(lsq_store_ack_error), .occupancy_o(lsq_occupancy), .tail_o()
+.clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_valid_i(recovery_domains[5]), .recovery_tag_i(recovery_tag_views[5*TAG_WIDTH +: TAG_WIDTH]), .recovery_head_i(recovery_head_views[3*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]), .recovery_occupancy_i({{(16-ROB_COUNT_WIDTH){1'b0}}, recovery_descriptor_occupancy}), .alloc_valid_i(lsq_alloc_valid), .alloc_ready_o(lsq_alloc_ready), .alloc_fire_o(lsq_alloc_fire), .alloc_count_o(lsq_alloc_count), .alloc_lsq_tag_o(lsq_alloc_tag), .alloc_is_load_i(d_is_load), .alloc_is_store_i(d_is_store), .alloc_rob_tag_i(d_tag), .alloc_phys_rd_i(d_new_phys), .alloc_size_i(d_mem_size), .alloc_unsigned_i(d_mem_unsigned), .alloc_addr_valid_i(lsq_alloc_addr_valid), .alloc_addr_i(lsq_alloc_addr), .alloc_data_valid_i(lsq_alloc_data_valid), .alloc_store_data_i(d_store_data), .alloc_store_mask_i({BE_WIDTH*4{1'b0}}), .addr_update_valid_i(lsq_addr_update_valid), .addr_update_tag_i(lsq_addr_update_tag), .addr_update_i(lsq_addr_update), .data_update_valid_i(lsq_data_update_valid), .data_update_tag_i(lsq_data_update_tag), .data_update_i(alu_exec_store_data), .data_mask_update_i({BE_WIDTH*4{1'b0}}), .wakeup_valid_i({BE_WIDTH{1'b0}}), .wakeup_tag_i({BE_WIDTH*TAG_WIDTH{1'b0}}), .wakeup_value_i({BE_WIDTH*32{1'b0}}), .store_commit_valid_i(rob_store_commit_valid), .store_commit_ready_o(rob_store_commit_ready), .store_commit_rob_tag_i(rob_store_commit_tag), .dcache_req_valid_o(dcache_req_valid_o), .dcache_req_ready_i(dcache_req_ready_i), .dcache_req_is_load_o(dcache_req_is_load_o), .dcache_req_is_store_o(dcache_req_is_store_o), .dcache_req_addr_o(dcache_req_addr_o), .dcache_req_size_o(dcache_req_size_o), .dcache_req_unsigned_o(dcache_req_unsigned_o), .dcache_req_mask_o(dcache_req_mask_o), .dcache_req_wdata_o(dcache_req_wdata_o), .dcache_req_rob_tag_o(dcache_req_rob_tag_o), .dcache_req_lsq_tag_o(dcache_req_lsq_tag_o), .dcache_resp_valid_i(dcache_resp_valid_i), .dcache_resp_ready_o(dcache_resp_ready_o), .dcache_resp_lsq_tag_i(dcache_resp_lsq_tag_i), .dcache_resp_addr_i(dcache_resp_addr_i), .dcache_resp_line_data_i(dcache_resp_line_data_i), .dcache_resp_word_data_i(dcache_resp_word_data_i), .dcache_resp_line_valid_i(dcache_resp_line_valid_i), .dcache_resp_error_i(dcache_resp_error_i), .load_complete_valid_o(lsq_load_complete_valid), .load_complete_ready_i(lsq_load_complete_ready), .load_complete_rob_tag_o(lsq_load_complete_tag), .load_complete_lsq_tag_o(lsq_load_complete_lsq_tag), .load_complete_value_o(lsq_load_complete_value), .load_complete_phys_rd_o(lsq_load_complete_phys), .load_complete_unretired_o(lsq_load_complete_unretired), .load_complete_cancel_o(lsq_load_complete_cancel), .report_recovery_packet_i(execution_recovery_views[(BE_WIDTH+1)*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .load_complete_error_o(lsq_load_complete_error), .dcache_store_ack_valid_i(dcache_store_ack_valid_i), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag_i), .dcache_store_ack_error_i(dcache_store_ack_error_i), .store_ack_valid_o(lsq_store_ack_valid), .store_ack_ready_i(1'b1), .store_ack_rob_tag_o(lsq_store_ack_rob_tag), .store_ack_lsq_tag_o(lsq_store_ack_lsq_tag), .store_ack_error_o(lsq_store_ack_error), .occupancy_o(lsq_occupancy), .tail_o()
     );
 
     // Keep producer positions fixed.  The completion network already skips
@@ -1615,10 +1617,16 @@ module rv32_backend_joint #(
     // valid/generation authority above. A retained retired load cannot
     // wake, even if a late response reaches its still-allocated LSQ row.
     wire lsq_wake_cancel;
-    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
-        .ENABLED(LOCAL_EXEC_RECOVERY),.KILL_BRANCH(0)) lsq_wake_guard (
-        .packet_i(execution_recovery_views[(BE_WIDTH+1)*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]),
-        .active_i(lsq_load_complete_valid),.tag_i(lsq_load_complete_tag),.cancel_o(lsq_wake_cancel));
+    generate if(LOCAL_EXEC_RECOVERY!=0) begin:g_preselected_lsq_cancel
+        // Exact cancellation is selected with the LSQ report, removing the
+        // late selected-tag subtraction/comparisons from the RS wake chain.
+        assign lsq_wake_cancel=lsq_load_complete_cancel;
+    end else begin:g_legacy_lsq_cancel
+        rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+            .ENABLED(LOCAL_EXEC_RECOVERY),.KILL_BRANCH(0)) lsq_wake_guard (
+            .packet_i(execution_recovery_views[(BE_WIDTH+1)*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]),
+            .active_i(lsq_load_complete_valid),.tag_i(lsq_load_complete_tag),.cancel_o(lsq_wake_cancel));
+    end endgenerate
     wire [PRODUCERS-1:0] producer_wake_live;
     generate for(genvar wake_owner=0;wake_owner<PRODUCERS;wake_owner=wake_owner+1) begin:g_wake_owner
         if(LOCAL_EXEC_RECOVERY!=0 && wake_owner<=MDU_SOURCE) begin:g_local_execution
