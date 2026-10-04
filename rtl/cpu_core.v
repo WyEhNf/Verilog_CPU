@@ -186,19 +186,24 @@ module cpu_core #(
     // individual predictor banks nor lanes can maintain the ordered RAS alone.
     // Updating here, after the frontend accepts a bundle, keeps one ordered
     // stack for the whole fetch stream at very small area cost.
-    reg [31:0] ras_stack [0:3];
+    wire [31:0] ras_stack [0:3];
     reg [1:0] ras_sp;
     reg [2:0] ras_count;
     reg ras_push;
     reg ras_pop;
-    reg [31:0] ras_push_address;
+    wire [31:0] ras_push_address;
+    reg [FE_WIDTH-1:0] ras_push_lanes;
+    wire [FE_WIDTH*32-1:0] ras_return_addresses;
     integer ras_lane;
     integer ras_word_index;
     integer ras_event_found;
     reg [31:0] ras_inst;
-    reg [31:0] ras_pc;
     wire [1:0] ras_top_index = ras_sp - 1'b1;
-    wire [31:0] ras_target = ras_stack[ras_top_index];
+    wire [127:0] ras_rows;
+    wire [31:0] ras_target;
+    wire [FE_WIDTH*32-1:0] ras_query_words;
+    rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(2)) ras_query (
+        .rows_i(ras_rows),.index_i(ras_top_index),.value_o(ras_target));
 
     // Consecutive lane PCs route to disjoint low-index predictor banks. All
     // lanes retain a read without duplicating the complete BHT/BTB state.
@@ -242,8 +247,12 @@ module cpu_core #(
             wire [2:0] query_word_index =
                 {1'b0, if_resp_pc[3:2]} + predictor_lane;
             wire query_valid = if_resp_valid && (query_word_index < 3'd4);
-            wire [31:0] query_inst =
-                if_resp_line_data >> (query_word_index * 32);
+            wire [31:0] query_inst;
+            rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_query (
+                .rows_i(if_resp_line_data),.index_i(query_word_index),.value_o(query_inst));
+            assign ras_query_words[predictor_lane*32 +: 32]=query_inst;
+            // Independent constant add replaces selected PC then PC+4.
+            assign ras_return_addresses[predictor_lane*32 +: 32]=if_resp_pc+((predictor_lane+1)*32'd4);
             wire query_is_return = (query_inst[6:0] == 7'b1100111) &&
                                    (query_inst[14:12] == 3'b000) &&
                                    (query_inst[11:7] == 5'd0) &&
@@ -253,38 +262,38 @@ module cpu_core #(
             wire ras_return_hit = (ENABLE_PREDICTOR != 0) && query_valid &&
                                   query_is_return && (ras_count != 0);
 
-            assign pred_taken_bus[predictor_lane] = ras_return_hit ? 1'b1 :
-                                                     pred_taken_raw_bus[predictor_lane];
-            assign pred_target_bus[predictor_lane*32 +: 32] = ras_return_hit ?
-                ras_target : pred_target_raw_bus[predictor_lane*32 +: 32];
-            assign pred_kind_bus[predictor_lane*2 +: 2] = ras_return_hit ?
+            wire [2:0] ras_hit_views;
+            rv32_frequency_control_tree #(.LEAVES(3)) ras_hit_tree (
+                .signal_i(ras_return_hit),.views_o(ras_hit_views));
+            assign pred_taken_bus[predictor_lane]=ras_hit_views[2] ? 1'b1 : pred_taken_raw_bus[predictor_lane];
+            assign pred_target_bus[predictor_lane*32 +: 32]={
+                ras_hit_views[1] ? ras_target[31:16] : pred_target_raw_bus[predictor_lane*32+16 +: 16],
+                ras_hit_views[0] ? ras_target[15:0] : pred_target_raw_bus[predictor_lane*32 +: 16]};
+            assign pred_kind_bus[predictor_lane*2 +: 2]=ras_hit_views[2] ?
                 `RV32IM_PRED_JALR : pred_kind_raw_bus[predictor_lane*2 +: 2];
-            assign pred_btb_hit_bus[predictor_lane] = ras_return_hit ? 1'b1 :
-                                                       pred_btb_hit_raw_bus[predictor_lane];
+            assign pred_btb_hit_bus[predictor_lane]=ras_hit_views[2] ? 1'b1 : pred_btb_hit_raw_bus[predictor_lane];
         end
     endgenerate
 
     always @* begin
         ras_push = 1'b0;
         ras_pop = 1'b0;
-        ras_push_address = 32'd0;
+        ras_push_lanes = {FE_WIDTH{1'b0}};
         ras_event_found = 0;
         ras_word_index = 0;
         ras_inst = 32'd0;
-        ras_pc = 32'd0;
         if ((ENABLE_PREDICTOR != 0) && if_resp_valid && if_resp_ready) begin
             for (ras_lane = 0; ras_lane < FE_WIDTH; ras_lane = ras_lane + 1) begin
                 ras_word_index = if_resp_pc[3:2] + ras_lane;
                 if (!ras_event_found && (ras_word_index < 4)) begin
-                    ras_inst = if_resp_line_data >> (ras_word_index * 32);
-                    ras_pc = if_resp_pc + (ras_lane * 32'd4);
+                    ras_inst = ras_query_words[ras_lane*32 +: 32];
                     if (((ras_inst[6:0] == 7'b1101111) ||
                          ((ras_inst[6:0] == 7'b1100111) &&
                           (ras_inst[14:12] == 3'b000))) &&
                         ((ras_inst[11:7] == 5'd1) ||
                          (ras_inst[11:7] == 5'd5))) begin
                         ras_push = 1'b1;
-                        ras_push_address = ras_pc + 32'd4;
+                        ras_push_lanes[ras_lane] = 1'b1;
                         ras_event_found = 1;
                     end else if ((ras_inst[6:0] == 7'b1100111) &&
                                  (ras_inst[14:12] == 3'b000) &&
@@ -305,22 +314,28 @@ module cpu_core #(
         end
     end
 
-    integer ras_reset_index;
+
+    // The first accepted call wins; return/taken events close the
+    // prefix even when they do not push. Each payload mask drives <=16 bits.
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(FE_WIDTH),.PRIORITY(0)) ras_return_address_selector (
+        .events_i(ras_push_lanes),.values_i(ras_return_addresses),.write_o(),.value_o(ras_push_address));
+    genvar ras_row;
+    generate for(ras_row=0;ras_row<4;ras_row=ras_row+1) begin:g_ras_row
+        // count=0 suppresses all observable RAS predictions after reset.
+        // Only valid return addresses need storage; same-edge pushes win.
+        wire write_event=!reset && ras_push && ras_sp==ras_row;
+        rv32_frequency_word_bank #(.WIDTH(32)) payload_owner (
+            .clk_i(clk),.write_i(write_event),.data_i(ras_push_address),.data_o(ras_stack[ras_row]));
+        assign ras_rows[ras_row*32 +: 32]=ras_stack[ras_row];
+    end endgenerate
     always @(posedge clk) begin
-        if (reset) begin
-            ras_sp <= 2'd0;
-            ras_count <= 3'd0;
-            for (ras_reset_index = 0; ras_reset_index < 4;
-                 ras_reset_index = ras_reset_index + 1)
-                ras_stack[ras_reset_index] <= 32'd0;
-        end else if (ras_push) begin
-            ras_stack[ras_sp] <= ras_push_address;
-            ras_sp <= ras_sp + 1'b1;
-            if (ras_count < 4)
-                ras_count <= ras_count + 1'b1;
-        end else if (ras_pop) begin
-            ras_sp <= ras_sp - 1'b1;
-            ras_count <= ras_count - 1'b1;
+        if(reset) begin ras_sp<=2'd0;ras_count<=3'd0;end
+        else if(ras_push) begin
+            ras_sp<=ras_sp+1'b1;
+            if(ras_count<4) ras_count<=ras_count+1'b1;
+        end else if(ras_pop) begin
+            ras_sp<=ras_sp-1'b1;
+            ras_count<=ras_count-1'b1;
         end
     end
 
@@ -864,7 +879,7 @@ module cpu_core #(
     assign perf_branch_pending = 1'b0;
     assign perf_mdu_busy = 1'b0;
     end else begin : g_ooo_backend
-    rv32_backend_joint #(.DISPATCH_PIPELINE(1), .ISSUE_PIPELINE(ISSUE_PIPELINE), .BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .RS_ISSUE_METADATA(RS_ISSUE_METADATA), .RS_WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .RS_ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .RS_AGE_WIDTH(RS_AGE_WIDTH), .PRF_READ_MUX_IMPL(PRF_READ_MUX_IMPL), .RAT_READ_BYPASS(RAT_READ_BYPASS), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .ROB_COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ROB_ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .ROB_MMIO_PREDECODE(ROB_MMIO_PREDECODE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
+    rv32_backend_joint #(.RS_PHYSICAL_WAKEUP(1), .DISPATCH_PIPELINE(1), .ISSUE_PIPELINE(ISSUE_PIPELINE), .BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .RS_ISSUE_METADATA(RS_ISSUE_METADATA), .RS_WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .RS_ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .RS_AGE_WIDTH(RS_AGE_WIDTH), .PRF_READ_MUX_IMPL(PRF_READ_MUX_IMPL), .RAT_READ_BYPASS(RAT_READ_BYPASS), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .ROB_COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ROB_ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .ROB_MMIO_PREDECODE(ROB_MMIO_PREDECODE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),

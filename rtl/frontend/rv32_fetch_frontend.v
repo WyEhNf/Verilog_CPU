@@ -41,11 +41,11 @@ module rv32_fetch_frontend #(
     input  wire [FE_WIDTH*2-1:0]        if_resp_pred_kind_i,
     input  wire [FE_WIDTH-1:0]          if_resp_pred_btb_hit_i,
     input  wire [FE_WIDTH*16-1:0]       if_resp_pred_metadata_i,
-    output reg  [FE_WIDTH*16-1:0]       fetch_pred_metadata_o,
+    output wire  [FE_WIDTH*16-1:0]       fetch_pred_metadata_o,
 
     output reg  [FE_WIDTH-1:0]          fetch_valid_o,
     input  wire [FE_WIDTH-1:0]           fetch_ready_i,
-    output reg  [FE_WIDTH*`RV32IM_FETCH_PACKET_WIDTH-1:0] fetch_packet_o,
+    output wire  [FE_WIDTH*`RV32IM_FETCH_PACKET_WIDTH-1:0] fetch_packet_o,
     output wire [EPOCH_WIDTH-1:0]       current_epoch_o,
     output wire                         frozen_o,
     output reg                          event_fetch_o,
@@ -55,8 +55,8 @@ module rv32_fetch_frontend #(
     localparam integer PACKET_WIDTH = `RV32IM_FETCH_PACKET_WIDTH;
     localparam integer PTR_WIDTH = (FQ_DEPTH <= 2) ? 1 : $clog2(FQ_DEPTH);
 
-    reg [31:0] pc_reg;
-    reg [EPOCH_WIDTH-1:0] epoch_reg;
+    wire [31:0] pc_reg;
+    wire [EPOCH_WIDTH-1:0] epoch_reg;
     reg req_pending_reg;
     reg frozen_reg;
     reg [PTR_WIDTH-1:0] head_reg, tail_reg;
@@ -82,23 +82,23 @@ module rv32_fetch_frontend #(
     wire [15:0] fq_pred_metadata [0:FQ_DEPTH-1];
     reg [15:0] legacy_fq_pred_metadata [0:FQ_DEPTH-1];
 
-    reg [FE_WIDTH-1:0] bundle_pred_taken;
-    reg [FE_WIDTH-1:0] bundle_pred_btb_hit;
-    reg [FE_WIDTH*32-1:0] bundle_pred_target;
-    reg [FE_WIDTH*2-1:0] bundle_pred_kind;
-    reg [FE_WIDTH*32-1:0] bundle_inst;
-    reg [FE_WIDTH*32-1:0] bundle_pc;
+    wire [FE_WIDTH-1:0] bundle_pred_taken;
+    wire [FE_WIDTH-1:0] bundle_pred_btb_hit;
+    wire [FE_WIDTH*32-1:0] bundle_pred_target;
+    wire [FE_WIDTH*2-1:0] bundle_pred_kind;
+    wire [FE_WIDTH*32-1:0] bundle_inst;
+    wire [FE_WIDTH*32-1:0] bundle_pc;
     reg [EPOCH_WIDTH-1:0] bundle_epoch;
-    integer bundle_count;
-    integer enq_count;
-    integer deq_count;
+    // Every count is constructed from <=FE_WIDTH accepted lanes.
+    localparam integer BUNDLE_COUNT_WIDTH=(FE_WIDTH<=1)?1:$clog2(FE_WIDTH+1);
+    reg [BUNDLE_COUNT_WIDTH-1:0] bundle_count,enq_count,deq_count;
     integer i;
     integer b;
     integer j;
     integer k;
     integer write_index;
     integer word_index;
-    reg [31:0] next_pc_comb;
+    wire [31:0] next_pc_comb;
     reg bundle_freeze;
     reg freeze_after_response;
     reg req_fire;
@@ -198,6 +198,48 @@ module rv32_fetch_frontend #(
         end
     endgenerate
 
+
+    // Only bundle_count authorizes enqueue; computing unused later lanes
+    // cannot publish them. Keep all public empty queue outputs zero below.
+    wire [FE_WIDTH-1:0] next_pc_classes;
+    wire [FE_WIDTH*32-1:0] next_pc_values;
+    wire [FE_WIDTH*32-1:0] response_words;
+    wire [31:0] default_next_pc=if_resp_pc_i+32'd4;
+    genvar response_lane,response_half,public_lane;
+    generate
+        for(response_lane=0;response_lane<FE_WIDTH;response_lane=response_lane+1) begin:g_response_lane
+            wire [2:0] index={1'b0,if_resp_pc_i[3:2]}+response_lane;
+            wire [1:0] predicted_views;
+            wire [31:0] sequential_pc=if_resp_pc_i+((response_lane+1)*32'd4);
+            assign bundle_pc[response_lane*32 +: 32]=if_resp_pc_i+(response_lane*32'd4);
+            assign bundle_inst[response_lane*32 +: 32]=response_words[response_lane*32 +: 32];
+            assign bundle_pred_taken[response_lane]=if_resp_pred_taken_i[response_lane];
+            assign bundle_pred_btb_hit[response_lane]=if_resp_pred_btb_hit_i[response_lane];
+            assign bundle_pred_target[response_lane*32 +: 32]=if_resp_pred_target_i[response_lane*32 +: 32];
+            assign bundle_pred_kind[response_lane*2 +: 2]=if_resp_pred_kind_i[response_lane*2 +: 2];
+            rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_word_reader (
+                .rows_i(if_resp_line_data_i),.index_i(index),.value_o(response_words[response_lane*32 +: 32]));
+            rv32_frequency_control_tree #(.LEAVES(2)) predicted_tree (
+                .signal_i(if_resp_pred_taken_i[response_lane]),.views_o(predicted_views));
+            for(response_half=0;response_half<2;response_half=response_half+1) begin:g_half
+                assign next_pc_values[response_lane*32+response_half*16 +: 16]=predicted_views[response_half]?
+                    if_resp_pred_target_i[response_lane*32+response_half*16 +: 16]:sequential_pc[response_half*16 +: 16];
+            end
+            assign next_pc_classes[response_lane]=bundle_count==response_lane+1;
+        end
+        for(public_lane=0;public_lane<FE_WIDTH;public_lane=public_lane+1) begin:g_public_packet
+            rv32_frequency_event_select #(.WIDTH(READ_DATA_WIDTH),.EVENTS(1)) packet_selector (
+                .events_i(public_lane<count_reg),
+                .values_i({queue_read_packets[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
+                           queue_read_metadata[public_lane*16 +: 16]}),.write_o(),
+                .value_o({fetch_packet_o[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
+                          fetch_pred_metadata_o[public_lane*16 +: 16]}));
+        end
+    endgenerate
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(FE_WIDTH+1),.PRIORITY(0)) next_pc_selector (
+        .events_i({(bundle_count==0),next_pc_classes}),
+        .values_i({default_next_pc,next_pc_values}),.write_o(),.value_o(next_pc_comb));
+
     assign current_epoch_o = epoch_reg;
     assign frozen_o = frozen_reg;
     // A consumed response determines the next predicted PC combinationally.
@@ -207,40 +249,49 @@ module rv32_fetch_frontend #(
                               !freeze_after_response && !stop_i && !error_i;
     assign if_req_valid_o = !reset_i && !frozen_reg && !stop_i && !error_i &&
                             (!req_pending_reg || response_can_chain);
-    assign if_req_pc_o = response_can_chain ? next_pc_comb : pc_reg;
+
+    wire [31:0] pc_update;
+    wire pc_write;
+    // Original edge precedence is reset > redirect > accepted response.
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(3)) pc_update_selector (
+        .events_i({reset_i,redirect_valid_i,resp_fire}),
+        .values_i({32'b0,redirect_pc_i,next_pc_comb}),.write_o(pc_write),.value_o(pc_update));
+    rv32_frequency_word_bank #(.WIDTH(32)) pc_owner (
+        .clk_i(clk_i),.write_i(pc_write),.data_i(pc_update),.data_o(pc_reg));
+    wire [EPOCH_WIDTH-1:0] epoch_update;
+    wire epoch_write;
+    rv32_frequency_event_select #(.WIDTH(EPOCH_WIDTH),.EVENTS(2)) epoch_update_selector (
+        .events_i({reset_i,redirect_valid_i}),
+        .values_i({{EPOCH_WIDTH{1'b0}},redirect_epoch_i}),.write_o(epoch_write),.value_o(epoch_update));
+    rv32_frequency_word_bank #(.WIDTH(EPOCH_WIDTH)) epoch_owner (
+        .clk_i(clk_i),.write_i(epoch_write),.data_i(epoch_update),.data_o(epoch_reg));
+    wire [1:0] chain_views;
+    rv32_frequency_control_tree #(.LEAVES(2)) chain_tree (
+        .signal_i(response_can_chain),.views_o(chain_views));
+    genvar request_half;
+    generate for(request_half=0;request_half<2;request_half=request_half+1) begin:g_request_pc
+        assign if_req_pc_o[request_half*16 +: 16]=chain_views[request_half]?
+            next_pc_comb[request_half*16 +: 16]:pc_reg[request_half*16 +: 16];
+    end endgenerate
+
     assign if_req_epoch_o = epoch_reg;
     assign if_resp_ready_o = !reset_i && !redirect_valid_i && response_live && queue_space;
 
     always @* begin
         // Form the largest contiguous bundle available in this returned line.
-        bundle_pred_taken = {FE_WIDTH{1'b0}};
-        bundle_pred_btb_hit = {FE_WIDTH{1'b0}};
-        bundle_pred_target = {FE_WIDTH*32{1'b0}};
-        bundle_pred_kind = {FE_WIDTH*2{1'b0}};
-        bundle_inst = {FE_WIDTH*32{1'b0}};
-        bundle_pc = {FE_WIDTH*32{1'b0}};
         bundle_epoch = if_resp_epoch_i;
         bundle_count = 0;
-        next_pc_comb = if_resp_pc_i + 32'd4;
         bundle_freeze = if_resp_error_i;
         freeze_after_response = if_resp_error_i;
         word_index = if_resp_pc_i[3:2];
         for (b = 0; b < FE_WIDTH; b = b + 1) begin
             if ((word_index + b) < 4 && !bundle_freeze) begin
-                bundle_inst[b*32 +: 32] = if_resp_line_data_i >> ((word_index+b)*32);
-                bundle_pc[b*32 +: 32] = if_resp_pc_i + (b*32'd4);
-                bundle_pred_taken[b] = if_resp_pred_taken_i[b];
-                bundle_pred_btb_hit[b] = if_resp_pred_btb_hit_i[b];
-                bundle_pred_target[b*32 +: 32] = if_resp_pred_target_i[b*32 +: 32];
-                bundle_pred_kind[b*2 +: 2] = if_resp_pred_kind_i[b*2 +: 2];
                 bundle_count = bundle_count + 1;
-                next_pc_comb = if_resp_pc_i + ((b+1)*32'd4);
                 if (if_resp_pred_taken_i[b]) begin
-                    next_pc_comb = if_resp_pred_target_i[b*32 +: 32];
                     bundle_freeze = 1'b1;
                 end
                 if ((LEGACY_SENTINEL_HALT != 0) &&
-                    ((if_resp_line_data_i >> ((word_index+b)*32)) == 32'h0ff00513)) begin
+                    (response_words[b*32 +: 32] == 32'h0ff00513)) begin
                     bundle_freeze = 1'b1;
                     freeze_after_response = 1'b1;
                 end
@@ -253,15 +304,10 @@ module rv32_fetch_frontend #(
 
     always @* begin
         fetch_valid_o = {FE_WIDTH{1'b0}};
-        fetch_packet_o = {(FE_WIDTH*PACKET_WIDTH){1'b0}};
-        fetch_pred_metadata_o = {FE_WIDTH*16{1'b0}};
         deq_count = 0;
         for (j = 0; j < FE_WIDTH; j = j + 1) begin
             if (j < count_reg) begin
                 fetch_valid_o[j] = 1'b1;
-                fetch_packet_o[j*PACKET_WIDTH +: PACKET_WIDTH] =
-                    queue_read_packets[j*PACKET_WIDTH +: PACKET_WIDTH];
-                fetch_pred_metadata_o[j*16 +: 16] = queue_read_metadata[j*16 +: 16];
             end
             if ((j < count_reg) && (deq_count == j) && fetch_ready_i[j])
                 deq_count = deq_count + 1;
@@ -275,8 +321,6 @@ module rv32_fetch_frontend #(
 
     always @(posedge clk_i) begin
         if (reset_i) begin
-            pc_reg <= 32'd0;
-            epoch_reg <= {EPOCH_WIDTH{1'b0}};
             req_pending_reg <= 1'b0;
             frozen_reg <= 1'b0;
             head_reg <= {PTR_WIDTH{1'b0}};
@@ -303,8 +347,6 @@ module rv32_fetch_frontend #(
             event_stall_o <= (count_reg != 0) && (deq_count == 0);
 
             if (redirect_valid_i) begin
-                pc_reg <= redirect_pc_i;
-                epoch_reg <= redirect_epoch_i;
                 req_pending_reg <= 1'b0;
                 frozen_reg <= 1'b0;
                 head_reg <= {PTR_WIDTH{1'b0}};
@@ -312,7 +354,6 @@ module rv32_fetch_frontend #(
                 count_storage_reg <= 0;
             end else begin
                 if (resp_fire) begin
-                    pc_reg <= next_pc_comb;
                     if (freeze_after_response || stop_i || error_i)
                         frozen_reg <= 1'b1;
                 end

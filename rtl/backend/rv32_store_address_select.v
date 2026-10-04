@@ -56,13 +56,13 @@ module rv32_store_address_select #(
     rv32_frequency_first_two #(.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(LSQ_INDEX_WIDTH)) wrap_selector (
         .candidates_i(eligible),.first_valid_o(wrap_found),.first_index_o(wrap_slot),
         .second_valid_o(),.second_index_o());
-    rv32_frequency_event_select #(.WIDTH(STORE_PACKET_WIDTH),.EVENTS(LSQ_ENTRIES)) store_packet_selector (
+    rv32_frequency_event_select #(.WIDTH(STORE_PACKET_WIDTH),.EVENTS(LSQ_ENTRIES),.PRIORITY(0)) store_packet_selector (
         .events_i(first),.values_i(row_packets),.write_o(),.value_o(chosen_packet));
     rv32_frequency_control_tree #(.WIDTH(RS_INDEX_WIDTH),.LEAVES(BASE_DOMAINS)) base_index_tree (
         .signal_i(chosen_rs),.views_o(base_index_views));
     rv32_frequency_control_tree #(.LEAVES(BASE_DOMAINS)) base_valid_tree (
         .signal_i(valid_o),.views_o(base_valid_views));
-    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(RS_ENTRIES)) base_selector (
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(RS_ENTRIES),.PRIORITY(0)) base_selector (
         .events_i(base_select_o),.values_i(base_value_i),.write_o(),.value_o(base_value_o));
     genvar row,entry;
     generate

@@ -31,6 +31,7 @@ module rv32_backend_joint #(
     parameter integer CDB_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer MUL_IMPL = 0,
     parameter integer SHIFT_IMPL = 0,
+    parameter integer RS_PHYSICAL_WAKEUP = 0,
     parameter integer PHYS_TAG_IMPL = 0,
     parameter integer CHECKPOINT_IMPL = 0,
     parameter integer RAT_RECOVERY_IMPL = 0,
@@ -274,9 +275,13 @@ module rv32_backend_joint #(
     wire [((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES + 1))-1:0] rs_occupancy;
     wire [15:0] rs_free_count = (rs_occupancy < RS_ENTRIES) ? RS_ENTRIES - rs_occupancy : 16'd0;
     wire [BE_WIDTH-1:0] rs_issue_ready;
-    localparam integer RS_WAKE_WIDTH = BE_WIDTH + PRODUCERS;
+    // In direct completion modes every CDB packet is a view of a
+    // still-valid held producer. That producer already broadcasts to RS.
+    localparam integer RS_DIRECT_WAKE=(RS_PHYSICAL_WAKEUP!=0) &&
+        ((COMPLETION_BYPASS==1) || (COMPLETION_BYPASS==2));
+    localparam integer RS_WAKE_WIDTH = RS_DIRECT_WAKE ? PRODUCERS : BE_WIDTH+PRODUCERS;
     wire [RS_WAKE_WIDTH-1:0] rs_wake_valid;
-    wire [RS_WAKE_WIDTH*TAG_WIDTH-1:0] rs_wake_tag;
+    wire [RS_WAKE_WIDTH*RS_SOURCE_TAG_WIDTH-1:0] rs_wake_tag;
     wire [RS_WAKE_WIDTH*32-1:0] rs_wake_value;
     wire [RS_ENTRIES-1:0] rs_entry_valid;
     wire [RS_ENTRIES*TAG_WIDTH-1:0] rs_entry_rob_tag;
@@ -455,7 +460,7 @@ module rv32_backend_joint #(
             assign tag_read_queries[(2*tag_lane)*PAW +: PAW]=d_src1_phys[tag_lane*PAW +: PAW];
             assign tag_read_queries[(2*tag_lane+1)*PAW +: PAW]=d_src2_phys[tag_lane*PAW +: PAW];
         end
-        if(PHYS_TAG_IMPL==0) begin:g_owned_producer_tags
+        if(PHYS_TAG_IMPL==0 && RS_PHYSICAL_WAKEUP==0) begin:g_owned_producer_tags
             rv32_frequency_control_tree #(.WIDTH(TAG_READ_PORTS*PAW),.LEAVES(4)) query_tree (
                 .signal_i(tag_read_queries),.views_o(tag_query_views));
             rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*PAW),.LEAVES(4)) address_tree (
@@ -540,7 +545,7 @@ module rv32_backend_joint #(
             for(meta_slot=0;meta_slot<RS_ENTRIES;meta_slot=meta_slot+1) begin:g_immediate_row
                 assign immediate_rows[meta_slot*32 +: 32]=rs_entry_metadata[meta_slot*RS_METADATA_WIDTH +: 32];
             end
-            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(RS_ENTRIES)) immediate_selector (
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(RS_ENTRIES),.PRIORITY(0)) immediate_selector (
                 .events_i(selected_rs),.values_i(immediate_rows),.write_o(),.value_o(selected_imm));
         end else begin : g_rob_imm
             assign selected_imm = rob_imm_mem[selected_slot];
@@ -682,6 +687,25 @@ module rv32_backend_joint #(
     reg [COMPLETION_DEPTH-1:0] completion_kill_mask;
     wire [BE_WIDTH-1:0] dispatch_valid = rename_valid;
     reg [BE_WIDTH*TAG_WIDTH-1:0] rs_src1_tag, rs_src2_tag;
+
+    // ROB tags still guard producer ownership before wake_valid. RS source
+    // identity is physical-register identity while that allocation is live.
+    // P0/out-of-range source IDs never claim a wake dependency.
+    localparam integer RS_SOURCE_TAG_WIDTH=RS_PHYSICAL_WAKEUP?(PAW+1):TAG_WIDTH;
+    wire [BE_WIDTH*RS_SOURCE_TAG_WIDTH-1:0] rs_source1_identity,rs_source2_identity;
+    genvar source_identity_lane;
+    generate if(RS_PHYSICAL_WAKEUP!=0) begin:g_physical_source_identity
+        for(source_identity_lane=0;source_identity_lane<BE_WIDTH;source_identity_lane=source_identity_lane+1) begin:g_lane
+            wire [PAW-1:0] phys1=d_src1_phys[source_identity_lane*PAW +: PAW];
+            wire [PAW-1:0] phys2=d_src2_phys[source_identity_lane*PAW +: PAW];
+            assign rs_source1_identity[source_identity_lane*RS_SOURCE_TAG_WIDTH +: RS_SOURCE_TAG_WIDTH]={phys1,(phys1!=0 && phys1<PHYS_REGS)};
+            assign rs_source2_identity[source_identity_lane*RS_SOURCE_TAG_WIDTH +: RS_SOURCE_TAG_WIDTH]={phys2,(phys2!=0 && phys2<PHYS_REGS)};
+        end
+    end else begin:g_rob_source_identity
+        assign rs_source1_identity=rs_src1_tag;
+        assign rs_source2_identity=rs_src2_tag;
+    end endgenerate
+
     reg [BE_WIDTH-1:0] rs_src1_ready, rs_src2_ready;
     reg [BE_WIDTH*32-1:0] rs_src1_value, rs_src2_value;
     wire [BE_WIDTH*32-1:0] rs_issue_imm;
@@ -1014,7 +1038,7 @@ module rv32_backend_joint #(
     rv32_frequency_first_two #(.ENTRIES(BE_WIDTH),.INDEX_WIDTH(FEEDBACK_LANE_WIDTH)) feedback_selector (
         .candidates_i(feedback_candidates),.first_valid_o(branch_feedback_valid_r),.first_index_o(feedback_lane),
         .second_valid_o(),.second_index_o());
-    rv32_frequency_event_select #(.WIDTH(FEEDBACK_PACKET_WIDTH),.EVENTS(BE_WIDTH)) feedback_payload_selector (
+    rv32_frequency_event_select #(.WIDTH(FEEDBACK_PACKET_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) feedback_payload_selector (
         .events_i(feedback_grants),.values_i(feedback_values),.write_o(),.value_o(feedback_packet));
     assign {branch_feedback_slot,branch_feedback_pc_r,branch_feedback_kind_r,branch_feedback_taken_r,
         branch_feedback_target_r,branch_feedback_pred_taken_r,branch_feedback_pred_target_r}=feedback_packet;
@@ -1081,7 +1105,7 @@ module rv32_backend_joint #(
             rs_issue_src1[mdu_route_lane*32 +: 32],rs_issue_src2[mdu_route_lane*32 +: 32],
             rs_issue_tag[mdu_route_lane*TAG_WIDTH +: TAG_WIDTH],rs_issue_phys[mdu_route_lane*PAW +: PAW]};
     end endgenerate
-    rv32_frequency_event_select #(.WIDTH(MDU_ISSUE_PAYLOAD_WIDTH),.EVENTS(BE_WIDTH)) mdu_payload_selector (
+    rv32_frequency_event_select #(.WIDTH(MDU_ISSUE_PAYLOAD_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) mdu_payload_selector (
         .events_i(mdu_select),.values_i(mdu_values),.write_o(),
         .value_o({mdu_issue_op,mdu_issue_src1,mdu_issue_src2,mdu_issue_tag,mdu_issue_phys}));
     assign mdu_issue_valid = (|mdu_select) && !branch_busy_domains[0];
@@ -1342,11 +1366,11 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] raw_rs_issue_store;
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] raw_rs_issue_metadata;
     wire [BE_WIDTH*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))-1:0] raw_rs_issue_slot;
-    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH)) rs (
+    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH)) rs (
         .alloc_metadata_i(rs_alloc_metadata), .issue_metadata_o(raw_rs_issue_metadata), .entry_metadata_o(rs_entry_metadata),
         .entry_base_ready_o(rs_entry_base_ready), .entry_base_value_o(rs_entry_base_value),
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rs_alloc_valid), .alloc_op_i(d_op), .alloc_pc_i(d_pc), .alloc_rob_tag_i(d_tag), .alloc_target_live_i(d_valid), .alloc_phys_rd_i(d_new_phys),
-        .alloc_src1_value_i(rs_src1_value), .alloc_src1_tag_i(rs_src1_tag), .alloc_src1_ready_i(rs_src1_ready), .alloc_src2_value_i(rs_src2_value), .alloc_src2_tag_i(rs_src2_tag), .alloc_src2_ready_i(rs_src2_ready), .alloc_store_data_i(d_store_data), .alloc_ready_o(rs_alloc_ready), .alloc_fire_o(rs_alloc_fire), .alloc_count_o(rs_alloc_count),
+        .alloc_src1_value_i(rs_src1_value), .alloc_src1_tag_i(rs_source1_identity), .alloc_src1_ready_i(rs_src1_ready), .alloc_src2_value_i(rs_src2_value), .alloc_src2_tag_i(rs_source2_identity), .alloc_src2_ready_i(rs_src2_ready), .alloc_store_data_i(d_store_data), .alloc_ready_o(rs_alloc_ready), .alloc_fire_o(rs_alloc_fire), .alloc_count_o(rs_alloc_count),
         .wake_valid_i(rs_wake_valid), .wake_tag_i(rs_wake_tag), .wake_value_i(rs_wake_value), .issue_ready_i(raw_rs_issue_ready), .issue_valid_o(raw_rs_issue_valid), .issue_op_o(raw_rs_issue_op), .issue_pc_o(raw_rs_issue_pc), .issue_rob_tag_o(raw_rs_issue_tag), .issue_phys_rd_o(raw_rs_issue_phys), .issue_src1_value_o(raw_rs_issue_src1), .issue_src2_value_o(raw_rs_issue_src2), .issue_store_data_o(raw_rs_issue_store), .issue_slot_o(raw_rs_issue_slot), .flush_valid_i(flush_i || recovery_domains[4]), .flush_kill_mask_i(rs_flush_kill_mask), .entry_valid_o(rs_entry_valid), .entry_rob_tag_o(rs_entry_rob_tag), .occupancy_o(rs_occupancy)
     );
 
@@ -1604,12 +1628,32 @@ module rv32_backend_joint #(
     // the producer -> RS -> ALU same-cycle bypass path.  A producer killed by
     // recovery is suppressed by producer_target_live_r; the ordinary CDB
     // lanes remain in the bus for already-queued results.
-    assign rs_wake_valid = {
-        producer_valid & producer_rd_we & producer_target_live_r,
-        wake_wb_valid
-    };
-    assign rs_wake_tag = {producer_tag, wake_wb_tag};
-    assign rs_wake_value = {producer_value, wake_wb_value};
+    generate if(RS_DIRECT_WAKE!=0) begin:g_direct_producer_wake
+        assign rs_wake_valid=producer_valid & producer_rd_we & producer_target_live_r;
+        assign rs_wake_value=producer_value;
+    end else begin:g_queued_or_legacy_wake
+        assign rs_wake_valid={producer_valid & producer_rd_we & producer_target_live_r,wake_wb_valid};
+        assign rs_wake_value={producer_value,wake_wb_value};
+    end endgenerate
+
+    genvar wake_identity_lane;
+    generate if(RS_PHYSICAL_WAKEUP!=0) begin:g_physical_wake_identity
+        for(wake_identity_lane=0;wake_identity_lane<RS_WAKE_WIDTH;wake_identity_lane=wake_identity_lane+1) begin:g_lane
+            wire [PAW-1:0] phys;
+            if(RS_DIRECT_WAKE!=0) begin:g_direct_producer
+                assign phys=producer_phys[wake_identity_lane*PAW +: PAW];
+            end else if(wake_identity_lane<BE_WIDTH) begin:g_completed
+                // Completion exports wake tag/value from this same CDB lane.
+                assign phys=cdb_phys[wake_identity_lane*PAW +: PAW];
+            end else begin:g_held_producer
+                assign phys=producer_phys[(wake_identity_lane-BE_WIDTH)*PAW +: PAW];
+            end
+            assign rs_wake_tag[wake_identity_lane*RS_SOURCE_TAG_WIDTH +: RS_SOURCE_TAG_WIDTH]={phys,(phys!=0 && phys<PHYS_REGS)};
+        end
+    end else begin:g_rob_wake_identity
+        assign rs_wake_tag={producer_tag,wake_wb_tag};
+    end endgenerate
+
 
 
     localparam integer ROB_COMPLETION_PACKET_WIDTH=TAG_WIDTH+103;
@@ -1848,7 +1892,7 @@ module rv32_backend_joint #(
             alu_exec_phys[capture_lane*PAW +: PAW],alu_exec_rd_we[capture_lane],
             alu_exec_value[capture_lane*32 +: 32],alu_exec_redirect_pc[capture_lane*32 +: 32]};
     end endgenerate
-    rv32_frequency_event_select #(.WIDTH(BRANCH_CAPTURE_WIDTH),.EVENTS(BE_WIDTH)) branch_capture_selector (
+    rv32_frequency_event_select #(.WIDTH(BRANCH_CAPTURE_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) branch_capture_selector (
         .events_i(branch_capture_grant),.values_i(branch_capture_values),
         .write_o(branch_capture_write),.value_o(branch_capture_next));
     rv32_frequency_word_bank #(.WIDTH(BRANCH_CAPTURE_WIDTH)) branch_capture_owner (
@@ -1867,7 +1911,7 @@ module rv32_backend_joint #(
                 {rob_pred_metadata_mem[slot][14:8],alu_exec_branch_taken[capture_lane]}:
                 rob_pred_metadata_mem[slot][15:8];
         end
-        rv32_frequency_event_select #(.WIDTH(8),.EVENTS(BE_WIDTH)) history_selector (
+        rv32_frequency_event_select #(.WIDTH(8),.EVENTS(BE_WIDTH),.PRIORITY(0)) history_selector (
             .events_i(branch_capture_grant),.values_i(histories),.write_o(history_write),.value_o(history_next));
         rv32_frequency_word_bank #(.WIDTH(8)) history_owner (
             .clk_i(clk_i),.write_i(history_write),.data_i(history_next),.data_o(branch_recovery_history_o));
@@ -2024,7 +2068,12 @@ module rv32_reserved_dispatch_packet #(
     output reg [15:0] reserved_rs_o,reserved_lsq_o
 );
     reg [LANES-1:0] valid_q;
-    reg [TAG_WIDTH-1:0] tag_q [0:LANES-1];
+    wire [TAG_WIDTH-1:0] tag_q [0:LANES-1];
+    wire [ROB_ENTRIES*(GW+1)-1:0] live_rows;
+    genvar live_row;
+    generate for(live_row=0;live_row<ROB_ENTRIES;live_row=live_row+1) begin:g_live_row
+        assign live_rows[live_row*(GW+1) +: GW+1]={rob_valid_i[live_row],rob_generation_i[live_row*GW +: GW]};
+    end endgenerate
     wire [LANES-1:0] recovery_keep;
     wire normal=!reset_i && !flush_i && !hold_i && !recovery_i;
     wire [SW-1:0] branch_age=recovery_tag_i[3 +: SW]-recovery_head_i;
@@ -2032,16 +2081,17 @@ module rv32_reserved_dispatch_packet #(
     generate for(lane=0;lane<LANES;lane=lane+1) begin:g_lane
         wire [SW-1:0] slot=tag_q[lane][3 +: SW];
         wire [SW-1:0] age=slot-recovery_head_i;
-        wire generation_live=rob_valid_i[slot] &&
-            tag_q[lane][3+SW +: GW]==rob_generation_i[slot*GW +: GW];
+        wire [GW:0] live;
+        rv32_frequency_array_read #(.WIDTH(GW+1),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SW)) live_reader (
+            .rows_i(live_rows),.index_i(slot),.value_o(live));
+        wire generation_live=live[GW] && tag_q[lane][3+SW +: GW]==live[0 +: GW];
         assign recovery_keep[lane]=valid_q[lane] && tag_q[lane][0] &&
             generation_live && age<branch_age && age<recovery_occupancy_i;
         assign valid_o[lane]=normal && valid_q[lane];
         assign tag_o[lane*TAG_WIDTH +: TAG_WIDTH]=tag_q[lane];
-        wire write_local;
-        rv32_frequency_control_tree #(.LEAVES(1)) tag_write_tree (
-            .signal_i(normal && valid_i[lane]),.views_o(write_local));
-        always @(posedge clk_i) if(write_local) tag_q[lane]<=tag_i[lane*TAG_WIDTH +: TAG_WIDTH];
+        rv32_frequency_word_bank #(.WIDTH(TAG_WIDTH)) tag_owner (
+            .clk_i(clk_i),.write_i(normal && valid_i[lane]),
+            .data_i(tag_i[lane*TAG_WIDTH +: TAG_WIDTH]),.data_o(tag_q[lane]));
         rv32_frequency_word_bank #(.WIDTH(PAYLOAD_WIDTH)) payload_owner (
             .clk_i(clk_i),.write_i(normal && valid_i[lane]),
             .data_i(data_i[lane*PAYLOAD_WIDTH +: PAYLOAD_WIDTH]),

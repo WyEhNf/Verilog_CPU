@@ -44,6 +44,7 @@ module rv32_banked_predictor #(
     wire [FE_WIDTH*32-1:0] bank_target;
     wire [FE_WIDTH*2-1:0] bank_kind, bank_counter;
     wire [FE_WIDTH*8-1:0] bank_training_index;
+    wire [FE_WIDTH*38-1:0] bank_query_packets;
     reg [7:0] global_history;
     reg [7:0] history_after_bundle;
     reg history_prefix_live;
@@ -68,8 +69,11 @@ module rv32_banked_predictor #(
             wire [1:0] offset = (BANK_NUMBER - base_bank) & BANK_MASK;
             wire [2:0] word_index = {1'b0, query_pc_i[3:2]} + {1'b0, offset};
             wire [31:0] pc = query_pc_i + {28'd0, offset, 2'b00};
-            wire [127:0] shifted_line = query_line_i >> (word_index * 32);
-            wire [31:0] inst = shifted_line[31:0];
+            wire [31:0] inst;
+            rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_query (
+                .rows_i(query_line_i),.index_i(word_index),.value_o(inst));
+            assign bank_query_packets[bank*38 +: 38]={bank_taken[bank],bank_hit[bank],
+                bank_target[bank*32 +: 32],bank_kind[bank*2 +: 2],bank_counter[bank*2 +: 2]};
             rv32_branch_predictor #(.BANK_BITS(BANK_BITS), .DIRECT_BRANCH_TARGET(DIRECT_BRANCH_TARGET),
                 .HISTORY_BITS(HISTORY_BITS)) predictor (
                 .clk_i(clk_i), .reset_i(reset_i),
@@ -95,11 +99,11 @@ module rv32_banked_predictor #(
             localparam [1:0] LANE_OFFSET = lane;
             wire [1:0] select_bank = (base_bank + LANE_OFFSET) & BANK_MASK;
             wire [31:0] pc = query_pc_i + (lane * 32'd4);
-            assign pred_taken_o[lane] = bank_taken[select_bank];
-            assign pred_btb_hit_o[lane] = bank_hit[select_bank];
-            assign pred_target_o[lane*32 +: 32] = bank_target[select_bank*32 +: 32];
-            assign pred_kind_o[lane*2 +: 2] = bank_kind[select_bank*2 +: 2];
-            assign pred_counter_o[lane*2 +: 2] = bank_counter[select_bank*2 +: 2];
+            wire [37:0] selected_prediction;
+            rv32_frequency_array_read #(.WIDTH(38),.ENTRIES(FE_WIDTH),.INDEX_WIDTH(2)) bank_query (
+                .rows_i(bank_query_packets),.index_i(select_bank),.value_o(selected_prediction));
+            assign {pred_taken_o[lane],pred_btb_hit_o[lane],pred_target_o[lane*32 +: 32],
+                pred_kind_o[lane*2 +: 2],pred_counter_o[lane*2 +: 2]}=selected_prediction;
             assign pred_bht_index_o[lane*6 +: 6] = pc[7:2];
             assign pred_btb_index_o[lane*4 +: 4] = pc[5:2];
         end
