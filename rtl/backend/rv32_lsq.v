@@ -83,7 +83,7 @@ module rv32_lsq #(
     output reg  [1:0]                   dcache_req_size_o,
     output reg                          dcache_req_unsigned_o,
     output reg  [15:0]                  dcache_req_mask_o,
-    output reg  [127:0]                 dcache_req_wdata_o,
+    output wire [127:0]                 dcache_req_wdata_o,
     output reg  [ROB_TAG_WIDTH-1:0]     dcache_req_rob_tag_o,
     output reg  [TAG_WIDTH-1:0]         dcache_req_lsq_tag_o,
 
@@ -698,7 +698,7 @@ module rv32_lsq #(
         dcache_req_size_o = 2'b0;
         dcache_req_unsigned_o = 1'b0;
         dcache_req_mask_o = 16'b0;
-        dcache_req_wdata_o = 128'b0;
+        // Wide request data is routed by the bounded combinational unit below.
         dcache_req_rob_tag_o = {ROB_TAG_WIDTH{1'b0}};
         dcache_req_lsq_tag_o = {TAG_WIDTH{1'b0}};
         request_fire = 1'b0;
@@ -716,7 +716,7 @@ module rv32_lsq #(
                     dcache_req_unsigned_o = selected_unsigned;
                     dcache_req_mask_o = line_mask_from_relative(target_mask & ~fwd_mask,
                                                                  selected_addr);
-                    dcache_req_wdata_o = line_data_from_relative(fwd_data, selected_addr);
+                    // Forwarded request bytes use the shared insertion unit.
                     dcache_req_rob_tag_o = selected_rob_tag;
                     dcache_req_lsq_tag_o = selected_lsq_tag;
                     request_fire = dcache_req_ready_i;
@@ -727,7 +727,7 @@ module rv32_lsq #(
                 dcache_req_size_o = selected_size;
                 dcache_req_unsigned_o = 1'b0;
                 dcache_req_mask_o = line_mask_from_relative(selected_store_mask, selected_addr);
-                dcache_req_wdata_o = line_data_from_relative(selected_store_data, selected_addr);
+                // Store request bytes use the shared insertion unit.
                 dcache_req_rob_tag_o = selected_rob_tag;
                 dcache_req_lsq_tag_o = selected_lsq_tag;
                 request_fire = dcache_req_ready_i;
@@ -749,6 +749,29 @@ module rv32_lsq #(
         response_fire = dcache_resp_valid_i && response_match;
     end
 
+
+    // The old request-admission gate fed ~151 mapped pins and also happened
+    // to be named as AXI enabled_words bit0 after flattening. Keep admission
+    // itself unchanged. Select one relative32-bit source, then insert it;
+    // qualify AFTER insertion so late request-valid never traverses shifts.
+    wire [1:0] request_source_views;
+    wire [7:0] request_data_views;
+    wire [31:0] request_relative_data;
+    wire [127:0] request_inserted_data;
+    rv32_frequency_control_tree #(.LEAVES(2)) request_source_tree (
+        .signal_i(selected_load),.views_o(request_source_views));
+    rv32_frequency_control_tree #(.LEAVES(8)) request_data_tree (
+        .signal_i(dcache_req_valid_o),.views_o(request_data_views));
+    generate for(genvar request_source_word=0;request_source_word<2;request_source_word=request_source_word+1) begin:g_request_source_word
+        assign request_relative_data[request_source_word*16 +: 16]=request_source_views[request_source_word]?
+            fwd_data[request_source_word*16 +: 16]:selected_store_data[request_source_word*16 +: 16];
+    end endgenerate
+    rv32_frequency_line_insert32 request_insertion (
+        .value_i(request_relative_data),.offset_i(selected_addr[3:0]),.line_o(request_inserted_data));
+    generate for(genvar request_line_word=0;request_line_word<8;request_line_word=request_line_word+1) begin:g_request_line_word
+        assign dcache_req_wdata_o[request_line_word*16 +: 16]=
+            {16{request_data_views[request_line_word]}} & request_inserted_data[request_line_word*16 +: 16];
+    end endgenerate
 
     // Load reporting follows queue age; store admission preserves the former
     // lowest physical-slot priority. Neither selection is a serial scan.
