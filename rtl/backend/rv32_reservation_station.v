@@ -102,10 +102,10 @@ module rv32_reservation_station #(
     reg [METADATA_WIDTH-1:0] metadata_mem_legacy [0:ENTRIES-1];
     wire [AGE_WIDTH-1:0] age_mem [0:ENTRIES-1];
     reg [AGE_WIDTH-1:0] age_mem_legacy [0:ENTRIES-1];
-    reg src1_ready_effective [0:ENTRIES-1];
-    reg [31:0] src1_value_effective [0:ENTRIES-1];
-    reg src2_ready_effective [0:ENTRIES-1];
-    reg [31:0] src2_value_effective [0:ENTRIES-1];
+    wire src1_ready_effective [0:ENTRIES-1];
+    wire [31:0] src1_value_effective [0:ENTRIES-1];
+    wire src2_ready_effective [0:ENTRIES-1];
+    wire [31:0] src2_value_effective [0:ENTRIES-1];
     reg [AGE_WIDTH-1:0] age_counter;
     reg [COUNT_WIDTH-1:0] occupancy_reg;
 
@@ -537,39 +537,53 @@ module rv32_reservation_station #(
     // operand mux.  State is still updated on the edge, but a dependent entry
     // no longer spends an otherwise idle cycle waiting for the ready bit to
     // become visible.
-    always @* begin
-        for (slot = 0; slot < ENTRIES; slot = slot + 1) begin
-            src1_ready_effective[slot] = src1_ready_mem[slot];
-            src1_value_effective[slot] = src1_value_mem[slot];
-            src2_ready_effective[slot] = src2_ready_mem[slot];
-            src2_value_effective[slot] = src2_value_mem[slot];
-            if (WAKE_MUX_IMPL != 0) begin
-                    if (!src1_ready_effective[slot] && (|wake1_match[slot])) begin
-                        src1_ready_effective[slot] = 1'b1;
-                        src1_value_effective[slot] = wake1_first[slot];
+
+    genvar effective_row,effective_word;
+    generate for(effective_row=0;effective_row<ENTRIES;effective_row=effective_row+1) begin:g_effective_operand
+        if(WAKE_MUX_IMPL!=0) begin:g_parallel
+            wire wake1=(|wake1_match[effective_row]);
+            wire wake2=(|wake2_match[effective_row]);
+            wire [1:0] select1,select2;
+            rv32_frequency_control_tree #(.LEAVES(2)) select1_tree (
+                .signal_i(!src1_ready_mem[effective_row] && wake1),.views_o(select1));
+            rv32_frequency_control_tree #(.LEAVES(2)) select2_tree (
+                .signal_i(!src2_ready_mem[effective_row] && wake2),.views_o(select2));
+            assign src1_ready_effective[effective_row]=src1_ready_mem[effective_row] || wake1;
+            assign src2_ready_effective[effective_row]=src2_ready_mem[effective_row] || wake2;
+            for(effective_word=0;effective_word<2;effective_word=effective_word+1) begin:g_word
+                assign src1_value_effective[effective_row][effective_word*16 +: 16]=select1[effective_word]?
+                    wake1_first[effective_row][effective_word*16 +: 16]:src1_value_mem[effective_row][effective_word*16 +: 16];
+                assign src2_value_effective[effective_row][effective_word*16 +: 16]=select2[effective_word]?
+                    wake2_first[effective_row][effective_word*16 +: 16]:src2_value_mem[effective_row][effective_word*16 +: 16];
+            end
+        end else begin:g_legacy
+            reg ready1,ready2;
+            reg [31:0] value1,value2;
+            integer source;
+            always @* begin
+                ready1=src1_ready_mem[effective_row];value1=src1_value_mem[effective_row];
+                ready2=src2_ready_mem[effective_row];value2=src2_value_mem[effective_row];
+                for(source=0;source<WAKE_WIDTH;source=source+1) begin
+                    if(!ready1 && wake_valid_i[source] && wake_tag_i[source*TAG_WIDTH] &&
+                        src1_tag_mem[effective_row][0] &&
+                        wake_tag_i[source*TAG_WIDTH +: TAG_WIDTH]==src1_tag_mem[effective_row]) begin
+                        ready1=1'b1;value1=wake_value_i[source*32 +: 32];
                     end
-                    if (!src2_ready_effective[slot] && (|wake2_match[slot])) begin
-                        src2_ready_effective[slot] = 1'b1;
-                        src2_value_effective[slot] = wake2_first[slot];
+                    if(!ready2 && wake_valid_i[source] && wake_tag_i[source*TAG_WIDTH] &&
+                        src2_tag_mem[effective_row][0] &&
+                        wake_tag_i[source*TAG_WIDTH +: TAG_WIDTH]==src2_tag_mem[effective_row]) begin
+                        ready2=1'b1;value2=wake_value_i[source*32 +: 32];
                     end
-                end else begin
-for (wake_lane = 0; wake_lane < WAKE_WIDTH; wake_lane = wake_lane + 1) begin
-                if (!src1_ready_effective[slot] && wake_valid_i[wake_lane] &&
-                    wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src1_tag_mem[slot] &&
-                    wake_tag_i[wake_lane*TAG_WIDTH] && src1_tag_mem[slot][0]) begin
-                    src1_ready_effective[slot] = 1'b1;
-                    src1_value_effective[slot] = wake_value_i[(wake_lane*32) +: 32];
-                end
-                if (!src2_ready_effective[slot] && wake_valid_i[wake_lane] &&
-                    wake_tag_i[(wake_lane*TAG_WIDTH) +: TAG_WIDTH] == src2_tag_mem[slot] &&
-                    wake_tag_i[wake_lane*TAG_WIDTH] && src2_tag_mem[slot][0]) begin
-                    src2_ready_effective[slot] = 1'b1;
-                    src2_value_effective[slot] = wake_value_i[(wake_lane*32) +: 32];
                 end
             end
-                end
+            assign src1_ready_effective[effective_row]=ready1;
+            assign src2_ready_effective[effective_row]=ready2;
+            assign src1_value_effective[effective_row]=value1;
+            assign src2_value_effective[effective_row]=value2;
         end
+    end endgenerate
 
+    always @* begin
         alloc_fire_o = {BE_WIDTH{1'b0}};
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
         allocation_count = 0;

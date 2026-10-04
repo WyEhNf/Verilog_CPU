@@ -80,22 +80,20 @@ module rv32i_alu #(
     wire result_mem_unsigned_reg;
     wire [31:0] result_store_data_reg;
 
-    reg [31:0] calc_value;
-    reg calc_rd_we;
-    reg calc_is_branch;
-    reg calc_branch_taken;
-    reg [31:0] calc_branch_target;
-    reg calc_redirect_valid;
-    reg [31:0] calc_redirect_pc;
-    reg calc_is_memory;
-    reg calc_is_load;
-    reg calc_is_store;
-    reg [31:0] calc_mem_addr;
-    reg [1:0] calc_mem_size;
-    reg calc_mem_unsigned;
-    reg [31:0] calc_store_data;
-    reg actual_control;
-    reg [31:0] actual_next_pc;
+    wire [31:0] calc_value;
+    wire calc_rd_we;
+    wire calc_is_branch;
+    wire calc_branch_taken;
+    wire [31:0] calc_branch_target;
+    wire calc_redirect_valid;
+    wire [31:0] calc_redirect_pc;
+    wire calc_is_memory;
+    wire calc_is_load;
+    wire calc_is_store;
+    wire [31:0] calc_mem_addr;
+    wire [1:0] calc_mem_size;
+    wire calc_mem_unsigned;
+    wire [31:0] calc_store_data;
     reg live_match;
     // Target and AGU adders have fixed operands, so opcode selection is
     // after arithmetic instead of being in front of all thirty-two bits.
@@ -109,7 +107,6 @@ module rv32i_alu #(
     wire [31:0] integer_sum=fast_add_carry(issue_src1_value_i,integer_adjusted_rhs,integer_subtract_views[2]);
     wire [31:0] address_sum=fast_add_carry(issue_src1_value_i,issue_imm_i,1'b0);
     wire [31:0] pc_relative_sum=fast_add_carry(issue_pc_i,issue_imm_i,1'b0);
-    reg [31:0] pc_plus_four;
     reg shift_busy;
     reg [4:0] shift_remaining;
     reg shift_right;
@@ -171,6 +168,25 @@ module rv32i_alu #(
          (issue_op_i == `RV32IM_OP_SRLI) ||
          (issue_op_i == `RV32IM_OP_SRAI)) ?
         issue_imm_i[4:0] : issue_src2_value_i[4:0];
+
+
+    wire [31:0] immediate_shift_left,immediate_shift_right;
+    wire [31:0] register_shift_left,register_shift_right;
+    wire shift_sign_fill=issue_src1_value_i[31] &&
+        (issue_op_i==`RV32IM_OP_SRAI || issue_op_i==`RV32IM_OP_SRA);
+    generate if(SHIFT_IMPL==0) begin:g_parallel_barrel
+        rv32_frequency_barrel32 immediate_barrel (
+            .value_i(issue_src1_value_i),.amount_i(issue_imm_i[4:0]),.fill_i(shift_sign_fill),
+            .left_o(immediate_shift_left),.right_o(immediate_shift_right));
+        rv32_frequency_barrel32 register_barrel (
+            .value_i(issue_src1_value_i),.amount_i(issue_src2_value_i[4:0]),.fill_i(shift_sign_fill),
+            .left_o(register_shift_left),.right_o(register_shift_right));
+    end else begin:g_iterative_shift_values
+        assign immediate_shift_left=issue_src1_value_i;
+        assign immediate_shift_right=issue_src1_value_i;
+        assign register_shift_left=issue_src1_value_i;
+        assign register_shift_right=issue_src1_value_i;
+    end endgenerate
 
     // Compare four-bit chunks in parallel, then combine high chunks before
     // low chunks. The issue path otherwise contains a 32-bit serial compare
@@ -271,131 +287,91 @@ module rv32i_alu #(
         assign exec_pred_kind_o = 2'b0;
     end endgenerate
 
-    // All operation semantics are combinational from the accepted IssuePacket.
-    // The resulting fields are latched below, making completion visible one
-    // cycle after issue and stable while the consumer applies backpressure.
-    always @* begin
-        pc_plus_four = issue_pc_i + 32'd4;
 
-        calc_value = 32'b0;
-        calc_rd_we = 1'b0;
-        calc_is_branch = 1'b0;
-        calc_branch_taken = 1'b0;
-        calc_branch_target = 32'b0;
-        calc_redirect_valid = 1'b0;
-        calc_redirect_pc = 32'b0;
-        calc_is_memory = 1'b0;
-        calc_is_load = 1'b0;
-        calc_is_store = 1'b0;
-        calc_mem_addr = 32'b0;
-        calc_mem_size = issue_mem_size_i;
-        calc_mem_unsigned = issue_mem_unsigned_i;
-        calc_store_data = issue_store_data_i;
-        actual_control = 1'b0;
-        actual_next_pc = 32'b0;
+    // Exclusive opcode classes select fixed arithmetic/logic results after
+    // their networks. Each decoded class reaches <=16 data bits per leaf.
+    wire [15:0] value_classes;
+    wire [16*32-1:0] value_class_data;
+    wire comparison_value=
+        (issue_op_i==`RV32IM_OP_SLTI && $signed(issue_src1_value_i)<$signed(issue_imm_i)) ||
+        (issue_op_i==`RV32IM_OP_SLTIU && issue_src1_value_i<issue_imm_i) ||
+        (issue_op_i==`RV32IM_OP_SLT && cmp_signed_lt) ||
+        (issue_op_i==`RV32IM_OP_SLTU && cmp_unsigned_lt);
+    wire [31:0] pc_plus_four=issue_pc_i+32'd4;
+    assign value_classes[0]=(issue_op_i==`RV32IM_OP_LUI);
+    assign value_class_data[0*32 +: 32]=issue_imm_i;
+    assign value_classes[1]=(issue_op_i==`RV32IM_OP_AUIPC);
+    assign value_class_data[1*32 +: 32]=pc_relative_sum;
+    assign value_classes[2]=(issue_op_i==`RV32IM_OP_JAL || issue_op_i==`RV32IM_OP_JALR);
+    assign value_class_data[2*32 +: 32]=pc_plus_four;
+    assign value_classes[3]=(issue_op_i==`RV32IM_OP_ADDI);
+    assign value_class_data[3*32 +: 32]=address_sum;
+    assign value_classes[4]=(issue_op_i==`RV32IM_OP_ADD || issue_op_i==`RV32IM_OP_SUB);
+    assign value_class_data[4*32 +: 32]=integer_sum;
+    assign value_classes[5]=(issue_op_i==`RV32IM_OP_XORI);
+    assign value_class_data[5*32 +: 32]=issue_src1_value_i ^ issue_imm_i;
+    assign value_classes[6]=(issue_op_i==`RV32IM_OP_ORI);
+    assign value_class_data[6*32 +: 32]=issue_src1_value_i | issue_imm_i;
+    assign value_classes[7]=(issue_op_i==`RV32IM_OP_ANDI);
+    assign value_class_data[7*32 +: 32]=issue_src1_value_i & issue_imm_i;
+    assign value_classes[8]=(issue_op_i==`RV32IM_OP_SLLI);
+    assign value_class_data[8*32 +: 32]=immediate_shift_left;
+    assign value_classes[9]=(issue_op_i==`RV32IM_OP_SRLI || issue_op_i==`RV32IM_OP_SRAI);
+    assign value_class_data[9*32 +: 32]=immediate_shift_right;
+    assign value_classes[10]=(issue_op_i==`RV32IM_OP_XOR);
+    assign value_class_data[10*32 +: 32]=issue_src1_value_i ^ issue_src2_value_i;
+    assign value_classes[11]=(issue_op_i==`RV32IM_OP_OR);
+    assign value_class_data[11*32 +: 32]=issue_src1_value_i | issue_src2_value_i;
+    assign value_classes[12]=(issue_op_i==`RV32IM_OP_AND);
+    assign value_class_data[12*32 +: 32]=issue_src1_value_i & issue_src2_value_i;
+    assign value_classes[13]=(issue_op_i==`RV32IM_OP_SLL);
+    assign value_class_data[13*32 +: 32]=register_shift_left;
+    assign value_classes[14]=(issue_op_i==`RV32IM_OP_SRL || issue_op_i==`RV32IM_OP_SRA);
+    assign value_class_data[14*32 +: 32]=register_shift_right;
+    assign value_classes[15]=(issue_op_i==`RV32IM_OP_SLTI || issue_op_i==`RV32IM_OP_SLTIU || issue_op_i==`RV32IM_OP_SLT || issue_op_i==`RV32IM_OP_SLTU);
+    assign value_class_data[15*32 +: 32]={31'd0,comparison_value};
 
-        case (issue_op_i)
-            `RV32IM_OP_LUI: begin
-                calc_value = issue_imm_i;
-                calc_rd_we = 1'b1;
-            end
-            `RV32IM_OP_AUIPC: begin
-                calc_value = pc_relative_sum;
-                calc_rd_we = 1'b1;
-            end
-            `RV32IM_OP_JAL: begin
-                calc_value = pc_plus_four;
-                calc_rd_we = 1'b1;
-                calc_is_branch = 1'b1;
-                calc_branch_taken = 1'b1;
-                actual_control = 1'b1;
-                actual_next_pc = pc_relative_sum;
-                calc_branch_target = actual_next_pc;
-            end
-            `RV32IM_OP_JALR: begin
-                calc_value = pc_plus_four;
-                calc_rd_we = 1'b1;
-                calc_is_branch = 1'b1;
-                calc_branch_taken = 1'b1;
-                actual_control = 1'b1;
-                actual_next_pc = address_sum & 32'hfffffffe;
-                calc_branch_target = actual_next_pc;
-            end
-            `RV32IM_OP_BEQ: begin calc_is_branch = 1'b1; calc_branch_taken = cmp_equal; end
-            `RV32IM_OP_BNE: begin calc_is_branch = 1'b1; calc_branch_taken = !cmp_equal; end
-            `RV32IM_OP_BLT: begin calc_is_branch = 1'b1; calc_branch_taken = cmp_signed_lt; end
-            `RV32IM_OP_BGE: begin calc_is_branch = 1'b1; calc_branch_taken = !cmp_signed_lt; end
-            `RV32IM_OP_BLTU: begin calc_is_branch = 1'b1; calc_branch_taken = cmp_unsigned_lt; end
-            `RV32IM_OP_BGEU: begin calc_is_branch = 1'b1; calc_branch_taken = !cmp_unsigned_lt; end
-            `RV32IM_OP_LB,
-            `RV32IM_OP_LH,
-            `RV32IM_OP_LW,
-            `RV32IM_OP_LBU,
-            `RV32IM_OP_LHU: begin
-                calc_is_memory = 1'b1;
-                calc_is_load = 1'b1;
-                calc_rd_we = 1'b1;
-                calc_mem_addr = address_sum;
-            end
-            `RV32IM_OP_SB,
-            `RV32IM_OP_SH,
-            `RV32IM_OP_SW: begin
-                calc_is_memory = 1'b1;
-                calc_is_store = 1'b1;
-                calc_mem_addr = address_sum;
-                // Store data remains access-relative inside the backend.
-                // A zero predecoded payload selects the live rs2 value; the
-                // LSQ expands it to cache-line coordinates at its boundary.
-                if (issue_store_data_i == 32'b0)
-                    calc_store_data = issue_src2_value_i;
-            end
-            `RV32IM_OP_ADDI: begin calc_value = address_sum; calc_rd_we = 1'b1; end
-            `RV32IM_OP_ADD: begin calc_value = integer_sum; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SLTI: begin calc_value = ($signed(issue_src1_value_i) < $signed(issue_imm_i)) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SLTIU: begin calc_value = (issue_src1_value_i < issue_imm_i) ? 32'd1 : 32'd0; calc_rd_we = 1'b1; end
-            `RV32IM_OP_XORI: begin calc_value = issue_src1_value_i ^ issue_imm_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_ORI: begin calc_value = issue_src1_value_i | issue_imm_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_ANDI: begin calc_value = issue_src1_value_i & issue_imm_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SLLI: begin calc_value = (SHIFT_IMPL == 0) ? (issue_src1_value_i << issue_imm_i[4:0]) : issue_src1_value_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SRLI: begin calc_value = (SHIFT_IMPL == 0) ? (issue_src1_value_i >> issue_imm_i[4:0]) : issue_src1_value_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SRAI: begin
-                if (SHIFT_IMPL == 0)
-                    calc_value = $signed(issue_src1_value_i) >>> issue_imm_i[4:0];
-                else
-                    calc_value = issue_src1_value_i;
-                calc_rd_we = 1'b1;
-            end
-            `RV32IM_OP_SUB: begin calc_value = integer_sum; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SLL: begin calc_value = (SHIFT_IMPL == 0) ? (issue_src1_value_i << issue_src2_value_i[4:0]) : issue_src1_value_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SLT: begin calc_value = {31'd0, cmp_signed_lt}; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SLTU: begin calc_value = {31'd0, cmp_unsigned_lt}; calc_rd_we = 1'b1; end
-            `RV32IM_OP_XOR: begin calc_value = issue_src1_value_i ^ issue_src2_value_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SRL: begin calc_value = (SHIFT_IMPL == 0) ? (issue_src1_value_i >> issue_src2_value_i[4:0]) : issue_src1_value_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_SRA: begin
-                if (SHIFT_IMPL == 0)
-                    calc_value = $signed(issue_src1_value_i) >>> issue_src2_value_i[4:0];
-                else
-                    calc_value = issue_src1_value_i;
-                calc_rd_we = 1'b1;
-            end
-            `RV32IM_OP_OR: begin calc_value = issue_src1_value_i | issue_src2_value_i; calc_rd_we = 1'b1; end
-            `RV32IM_OP_AND: begin calc_value = issue_src1_value_i & issue_src2_value_i; calc_rd_we = 1'b1; end
-            default: begin end
-        endcase
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(16),.PRIORITY(0)) value_class_selector (
+        .events_i(value_classes),.values_i(value_class_data),.write_o(),.value_o(calc_value));
+    wire conditional_branch=(issue_op_i==`RV32IM_OP_BEQ || issue_op_i==`RV32IM_OP_BNE || issue_op_i==`RV32IM_OP_BLT || issue_op_i==`RV32IM_OP_BGE || issue_op_i==`RV32IM_OP_BLTU || issue_op_i==`RV32IM_OP_BGEU);
+    wire jal=(issue_op_i==`RV32IM_OP_JAL);
+    wire jalr=(issue_op_i==`RV32IM_OP_JALR);
+    assign calc_is_load=(issue_op_i==`RV32IM_OP_LB || issue_op_i==`RV32IM_OP_LH || issue_op_i==`RV32IM_OP_LW || issue_op_i==`RV32IM_OP_LBU || issue_op_i==`RV32IM_OP_LHU);
+    assign calc_is_store=(issue_op_i==`RV32IM_OP_SB || issue_op_i==`RV32IM_OP_SH || issue_op_i==`RV32IM_OP_SW);
 
-        if ((issue_op_i == `RV32IM_OP_BEQ) || (issue_op_i == `RV32IM_OP_BNE) ||
-            (issue_op_i == `RV32IM_OP_BLT) || (issue_op_i == `RV32IM_OP_BGE) ||
-            (issue_op_i == `RV32IM_OP_BLTU) || (issue_op_i == `RV32IM_OP_BGEU)) begin
-            actual_control = 1'b1;
-            calc_branch_target = pc_relative_sum;
-            actual_next_pc = calc_branch_taken ? pc_relative_sum : pc_plus_four;
-        end
-        if (actual_control) begin
-            calc_redirect_pc = actual_next_pc;
-            calc_redirect_valid = (issue_pred_taken_i != calc_branch_taken) ||
-                (calc_branch_taken && (issue_pred_target_i != calc_branch_target));
-        end
-    end
+    assign calc_rd_we=(|value_classes) || calc_is_load;
+    assign calc_is_branch=conditional_branch || jal || jalr;
+    assign calc_is_memory=calc_is_load || calc_is_store;
+    assign calc_mem_size=issue_mem_size_i;
+    assign calc_mem_unsigned=issue_mem_unsigned_i;
+    assign calc_branch_taken=jal || jalr ||
+        (issue_op_i==`RV32IM_OP_BEQ && cmp_equal) ||
+        (issue_op_i==`RV32IM_OP_BNE && !cmp_equal) ||
+        (issue_op_i==`RV32IM_OP_BLT && cmp_signed_lt) ||
+        (issue_op_i==`RV32IM_OP_BGE && !cmp_signed_lt) ||
+        (issue_op_i==`RV32IM_OP_BLTU && cmp_unsigned_lt) ||
+        (issue_op_i==`RV32IM_OP_BGEU && !cmp_unsigned_lt);
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(2),.PRIORITY(0)) branch_target_selector (
+        .events_i({jalr,(conditional_branch || jal)}),
+        .values_i({(address_sum & 32'hfffffffe),pc_relative_sum}),.write_o(),.value_o(calc_branch_target));
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(3),.PRIORITY(0)) branch_next_pc_selector (
+        .events_i({jalr,(jal || (conditional_branch && calc_branch_taken)),
+                   (conditional_branch && !calc_branch_taken)}),
+        .values_i({(address_sum & 32'hfffffffe),pc_relative_sum,pc_plus_four}),
+        .write_o(),.value_o(calc_redirect_pc));
+    assign calc_redirect_valid=calc_is_branch &&
+        ((issue_pred_taken_i!=calc_branch_taken) ||
+         (calc_branch_taken && issue_pred_target_i!=calc_branch_target));
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(1)) memory_address_selector (
+        .events_i(calc_is_memory),.values_i(address_sum),.write_o(),.value_o(calc_mem_addr));
+    wire [1:0] store_fallback_views;
+    rv32_frequency_control_tree #(.LEAVES(2)) store_fallback_tree (
+        .signal_i(calc_is_store && issue_store_data_i==32'b0),.views_o(store_fallback_views));
+    genvar store_word;
+    generate for(store_word=0;store_word<2;store_word=store_word+1) begin:g_store_operand
+        assign calc_store_data[store_word*16 +: 16]=store_fallback_views[store_word]?
+            issue_src2_value_i[store_word*16 +: 16]:issue_store_data_i[store_word*16 +: 16];
+    end endgenerate
 
     localparam integer RESULT_METADATA_WIDTH=PHYS_ADDR_WIDTH+TAG_WIDTH+EPOCH_WIDTH+1+1+1+32+1+32+1+1+1+32+2+1+32;
     rv32_frequency_word_bank #(.WIDTH(RESULT_METADATA_WIDTH)) result_metadata_owner (
