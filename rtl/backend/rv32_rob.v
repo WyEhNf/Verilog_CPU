@@ -469,7 +469,7 @@ module rv32_rob #(
     generate
         for(alloc_bank=0;alloc_bank<BE_WIDTH;alloc_bank=alloc_bank+1) begin:g_bank_allocation
             if(ALLOC_BANKED_WRITE!=0 && ROB_ENTRIES>=BE_WIDTH) begin:g_enabled
-                wire [BE_WIDTH-1:0] matches,grants;
+                wire [BE_WIDTH-1:0] row_match_mask,grants;
                 wire [SLOT_WIDTH-1:0] slots [1:2*ALLOC_DATA_LEAVES-1];
                 wire [ALLOC_DATA_WIDTH-1:0] packets [1:2*ALLOC_DATA_LEAVES-1];
                 for(alloc_source=0;alloc_source<ALLOC_DATA_LEAVES;alloc_source=alloc_source+1) begin:g_source
@@ -490,13 +490,13 @@ module rv32_rob #(
                         end else begin:g_without_checkpoint
                             assign active_payload=full_payload[CHECKPOINT_WIDTH +: ALLOC_PACKET_WIDTH-CHECKPOINT_WIDTH];
                         end
-                        assign matches[alloc_source]=alloc_fire_o[alloc_source] &&
+                        assign row_match_mask[alloc_source]=alloc_fire_o[alloc_source] &&
                             ((tail_reg+alloc_source)%BE_WIDTH)==alloc_bank;
                         if(alloc_source==BE_WIDTH-1) begin:g_last
-                            assign grants[alloc_source]=matches[alloc_source];
+                            assign grants[alloc_source]=row_match_mask[alloc_source];
                         end else begin:g_priority
-                            assign grants[alloc_source]=matches[alloc_source] &&
-                                !(|matches[BE_WIDTH-1:alloc_source+1]);
+                            assign grants[alloc_source]=row_match_mask[alloc_source] &&
+                                !(|row_match_mask[BE_WIDTH-1:alloc_source+1]);
                         end
                         rv32_frequency_control_tree #(.LEAVES(ALLOC_DATA_WORDS)) selection_tree (
                             .signal_i(grants[alloc_source]),.views_o(selected_words));
@@ -516,7 +516,7 @@ module rv32_rob #(
                     assign slots[alloc_node]=slots[2*alloc_node] | slots[2*alloc_node+1];
                     assign packets[alloc_node]=packets[2*alloc_node] | packets[2*alloc_node+1];
                 end
-                assign bank_alloc_fire[alloc_bank]=|matches;
+                assign bank_alloc_fire[alloc_bank]=|row_match_mask;
                 assign bank_alloc_slot[alloc_bank]=slots[1];
                 if(CHECKPOINT_IMPL==0) begin:g_full_result
                     assign bank_alloc_packet[alloc_bank]=packets[1];

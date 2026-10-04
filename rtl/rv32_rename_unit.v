@@ -90,11 +90,11 @@ module rv32_rename_unit #(
             pool_candidate[pool_index]<=pool_next_payload[pool_index*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
     end
     for(pool_phys=0;pool_phys<PHYS_REGS;pool_phys=pool_phys+1) begin:g_pool_bitmap
-        wire [BE_WIDTH-1:0] matches;
+        wire [BE_WIDTH-1:0] row_match_mask;
         for(pool_index=0;pool_index<BE_WIDTH;pool_index=pool_index+1) begin:g_match
-            assign matches[pool_index]=pool_valid_local[pool_index] && pool_ids_local[pool_index*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==pool_phys;
+            assign row_match_mask[pool_index]=pool_valid_local[pool_index] && pool_ids_local[pool_index*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==pool_phys;
         end
-        assign pool_bitmap[pool_phys]=(pool_phys!=0) && (|matches);
+        assign pool_bitmap[pool_phys]=(pool_phys!=0) && (|row_match_mask);
     end endgenerate
     // The pool is not architectural allocation. Expose both unreserved and
     // reserved-but-unused registers as free so recovery never leaks them.
@@ -148,16 +148,16 @@ module rv32_rename_unit #(
                 assign rat[map_row]=0;
             end else begin:g_stored
                 localparam integer DOMAIN=map_row/8;
-                wire [BE_WIDTH-1:0] matches;
+                wire [BE_WIDTH-1:0] row_match_mask;
                 for(map_lane=0;map_lane<BE_WIDTH;map_lane=map_lane+1) begin:g_match
-                    assign matches[map_lane]=map_valid_views[DOMAIN*BE_WIDTH+map_lane] &&
+                    assign row_match_mask[map_lane]=map_valid_views[DOMAIN*BE_WIDTH+map_lane] &&
                         map_address_views[(DOMAIN*BE_WIDTH+map_lane)*5 +: 5]==map_row;
                 end
                 rv32_rename_map_row #(.LANES(BE_WIDTH),.PAW(PHYS_ADDR_WIDTH)) owner (
                     .clk_i(clk_i),.reset_i(rename_reset_views[map_row]),
                     .restore_i(rename_restore_views[map_row]),
                     .restore_value_i(restore_rat_i[map_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]),
-                    .match_i(matches),
+                    .match_i(row_match_mask),
                     .values_i(map_value_views[DOMAIN*BE_WIDTH*PHYS_ADDR_WIDTH +: BE_WIDTH*PHYS_ADDR_WIDTH]),
                     .value_o(rat[map_row]));
             end

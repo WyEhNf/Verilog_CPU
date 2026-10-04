@@ -71,11 +71,11 @@ module rv32_store_address_select #(
                 base_ready_i[entry],rs_rob_tag_i[entry*ROB_TAG_WIDTH +: ROB_TAG_WIDTH]};
         end
         for(row=0;row<LSQ_ENTRIES;row=row+1) begin:g_store
-            wire [RS_ENTRIES-1:0] matches;
+            wire [RS_ENTRIES-1:0] row_match_mask;
             wire match_found;
             wire [RS_INDEX_WIDTH-1:0] match_slot;
             for(entry=0;entry<RS_ENTRIES;entry=entry+1) begin:g_rs_match
-                assign matches[entry]=rs_match_views[((row/4)*RS_ENTRIES+entry)*(ROB_TAG_WIDTH+1)+ROB_TAG_WIDTH] &&
+                assign row_match_mask[entry]=rs_match_views[((row/4)*RS_ENTRIES+entry)*(ROB_TAG_WIDTH+1)+ROB_TAG_WIDTH] &&
                     store_rob_tag_i[row*ROB_TAG_WIDTH +: ROB_TAG_WIDTH]==
                     rs_match_views[((row/4)*RS_ENTRIES+entry)*(ROB_TAG_WIDTH+1) +: ROB_TAG_WIDTH];
             end
@@ -83,7 +83,7 @@ module rv32_store_address_select #(
             // After choosing the oldest store, only this small index is
             // selected; the chosen ROB tag is never compared again.
             rv32_frequency_first_two #(.ENTRIES(RS_ENTRIES),.INDEX_WIDTH(RS_INDEX_WIDTH)) match_selector (
-                .candidates_i(matches),.first_valid_o(match_found),.first_index_o(match_slot),
+                .candidates_i(row_match_mask),.first_valid_o(match_found),.first_index_o(match_slot),
                 .second_valid_o(),.second_index_o());
             assign eligible[row]=pending_i[row] && match_found;
             assign upper[row]=eligible[row] && row>=head_views[(row/4)*HEAD_WIDTH +: HEAD_WIDTH];

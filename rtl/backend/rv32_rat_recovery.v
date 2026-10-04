@@ -91,22 +91,22 @@ module rv32_rat_recovery #(
             .signal_i(raw_upper),.views_o(upper));
         assign undo_result[0 +: PAW]=rat_i[0 +: PAW];
         for(arch=1;arch<32;arch=arch+1) begin:g_arch
-            wire [ROB_ENTRIES-1:0] matches,upper_matches,first_any,first_upper;
+            wire [ROB_ENTRIES-1:0] row_match_mask,upper_matches,first_any,first_upper;
             wire [GROUPS-1:0] any_group,upper_group;
             wire found=|any_group;
             wire upper_found=|upper_group;
             wire [PAW-1:0] any_value,upper_value;
             for(group=0;group<GROUPS;group=group+1) begin:g_group
                 localparam integer LAST=((group+1)*8>ROB_ENTRIES)?ROB_ENTRIES-1:(group+1)*8-1;
-                assign any_group[group]=|matches[LAST:group*8];
+                assign any_group[group]=|row_match_mask[LAST:group*8];
                 assign upper_group[group]=|upper_matches[LAST:group*8];
             end
             for(row=0;row<ROB_ENTRIES;row=row+1) begin:g_match
                 localparam integer GROUP=row/8;
                 localparam integer FIRST=GROUP*8;
                 wire any_before_group,upper_before_group,any_before_row,upper_before_row;
-                assign matches[row]=killed[row] && rd_i[row*5 +: 5]==arch;
-                assign upper_matches[row]=matches[row] && upper[row];
+                assign row_match_mask[row]=killed[row] && rd_i[row*5 +: 5]==arch;
+                assign upper_matches[row]=row_match_mask[row] && upper[row];
                 if(GROUP==0) begin:g_first_group
                     assign any_before_group=0;assign upper_before_group=0;
                 end else begin:g_later_group
@@ -116,10 +116,10 @@ module rv32_rat_recovery #(
                 if(row==FIRST) begin:g_first_row
                     assign any_before_row=0;assign upper_before_row=0;
                 end else begin:g_later_row
-                    assign any_before_row=|matches[row-1:FIRST];
+                    assign any_before_row=|row_match_mask[row-1:FIRST];
                     assign upper_before_row=|upper_matches[row-1:FIRST];
                 end
-                assign first_any[row]=matches[row] && !any_before_row && !any_before_group;
+                assign first_any[row]=row_match_mask[row] && !any_before_row && !any_before_group;
                 assign first_upper[row]=upper_matches[row] && !upper_before_row && !upper_before_group;
             end
             for(bit_id=0;bit_id<PAW;bit_id=bit_id+1) begin:g_payload

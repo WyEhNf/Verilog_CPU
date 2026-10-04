@@ -473,13 +473,13 @@ module rv32_backend_joint #(
                 .signal_i(reset_i),.views_o(tag_reset_views));
             for(tag_row=0;tag_row<PHYS_REGS;tag_row=tag_row+1) begin:g_row
                 localparam integer DOMAIN=(tag_row*4)/PHYS_REGS;
-                wire [BE_WIDTH-1:0] matches;
+                wire [BE_WIDTH-1:0] row_match_mask;
                 for(tag_lane=0;tag_lane<BE_WIDTH;tag_lane=tag_lane+1) begin:g_match
-                    assign matches[tag_lane]=tag_write_valid_views[DOMAIN*BE_WIDTH+tag_lane] &&
+                    assign row_match_mask[tag_lane]=tag_write_valid_views[DOMAIN*BE_WIDTH+tag_lane] &&
                         tag_write_address_views[(DOMAIN*BE_WIDTH+tag_lane)*PAW +: PAW]==tag_row;
                 end
                 rv32_producer_tag_row #(.LANES(BE_WIDTH),.TAG_WIDTH(TAG_WIDTH)) owner (
-                    .clk_i(clk_i),.reset_i(tag_reset_views[tag_row]),.match_i(matches),
+                    .clk_i(clk_i),.reset_i(tag_reset_views[tag_row]),.match_i(row_match_mask),
                     .tag_i(tag_write_value_views[DOMAIN*BE_WIDTH*TAG_WIDTH +: BE_WIDTH*TAG_WIDTH]),
                     .tag_o(phys_tag_mem[tag_row]));
             end
@@ -1829,15 +1829,15 @@ module rv32_backend_joint #(
         end
         for(map_row=0;map_row<LSQ_ENTRIES;map_row=map_row+1) begin:g_lsq_phys_row
             localparam integer DOMAIN=(map_row*MAP_DOMAINS)/LSQ_ENTRIES;
-            wire [BE_WIDTH-1:0] matches;
+            wire [BE_WIDTH-1:0] row_match_mask;
             wire write_enable;
             wire [PAW-1:0] next_phys;
             for(map_lane_id=0;map_lane_id<BE_WIDTH;map_lane_id=map_lane_id+1) begin:g_match
-                assign matches[map_lane_id]=d_map_writes[DOMAIN*BE_WIDTH+map_lane_id] &&
+                assign row_match_mask[map_lane_id]=d_map_writes[DOMAIN*BE_WIDTH+map_lane_id] &&
                     d_lsq_map_slots[(DOMAIN*BE_WIDTH+map_lane_id)*LSQ_SLOT_WIDTH +: LSQ_SLOT_WIDTH]==map_row;
             end
             rv32_frequency_event_select #(.WIDTH(PAW),.EVENTS(BE_WIDTH)) selector (
-                .events_i(matches),.values_i(d_lsq_map_values[DOMAIN*BE_WIDTH*PAW +: BE_WIDTH*PAW]),
+                .events_i(row_match_mask),.values_i(d_lsq_map_values[DOMAIN*BE_WIDTH*PAW +: BE_WIDTH*PAW]),
                 .write_o(write_enable),.value_o(next_phys));
             rv32_frequency_word_bank #(.WIDTH(PAW)) owner (
                 .clk_i(clk_i),.write_i(write_enable),.data_i(next_phys),.data_o(lsq_phys_mem[map_row]));
