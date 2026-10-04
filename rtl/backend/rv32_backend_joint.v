@@ -301,11 +301,11 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*PAW-1:0] alu_exec_phys;
     wire [BE_WIDTH*TAG_WIDTH-1:0] alu_exec_tag;
     wire [BE_WIDTH-1:0] rs_issue_is_mdu;
-    reg [BE_WIDTH-1:0] mdu_select;
-    reg [`RV32IM_OP_WIDTH-1:0] mdu_issue_op;
-    reg [31:0] mdu_issue_src1, mdu_issue_src2;
-    reg [TAG_WIDTH-1:0] mdu_issue_tag;
-    reg [PAW-1:0] mdu_issue_phys;
+    wire [BE_WIDTH-1:0] mdu_select;
+    wire [`RV32IM_OP_WIDTH-1:0] mdu_issue_op;
+    wire [31:0] mdu_issue_src1, mdu_issue_src2;
+    wire [TAG_WIDTH-1:0] mdu_issue_tag;
+    wire [PAW-1:0] mdu_issue_phys;
 
     wire mdu_issue_valid, mdu_issue_ready, mdu_completion_valid, mdu_completion_ready, mdu_completion_rd_we;
     wire mdu_busy;
@@ -516,39 +516,32 @@ module rv32_backend_joint #(
         wire [TAG_WIDTH-1:0] selected_rob_tag;
         wire [31:0] selected_base;
         wire [31:0] selected_imm;
+        wire [RS_ENTRIES-1:0] selected_rs;
         wire [ROB_SLOT_WIDTH-1:0] selected_slot = selected_rob_tag[3 +: ROB_SLOT_WIDTH];
+        wire [ROB_LIVE_WIDTH-1:0] selected_live;
+        rv32_frequency_array_read #(.WIDTH(ROB_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),
+            .INDEX_WIDTH(ROB_SLOT_WIDTH)) live_read (
+            .rows_i(rob_live_rows),.index_i(selected_slot),.value_o(selected_live));
         rv32_store_address_select #(.LSQ_ENTRIES(LSQ_ENTRIES), .RS_ENTRIES(RS_ENTRIES),
             .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH)) selector (
             .head_i(lsq_head), .pending_i(lsq_store_addr_pending),
             .lsq_tag_i(lsq_store_addr_lsq_tag), .store_rob_tag_i(lsq_store_addr_rob_tag),
             .base_ready_i(rs_entry_base_ready), .rs_rob_tag_i(rs_entry_rob_tag),
             .base_value_i(rs_entry_base_value), .valid_o(selected),
-            .lsq_tag_o(shared_store_addr_tag), .rob_tag_o(selected_rob_tag), .base_value_o(selected_base)
+            .lsq_tag_o(shared_store_addr_tag), .rob_tag_o(selected_rob_tag), .base_value_o(selected_base), .base_select_o(selected_rs)
         );
         assign shared_store_addr_valid = selected && !reset_i && !flush_i &&
-            !branch_busy_domains[0] && selected_rob_tag[0] && rob_entry_valid[selected_slot] &&
+            !branch_busy_domains[0] && selected_rob_tag[0] && selected_live[ROB_GENERATION_WIDTH] &&
             (selected_rob_tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH] ==
-             rob_entry_generation[selected_slot*ROB_GENERATION_WIDTH +: ROB_GENERATION_WIDTH]);
+             selected_live[0 +: ROB_GENERATION_WIDTH]);
         if (RS_ISSUE_METADATA != 0) begin : g_inline_imm
-            wire [RS_ENTRIES-1:0] metadata_matches, selected_rs;
-            reg [31:0] imm_value;
-            integer slot;
+            wire [RS_ENTRIES*32-1:0] immediate_rows;
             genvar meta_slot;
-            for (meta_slot = 0; meta_slot < RS_ENTRIES; meta_slot = meta_slot + 1) begin : g_match
-                assign metadata_matches[meta_slot] = rs_entry_base_ready[meta_slot] &&
-                    (rs_entry_rob_tag[meta_slot*TAG_WIDTH +: TAG_WIDTH] == selected_rob_tag);
-                if (meta_slot == 0)
-                    assign selected_rs[meta_slot] = metadata_matches[meta_slot];
-                else
-                    assign selected_rs[meta_slot] = metadata_matches[meta_slot] && !(|metadata_matches[meta_slot-1:0]);
+            for(meta_slot=0;meta_slot<RS_ENTRIES;meta_slot=meta_slot+1) begin:g_immediate_row
+                assign immediate_rows[meta_slot*32 +: 32]=rs_entry_metadata[meta_slot*RS_METADATA_WIDTH +: 32];
             end
-            always @* begin
-                imm_value = 32'b0;
-                for (slot = 0; slot < RS_ENTRIES; slot = slot + 1)
-                    imm_value = imm_value |
-                        ({32{selected_rs[slot]}} & rs_entry_metadata[slot*RS_METADATA_WIDTH +: 32]);
-            end
-            assign selected_imm = imm_value;
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(RS_ENTRIES)) immediate_selector (
+                .events_i(selected_rs),.values_i(immediate_rows),.write_o(),.value_o(selected_imm));
         end else begin : g_rob_imm
             assign selected_imm = rob_imm_mem[selected_slot];
         end
@@ -573,6 +566,42 @@ module rv32_backend_joint #(
     wire [1:0] rob_pred_kind_mem [0:ROB_ENTRIES-1];
     wire [1:0] rob_mem_size_mem [0:ROB_ENTRIES-1];
     wire rob_mem_unsigned_mem [0:ROB_ENTRIES-1];
+
+    // Raw registered producer tags form the query independently of the
+    // producer qualification process. Never feed that process's result
+    // back through an asynchronous table read into its own live predicate.
+    localparam integer ROB_LIVE_WIDTH=ROB_GENERATION_WIDTH+1;
+    wire [ROB_ENTRIES*ROB_LIVE_WIDTH-1:0] rob_live_rows;
+    wire [ROB_ENTRIES*3-1:0] rob_completion_state_rows;
+    wire [PRODUCERS*TAG_WIDTH-1:0] producer_query_tags={
+        lsq_load_complete_tag,mdu_completion_tag,alu_exec_tag};
+    wire [PRODUCERS*ROB_LIVE_WIDTH-1:0] producer_live_reads;
+    wire [BE_WIDTH*3-1:0] completion_state_reads;
+    genvar status_row,status_source,status_lane;
+    generate
+        for(status_row=0;status_row<ROB_ENTRIES;status_row=status_row+1) begin:g_rob_status_row
+            assign rob_live_rows[status_row*ROB_LIVE_WIDTH +: ROB_LIVE_WIDTH]={
+                rob_entry_valid[status_row],
+                rob_entry_generation[status_row*ROB_GENERATION_WIDTH +: ROB_GENERATION_WIDTH]};
+            assign rob_completion_state_rows[status_row*3 +: 3]={
+                load_error_mem[status_row],rob_mem_size_mem[status_row]};
+        end
+        for(status_source=0;status_source<PRODUCERS;status_source=status_source+1) begin:g_producer_live_read
+            rv32_frequency_array_read #(.WIDTH(ROB_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),
+                .INDEX_WIDTH(ROB_SLOT_WIDTH)) live_read (
+                .rows_i(rob_live_rows),
+                .index_i(producer_query_tags[status_source*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]),
+                .value_o(producer_live_reads[status_source*ROB_LIVE_WIDTH +: ROB_LIVE_WIDTH]));
+        end
+        for(status_lane=0;status_lane<BE_WIDTH;status_lane=status_lane+1) begin:g_completion_state_read
+            rv32_frequency_array_read #(.WIDTH(3),.ENTRIES(ROB_ENTRIES),
+                .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
+                .rows_i(rob_completion_state_rows),
+                .index_i(rob_wb_tag[status_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]),
+                .value_o(completion_state_reads[status_lane*3 +: 3]));
+        end
+    endgenerate
+
     // Front-end redirect is issued during preview. Backend recovery is a
     // registered transaction applied on the following edge.
     reg branch_pending;
@@ -605,30 +634,26 @@ module rv32_backend_joint #(
     wire [PAW-1:0] branch_pending_phys;
     wire branch_pending_rd_we;
     wire [31:0] branch_pending_pc;
-    reg branch_feedback_valid_r;
-    reg [31:0] branch_feedback_pc_r;
-    reg [1:0] branch_feedback_kind_r;
-    reg branch_feedback_taken_r;
-    reg [31:0] branch_feedback_target_r;
-    reg branch_feedback_pred_taken_r;
-    reg [31:0] branch_feedback_pred_target_r;
+    wire branch_feedback_valid_r;
+    wire [31:0] branch_feedback_pc_r;
+    wire [1:0] branch_feedback_kind_r;
+    wire branch_feedback_taken_r;
+    wire [31:0] branch_feedback_target_r;
+    wire branch_feedback_pred_taken_r;
+    wire [31:0] branch_feedback_pred_target_r;
     reg [BE_WIDTH-1:0] cdb_ready_r;
-    integer branch_feedback_lane;
-    integer branch_feedback_found;
-    integer branch_feedback_slot;
+    wire [ROB_SLOT_WIDTH-1:0] branch_feedback_slot;
     integer ready_lane;
     integer source_lane;
     integer source_rob_slot;
     integer checkpoint_lane;
     integer dependency_lane;
-    integer issue_lane;
     integer alu_ready_lane;
     integer redirect_ready_found;
     integer ready_rob_used;
     integer ready_rs_used;
     integer ready_lsq_used;
     integer ready_phys_used;
-    integer mdu_taken;
     integer producer_index;
     integer cdb_ready_lane;
     integer recovery_rs_index;
@@ -644,7 +669,6 @@ module rv32_backend_joint #(
     integer producer_recovery_rob_slot;
     reg [ROB_SLOT_WIDTH-1:0] producer_recovery_age;
     reg [ROB_SLOT_WIDTH-1:0] producer_recovery_branch_age;
-    integer producer_live_slot;
     integer alu_recovery_lane;
     integer alu_recovery_slot;
     reg [ROB_SLOT_WIDTH-1:0] alu_recovery_age;
@@ -966,8 +990,6 @@ module rv32_backend_joint #(
     assign branch_feedback_pred_taken_o = branch_feedback_pred_taken_r;
     assign branch_feedback_pred_target_o = branch_feedback_pred_target_r;
     wire [15:0] rob_pred_metadata_mem [0:ROB_ENTRIES-1];
-    assign branch_feedback_metadata_o = (PREDICTOR_META != 0 && branch_feedback_valid_r) ?
-        rob_pred_metadata_mem[branch_feedback_slot] : 16'b0;
 
     // Train on every resolved control-flow instruction, not only on the
     // mispredictions that enter branch_pending.  The previous policy left
@@ -976,69 +998,92 @@ module rv32_backend_joint #(
     wire [BE_WIDTH-1:0] branch_training_live;
     genvar training_lane;
     generate for (training_lane = 0; training_lane < BE_WIDTH; training_lane = training_lane + 1) begin : g_training_live
-        wire [ROB_SLOT_WIDTH-1:0] slot = alu_exec_tag[training_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH];
         assign branch_training_live[training_lane] = !reset_i && !flush_i && !alu_flush_r[training_lane] &&
-            alu_exec_tag[training_lane*TAG_WIDTH] && rob_entry_valid[slot] &&
+            alu_exec_tag[training_lane*TAG_WIDTH] &&
+            producer_live_reads[training_lane*ROB_LIVE_WIDTH+ROB_GENERATION_WIDTH] &&
             (alu_exec_tag[training_lane*TAG_WIDTH+3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH] ==
-             rob_entry_generation[slot*ROB_GENERATION_WIDTH +: ROB_GENERATION_WIDTH]);
+             producer_live_reads[training_lane*ROB_LIVE_WIDTH +: ROB_GENERATION_WIDTH]);
     end endgenerate
-    always @* begin
-        branch_feedback_valid_r = 1'b0;
-        branch_feedback_pc_r = 32'd0;
-        branch_feedback_kind_r = `RV32IM_PRED_NONE;
-        branch_feedback_taken_r = 1'b0;
-        branch_feedback_target_r = 32'd0;
-        branch_feedback_pred_taken_r = 1'b0;
-        branch_feedback_pred_target_r = 32'd0;
-        branch_feedback_found = 0;
-        branch_feedback_slot = 0;
-        for (branch_feedback_lane = 0; branch_feedback_lane < BE_WIDTH;
-             branch_feedback_lane = branch_feedback_lane + 1) begin
-            if (!branch_feedback_found && alu_exec_valid[branch_feedback_lane] &&
-                alu_exec_ready[branch_feedback_lane] &&
-                (PREDICTOR_META == 0 || branch_training_live[branch_feedback_lane]) &&
-                alu_exec_is_branch[branch_feedback_lane]) begin
-                branch_feedback_slot =
-                    alu_exec_tag[branch_feedback_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH];
-                branch_feedback_valid_r = 1'b1;
-                branch_feedback_pc_r = (RS_ISSUE_METADATA != 0) ?
-                    alu_exec_source_pc[branch_feedback_lane*32 +: 32] : rob_pc_mem[branch_feedback_slot];
-                branch_feedback_kind_r = (RS_ISSUE_METADATA != 0) ?
-                    alu_exec_pred_kind[branch_feedback_lane*2 +: 2] : rob_pred_kind_mem[branch_feedback_slot];
-                branch_feedback_taken_r = alu_exec_branch_taken[branch_feedback_lane];
-                branch_feedback_target_r =
-                    alu_exec_branch_target[branch_feedback_lane*32 +: 32];
-                branch_feedback_pred_taken_r = (RS_ISSUE_METADATA != 0) ?
-                    alu_exec_pred_taken[branch_feedback_lane] : rob_pred_taken_mem[branch_feedback_slot];
-                branch_feedback_pred_target_r = (RS_ISSUE_METADATA != 0) ?
-                    alu_exec_pred_target[branch_feedback_lane*32 +: 32] : rob_pred_target_mem[branch_feedback_slot];
-                branch_feedback_found = 1;
+
+    localparam integer FEEDBACK_LANE_WIDTH=(BE_WIDTH<=1)?1:$clog2(BE_WIDTH);
+    localparam integer FEEDBACK_PACKET_WIDTH=100+ROB_SLOT_WIDTH;
+    wire [BE_WIDTH-1:0] feedback_candidates,feedback_grants;
+    wire [FEEDBACK_LANE_WIDTH-1:0] feedback_lane;
+    wire [BE_WIDTH*FEEDBACK_PACKET_WIDTH-1:0] feedback_values;
+    wire [FEEDBACK_PACKET_WIDTH-1:0] feedback_packet;
+    rv32_frequency_first_two #(.ENTRIES(BE_WIDTH),.INDEX_WIDTH(FEEDBACK_LANE_WIDTH)) feedback_selector (
+        .candidates_i(feedback_candidates),.first_valid_o(branch_feedback_valid_r),.first_index_o(feedback_lane),
+        .second_valid_o(),.second_index_o());
+    rv32_frequency_event_select #(.WIDTH(FEEDBACK_PACKET_WIDTH),.EVENTS(BE_WIDTH)) feedback_payload_selector (
+        .events_i(feedback_grants),.values_i(feedback_values),.write_o(),.value_o(feedback_packet));
+    assign {branch_feedback_slot,branch_feedback_pc_r,branch_feedback_kind_r,branch_feedback_taken_r,
+        branch_feedback_target_r,branch_feedback_pred_taken_r,branch_feedback_pred_target_r}=feedback_packet;
+    genvar feedback_source,feedback_row;
+    generate
+        for(feedback_source=0;feedback_source<BE_WIDTH;feedback_source=feedback_source+1) begin:g_feedback_source
+            wire [ROB_SLOT_WIDTH-1:0] slot=alu_exec_tag[feedback_source*TAG_WIDTH+3 +: ROB_SLOT_WIDTH];
+            wire [31:0] pc,pred_target;
+            wire [1:0] kind;
+            wire pred_taken;
+            assign feedback_candidates[feedback_source]=alu_exec_valid[feedback_source] && alu_exec_ready[feedback_source] &&
+                (PREDICTOR_META==0 || branch_training_live[feedback_source]) && alu_exec_is_branch[feedback_source];
+            assign feedback_grants[feedback_source]=branch_feedback_valid_r && feedback_lane==feedback_source;
+            if(RS_ISSUE_METADATA!=0) begin:g_inline
+                assign pc=alu_exec_source_pc[feedback_source*32 +: 32];
+                assign kind=alu_exec_pred_kind[feedback_source*2 +: 2];
+                assign pred_taken=alu_exec_pred_taken[feedback_source];
+                assign pred_target=alu_exec_pred_target[feedback_source*32 +: 32];
+            end else begin:g_legacy
+                wire [ROB_ENTRIES*67-1:0] metadata_rows;
+                for(feedback_row=0;feedback_row<ROB_ENTRIES;feedback_row=feedback_row+1) begin:g_row
+                    assign metadata_rows[feedback_row*67 +: 67]={rob_pc_mem[feedback_row],
+                        rob_pred_kind_mem[feedback_row],rob_pred_taken_mem[feedback_row],rob_pred_target_mem[feedback_row]};
+                end
+                rv32_frequency_array_read #(.WIDTH(67),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(ROB_SLOT_WIDTH)) metadata_read (
+                    .rows_i(metadata_rows),.index_i(slot),.value_o({pc,kind,pred_taken,pred_target}));
             end
+            assign feedback_values[feedback_source*FEEDBACK_PACKET_WIDTH +: FEEDBACK_PACKET_WIDTH]={
+                slot,pc,kind,alu_exec_branch_taken[feedback_source],
+                alu_exec_branch_target[feedback_source*32 +: 32],pred_taken,pred_target};
         end
-    end
+        if(PREDICTOR_META!=0) begin:g_feedback_history
+            wire [ROB_ENTRIES*16-1:0] history_rows;
+            wire [15:0] history;
+            for(feedback_row=0;feedback_row<ROB_ENTRIES;feedback_row=feedback_row+1) begin:g_row
+                assign history_rows[feedback_row*16 +: 16]=rob_pred_metadata_mem[feedback_row];
+            end
+            rv32_frequency_array_read #(.WIDTH(16),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(ROB_SLOT_WIDTH)) history_read (
+                .rows_i(history_rows),.index_i(branch_feedback_slot),.value_o(history));
+            rv32_frequency_event_select #(.WIDTH(16),.EVENTS(1)) valid_selector (
+                .events_i(branch_feedback_valid_r),.values_i(history),.write_o(),.value_o(branch_feedback_metadata_o));
+        end else begin:g_no_feedback_history
+            assign branch_feedback_metadata_o=0;
+        end
+    endgenerate
 
     // One shared MDU accepts the oldest M-class selection while independent
     // ALUs may accept all other selected instructions in the same cycle.
-    always @* begin
-        mdu_select = {BE_WIDTH{1'b0}};
-        mdu_issue_op = {`RV32IM_OP_WIDTH{1'b0}};
-        mdu_issue_src1 = 32'b0;
-        mdu_issue_src2 = 32'b0;
-        mdu_issue_tag = {TAG_WIDTH{1'b0}};
-        mdu_issue_phys = {PAW{1'b0}};
-        mdu_taken = 0;
-        for (issue_lane = 0; issue_lane < BE_WIDTH; issue_lane = issue_lane + 1) begin
-            if (!mdu_taken && rs_issue_valid[issue_lane] && rs_issue_is_mdu[issue_lane]) begin
-                mdu_select[issue_lane] = 1'b1;
-                mdu_issue_op = rs_issue_op[issue_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH];
-                mdu_issue_src1 = rs_issue_src1[issue_lane*32 +: 32];
-                mdu_issue_src2 = rs_issue_src2[issue_lane*32 +: 32];
-                mdu_issue_tag = rs_issue_tag[issue_lane*TAG_WIDTH +: TAG_WIDTH];
-                mdu_issue_phys = rs_issue_phys[issue_lane*PAW +: PAW];
-                mdu_taken = 1;
-            end
-        end
-    end
+
+    localparam integer MDU_ISSUE_PAYLOAD_WIDTH=`RV32IM_OP_WIDTH+64+TAG_WIDTH+PAW;
+    localparam integer MDU_LANE_WIDTH=(BE_WIDTH<=1)?1:$clog2(BE_WIDTH);
+    wire [BE_WIDTH-1:0] mdu_candidates=rs_issue_valid & rs_issue_is_mdu;
+    wire mdu_found;
+    wire [MDU_LANE_WIDTH-1:0] mdu_lane;
+    wire [BE_WIDTH*MDU_ISSUE_PAYLOAD_WIDTH-1:0] mdu_values;
+    rv32_frequency_first_two #(.ENTRIES(BE_WIDTH),.INDEX_WIDTH(MDU_LANE_WIDTH)) mdu_first_selector (
+        .candidates_i(mdu_candidates),.first_valid_o(mdu_found),.first_index_o(mdu_lane),
+        .second_valid_o(),.second_index_o());
+    genvar mdu_route_lane;
+    generate for(mdu_route_lane=0;mdu_route_lane<BE_WIDTH;mdu_route_lane=mdu_route_lane+1) begin:g_mdu_route
+        assign mdu_select[mdu_route_lane]=mdu_found && mdu_lane==mdu_route_lane;
+        assign mdu_values[mdu_route_lane*MDU_ISSUE_PAYLOAD_WIDTH +: MDU_ISSUE_PAYLOAD_WIDTH]={
+            rs_issue_op[mdu_route_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH],
+            rs_issue_src1[mdu_route_lane*32 +: 32],rs_issue_src2[mdu_route_lane*32 +: 32],
+            rs_issue_tag[mdu_route_lane*TAG_WIDTH +: TAG_WIDTH],rs_issue_phys[mdu_route_lane*PAW +: PAW]};
+    end endgenerate
+    rv32_frequency_event_select #(.WIDTH(MDU_ISSUE_PAYLOAD_WIDTH),.EVENTS(BE_WIDTH)) mdu_payload_selector (
+        .events_i(mdu_select),.values_i(mdu_values),.write_o(),
+        .value_o({mdu_issue_op,mdu_issue_src1,mdu_issue_src2,mdu_issue_tag,mdu_issue_phys}));
     assign mdu_issue_valid = (|mdu_select) && !branch_busy_domains[0];
     // Issue acceptance is independent from completion/CDB backpressure.  The
     // previous wiring reused alu_exec_ready for both directions, creating a
@@ -1297,7 +1342,7 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] raw_rs_issue_store;
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] raw_rs_issue_metadata;
     wire [BE_WIDTH*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))-1:0] raw_rs_issue_slot;
-    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .AGE_ORDER_MATRIX(1), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH)) rs (
+    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH)) rs (
         .alloc_metadata_i(rs_alloc_metadata), .issue_metadata_o(raw_rs_issue_metadata), .entry_metadata_o(rs_entry_metadata),
         .entry_base_ready_o(rs_entry_base_ready), .entry_base_value_o(rs_entry_base_value),
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rs_alloc_valid), .alloc_op_i(d_op), .alloc_pc_i(d_pc), .alloc_rob_tag_i(d_tag), .alloc_target_live_i(d_valid), .alloc_phys_rd_i(d_new_phys),
@@ -1462,13 +1507,11 @@ module rv32_backend_joint #(
         // suffix (whose slots and physical destinations may then be reused).
         for (producer_recovery_index = 0; producer_recovery_index < PRODUCERS;
              producer_recovery_index = producer_recovery_index + 1) begin
-            producer_live_slot =
-                producer_tag_r[(producer_recovery_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH];
             if (producer_valid_r[producer_recovery_index] &&
                 (!producer_tag_r[producer_recovery_index*TAG_WIDTH] ||
-                 !rob_entry_valid[producer_live_slot] ||
+                 !producer_live_reads[producer_recovery_index*ROB_LIVE_WIDTH+ROB_GENERATION_WIDTH] ||
                  (producer_tag_r[(producer_recovery_index*TAG_WIDTH) + 3 + ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH] !=
-                  rob_entry_generation[(producer_live_slot*ROB_GENERATION_WIDTH) +: ROB_GENERATION_WIDTH])))
+                  producer_live_reads[producer_recovery_index*ROB_LIVE_WIDTH +: ROB_GENERATION_WIDTH])))
                 producer_target_live_r[producer_recovery_index] = 1'b0;
         end
         producer_recovery_rob_slot = 0;
@@ -1579,8 +1622,8 @@ module rv32_backend_joint #(
         wire [ROB_SLOT_WIDTH-1:0] normal_slot=rob_wb_tag[routed_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH];
         wire normal_in_range=normal_slot<ROB_ENTRIES;
         wire normal_error=rob_wb_valid[routed_lane] && normal_in_range &&
-            (load_error_mem[normal_slot] || completion_live_load_error[routed_lane]);
-        wire [1:0] normal_size=rob_mem_size_mem[normal_slot];
+            (completion_state_reads[routed_lane*3+2] || completion_live_load_error[routed_lane]);
+        wire [1:0] normal_size=completion_state_reads[routed_lane*3 +: 2];
         wire [3:0] normal_mask=(rob_wb_valid[routed_lane] && normal_in_range && cdb_is_store[routed_lane])?
             ((normal_size==`RV32IM_MEM_BYTE)?4'b0001:((normal_size==`RV32IM_MEM_HALF)?4'b0011:4'b1111)):4'b0;
         wire [ROB_COMPLETION_PACKET_WIDTH-1:0] normal_packet={
@@ -1596,8 +1639,8 @@ module rv32_backend_joint #(
             wire accepted=rob_wb_valid[SOURCE] && cdb_ready[SOURCE];
             wire [ROB_SLOT_WIDTH-1:0] slot=rob_wb_tag[SOURCE*TAG_WIDTH+3 +: ROB_SLOT_WIDTH];
             wire in_range=slot<ROB_ENTRIES;
-            wire error=(load_error_mem[slot] || completion_live_load_error[SOURCE]) && in_range;
-            wire [1:0] size=rob_mem_size_mem[slot];
+            wire error=(completion_state_reads[SOURCE*3+2] || completion_live_load_error[SOURCE]) && in_range;
+            wire [1:0] size=completion_state_reads[SOURCE*3 +: 2];
             wire [3:0] mask=(in_range && cdb_is_store[SOURCE])?
                 ((size==`RV32IM_MEM_BYTE)?4'b0001:((size==`RV32IM_MEM_HALF)?4'b0011:4'b1111)):4'b0;
             wire [63:0] store_payload;
@@ -1646,9 +1689,9 @@ module rv32_backend_joint #(
     wire error_response=lsq_load_complete_valid && lsq_load_complete_ready &&
         lsq_load_complete_error && lsq_load_complete_tag[0] &&
         lsq_load_complete_tag[3 +: ROB_SLOT_WIDTH]<ROB_ENTRIES &&
-        rob_entry_valid[lsq_load_complete_tag[3 +: ROB_SLOT_WIDTH]] &&
+        producer_live_reads[LSQ_SOURCE*ROB_LIVE_WIDTH+ROB_GENERATION_WIDTH] &&
         lsq_load_complete_tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]==
-        rob_entry_generation[lsq_load_complete_tag[3 +: ROB_SLOT_WIDTH]*ROB_GENERATION_WIDTH +: ROB_GENERATION_WIDTH];
+        producer_live_reads[LSQ_SOURCE*ROB_LIVE_WIDTH +: ROB_GENERATION_WIDTH];
     rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(MAP_DOMAINS)) r_write_tree (
         .signal_i(dispatch_valid & rob_alloc_fire & {BE_WIDTH{!reset_i}}),.views_o(r_map_writes));
     rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(MAP_DOMAINS)) d_write_tree (

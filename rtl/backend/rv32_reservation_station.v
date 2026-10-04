@@ -14,6 +14,8 @@ module rv32_reservation_station #(
     parameter integer METADATA_WIDTH = 1,
     parameter integer WAKE_MUX_IMPL = 0,
     parameter integer ALLOC_STATIC_WRITE = 0,
+    // 0: numeric comparison, 1: cached numeric comparison,
+    // 2: relative allocation-order matrix (requires static allocation).
     parameter integer AGE_ORDER_MATRIX = 0,
     parameter integer LOCAL_PAYLOAD_ROWS = 0,
     parameter integer SLOT_WIDTH = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES),
@@ -296,7 +298,7 @@ module rv32_reservation_station #(
             assign allocation_slots[rank_lane]=slot_tree[1];
         end
         for (al = 0; al < BE_WIDTH; al = al + 1) begin : g_payload
-            wire [AGE_WIDTH-1:0] lane_age = age_counter + al;
+            wire [AGE_WIDTH-1:0] lane_age = (AGE_ORDER_MATRIX==2) ? 0 : age_counter + al;
             assign alloc_lane_payload[al] = {
                 alloc_target_live_i[al] && alloc_rob_tag_i[al*TAG_WIDTH],
                 alloc_op_i[al*OP_WIDTH +: OP_WIDTH], alloc_pc_i[al*32 +: 32],
@@ -345,7 +347,7 @@ module rv32_reservation_station #(
     // flush and issue preserve both age words and their derived relation.
     // Shared new-age/old-age comparisons are computed once per lane/row.
     genvar age_lane, age_row, age_peer, pair_low, pair_high;
-    generate if ((AGE_ORDER_MATRIX != 0) && (ALLOC_STATIC_WRITE != 0)) begin : g_age_order_matrix
+    generate if ((AGE_ORDER_MATRIX == 1) && (ALLOC_STATIC_WRITE != 0)) begin : g_age_order_matrix
         wire [AGE_WIDTH-1:0] new_age [0:BE_WIDTH-1];
         wire [BE_WIDTH-1:0] new_le_old [0:ENTRIES-1];
         wire [BE_WIDTH-1:0] new_lt_old [0:ENTRIES-1];
@@ -392,6 +394,36 @@ module rv32_reservation_station #(
                 end
                 assign cached_age_precedes[pair_low][pair_high] = low_precedes_high;
                 assign cached_age_precedes[pair_high][pair_low] = !low_precedes_high;
+            end
+        end
+    end endgenerate
+
+
+    // Mode 2 tracks relative allocation order, independent of a wrapping
+    // numeric counter. Allocation maps accepted lanes in order to increasing
+    // free row numbers: when both rows are new, the lower row is older.
+    // If only one row is new, every still-valid old row precedes it.
+    // Pair bits need no reset: before two rows can both be valid, allocation
+    // has written their relation. Ready filtering excludes invalid rows.
+    generate if(AGE_ORDER_MATRIX==2 && ALLOC_STATIC_WRITE!=0) begin:g_chronological_order
+        localparam integer ORDER_DOMAINS=(ENTRIES+3)/4;
+        wire [ENTRIES-1:0] row_allocations;
+        wire [ORDER_DOMAINS*ENTRIES-1:0] allocation_views;
+        rv32_frequency_control_tree #(.WIDTH(ENTRIES),.LEAVES(ORDER_DOMAINS)) allocation_tree (
+            .signal_i(row_allocations),.views_o(allocation_views));
+        for(pair_low=0;pair_low<ENTRIES;pair_low=pair_low+1) begin:g_low
+            assign row_allocations[pair_low]=!reset_i && !flush_valid_i && alloc_row_write[pair_low];
+            assign cached_age_precedes[pair_low][pair_low]=1'b0;
+            for(pair_high=pair_low+1;pair_high<ENTRIES;pair_high=pair_high+1) begin:g_high
+                // Choose each source's view by the other row's group, so a
+                // leaf allocation control updates at most four pair bits.
+                wire low_new=allocation_views[(pair_high/4)*ENTRIES+pair_low];
+                wire high_new=allocation_views[(pair_low/4)*ENTRIES+pair_high];
+                wire low_precedes_high;
+                rv32_frequency_word_bank #(.WIDTH(1)) order_owner (
+                    .clk_i(clk_i),.write_i(low_new || high_new),.data_i(high_new),.data_o(low_precedes_high));
+                assign cached_age_precedes[pair_low][pair_high]=low_precedes_high;
+                assign cached_age_precedes[pair_high][pair_low]=!low_precedes_high;
             end
         end
     end endgenerate
