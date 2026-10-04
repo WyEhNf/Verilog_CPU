@@ -104,6 +104,7 @@ module rv32_lsq #(
     output reg  [TAG_WIDTH-1:0]         load_complete_lsq_tag_o,
     output reg  [31:0]                  load_complete_value_o,
     output reg  [PHYS_ADDR_WIDTH-1:0]    load_complete_phys_rd_o,
+    output reg                          load_complete_unretired_o,
     output reg                          load_complete_error_o,
 
     input  wire                         dcache_store_ack_valid_i,
@@ -407,6 +408,24 @@ module rv32_lsq #(
     // physical store directly instead of muxing the whole store array through
     // head+offset once per older age and once per candidate load.
     wire [SLOT_WIDTH-1:0] entry_age [0:LSQ_ENTRIES-1];
+    // For ascending physical rows, age order is (row<head, row).
+    // Only the wrap bit needs to traverse a balanced tournament: the
+    // physical order of its left/right subtrees is already static.
+    localparam integer CIRCULAR_ORDER_POWER2=((LSQ_ENTRIES & (LSQ_ENTRIES-1))==0);
+    wire [8*LSQ_ENTRIES-1:0] circular_wrap_views;
+    localparam integer HAZARD_WRAP_GROUPS=(LSQ_ENTRIES+3)/4;
+    wire [LSQ_ENTRIES*HAZARD_WRAP_GROUPS-1:0] hazard_wrap_views;
+    wire pick_wrap [1:2*LSQ_ENTRIES-1];
+    generate for(genvar wrap_row=0;wrap_row<LSQ_ENTRIES;wrap_row=wrap_row+1) begin:g_circular_key
+        wire row_wrap=wrap_row<head_query_views[wrap_row*SLOT_WIDTH +: SLOT_WIDTH];
+        rv32_frequency_control_tree #(.LEAVES(8)) wrap_tree (
+            .signal_i(row_wrap),.views_o(circular_wrap_views[wrap_row*8 +: 8]));
+        // Each leaf serves at most four opposite rows in the hazard matrix.
+        rv32_frequency_control_tree #(.LEAVES(HAZARD_WRAP_GROUPS)) hazard_wrap_tree (
+            .signal_i(row_wrap),
+            .views_o(hazard_wrap_views[wrap_row*HAZARD_WRAP_GROUPS +: HAZARD_WRAP_GROUPS]));
+        assign pick_wrap[LSQ_ENTRIES+wrap_row]=circular_wrap_views[wrap_row*8];
+    end endgenerate
     wire [LSQ_ENTRIES-1:0] request_eligible;
     wire [15:0] load_line_mask [0:LSQ_ENTRIES-1];
     wire [15:0] store_line_mask [0:LSQ_ENTRIES-1];
@@ -478,6 +497,11 @@ module rv32_lsq #(
     wire [SLOT_WIDTH-1:0] selected_slot=(REQUEST_PIPELINE!=0)?selection_slot:pick_slot[1];
     wire [31:0] selected_addr=(REQUEST_PIPELINE!=0)?selection_addr:pick_addr[1];
     wire [SLOT_WIDTH-1:0] selected_age=selected_slot-head_query_views[LSQ_ENTRIES*SLOT_WIDTH +: SLOT_WIDTH];
+    localparam integer FORWARD_ORDER_WIDTH=SLOT_WIDTH+1;
+    wire [LSQ_ENTRIES*FORWARD_ORDER_WIDTH-1:0] selected_order_views;
+    wire selected_wrap=selected_slot<head_query_views[LSQ_ENTRIES*SLOT_WIDTH +: SLOT_WIDTH];
+    rv32_frequency_control_tree #(.WIDTH(FORWARD_ORDER_WIDTH),.LEAVES(LSQ_ENTRIES)) selected_order_tree (
+        .signal_i({selected_wrap,selected_slot}),.views_o(selected_order_views));
     wire [1:0] selected_size=(REQUEST_PIPELINE!=0)?selection_size:pick_size;
     wire selected_unsigned=(REQUEST_PIPELINE!=0)?selection_unsigned:pick_unsigned;
     wire selected_load=(REQUEST_PIPELINE!=0)?selection_load:pick_load;
@@ -549,10 +573,18 @@ module rv32_lsq #(
             assign pick_slot[LSQ_ENTRIES+age_slot] = age_slot;
             assign pick_age[LSQ_ENTRIES+age_slot] = entry_age[age_slot];
             assign pick_addr[LSQ_ENTRIES+age_slot] = addr_mem[age_slot];
+            wire [SLOT_WIDTH-1:0] local_selected_slot;
+            wire local_selected_wrap;
+            assign {local_selected_wrap,local_selected_slot}=
+                selected_order_views[age_slot*FORWARD_ORDER_WIDTH +: FORWARD_ORDER_WIDTH];
+            wire older_than_selected=
+                (circular_wrap_views[age_slot*8+7]==local_selected_wrap) ?
+                    (age_slot<local_selected_slot) :
+                    (!circular_wrap_views[age_slot*8+7] && local_selected_wrap);
             assign store_overlap[age_slot] =
                 valid_mem[age_slot] && store_mem[age_slot] &&
                 addr_ready_mem[age_slot] && data_ready_mem[age_slot] &&
-                (entry_age[age_slot] < selected_age) &&
+                (CIRCULAR_ORDER_POWER2 ? older_than_selected : (entry_age[age_slot] < selected_age)) &&
                 (addr_mem[age_slot][31:4] == selected_addr[31:4]) ?
                 relative_overlap(addr_mem[age_slot][3:0], mask_mem[age_slot],
                     selected_addr[3:0], access_mask(selected_size)) : 4'b0;
@@ -573,8 +605,18 @@ module rv32_lsq #(
             wire [LSQ_ENTRIES-1:0] older_hazard;
             for (older_slot = 0; older_slot < LSQ_ENTRIES;
                   older_slot = older_slot + 1) begin : g_older_hazard
+                wire older_wrap=hazard_wrap_views[older_slot*HAZARD_WRAP_GROUPS+request_slot/4];
+                wire request_wrap=hazard_wrap_views[request_slot*HAZARD_WRAP_GROUPS+older_slot/4];
+                wire ordered_before;
+                if(older_slot<request_slot) begin:g_lower_slot
+                    assign ordered_before=!older_wrap || request_wrap;
+                end else if(older_slot>request_slot) begin:g_higher_slot
+                    assign ordered_before=!older_wrap && request_wrap;
+                end else begin:g_same_slot
+                    assign ordered_before=1'b0;
+                end
                 assign older_hazard[older_slot] =
-                    (entry_age[older_slot] < entry_age[request_slot]) &&
+                    (CIRCULAR_ORDER_POWER2 ? ordered_before : (entry_age[older_slot] < entry_age[request_slot])) &&
                     valid_mem[older_slot] && store_mem[older_slot] &&
                     (!addr_ready_mem[older_slot] ||
                      ((addr_mem[older_slot][31:4] ==
@@ -605,10 +647,13 @@ module rv32_lsq #(
     generate
         for (pick_node = 1; pick_node < LSQ_ENTRIES; pick_node = pick_node + 1) begin : g_pick
             wire choose_left = pick_valid[2*pick_node] &&
-                (!pick_valid[2*pick_node+1] || (pick_age[2*pick_node] <= pick_age[2*pick_node+1]));
+                (!pick_valid[2*pick_node+1] ||
+                 (CIRCULAR_ORDER_POWER2 ? (!pick_wrap[2*pick_node] || pick_wrap[2*pick_node+1]) :
+                  (pick_age[2*pick_node] <= pick_age[2*pick_node+1])));
             assign pick_valid[pick_node] = pick_valid[2*pick_node] || pick_valid[2*pick_node+1];
             assign pick_slot[pick_node] = choose_left ? pick_slot[2*pick_node] : pick_slot[2*pick_node+1];
             assign pick_age[pick_node] = choose_left ? pick_age[2*pick_node] : pick_age[2*pick_node+1];
+            assign pick_wrap[pick_node] = choose_left ? pick_wrap[2*pick_node] : pick_wrap[2*pick_node+1];
             // Carry the address alongside the winning age/slot. The cache
             // need not wait for a second binary-indexed read after selection.
             assign pick_addr[pick_node] = choose_left ? pick_addr[2*pick_node] : pick_addr[2*pick_node+1];
@@ -618,17 +663,22 @@ module rv32_lsq #(
         for (forward_byte = 0; forward_byte < 4; forward_byte = forward_byte + 1) begin : g_forward
             wire byte_valid [1:2*LSQ_ENTRIES-1];
             wire [SLOT_WIDTH-1:0] byte_age [1:2*LSQ_ENTRIES-1];
+            wire byte_wrap [1:2*LSQ_ENTRIES-1];
             wire [7:0] byte_data [1:2*LSQ_ENTRIES-1];
             for (forward_slot = 0; forward_slot < LSQ_ENTRIES; forward_slot = forward_slot + 1) begin : g_leaf
                 assign byte_valid[LSQ_ENTRIES+forward_slot] = store_overlap[forward_slot][forward_byte];
                 assign byte_age[LSQ_ENTRIES+forward_slot] = entry_age[forward_slot];
+                assign byte_wrap[LSQ_ENTRIES+forward_slot] = circular_wrap_views[forward_slot*8+1+forward_byte];
                 assign byte_data[LSQ_ENTRIES+forward_slot] = store_forward_data[forward_slot][forward_byte*8 +: 8];
             end
             for (forward_node = 1; forward_node < LSQ_ENTRIES; forward_node = forward_node + 1) begin : g_node
                 wire choose_left = byte_valid[2*forward_node] &&
-                    (!byte_valid[2*forward_node+1] || (byte_age[2*forward_node] >= byte_age[2*forward_node+1]));
+                    (!byte_valid[2*forward_node+1] ||
+                     (CIRCULAR_ORDER_POWER2 ? (byte_wrap[2*forward_node] && !byte_wrap[2*forward_node+1]) :
+                      (byte_age[2*forward_node] >= byte_age[2*forward_node+1])));
                 assign byte_valid[forward_node] = byte_valid[2*forward_node] || byte_valid[2*forward_node+1];
                 assign byte_age[forward_node] = choose_left ? byte_age[2*forward_node] : byte_age[2*forward_node+1];
+                assign byte_wrap[forward_node] = choose_left ? byte_wrap[2*forward_node] : byte_wrap[2*forward_node+1];
                 assign byte_data[forward_node] = choose_left ? byte_data[2*forward_node] : byte_data[2*forward_node+1];
             end
             assign tree_forward_mask[forward_byte] = byte_valid[1];
@@ -819,12 +869,13 @@ module rv32_lsq #(
     // Load reporting follows queue age; store admission preserves the former
     // lowest physical-slot priority. Neither selection is a serial scan.
     localparam integer REPORT_ROWS=(LSQ_ENTRIES<=1)?1:(1<<$clog2(LSQ_ENTRIES));
-    localparam integer REPORT_WIDTH=PHYS_ADDR_WIDTH+ROB_TAG_WIDTH+TAG_WIDTH+33;
+    localparam integer REPORT_WIDTH=PHYS_ADDR_WIDTH+ROB_TAG_WIDTH+TAG_WIDTH+34;
     localparam integer ACK_WIDTH=ROB_TAG_WIDTH+TAG_WIDTH+1;
     localparam integer REPORT_WORDS=(REPORT_WIDTH+15)/16;
     localparam integer ACK_WORDS=(ACK_WIDTH+15)/16;
     wire report_valid_tree [1:2*REPORT_ROWS-1];
-    wire [SLOT_WIDTH-1:0] report_slot_tree [1:2*REPORT_ROWS-1],report_age_tree [1:2*REPORT_ROWS-1];
+    wire [SLOT_WIDTH-1:0] report_slot_tree [1:2*REPORT_ROWS-1];
+    wire report_wrap_tree [1:2*REPORT_ROWS-1];
     wire commit_valid_tree [1:2*REPORT_ROWS-1];
     wire [SLOT_WIDTH-1:0] commit_slot_tree [1:2*REPORT_ROWS-1];
     wire [REPORT_WIDTH-1:0] report_payload_tree [1:2*REPORT_ROWS-1];
@@ -837,7 +888,7 @@ module rv32_lsq #(
                 wire [REPORT_WORDS-1:0] report_select;
                 wire [ACK_WORDS-1:0] ack_select;
                 wire [REPORT_WIDTH-1:0] report_payload={
-                    physical_destinations[report_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
+                    !retired_mem[report_row],physical_destinations[report_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
                     complete_error_mem[report_row],complete_value_mem[report_row],
                     make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
                 wire [ACK_WIDTH-1:0] ack_payload={store_ack_error_mem[report_row],
@@ -845,7 +896,7 @@ module rv32_lsq #(
                 assign report_valid_tree[REPORT_ROWS+report_row]=entry_age[report_row]<occupancy_reg &&
                     valid_mem[report_row] && load_mem[report_row] && complete_mem[report_row] && !load_reported_mem[report_row];
                 assign report_slot_tree[REPORT_ROWS+report_row]=report_row;
-                assign report_age_tree[REPORT_ROWS+report_row]=entry_age[report_row];
+                assign report_wrap_tree[REPORT_ROWS+report_row]=circular_wrap_views[report_row*8+5];
                 assign commit_valid_tree[REPORT_ROWS+report_row]=valid_mem[report_row] && store_mem[report_row] &&
                     addr_ready_mem[report_row] && data_ready_mem[report_row] && !store_commit_mem[report_row] &&
                     rob_tag_mem[report_row]==store_commit_rob_tag_i;
@@ -871,7 +922,7 @@ module rv32_lsq #(
             end else begin:g_padding
                 assign report_valid_tree[REPORT_ROWS+report_row]=0;
                 assign report_slot_tree[REPORT_ROWS+report_row]=0;
-                assign report_age_tree[REPORT_ROWS+report_row]=0;
+                assign report_wrap_tree[REPORT_ROWS+report_row]=0;
                 assign commit_valid_tree[REPORT_ROWS+report_row]=0;
                 assign commit_slot_tree[REPORT_ROWS+report_row]=0;
                 assign report_payload_tree[REPORT_ROWS+report_row]=0;
@@ -881,10 +932,11 @@ module rv32_lsq #(
         end
         for(report_node=1;report_node<REPORT_ROWS;report_node=report_node+1) begin:g_report_merge
             wire choose_left=report_valid_tree[2*report_node] &&
-                (!report_valid_tree[2*report_node+1] || report_age_tree[2*report_node]<=report_age_tree[2*report_node+1]);
+                (!report_valid_tree[2*report_node+1] ||
+                 !report_wrap_tree[2*report_node] || report_wrap_tree[2*report_node+1]);
             assign report_valid_tree[report_node]=report_valid_tree[2*report_node] || report_valid_tree[2*report_node+1];
             assign report_slot_tree[report_node]=choose_left?report_slot_tree[2*report_node]:report_slot_tree[2*report_node+1];
-            assign report_age_tree[report_node]=choose_left?report_age_tree[2*report_node]:report_age_tree[2*report_node+1];
+            assign report_wrap_tree[report_node]=choose_left?report_wrap_tree[2*report_node]:report_wrap_tree[2*report_node+1];
             assign commit_valid_tree[report_node]=commit_valid_tree[2*report_node] || commit_valid_tree[2*report_node+1];
             assign commit_slot_tree[report_node]=commit_valid_tree[2*report_node]?
                 commit_slot_tree[2*report_node]:commit_slot_tree[2*report_node+1];
@@ -898,7 +950,7 @@ module rv32_lsq #(
         complete_slot_found=report_valid_tree[1];
         complete_slot_select=complete_slot_found?report_slot_tree[1]:head_reg;
         load_complete_valid_o=complete_slot_found;
-        {load_complete_phys_rd_o,load_complete_error_o,load_complete_value_o,load_complete_lsq_tag_o,load_complete_rob_tag_o}=report_payload_tree[1];
+        {load_complete_unretired_o,load_complete_phys_rd_o,load_complete_error_o,load_complete_value_o,load_complete_lsq_tag_o,load_complete_rob_tag_o}=report_payload_tree[1];
         store_ack_valid_o=ack_valid_tree[1];
         {store_ack_error_o,store_ack_lsq_tag_o,store_ack_rob_tag_o}=ack_payload_tree[1];
     end
@@ -983,14 +1035,17 @@ module rv32_lsq #(
     wire [COUNT_WIDTH-1:0] recovery_keep_tree [1:2*LSQ_ENTRIES-1];
     wire recovery_kill_tree [1:2*LSQ_ENTRIES-1];
     wire [SLOT_WIDTH-1:0] recovery_kill_age_tree [1:2*LSQ_ENTRIES-1];
+    wire recovery_kill_wrap_tree [1:2*LSQ_ENTRIES-1];
     wire [SLOT_WIDTH-1:0] recovery_kill_slot_tree [1:2*LSQ_ENTRIES-1];
     generate for(genvar trim_node=1;trim_node<LSQ_ENTRIES;trim_node=trim_node+1) begin:g_recovery_trim
         wire choose_left=recovery_kill_tree[2*trim_node] &&
             (!recovery_kill_tree[2*trim_node+1] ||
-             recovery_kill_age_tree[2*trim_node]<=recovery_kill_age_tree[2*trim_node+1]);
+             (CIRCULAR_ORDER_POWER2 ? (!recovery_kill_wrap_tree[2*trim_node] || recovery_kill_wrap_tree[2*trim_node+1]) :
+              recovery_kill_age_tree[2*trim_node]<=recovery_kill_age_tree[2*trim_node+1]));
         assign recovery_keep_tree[trim_node]=recovery_keep_tree[2*trim_node]+recovery_keep_tree[2*trim_node+1];
         assign recovery_kill_tree[trim_node]=recovery_kill_tree[2*trim_node] || recovery_kill_tree[2*trim_node+1];
         assign recovery_kill_age_tree[trim_node]=choose_left?recovery_kill_age_tree[2*trim_node]:recovery_kill_age_tree[2*trim_node+1];
+        assign recovery_kill_wrap_tree[trim_node]=choose_left?recovery_kill_wrap_tree[2*trim_node]:recovery_kill_wrap_tree[2*trim_node+1];
         assign recovery_kill_slot_tree[trim_node]=choose_left?recovery_kill_slot_tree[2*trim_node]:recovery_kill_slot_tree[2*trim_node+1];
     end endgenerate
     rv32_frequency_control_tree #(.WIDTH(3),.LEAVES(LSQ_ENTRIES)) payload_mode_tree (
@@ -1148,6 +1203,7 @@ module rv32_lsq #(
             (lsq_age<occupancy_reg && valid_mem[metadata_row] && !kill)?1:0;
         assign recovery_kill_tree[LSQ_ENTRIES+metadata_row]=kill;
         assign recovery_kill_age_tree[LSQ_ENTRIES+metadata_row]=lsq_age;
+        assign recovery_kill_wrap_tree[LSQ_ENTRIES+metadata_row]=circular_wrap_views[metadata_row*8+6];
         assign recovery_kill_slot_tree[LSQ_ENTRIES+metadata_row]=metadata_row;
         wire commit_event=metadata_events[metadata_row*7] && commit_slot_select==metadata_row;
         wire report_event=metadata_events[metadata_row*7+1] && complete_slot_select==metadata_row;

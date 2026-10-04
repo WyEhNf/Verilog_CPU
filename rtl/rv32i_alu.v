@@ -123,11 +123,16 @@ module rv32i_alu #(
         reg [7:0] g0, p0, g1, p1, g2, p2, g3, p3;
         reg [8:0] carry;
         reg [4:0] chunk_sum;
+        reg [31:0] sum_zero,sum_one;
         integer chunk;
         begin
             for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
                 chunk_sum = {1'b0, lhs[chunk*4 +: 4]} +
                             {1'b0, adjusted_rhs[chunk*4 +: 4]};
+                // Both nibble results precede the group carry tree.
+                // A late carry selects four bits; it does not start an adder.
+                sum_zero[chunk*4 +: 4] = chunk_sum[3:0];
+                sum_one[chunk*4 +: 4] = chunk_sum[3:0] + 4'd1;
                 g0[chunk] = chunk_sum[4];
                 p0[chunk] = &(lhs[chunk*4 +: 4] ^ adjusted_rhs[chunk*4 +: 4]);
             end
@@ -155,8 +160,8 @@ module rv32i_alu #(
             carry[0] = carry_in;
             for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
                 carry[chunk+1] = g3[chunk] | (p3[chunk] & carry_in);
-                fast_add_carry[chunk*4 +: 4] = lhs[chunk*4 +: 4] +
-                    adjusted_rhs[chunk*4 +: 4] + carry[chunk];
+                fast_add_carry[chunk*4 +: 4] = carry[chunk] ?
+                    sum_one[chunk*4 +: 4] : sum_zero[chunk*4 +: 4];
             end
         end
     endfunction

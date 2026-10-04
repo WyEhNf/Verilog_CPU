@@ -537,8 +537,8 @@ module rv32_reservation_station #(
     end endgenerate
 
 
-    // Rank/ready remain unchanged. A selection never drives an entire packet;
-    // it is distributed into <=32-bit words before balanced payload reduction.
+    // Rank policy and ready remain unchanged. Each selection controls
+    // <=16-bit words before balanced payload reduction.
     localparam integer ISSUE_DATA_WIDTH=OP_WIDTH+32+TAG_WIDTH+PHYS_ADDR_WIDTH+
         64+STORE_DATA_WIDTH+METADATA_WIDTH+SLOT_WIDTH;
     localparam integer ISSUE_DATA_WORDS=(ISSUE_DATA_WIDTH+15)/16;

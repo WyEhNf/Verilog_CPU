@@ -41,103 +41,99 @@ module rv32m_multiplier #(
         begin csa_carry3=((a&b)|(a&c)|(b&c))<<1; end
     endfunction
 
-    // Signed high halves are corrected in carry-save form, modulo 2^64:
-    // U=A*B; signed correction is -(Anegative*B + Bnegative*A)<<32.
-    // Each negative term is {~operand,0} plus 1<<32. No absolute-value
-    // carry-propagate adder precedes the partial-product tree.
-    wire neg_a=((req_op_i==`RV32IM_OP_MULH)||
-                (req_op_i==`RV32IM_OP_MULHSU)) && req_src1_i[31];
-    wire neg_b=(req_op_i==`RV32IM_OP_MULH) && req_src2_i[31];
-    wire [63:0] pp [0:35];
-    wire [127:0] multiplicand_views;
-    wire [5:0] negative_views;
-    rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(4)) multiplicand_tree (
-        .signal_i(req_src1_i),.views_o(multiplicand_views));
-    rv32_frequency_control_tree #(.WIDTH(2),.LEAVES(3)) negative_tree (
-        .signal_i({neg_b,neg_a}),.views_o(negative_views));
+    // A and B are signed only where the requested high half requires it.
+    // The 33rd sign bit also represents every unsigned 32-bit operand.
+    // Seventeen radix-4 digits cover B. Negative rows use bitwise complement
+    // plus one shared correction vector, avoiding per-row negate adders.
+    wire signed_a=(req_op_i==`RV32IM_OP_MULH || req_op_i==`RV32IM_OP_MULHSU);
+    wire signed_b=(req_op_i==`RV32IM_OP_MULH);
+    wire [32:0] extended_a={signed_a && req_src1_i[31],req_src1_i};
+    wire [34:0] booth_bits={{2{signed_b && req_src2_i[31]}},req_src2_i,1'b0};
+    wire [5*33-1:0] multiplicand_views;
+    rv32_frequency_control_tree #(.WIDTH(33),.LEAVES(5)) multiplicand_tree (
+        .signal_i(extended_a),.views_o(multiplicand_views));
+    wire [63:0] pp [0:17];
+    wire [16:0] negative_corrections;
     genvar row;
-    generate for(row=0;row<32;row=row+1) begin:g_pp
-        wire [1:0] multiplier_views;
-        wire [31:0] relative_product;
-        rv32_frequency_control_tree #(.LEAVES(2)) multiplier_bit_tree (
-            .signal_i(req_src2_i[row]),.views_o(multiplier_views));
-        for(genvar product_word=0;product_word<2;product_word=product_word+1) begin:g_word
-            assign relative_product[product_word*16 +: 16]=
-                {16{multiplier_views[product_word]}} & multiplicand_views[(row/8)*32+product_word*16 +: 16];
+    generate for(row=0;row<17;row=row+1) begin:g_booth_row
+        wire [2:0] code=booth_bits[2*row +: 3];
+        wire one=code[0] ^ code[1];
+        wire two=(code[0]==code[1]) && (code[2]!=code[1]);
+        wire negative=code[2] && (one || two);
+        wire [2:0] one_views,two_views;
+        wire [3:0] negative_views;
+        wire [32:0] local_a=multiplicand_views[(row/4)*33 +: 33];
+        wire [33:0] once={local_a[32],local_a};
+        wire [33:0] twice={local_a,1'b0};
+        wire [33:0] relative_row;
+        localparam integer EXTENDED_BITS=(30-2*row>0)?30-2*row:0;
+        localparam integer SIGN_DOMAINS=(EXTENDED_BITS+7)/8;
+        rv32_frequency_control_tree #(.LEAVES(3)) one_tree (
+            .signal_i(one),.views_o(one_views));
+        rv32_frequency_control_tree #(.LEAVES(3)) two_tree (
+            .signal_i(two),.views_o(two_views));
+        rv32_frequency_control_tree #(.LEAVES(4)) negative_tree (
+            .signal_i(negative),.views_o(negative_views));
+        assign negative_corrections[row]=negative_views[3];
+        for(genvar relative_bit=0;relative_bit<34;relative_bit=relative_bit+1) begin:g_relative_bit
+            assign relative_row[relative_bit]=
+                ((one_views[relative_bit/16] && once[relative_bit]) |
+                 (two_views[relative_bit/16] && twice[relative_bit])) ^ negative_views[relative_bit/16];
         end
-        assign pp[row]={32'b0,relative_product}<<row;
+        if(SIGN_DOMAINS>0) begin:g_sign_extension
+            wire [SIGN_DOMAINS-1:0] sign_views;
+            // Each repeated sign feeds <=8 row bits, each used in CSA logic.
+            rv32_frequency_control_tree #(.LEAVES(SIGN_DOMAINS)) sign_tree (
+                .signal_i(relative_row[33]),.views_o(sign_views));
+            for(genvar product_bit=0;product_bit<64;product_bit=product_bit+1) begin:g_bit
+                if(product_bit<2*row) assign pp[row][product_bit]=1'b0;
+                else if(product_bit<2*row+34)
+                    assign pp[row][product_bit]=relative_row[product_bit-2*row];
+                else assign pp[row][product_bit]=sign_views[(product_bit-2*row-34)/8];
+            end
+        end else begin:g_no_sign_extension
+            for(genvar product_bit=0;product_bit<64;product_bit=product_bit+1) begin:g_bit
+                if(product_bit<2*row) assign pp[row][product_bit]=1'b0;
+                else assign pp[row][product_bit]=relative_row[product_bit-2*row];
+            end
+        end
     end endgenerate
-    assign pp[32]={({16{negative_views[2]}} & ~req_src2_i[31:16]),
-                   ({16{negative_views[0]}} & ~req_src2_i[15:0]),32'b0};
-    assign pp[33]={31'b0,negative_views[4],32'b0};
-    assign pp[34]={({16{negative_views[3]}} & ~req_src1_i[31:16]),
-                   ({16{negative_views[1]}} & ~req_src1_i[15:0]),32'b0};
-    assign pp[35]={31'b0,negative_views[5],32'b0};
-    wire [63:0] l1 [0:23];
-    assign l1[0]=csa_sum3(pp[0],pp[1],pp[2]);
-    assign l1[1]=csa_carry3(pp[0],pp[1],pp[2]);
-    assign l1[2]=csa_sum3(pp[3],pp[4],pp[5]);
-    assign l1[3]=csa_carry3(pp[3],pp[4],pp[5]);
-    assign l1[4]=csa_sum3(pp[6],pp[7],pp[8]);
-    assign l1[5]=csa_carry3(pp[6],pp[7],pp[8]);
-    assign l1[6]=csa_sum3(pp[9],pp[10],pp[11]);
-    assign l1[7]=csa_carry3(pp[9],pp[10],pp[11]);
-    assign l1[8]=csa_sum3(pp[12],pp[13],pp[14]);
-    assign l1[9]=csa_carry3(pp[12],pp[13],pp[14]);
-    assign l1[10]=csa_sum3(pp[15],pp[16],pp[17]);
-    assign l1[11]=csa_carry3(pp[15],pp[16],pp[17]);
-    assign l1[12]=csa_sum3(pp[18],pp[19],pp[20]);
-    assign l1[13]=csa_carry3(pp[18],pp[19],pp[20]);
-    assign l1[14]=csa_sum3(pp[21],pp[22],pp[23]);
-    assign l1[15]=csa_carry3(pp[21],pp[22],pp[23]);
-    assign l1[16]=csa_sum3(pp[24],pp[25],pp[26]);
-    assign l1[17]=csa_carry3(pp[24],pp[25],pp[26]);
-    assign l1[18]=csa_sum3(pp[27],pp[28],pp[29]);
-    assign l1[19]=csa_carry3(pp[27],pp[28],pp[29]);
-    assign l1[20]=csa_sum3(pp[30],pp[31],pp[32]);
-    assign l1[21]=csa_carry3(pp[30],pp[31],pp[32]);
-    assign l1[22]=csa_sum3(pp[33],pp[34],pp[35]);
-    assign l1[23]=csa_carry3(pp[33],pp[34],pp[35]);
-    wire [63:0] l2 [0:15];
-    assign l2[0]=csa_sum3(l1[0],l1[1],l1[2]);
-    assign l2[1]=csa_carry3(l1[0],l1[1],l1[2]);
-    assign l2[2]=csa_sum3(l1[3],l1[4],l1[5]);
-    assign l2[3]=csa_carry3(l1[3],l1[4],l1[5]);
-    assign l2[4]=csa_sum3(l1[6],l1[7],l1[8]);
-    assign l2[5]=csa_carry3(l1[6],l1[7],l1[8]);
-    assign l2[6]=csa_sum3(l1[9],l1[10],l1[11]);
-    assign l2[7]=csa_carry3(l1[9],l1[10],l1[11]);
-    assign l2[8]=csa_sum3(l1[12],l1[13],l1[14]);
-    assign l2[9]=csa_carry3(l1[12],l1[13],l1[14]);
-    assign l2[10]=csa_sum3(l1[15],l1[16],l1[17]);
-    assign l2[11]=csa_carry3(l1[15],l1[16],l1[17]);
-    assign l2[12]=csa_sum3(l1[18],l1[19],l1[20]);
-    assign l2[13]=csa_carry3(l1[18],l1[19],l1[20]);
-    assign l2[14]=csa_sum3(l1[21],l1[22],l1[23]);
-    assign l2[15]=csa_carry3(l1[21],l1[22],l1[23]);
-    wire [63:0] l3 [0:10];
-    assign l3[0]=csa_sum3(l2[0],l2[1],l2[2]);
-    assign l3[1]=csa_carry3(l2[0],l2[1],l2[2]);
-    assign l3[2]=csa_sum3(l2[3],l2[4],l2[5]);
-    assign l3[3]=csa_carry3(l2[3],l2[4],l2[5]);
-    assign l3[4]=csa_sum3(l2[6],l2[7],l2[8]);
-    assign l3[5]=csa_carry3(l2[6],l2[7],l2[8]);
-    assign l3[6]=csa_sum3(l2[9],l2[10],l2[11]);
-    assign l3[7]=csa_carry3(l2[9],l2[10],l2[11]);
-    assign l3[8]=csa_sum3(l2[12],l2[13],l2[14]);
-    assign l3[9]=csa_carry3(l2[12],l2[13],l2[14]);
-    assign l3[10]=l2[15];
-    wire [63:0] l4 [0:7];
-    assign l4[0]=csa_sum3(l3[0],l3[1],l3[2]);
-    assign l4[1]=csa_carry3(l3[0],l3[1],l3[2]);
-    assign l4[2]=csa_sum3(l3[3],l3[4],l3[5]);
-    assign l4[3]=csa_carry3(l3[3],l3[4],l3[5]);
-    assign l4[4]=csa_sum3(l3[6],l3[7],l3[8]);
-    assign l4[5]=csa_carry3(l3[6],l3[7],l3[8]);
-    assign l4[6]=l3[9];
-    assign l4[7]=l3[10];
+    generate for(genvar correction_bit=0;correction_bit<64;correction_bit=correction_bit+1) begin:g_correction_bit
+        if(correction_bit<=32 && correction_bit%2==0)
+            assign pp[17][correction_bit]=negative_corrections[correction_bit/2];
+        else assign pp[17][correction_bit]=1'b0;
+    end endgenerate
+    wire [63:0] first_reduce1 [0:11];
+    assign first_reduce1[0]=csa_sum3(pp[0],pp[1],pp[2]);
+    assign first_reduce1[1]=csa_carry3(pp[0],pp[1],pp[2]);
+    assign first_reduce1[2]=csa_sum3(pp[3],pp[4],pp[5]);
+    assign first_reduce1[3]=csa_carry3(pp[3],pp[4],pp[5]);
+    assign first_reduce1[4]=csa_sum3(pp[6],pp[7],pp[8]);
+    assign first_reduce1[5]=csa_carry3(pp[6],pp[7],pp[8]);
+    assign first_reduce1[6]=csa_sum3(pp[9],pp[10],pp[11]);
+    assign first_reduce1[7]=csa_carry3(pp[9],pp[10],pp[11]);
+    assign first_reduce1[8]=csa_sum3(pp[12],pp[13],pp[14]);
+    assign first_reduce1[9]=csa_carry3(pp[12],pp[13],pp[14]);
+    assign first_reduce1[10]=csa_sum3(pp[15],pp[16],pp[17]);
+    assign first_reduce1[11]=csa_carry3(pp[15],pp[16],pp[17]);
+    wire [63:0] first_reduce2 [0:7];
+    assign first_reduce2[0]=csa_sum3(first_reduce1[0],first_reduce1[1],first_reduce1[2]);
+    assign first_reduce2[1]=csa_carry3(first_reduce1[0],first_reduce1[1],first_reduce1[2]);
+    assign first_reduce2[2]=csa_sum3(first_reduce1[3],first_reduce1[4],first_reduce1[5]);
+    assign first_reduce2[3]=csa_carry3(first_reduce1[3],first_reduce1[4],first_reduce1[5]);
+    assign first_reduce2[4]=csa_sum3(first_reduce1[6],first_reduce1[7],first_reduce1[8]);
+    assign first_reduce2[5]=csa_carry3(first_reduce1[6],first_reduce1[7],first_reduce1[8]);
+    assign first_reduce2[6]=csa_sum3(first_reduce1[9],first_reduce1[10],first_reduce1[11]);
+    assign first_reduce2[7]=csa_carry3(first_reduce1[9],first_reduce1[10],first_reduce1[11]);
+    wire [63:0] first_rows [0:5];
+    assign first_rows[0]=csa_sum3(first_reduce2[0],first_reduce2[1],first_reduce2[2]);
+    assign first_rows[1]=csa_carry3(first_reduce2[0],first_reduce2[1],first_reduce2[2]);
+    assign first_rows[2]=csa_sum3(first_reduce2[3],first_reduce2[4],first_reduce2[5]);
+    assign first_rows[3]=csa_carry3(first_reduce2[3],first_reduce2[4],first_reduce2[5]);
+    assign first_rows[4]=first_reduce2[6];
+    assign first_rows[5]=first_reduce2[7];
     reg s1_valid;
-    reg [63:0] s1_rows [0:7];
+    reg [63:0] s1_rows [0:5];
     wire [OP_WIDTH-1:0] s1_op;
     wire [TAG_WIDTH-1:0] s1_tag;
     wire [PHYS_ADDR_WIDTH-1:0] s1_phys;
@@ -185,9 +181,9 @@ module rv32m_multiplier #(
     wire [8:0] s2_write_domains;
     rv32_frequency_control_tree #(.LEAVES(9)) s2_write_tree (
         .signal_i(s2_ready && s1_valid && !s1_discard),.views_o(s2_write_domains));
-    wire [32:0] s1_write_domains;
-    // A single ready/valid gate must not directly drive 512 payload hold muxes.
-    rv32_frequency_control_tree #(.LEAVES(33)) s1_write_tree (
+    wire [24:0] s1_write_domains;
+    // A single ready/valid gate must not directly drive 384 payload hold muxes.
+    rv32_frequency_control_tree #(.LEAVES(25)) s1_write_tree (
         .signal_i(req_valid_i && req_ready_o),.views_o(s1_write_domains));
     wire payload_active=!reset_i && !flush_i;
     wire out_write=payload_active && out_ready && s2_valid && !s2_discard;
@@ -198,44 +194,39 @@ module rv32m_multiplier #(
     assign resp_rob_tag_o=out_tag;
     assign resp_phys_rd_o=out_phys;
     assign resp_rd_we_o=1'b1;
-    wire [63:0] l5 [0:5];
-    assign l5[0]=csa_sum3(s1_rows[0],s1_rows[1],s1_rows[2]);
-    assign l5[1]=csa_carry3(s1_rows[0],s1_rows[1],s1_rows[2]);
-    assign l5[2]=csa_sum3(s1_rows[3],s1_rows[4],s1_rows[5]);
-    assign l5[3]=csa_carry3(s1_rows[3],s1_rows[4],s1_rows[5]);
-    assign l5[4]=s1_rows[6];
-    assign l5[5]=s1_rows[7];
-    wire [63:0] l6 [0:3];
-    assign l6[0]=csa_sum3(l5[0],l5[1],l5[2]);
-    assign l6[1]=csa_carry3(l5[0],l5[1],l5[2]);
-    assign l6[2]=csa_sum3(l5[3],l5[4],l5[5]);
-    assign l6[3]=csa_carry3(l5[3],l5[4],l5[5]);
-    wire [63:0] l7 [0:2];
-    assign l7[0]=csa_sum3(l6[0],l6[1],l6[2]);
-    assign l7[1]=csa_carry3(l6[0],l6[1],l6[2]);
-    assign l7[2]=l6[3];
-    wire [63:0] l8 [0:1];
-    assign l8[0]=csa_sum3(l7[0],l7[1],l7[2]);
-    assign l8[1]=csa_carry3(l7[0],l7[1],l7[2]);
+    wire [63:0] second_reduce1 [0:3];
+    assign second_reduce1[0]=csa_sum3(s1_rows[0],s1_rows[1],s1_rows[2]);
+    assign second_reduce1[1]=csa_carry3(s1_rows[0],s1_rows[1],s1_rows[2]);
+    assign second_reduce1[2]=csa_sum3(s1_rows[3],s1_rows[4],s1_rows[5]);
+    assign second_reduce1[3]=csa_carry3(s1_rows[3],s1_rows[4],s1_rows[5]);
+    wire [63:0] second_reduce2 [0:2];
+    assign second_reduce2[0]=csa_sum3(second_reduce1[0],second_reduce1[1],second_reduce1[2]);
+    assign second_reduce2[1]=csa_carry3(second_reduce1[0],second_reduce1[1],second_reduce1[2]);
+    assign second_reduce2[2]=second_reduce1[3];
+    wire [63:0] second_rows [0:1];
+    assign second_rows[0]=csa_sum3(second_reduce2[0],second_reduce2[1],second_reduce2[2]);
+    assign second_rows[1]=csa_carry3(second_reduce2[0],second_reduce2[1],second_reduce2[2]);
     // The final CPA starts from two registered rows, never from the same
-    // cycle's four CSA layers. Both rows retain the exact modulo-2^64 sum.
-    wire [63:0] product=s2_rows[0]+s2_rows[1];
+    // cycle's three CSA layers. Both rows retain the exact modulo-2^64 sum.
+    wire [63:0] product;
+    rv32_frequency_add64_select final_add (
+        .lhs_i(s2_rows[0]),.rhs_i(s2_rows[1]),.sum_o(product));
     generate for(row=0;row<2;row=row+1) begin:g_s2_storage
         always @(posedge clk_i) begin
-            if(s2_write_domains[4*row]) s2_rows[row][15:0]<=l8[row][15:0];
-            if(s2_write_domains[4*row+1]) s2_rows[row][31:16]<=l8[row][31:16];
-            if(s2_write_domains[4*row+2]) s2_rows[row][47:32]<=l8[row][47:32];
-            if(s2_write_domains[4*row+3]) s2_rows[row][63:48]<=l8[row][63:48];
+            if(s2_write_domains[4*row]) s2_rows[row][15:0]<=second_rows[row][15:0];
+            if(s2_write_domains[4*row+1]) s2_rows[row][31:16]<=second_rows[row][31:16];
+            if(s2_write_domains[4*row+2]) s2_rows[row][47:32]<=second_rows[row][47:32];
+            if(s2_write_domains[4*row+3]) s2_rows[row][63:48]<=second_rows[row][63:48];
         end
     end endgenerate
     // Invalid payload may be overwritten even on a reset edge. Valid bits
     // below discard it; each newly valid transaction has all fields written.
-    generate for(row=0;row<8;row=row+1) begin:g_s1_storage
+    generate for(row=0;row<6;row=row+1) begin:g_s1_storage
         always @(posedge clk_i) begin
-            if(s1_write_domains[4*row]) s1_rows[row][15:0]<=l4[row][15:0];
-            if(s1_write_domains[4*row+1]) s1_rows[row][31:16]<=l4[row][31:16];
-            if(s1_write_domains[4*row+2]) s1_rows[row][47:32]<=l4[row][47:32];
-            if(s1_write_domains[4*row+3]) s1_rows[row][63:48]<=l4[row][63:48];
+            if(s1_write_domains[4*row]) s1_rows[row][15:0]<=first_rows[row][15:0];
+            if(s1_write_domains[4*row+1]) s1_rows[row][31:16]<=first_rows[row][31:16];
+            if(s1_write_domains[4*row+2]) s1_rows[row][47:32]<=first_rows[row][47:32];
+            if(s1_write_domains[4*row+3]) s1_rows[row][63:48]<=first_rows[row][63:48];
         end
     end endgenerate
     localparam integer MUL_META_WIDTH=OP_WIDTH+TAG_WIDTH+PHYS_ADDR_WIDTH+1;
@@ -243,7 +234,7 @@ module rv32m_multiplier #(
     assign {s1_op,s1_tag,s1_phys,s1_live}=s1_metadata;
     assign {s2_op,s2_tag,s2_phys,s2_live}=s2_metadata;
     rv32_frequency_word_bank #(.WIDTH(MUL_META_WIDTH)) s1_metadata_owner (
-        .clk_i(clk_i),.write_i(payload_active && s1_ready && s1_write_domains[32]),
+        .clk_i(clk_i),.write_i(payload_active && s1_ready && s1_write_domains[24]),
         .data_i({req_op_i,req_rob_tag_i,req_phys_rd_i,req_target_live_i && req_rob_tag_i[0]}),
         .data_o(s1_metadata));
     rv32_frequency_word_bank #(.WIDTH(MUL_META_WIDTH)) s2_metadata_owner (
