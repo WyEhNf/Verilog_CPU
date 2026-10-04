@@ -511,11 +511,29 @@ module rv32_icache_nonblocking #(
 
     localparam integer RESPONSE_META_WIDTH=65+EPOCH_WIDTH;
     wire response_hit_write=!reset_i && hit_array_read;
+    // Same-cycle promotion selects one completed metadata packet. Each
+    // select leaf owns at most sixteen mux bits, rather than one condition
+    // driving all epoch/PC/line-address bits after global mapping.
+    localparam integer PROMOTED_META_WIDTH=64+EPOCH_WIDTH;
+    localparam integer PROMOTED_META_WORDS=(PROMOTED_META_WIDTH+15)/16;
+    wire [PROMOTED_META_WORDS-1:0] promoted_meta_views;
+    wire [PROMOTED_META_WIDTH-1:0] promoted_meta_packet={
+        lookup_req_epoch,mem_resp_line_addr_i,lookup_req_pc};
+    wire [PROMOTED_META_WIDTH-1:0] stored_meta_packet={
+        mshr_demand_epoch[response_index],mshr_line[response_index],mshr_pc[response_index]};
+    wire [PROMOTED_META_WIDTH-1:0] memory_meta_packet;
+    rv32_frequency_control_tree #(.LEAVES(PROMOTED_META_WORDS)) promoted_meta_tree (
+        .signal_i(response_promoted),.views_o(promoted_meta_views));
+    genvar promoted_meta_word;
+    generate for(promoted_meta_word=0;promoted_meta_word<PROMOTED_META_WORDS;
+                 promoted_meta_word=promoted_meta_word+1) begin:g_promoted_meta_word
+        localparam integer LOW=promoted_meta_word*16;
+        localparam integer BITS=(PROMOTED_META_WIDTH-LOW>=16)?16:PROMOTED_META_WIDTH-LOW;
+        assign memory_meta_packet[LOW +: BITS]=promoted_meta_views[promoted_meta_word]?
+            promoted_meta_packet[LOW +: BITS]:stored_meta_packet[LOW +: BITS];
+    end endgenerate
     wire [2*RESPONSE_META_WIDTH-1:0] response_metadata_values={
-        mem_resp_error_i || !response_matches,
-        (response_promoted?lookup_req_epoch:mshr_demand_epoch[response_index]),
-        (response_promoted?mem_resp_line_addr_i:mshr_line[response_index]),
-        (response_promoted?lookup_req_pc:mshr_pc[response_index]),
+        mem_resp_error_i || !response_matches,memory_meta_packet,
         1'b0,lookup_req_epoch,request_line,lookup_req_pc};
     wire response_metadata_write;
     wire [RESPONSE_META_WIDTH-1:0] response_metadata_next,response_metadata_saved;
@@ -1003,11 +1021,21 @@ module rv32_icache_query_queue #(parameter integer EPOCH_WIDTH=4) (
 );
     reg [1:0] count;
     reg read_slot,write_slot;
-    reg [32+EPOCH_WIDTH-1:0] payload [0:1];
-    wire read_local;
-    rv32_frequency_control_tree #(.LEAVES(1)) read_tree (
-        .signal_i(read_slot),.views_o(read_local));
-    assign {pc_o,epoch_o}=read_local?payload[1]:payload[0];
+    localparam integer PAYLOAD_WIDTH=32+EPOCH_WIDTH;
+    localparam integer PAYLOAD_WORDS=(PAYLOAD_WIDTH+15)/16;
+    wire [PAYLOAD_WIDTH-1:0] payload [0:1];
+    wire [PAYLOAD_WORDS-1:0] read_views;
+    wire [PAYLOAD_WIDTH-1:0] read_payload;
+    rv32_frequency_control_tree #(.LEAVES(PAYLOAD_WORDS)) read_tree (
+        .signal_i(read_slot),.views_o(read_views));
+    assign {pc_o,epoch_o}=read_payload;
+    genvar read_word;
+    generate for(read_word=0;read_word<PAYLOAD_WORDS;read_word=read_word+1) begin:g_read_word
+        localparam integer LOW=read_word*16;
+        localparam integer BITS=(PAYLOAD_WIDTH-LOW>=16)?16:PAYLOAD_WIDTH-LOW;
+        assign read_payload[LOW +: BITS]=read_views[read_word]?
+            payload[1][LOW +: BITS]:payload[0][LOW +: BITS];
+    end endgenerate
     wire stale=count!=0 && epoch_o!=current_epoch_i;
     assign ready_o=!reset_i && count<2;
     assign valid_o=!reset_i && count!=0 && !stale;
@@ -1015,10 +1043,11 @@ module rv32_icache_query_queue #(parameter integer EPOCH_WIDTH=4) (
     wire pop=!reset_i && (stale || (valid_o && ready_i));
     genvar queue_row;
     generate for(queue_row=0;queue_row<2;queue_row=queue_row+1) begin:g_row
-        wire write_local;
-        rv32_frequency_control_tree #(.LEAVES(1)) write_tree (
-            .signal_i(push && write_slot==queue_row),.views_o(write_local));
-        always @(posedge clk_i) if(write_local) payload[queue_row]<={pc_i,epoch_i};
+        // Preserve the same two unreset payload slots and write edge.
+        // Each write leaf now owns at most sixteen existing hold muxes.
+        rv32_frequency_word_bank #(.WIDTH(PAYLOAD_WIDTH)) owner (
+            .clk_i(clk_i),.write_i(push && write_slot==queue_row),
+            .data_i({pc_i,epoch_i}),.data_o(payload[queue_row]));
     end endgenerate
     always @(posedge clk_i) begin
         if(reset_i) begin count<=0;read_slot<=0;write_slot<=0;end

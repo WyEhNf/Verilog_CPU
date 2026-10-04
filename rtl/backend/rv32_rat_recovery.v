@@ -78,16 +78,20 @@ module rv32_rat_recovery #(
         // Power-of-two ROB geometry makes narrow subtraction exactly the
         // wrapped age. No per-row compare/mux or unsized 32-bit wrap adder.
         wire [SLOT_WIDTH-1:0] branch_age=branch_slot_i-head_i;
-        wire [ROB_ENTRIES-1:0] raw_killed,raw_upper,killed,upper;
+        localparam integer ARCH_DOMAINS=(31+3)/4;
+        wire [ROB_ENTRIES-1:0] raw_killed,raw_upper;
+        wire [ARCH_DOMAINS*ROB_ENTRIES-1:0] killed,upper;
         for(row=0;row<ROB_ENTRIES;row=row+1) begin:g_age
             wire [SLOT_WIDTH-1:0] row_age=row-head_i;
             assign raw_killed[row]=valid_i[row] && rd_we_i[row] &&
                 row_age>branch_age && row_age<occupancy_i;
             assign raw_upper[row]=(row>branch_slot_i);
         end
-        rv32_frequency_control_tree #(.WIDTH(ROB_ENTRIES),.LEAVES(1)) killed_tree (
+        // One leaf serves at most four architectural registers.
+        // Keep the exact old killed/upper predicates; isolate their consumers.
+        rv32_frequency_control_tree #(.WIDTH(ROB_ENTRIES),.LEAVES(ARCH_DOMAINS)) killed_tree (
             .signal_i(raw_killed),.views_o(killed));
-        rv32_frequency_control_tree #(.WIDTH(ROB_ENTRIES),.LEAVES(1)) upper_tree (
+        rv32_frequency_control_tree #(.WIDTH(ROB_ENTRIES),.LEAVES(ARCH_DOMAINS)) upper_tree (
             .signal_i(raw_upper),.views_o(upper));
         assign undo_result[0 +: PAW]=rat_i[0 +: PAW];
         for(arch=1;arch<32;arch=arch+1) begin:g_arch
@@ -105,8 +109,9 @@ module rv32_rat_recovery #(
                 localparam integer GROUP=row/8;
                 localparam integer FIRST=GROUP*8;
                 wire any_before_group,upper_before_group,any_before_row,upper_before_row;
-                assign row_match_mask[row]=killed[row] && rd_i[row*5 +: 5]==arch;
-                assign upper_matches[row]=row_match_mask[row] && upper[row];
+                localparam integer ARCH_DOMAIN=(arch-1)/4;
+                assign row_match_mask[row]=killed[ARCH_DOMAIN*ROB_ENTRIES+row] && rd_i[row*5 +: 5]==arch;
+                assign upper_matches[row]=row_match_mask[row] && upper[ARCH_DOMAIN*ROB_ENTRIES+row];
                 if(GROUP==0) begin:g_first_group
                     assign any_before_group=0;assign upper_before_group=0;
                 end else begin:g_later_group
