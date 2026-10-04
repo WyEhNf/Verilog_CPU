@@ -139,7 +139,6 @@ module rv32_icache_nonblocking #(
     integer send_index;
     integer response_index;
     integer prefetch_match_index;
-    integer control_word;
     integer control_check;
     integer control_way;
     reg request_match_found;
@@ -147,21 +146,9 @@ module rv32_icache_nonblocking #(
     reg send_found;
     reg response_target_found;
     reg prefetch_match_found;
-    reg control_target_valid;
+    wire control_target_valid;
     reg control_target_present;
-    reg [31:0] control_inst;
-    reg [31:0] control_pc;
-    reg [31:0] control_target;
-    reg [31:0] control_candidate;
-    reg control_target_forward;
-
-    function [31:0] jal_immediate;
-        input [31:0] inst;
-        begin
-            jal_immediate = {{11{inst[31]}}, inst[31], inst[19:12],
-                             inst[20], inst[30:21], 1'b0};
-        end
-    endfunction
+    wire [31:0] control_target;
 
     always @* begin
         request_match_found = 1'b0;
@@ -249,35 +236,42 @@ module rv32_icache_nonblocking #(
     wire response_matches = response_target_found &&
                             (mshr_line[response_index] == mem_resp_line_addr_i);
 
-    // Inspect every returned line, including ordinary sequential prefetches,
-    // for a direct jump whose target is outside that line.  Reusing the
-    // completing MSHR starts fetching a cold call target before the jump is
-    // reached by demand fetch (e.g. startup code entering main).
-    always @* begin
-        control_target_valid = 1'b0;
-        control_target_present = 1'b0;
-        control_inst = 32'd0;
-        control_pc = mem_resp_line_addr_i;
-        control_target = 32'd0;
-        control_candidate = 32'd0;
-        control_target_forward = 1'b0;
-        for (control_word = 0; control_word < 4;
-             control_word = control_word + 1) begin
-            control_inst = mem_resp_data_i >> (control_word * 32);
-            control_pc = mem_resp_line_addr_i + (control_word * 32'd4);
-            if (control_inst[6:0] == 7'b1101111) begin
-                control_candidate = control_pc + jal_immediate(control_inst);
-                if ((control_candidate[31:4] !=
-                     mem_resp_line_addr_i[31:4]) &&
-                    (!control_target_valid ||
-                     (!control_target_forward &&
-                      (control_candidate > control_pc)))) begin
-                    control_target = control_candidate;
-                    control_target_valid = 1'b1;
-                    control_target_forward = control_candidate > control_pc;
-                end
-            end
+    // The former scan chooses the earliest forward outside-line JAL,
+    // otherwise the earliest outside-line JAL. Four independent candidates
+    // and scalar prefix grants retain that exact word priority.
+    // Distribute the shared response address before its arithmetic/comparators.
+    wire [127:0] control_base_views,control_candidates;
+    wire [3:0] control_outside,control_forward,control_preferred,control_grants;
+    wire control_has_forward=|control_forward;
+    rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(4)) control_base_tree (
+        .signal_i(mem_resp_line_addr_i),.views_o(control_base_views));
+    generate for(genvar control_lane=0;control_lane<4;control_lane=control_lane+1) begin:g_control_candidate
+        wire [31:0] inst=mem_resp_data_i[control_lane*32 +: 32];
+        wire [31:0] base=control_base_views[control_lane*32 +: 32];
+        // A J-immediate is signed21 bits with bit0=0. Adding 0/4/8/12
+        // fits signed22 bits, including the positive-limit carry. This moves
+        // the word displacement off the shared full-width PC carry path.
+        wire [21:0] displaced_immediate=
+            {inst[31],inst[31],inst[19:12],inst[20],inst[30:21],1'b0}+22'(control_lane*4);
+        wire [31:0] candidate=base+{{10{displaced_immediate[21]}},displaced_immediate};
+        wire [31:0] pc=base+32'(control_lane*4);
+        assign control_candidates[control_lane*32 +: 32]=candidate;
+        assign control_outside[control_lane]=(inst[6:0]==7'b1101111) && candidate[31:4]!=base[31:4];
+        // Preserve the original UNSIGNED comparison, including address wrap.
+        assign control_forward[control_lane]=control_outside[control_lane] && candidate>pc;
+        assign control_preferred[control_lane]=control_has_forward?
+            control_forward[control_lane]:control_outside[control_lane];
+        if(control_lane==0) begin:g_first
+            assign control_grants[control_lane]=control_preferred[control_lane];
+        end else begin:g_following
+            assign control_grants[control_lane]=control_preferred[control_lane] && !(|control_preferred[control_lane-1:0]);
         end
+    end endgenerate
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(4),.PRIORITY(0)) control_target_selector (
+        .events_i(control_grants),.values_i(control_candidates),
+        .write_o(control_target_valid),.value_o(control_target));
+    always @* begin
+        control_target_present=1'b0;
         if (control_target_valid) begin
             control_target_present = request_fire &&
                 (request_line == {control_target[31:4], 4'b0});

@@ -248,8 +248,8 @@ module rv32_rob #(
     integer update_alloc_entry;
     reg recovery_found;
     reg recovery_saved_valid;
-    reg [SLOT_WIDTH-1:0] recovery_saved_slot, recovery_saved_age;
-    reg [ROB_ENTRIES-1:0] recovery_saved_kill;
+    wire [SLOT_WIDTH-1:0] recovery_saved_slot, recovery_saved_age;
+    wire [ROB_ENTRIES-1:0] recovery_saved_kill;
     wire [ROB_ENTRIES-1:0] recovery_preview_kill;
     wire [SLOT_WIDTH-1:0] apply_slot = STAGED_RECOVERY ? recovery_saved_slot : chosen_slot;
     wire [SLOT_WIDTH-1:0] apply_age = STAGED_RECOVERY ? recovery_saved_age : chosen_age;
@@ -266,12 +266,37 @@ module rv32_rob #(
     assign recovery_accept_o=recovery_domains[0];
     assign redirect_valid_o=STAGED_RECOVERY ? recovery_preview_domains[1] : recovery_domains[1];
     assign checkpoint_restore_valid_o=recovery_domains[2];
+    // chosen_age is either a slot distance or ROB_ENTRIES+1 (no match).
+    // COUNT_WIDTH retains that sentinel; SLOT_WIDTH alone would truncate it.
+    localparam integer RECOVERY_QUERY_WIDTH=SLOT_WIDTH+2*COUNT_WIDTH+1;
+    localparam integer RECOVERY_QUERY_DOMAINS=(ROB_ENTRIES+3)/4;
+    wire [RECOVERY_QUERY_DOMAINS*RECOVERY_QUERY_WIDTH-1:0] recovery_query_views;
+    wire [ROB_ENTRIES-1:0] recovery_row_preview;
+    rv32_frequency_control_tree #(.WIDTH(RECOVERY_QUERY_WIDTH),.LEAVES(RECOVERY_QUERY_DOMAINS)) recovery_query_tree (
+        .signal_i({recovery_preview_domains[2],head_recovery_index,COUNT_WIDTH'(chosen_age),occupancy_reg}),
+        .views_o(recovery_query_views));
     genvar recovery_row;
     generate for(recovery_row=0;recovery_row<ROB_ENTRIES;recovery_row=recovery_row+1) begin:g_recovery_descriptor
-        wire [SLOT_WIDTH-1:0] relative_age = recovery_row-head_recovery_index;
-        assign recovery_preview_kill[recovery_row] = valid_mem[recovery_row] &&
-            relative_age>chosen_age && relative_age<occupancy_reg;
+        wire preview;
+        wire [SLOT_WIDTH-1:0] local_head;
+        wire [COUNT_WIDTH-1:0] local_branch_age,local_occupancy;
+        assign {preview,local_head,local_branch_age,local_occupancy}=
+            recovery_query_views[(recovery_row/4)*RECOVERY_QUERY_WIDTH +: RECOVERY_QUERY_WIDTH];
+        wire [SLOT_WIDTH-1:0] relative_age=recovery_row-local_head;
+        assign recovery_preview_kill[recovery_row]=valid_mem[recovery_row] &&
+            relative_age>local_branch_age && relative_age<local_occupancy;
+        assign recovery_row_preview[recovery_row]=preview;
     end endgenerate
+    localparam integer RECOVERY_SAVED_WIDTH=ROB_ENTRIES+2*SLOT_WIDTH;
+    wire [RECOVERY_SAVED_WIDTH-1:0] recovery_saved_payload;
+    wire recovery_save_payload=!reset_i && !recovery_domains[5] && recovery_hold &&
+        recovery_preview_domains[0] && !recovery_saved_valid;
+    assign {recovery_saved_slot,recovery_saved_age,recovery_saved_kill}=recovery_saved_payload;
+    // Same preview edge and unreset payload as the original descriptor.
+    rv32_frequency_word_bank #(.WIDTH(RECOVERY_SAVED_WIDTH)) recovery_saved_owner (
+        .clk_i(clk_i),.write_i(recovery_save_payload),
+        .data_i({SLOT_WIDTH'(chosen_slot),SLOT_WIDTH'(chosen_age),recovery_preview_kill}),
+        .data_o(recovery_saved_payload));
     // Allocation and commit are held between preview and apply, so these
     // physical slot identities cannot be reused while the mask is pending.
     always @(posedge clk_i) begin
@@ -279,9 +304,7 @@ module rv32_rob #(
         else if(recovery_domains[5] || !recovery_hold) recovery_saved_valid<=1'b0;
         else if(recovery_preview_domains[0] && !recovery_saved_valid) begin
             recovery_saved_valid<=1'b1;
-            recovery_saved_slot<=chosen_slot;
-            recovery_saved_age<=chosen_age;
-            recovery_saved_kill<=recovery_preview_kill;
+            // Payload is captured by the bounded owner on this same edge.
         end
     end
     reg prefix_open;
@@ -616,9 +639,9 @@ module rv32_rob #(
     genvar reclaim_entry, reclaim_phys, reclaim_match, reclaim_node;
     generate
         for (reclaim_entry = 0; reclaim_entry < ROB_ENTRIES; reclaim_entry = reclaim_entry + 1) begin : g_reclaim_age
-            wire [SLOT_WIDTH-1:0] relative_age = reclaim_entry - head_recovery_index;
-            assign reclaim_eligible[reclaim_entry] = recovery_preview_domains[2] && valid_mem[reclaim_entry] &&
-                rd_we_mem[reclaim_entry] && (relative_age > chosen_age) && (relative_age < occupancy_reg);
+            // Share the exact per-row interval predicate with the saved mask.
+            assign reclaim_eligible[reclaim_entry]=recovery_row_preview[reclaim_entry] &&
+                rd_we_mem[reclaim_entry] && recovery_preview_kill[reclaim_entry];
         end
         for (reclaim_phys = 0; reclaim_phys < RECLAIM_LEAVES; reclaim_phys = reclaim_phys + 1) begin : g_reclaim_phys
             if (reclaim_phys > 0 && reclaim_phys < PHYS_REGS) begin : g_register
@@ -649,6 +672,44 @@ module rv32_rob #(
             $finish;
         end
     end
+
+    // Recovery lane tags query only live/generation metadata. Qualified
+    // destination/checkpoint payload has a separate selected-slot read.
+    localparam integer RECOVERY_LIVE_WIDTH=GENERATION_WIDTH+1;
+    localparam integer RECOVERY_DEST_WIDTH=6+PHYS_ADDR_WIDTH+CHECKPOINT_WIDTH;
+    wire [ROB_ENTRIES*RECOVERY_LIVE_WIDTH-1:0] recovery_live_rows;
+    wire [ROB_ENTRIES*RECOVERY_DEST_WIDTH-1:0] recovery_dest_rows;
+    wire [BE_WIDTH-1:0] recovery_lane_live;
+    wire [RECOVERY_DEST_WIDTH-1:0] recovery_selected_dest;
+    wire recovery_selected_rd_we;
+    wire [4:0] recovery_selected_rd;
+    wire [PHYS_ADDR_WIDTH-1:0] recovery_selected_phys;
+    wire [CHECKPOINT_WIDTH-1:0] recovery_selected_checkpoint;
+    assign {recovery_selected_checkpoint,recovery_selected_rd_we,recovery_selected_rd,recovery_selected_phys}=
+        recovery_selected_dest;
+    generate
+        for(genvar recovery_query_row=0;recovery_query_row<ROB_ENTRIES;recovery_query_row=recovery_query_row+1) begin:g_recovery_query_row
+            assign recovery_live_rows[recovery_query_row*RECOVERY_LIVE_WIDTH +: RECOVERY_LIVE_WIDTH]=
+                {valid_mem[recovery_query_row],generation_mem[recovery_query_row]};
+            if(CHECKPOINT_IMPL==0) begin:g_checkpoint
+                assign recovery_dest_rows[recovery_query_row*RECOVERY_DEST_WIDTH +: RECOVERY_DEST_WIDTH]=
+                    {checkpoint_mem[recovery_query_row],rd_we_mem[recovery_query_row],rd_mem[recovery_query_row],new_phys_mem[recovery_query_row]};
+            end else begin:g_no_checkpoint
+                assign recovery_dest_rows[recovery_query_row*RECOVERY_DEST_WIDTH +: RECOVERY_DEST_WIDTH]=
+                    {{CHECKPOINT_WIDTH{1'b0}},rd_we_mem[recovery_query_row],rd_mem[recovery_query_row],new_phys_mem[recovery_query_row]};
+            end
+        end
+        for(genvar recovery_query_lane=0;recovery_query_lane<BE_WIDTH;recovery_query_lane=recovery_query_lane+1) begin:g_recovery_lane_query
+            wire [TAG_WIDTH-1:0] tag=recovery_tag_i[recovery_query_lane*TAG_WIDTH +: TAG_WIDTH];
+            wire [RECOVERY_LIVE_WIDTH-1:0] live_state;
+            rv32_frequency_array_read #(.WIDTH(RECOVERY_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) live_reader (
+                .rows_i(recovery_live_rows),.index_i(tag[SLOT_LSB +: SLOT_WIDTH]),.value_o(live_state));
+            assign recovery_lane_live[recovery_query_lane]=tag[VALID_LSB] && live_state[GENERATION_WIDTH] &&
+                tag[GEN_LSB +: GENERATION_WIDTH]==live_state[0 +: GENERATION_WIDTH];
+        end
+    endgenerate
+    rv32_frequency_array_read #(.WIDTH(RECOVERY_DEST_WIDTH),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) recovery_dest_reader (
+        .rows_i(recovery_dest_rows),.index_i(SLOT_WIDTH'(chosen_slot)),.value_o(recovery_selected_dest));
 
     // Allocation and all observable outputs are evaluated from old state.
     always @* begin
@@ -683,7 +744,7 @@ module rv32_rob #(
             recovery_slot = recovery_tag_i[(recovery_lane*TAG_WIDTH) + SLOT_LSB +: SLOT_WIDTH];
             age = recovery_slot - head_recovery_index;
             if (recovery_valid_i[recovery_lane] &&
-                tag_matches(recovery_tag_i[(recovery_lane*TAG_WIDTH) +: TAG_WIDTH], recovery_slot) &&
+                recovery_lane_live[recovery_lane] &&
                 (age < occupancy_reg) && (!recovery_found || age < chosen_age)) begin
                 recovery_found = 1'b1;
                 chosen_age = age;
@@ -701,10 +762,10 @@ module rv32_rob #(
         if (recovery_preview_domains[2]) begin
             redirect_pc_o = recovery_pc_i[0 +: 32];
             if (CHECKPOINT_IMPL == 0)
-                checkpoint_restore_o = checkpoint_mem[chosen_slot];
-            recovery_rd_we_o = rd_we_mem[chosen_slot];
-            recovery_rd_o = rd_mem[chosen_slot];
-            recovery_new_phys_o = new_phys_mem[chosen_slot];
+                checkpoint_restore_o = recovery_selected_checkpoint;
+            recovery_rd_we_o = recovery_selected_rd_we;
+            recovery_rd_o = recovery_selected_rd;
+            recovery_new_phys_o = recovery_selected_phys;
         end
 
         commit_valid_o = {BE_WIDTH{1'b0}};
