@@ -44,14 +44,30 @@ module rv32m_multiplier #(
                 (req_op_i==`RV32IM_OP_MULHSU)) && req_src1_i[31];
     wire neg_b=(req_op_i==`RV32IM_OP_MULH) && req_src2_i[31];
     wire [63:0] pp [0:35];
+    wire [127:0] multiplicand_views;
+    wire [5:0] negative_views;
+    rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(4)) multiplicand_tree (
+        .signal_i(req_src1_i),.views_o(multiplicand_views));
+    rv32_frequency_control_tree #(.WIDTH(2),.LEAVES(3)) negative_tree (
+        .signal_i({neg_b,neg_a}),.views_o(negative_views));
     genvar row;
     generate for(row=0;row<32;row=row+1) begin:g_pp
-        assign pp[row]=req_src2_i[row]?({32'b0,req_src1_i}<<row):64'b0;
+        wire [1:0] multiplier_views;
+        wire [31:0] relative_product;
+        rv32_frequency_control_tree #(.LEAVES(2)) multiplier_bit_tree (
+            .signal_i(req_src2_i[row]),.views_o(multiplier_views));
+        for(genvar product_word=0;product_word<2;product_word=product_word+1) begin:g_word
+            assign relative_product[product_word*16 +: 16]=
+                {16{multiplier_views[product_word]}} & multiplicand_views[(row/8)*32+product_word*16 +: 16];
+        end
+        assign pp[row]={32'b0,relative_product}<<row;
     end endgenerate
-    assign pp[32]=neg_a?{~req_src2_i,32'b0}:64'b0;
-    assign pp[33]=neg_a?64'h0000000100000000:64'b0;
-    assign pp[34]=neg_b?{~req_src1_i,32'b0}:64'b0;
-    assign pp[35]=neg_b?64'h0000000100000000:64'b0;
+    assign pp[32]={({16{negative_views[2]}} & ~req_src2_i[31:16]),
+                   ({16{negative_views[0]}} & ~req_src2_i[15:0]),32'b0};
+    assign pp[33]={31'b0,negative_views[4],32'b0};
+    assign pp[34]={({16{negative_views[3]}} & ~req_src1_i[31:16]),
+                   ({16{negative_views[1]}} & ~req_src1_i[15:0]),32'b0};
+    assign pp[35]={31'b0,negative_views[5],32'b0};
     wire [63:0] l1 [0:23];
     assign l1[0]=csa_sum3(pp[0],pp[1],pp[2]);
     assign l1[1]=csa_carry3(pp[0],pp[1],pp[2]);
@@ -117,21 +133,21 @@ module rv32m_multiplier #(
     assign l4[7]=l3[10];
     reg s1_valid;
     reg [63:0] s1_rows [0:7];
-    reg [OP_WIDTH-1:0] s1_op;
-    reg [TAG_WIDTH-1:0] s1_tag;
-    reg [PHYS_ADDR_WIDTH-1:0] s1_phys;
-    reg s1_live;
+    wire [OP_WIDTH-1:0] s1_op;
+    wire [TAG_WIDTH-1:0] s1_tag;
+    wire [PHYS_ADDR_WIDTH-1:0] s1_phys;
+    wire s1_live;
     reg s2_valid;
     reg [63:0] s2_rows [0:1];
-    reg [OP_WIDTH-1:0] s2_op;
-    reg [TAG_WIDTH-1:0] s2_tag;
-    reg [PHYS_ADDR_WIDTH-1:0] s2_phys;
-    reg s2_live;
+    wire [OP_WIDTH-1:0] s2_op;
+    wire [TAG_WIDTH-1:0] s2_tag;
+    wire [PHYS_ADDR_WIDTH-1:0] s2_phys;
+    wire s2_live;
     reg out_valid;
-    reg [31:0] out_value;
-    reg [TAG_WIDTH-1:0] out_tag;
-    reg [PHYS_ADDR_WIDTH-1:0] out_phys;
-    reg out_live;
+    wire [31:0] out_value;
+    wire [TAG_WIDTH-1:0] out_tag;
+    wire [PHYS_ADDR_WIDTH-1:0] out_phys;
+    wire out_live;
     wire s1_discard=s1_valid && (!s1_live ||
         (live_tag_valid_i && s1_tag!=live_tag_i));
     wire out_discard=out_valid && (!out_live ||
@@ -141,16 +157,15 @@ module rv32m_multiplier #(
         (live_tag_valid_i && s2_tag!=live_tag_i));
     wire s2_ready=!s2_valid || out_ready || s2_discard;
     wire s1_ready=!s1_valid || s2_ready || s1_discard;
-    wire [4:0] s2_write_domains;
-    rv32_frequency_control_tree #(.LEAVES(5)) s2_write_tree (
+    wire [8:0] s2_write_domains;
+    rv32_frequency_control_tree #(.LEAVES(9)) s2_write_tree (
         .signal_i(s2_ready && s1_valid && !s1_discard),.views_o(s2_write_domains));
-    wire [16:0] s1_write_domains;
-    wire [1:0] out_write_domains;
+    wire [32:0] s1_write_domains;
     // A single ready/valid gate must not directly drive 512 payload hold muxes.
-    rv32_frequency_control_tree #(.LEAVES(17)) s1_write_tree (
+    rv32_frequency_control_tree #(.LEAVES(33)) s1_write_tree (
         .signal_i(req_valid_i && req_ready_o),.views_o(s1_write_domains));
-    rv32_frequency_control_tree #(.LEAVES(2)) out_write_tree (
-        .signal_i(out_ready && s2_valid && !s2_discard),.views_o(out_write_domains));
+    wire payload_active=!reset_i && !flush_i;
+    wire out_write=payload_active && out_ready && s2_valid && !s2_discard;
     assign req_ready_o=!flush_i && s1_ready;
     assign resp_valid_o=out_valid && out_live &&
         (!live_tag_valid_i || out_tag==live_tag_i);
@@ -182,18 +197,47 @@ module rv32m_multiplier #(
     wire [63:0] product=s2_rows[0]+s2_rows[1];
     generate for(row=0;row<2;row=row+1) begin:g_s2_storage
         always @(posedge clk_i) begin
-            if(s2_write_domains[2*row]) s2_rows[row][31:0]<=l8[row][31:0];
-            if(s2_write_domains[2*row+1]) s2_rows[row][63:32]<=l8[row][63:32];
+            if(s2_write_domains[4*row]) s2_rows[row][15:0]<=l8[row][15:0];
+            if(s2_write_domains[4*row+1]) s2_rows[row][31:16]<=l8[row][31:16];
+            if(s2_write_domains[4*row+2]) s2_rows[row][47:32]<=l8[row][47:32];
+            if(s2_write_domains[4*row+3]) s2_rows[row][63:48]<=l8[row][63:48];
         end
     end endgenerate
     // Invalid payload may be overwritten even on a reset edge. Valid bits
     // below discard it; each newly valid transaction has all fields written.
     generate for(row=0;row<8;row=row+1) begin:g_s1_storage
         always @(posedge clk_i) begin
-            if(s1_write_domains[2*row]) s1_rows[row][31:0]<=l4[row][31:0];
-            if(s1_write_domains[2*row+1]) s1_rows[row][63:32]<=l4[row][63:32];
+            if(s1_write_domains[4*row]) s1_rows[row][15:0]<=l4[row][15:0];
+            if(s1_write_domains[4*row+1]) s1_rows[row][31:16]<=l4[row][31:16];
+            if(s1_write_domains[4*row+2]) s1_rows[row][47:32]<=l4[row][47:32];
+            if(s1_write_domains[4*row+3]) s1_rows[row][63:48]<=l4[row][63:48];
         end
     end endgenerate
+    localparam integer MUL_META_WIDTH=OP_WIDTH+TAG_WIDTH+PHYS_ADDR_WIDTH+1;
+    wire [MUL_META_WIDTH-1:0] s1_metadata,s2_metadata;
+    assign {s1_op,s1_tag,s1_phys,s1_live}=s1_metadata;
+    assign {s2_op,s2_tag,s2_phys,s2_live}=s2_metadata;
+    rv32_frequency_word_bank #(.WIDTH(MUL_META_WIDTH)) s1_metadata_owner (
+        .clk_i(clk_i),.write_i(payload_active && s1_ready && s1_write_domains[32]),
+        .data_i({req_op_i,req_rob_tag_i,req_phys_rd_i,req_target_live_i && req_rob_tag_i[0]}),
+        .data_o(s1_metadata));
+    rv32_frequency_word_bank #(.WIDTH(MUL_META_WIDTH)) s2_metadata_owner (
+        .clk_i(clk_i),.write_i(payload_active && s2_write_domains[8]),
+        .data_i(s1_metadata),.data_o(s2_metadata));
+    wire [TAG_WIDTH+PHYS_ADDR_WIDTH:0] out_metadata;
+    assign {out_tag,out_phys,out_live}=out_metadata;
+    rv32_frequency_word_bank #(.WIDTH(TAG_WIDTH+PHYS_ADDR_WIDTH+1)) out_metadata_owner (
+        .clk_i(clk_i),.write_i(out_write),.data_i({s2_tag,s2_phys,s2_live}),.data_o(out_metadata));
+    wire [31:0] out_next_value;
+    wire unused_result_select_write;
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(2),.PRIORITY(0)) out_value_selector (
+        .events_i({(s2_op==`RV32IM_OP_MULH || s2_op==`RV32IM_OP_MULHSU || s2_op==`RV32IM_OP_MULHU),
+                   (s2_op==`RV32IM_OP_MUL)}),
+        .values_i({product[63:32],product[31:0]}),
+        .write_o(unused_result_select_write),.value_o(out_next_value));
+    rv32_frequency_word_bank #(.WIDTH(32)) out_value_owner (
+        .clk_i(clk_i),.write_i(out_write),.data_i(out_next_value),.data_o(out_value));
+
     always @(posedge clk_i) begin
         if(reset_i || flush_i) begin
             s1_valid<=1'b0;
@@ -202,32 +246,12 @@ module rv32m_multiplier #(
         end else begin
             if(s1_ready) begin
                 s1_valid<=req_valid_i && req_ready_o;
-                if(s1_write_domains[16]) begin
-                    s1_op<=req_op_i;
-                    s1_tag<=req_rob_tag_i;
-                    s1_phys<=req_phys_rd_i;
-                    s1_live<=req_target_live_i && req_rob_tag_i[0];
-                end
+                // Metadata owner below captures on this same qualified edge.
             end
             if(s2_ready) s2_valid<=s1_valid && !s1_discard;
-            if(s2_write_domains[4]) begin
-                s2_op<=s1_op;s2_tag<=s1_tag;s2_phys<=s1_phys;s2_live<=s1_live;
-            end
+            // Metadata owner below captures on the original transfer edge.
             if(out_ready) begin
                 out_valid<=s2_valid && !s2_discard;
-            end
-            if(out_write_domains[0]) begin
-                    case(s2_op)
-                        `RV32IM_OP_MUL: out_value<=product[31:0];
-                        `RV32IM_OP_MULH,`RV32IM_OP_MULHSU,`RV32IM_OP_MULHU:
-                            out_value<=product[63:32];
-                        default: out_value<=32'b0;
-                    endcase
-            end
-            if(out_write_domains[1]) begin
-                    out_tag<=s2_tag;
-                    out_phys<=s2_phys;
-                    out_live<=s2_live;
             end
         end
     end

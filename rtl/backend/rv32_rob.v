@@ -635,6 +635,12 @@ module rv32_rob #(
     localparam integer RECLAIM_LEAVES = 2 ** ((PHYS_REGS <= 1) ? 0 : $clog2(PHYS_REGS));
     wire [ROB_ENTRIES-1:0] reclaim_eligible;
     wire [PHYS_REGS-1:0] reclaim_bitmap;
+    localparam integer RECLAIM_LOW_WIDTH=(PHYS_ADDR_WIDTH/2<1)?1:PHYS_ADDR_WIDTH/2;
+    localparam integer RECLAIM_HIGH_WIDTH=PHYS_ADDR_WIDTH-RECLAIM_LOW_WIDTH;
+    localparam integer RECLAIM_HIGH_SLICE_WIDTH=(RECLAIM_HIGH_WIDTH<1)?1:RECLAIM_HIGH_WIDTH;
+    localparam integer RECLAIM_LOW_CODES=1<<RECLAIM_LOW_WIDTH;
+    localparam integer RECLAIM_HIGH_CODES=1<<RECLAIM_HIGH_WIDTH;
+    wire [ROB_ENTRIES*PHYS_REGS-1:0] reclaim_row_destinations;
     wire [RECLAIM_COUNT_WIDTH-1:0] reclaim_count_tree [1:2*RECLAIM_LEAVES-1];
     genvar reclaim_entry, reclaim_phys, reclaim_match, reclaim_node;
     generate
@@ -643,12 +649,44 @@ module rv32_rob #(
             assign reclaim_eligible[reclaim_entry]=recovery_row_preview[reclaim_entry] &&
                 rd_we_mem[reclaim_entry] && recovery_preview_kill[reclaim_entry];
         end
+        // Qualify the small high predecode before the cross-product. With
+        // PHYS64 each eligibility source owns eight decode consumers rather
+        // than one comparison/qualification gate for every physical register.
+        // Kept inversion boundaries retain the two predecode domains through
+        // course ABC; each current predecode bit has <=eight final consumers.
+        for(genvar reclaim_decode_row=0;reclaim_decode_row<ROB_ENTRIES;reclaim_decode_row=reclaim_decode_row+1) begin:g_reclaim_destination_row
+            wire [PHYS_ADDR_WIDTH-1:0] destination=new_phys_mem[reclaim_decode_row];
+            wire [RECLAIM_HIGH_SLICE_WIDTH-1:0] high_destination=destination>>RECLAIM_LOW_WIDTH;
+            wire [RECLAIM_LOW_CODES-1:0] low_decode,low_views;
+            wire [RECLAIM_HIGH_CODES-1:0] high_decode,high_views;
+            for(genvar low_code=0;low_code<RECLAIM_LOW_CODES;low_code=low_code+1) begin:g_low_code
+                assign low_decode[low_code]=destination[0 +: RECLAIM_LOW_WIDTH]==RECLAIM_LOW_WIDTH'(low_code);
+            end
+            for(genvar high_code=0;high_code<RECLAIM_HIGH_CODES;high_code=high_code+1) begin:g_high_code
+                // No zero-width part-select/cast even at PHYS_ADDR_WIDTH=1.
+                // In that case the sole high_destination/code is constant0.
+                assign high_decode[high_code]=reclaim_eligible[reclaim_decode_row] &&
+                    high_destination==RECLAIM_HIGH_SLICE_WIDTH'(high_code);
+            end
+            rv32_frequency_control_tree #(.WIDTH(RECLAIM_LOW_CODES),.LEAVES(1)) low_decode_tree (
+                .signal_i(low_decode),.views_o(low_views));
+            rv32_frequency_control_tree #(.WIDTH(RECLAIM_HIGH_CODES),.LEAVES(1)) high_decode_tree (
+                .signal_i(high_decode),.views_o(high_views));
+            for(genvar destination_phys=0;destination_phys<PHYS_REGS;destination_phys=destination_phys+1) begin:g_destination
+                if(destination_phys==0) begin:g_zero
+                    assign reclaim_row_destinations[reclaim_decode_row*PHYS_REGS+destination_phys]=1'b0;
+                end else begin:g_register
+                    assign reclaim_row_destinations[reclaim_decode_row*PHYS_REGS+destination_phys]=
+                        low_views[destination_phys%RECLAIM_LOW_CODES] && high_views[destination_phys/RECLAIM_LOW_CODES];
+                end
+            end
+        end
         for (reclaim_phys = 0; reclaim_phys < RECLAIM_LEAVES; reclaim_phys = reclaim_phys + 1) begin : g_reclaim_phys
             if (reclaim_phys > 0 && reclaim_phys < PHYS_REGS) begin : g_register
                 wire [ROB_ENTRIES-1:0] destination_matches;
                 for (reclaim_match = 0; reclaim_match < ROB_ENTRIES; reclaim_match = reclaim_match + 1) begin : g_match
-                    assign destination_matches[reclaim_match] = reclaim_eligible[reclaim_match] &&
-                        (new_phys_mem[reclaim_match] == reclaim_phys);
+                    assign destination_matches[reclaim_match]=
+                        reclaim_row_destinations[reclaim_match*PHYS_REGS+reclaim_phys];
                 end
                 assign reclaim_bitmap[reclaim_phys] = |destination_matches;
                 assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys] = |destination_matches;

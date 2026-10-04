@@ -197,12 +197,24 @@ module rv32_dcache_nonblocking #(
     wire request_data_ready;
     wire request_dirty_victim;
     wire tag_array_write = refill_array_write || local_array_write;
-    wire [CACHE_ENTRY_WIDTH-1:0] tag_write_entry = local_array_write ?
-        query_local_mshr_victim_entry : query_response_mshr_victim_entry;
-    wire [CACHE_INDEX_WIDTH-1:0] tag_write_set = tag_write_entry / CACHE_WAYS;
-    wire [CACHE_TAG_WIDTH-1:0] tag_write_value = local_array_write ?
-        query_local_mshr_addr[31:CACHE_INDEX_WIDTH+4] :
-        query_response_mshr_addr[31:CACHE_INDEX_WIDTH+4];
+    localparam integer TAG_WRITE_INPUT_WIDTH=CACHE_ENTRY_WIDTH+CACHE_TAG_WIDTH;
+    localparam integer TAG_WRITE_INPUT_WORDS=(TAG_WRITE_INPUT_WIDTH+15)/16;
+    wire [CACHE_ENTRY_WIDTH-1:0] tag_write_entry;
+    wire [CACHE_INDEX_WIDTH-1:0] tag_write_set=tag_write_entry/CACHE_WAYS;
+    wire [CACHE_TAG_WIDTH-1:0] tag_write_value;
+    wire [TAG_WRITE_INPUT_WIDTH-1:0] local_tag_input,response_tag_input,selected_tag_input;
+    wire [TAG_WRITE_INPUT_WORDS-1:0] tag_write_source_views;
+    assign local_tag_input={query_local_mshr_victim_entry,query_local_mshr_addr[31:CACHE_INDEX_WIDTH+4]};
+    assign response_tag_input={query_response_mshr_victim_entry,query_response_mshr_addr[31:CACHE_INDEX_WIDTH+4]};
+    assign {tag_write_entry,tag_write_value}=selected_tag_input;
+    rv32_frequency_control_tree #(.LEAVES(TAG_WRITE_INPUT_WORDS)) tag_write_source_tree (
+        .signal_i(local_array_write),.views_o(tag_write_source_views));
+    generate for(genvar tag_input_word=0;tag_input_word<TAG_WRITE_INPUT_WORDS;tag_input_word=tag_input_word+1) begin:g_tag_input_word
+        localparam integer LOW=tag_input_word*16;
+        localparam integer BITS=(TAG_WRITE_INPUT_WIDTH-LOW>=16)?16:TAG_WRITE_INPUT_WIDTH-LOW;
+        assign selected_tag_input[LOW +: BITS]=tag_write_source_views[tag_input_word]?
+            local_tag_input[LOW +: BITS]:response_tag_input[LOW +: BITS];
+    end endgenerate
     wire [CACHE_WAYS-1:0] tag_write_mask = (CACHE_WAYS == 1) ? 1'b1 :
         (2'b01 << tag_write_entry[0]);
     reg request_hit;
@@ -315,27 +327,38 @@ module rv32_dcache_nonblocking #(
         wire [3*CACHE_WAYS-1:0] hold_event_views;
         rv32_frequency_control_tree #(.WIDTH(3),.LEAVES(CACHE_WAYS)) hold_event_tree (
             .signal_i({reset_i,query_data_from_sram,query_from_sram}),.views_o(hold_event_views));
+        localparam integer TAG_FORWARD_WIDTH=1+CACHE_WAYS+CACHE_INDEX_WIDTH+CACHE_TAG_WIDTH;
+        wire [CACHE_WAYS*TAG_FORWARD_WIDTH-1:0] tag_forward_views;
+        rv32_frequency_control_tree #(.WIDTH(TAG_FORWARD_WIDTH),.LEAVES(CACHE_WAYS)) tag_forward_tree (
+            .signal_i({tag_array_write,tag_write_mask,tag_write_set,tag_write_value}),
+            .views_o(tag_forward_views));
         genvar hold_way;
         for(hold_way=0;hold_way<CACHE_WAYS;hold_way=hold_way+1) begin:g_lookup_hold_owner
             wire local_reset,data_copy,tag_copy;
             assign {local_reset,data_copy,tag_copy}=hold_event_views[hold_way*3 +: 3];
             wire bank_forward=!local_reset && data_we && query_valid &&
                 data_addr/CACHE_WAYS==core_request_index && data_addr%CACHE_WAYS==hold_way;
-            wire tag_forward=!local_reset && tag_array_write && query_valid && tag_write_mask[hold_way];
-            wire demand_forward=tag_forward && tag_write_set==core_request_index;
-            wire prefetch_forward=tag_forward && tag_write_set==core_prefetch_index;
+            wire local_tag_write;
+            wire [CACHE_WAYS-1:0] local_tag_mask;
+            wire [CACHE_INDEX_WIDTH-1:0] local_tag_set;
+            wire [CACHE_TAG_WIDTH-1:0] local_tag_value;
+            assign {local_tag_write,local_tag_mask,local_tag_set,local_tag_value}=
+                tag_forward_views[hold_way*TAG_FORWARD_WIDTH +: TAG_FORWARD_WIDTH];
+            wire tag_forward=!local_reset && local_tag_write && query_valid && local_tag_mask[hold_way];
+            wire demand_forward=tag_forward && local_tag_set==core_request_index;
+            wire prefetch_forward=tag_forward && local_tag_set==core_prefetch_index;
             wire demand_write,prefetch_write,data_write;
             wire [CACHE_TAG_WIDTH-1:0] demand_next,prefetch_next;
             wire [127:0] data_next;
             rv32_frequency_event_select #(.WIDTH(CACHE_TAG_WIDTH),.EVENTS(2)) demand_selector (
                 .events_i({demand_forward,!local_reset && tag_copy}),
-                .values_i({tag_write_value,demand_rdata[hold_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]}),
+                .values_i({local_tag_value,demand_rdata[hold_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]}),
                 .write_o(demand_write),.value_o(demand_next));
             rv32_frequency_word_bank #(.WIDTH(CACHE_TAG_WIDTH)) demand_owner (
                 .clk_i(clk_i),.write_i(demand_write),.data_i(demand_next),.data_o(demand_hold[hold_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]));
             rv32_frequency_event_select #(.WIDTH(CACHE_TAG_WIDTH),.EVENTS(2)) prefetch_selector (
                 .events_i({prefetch_forward,!local_reset && tag_copy}),
-                .values_i({tag_write_value,prefetch_rdata[hold_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]}),
+                .values_i({local_tag_value,prefetch_rdata[hold_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]}),
                 .write_o(prefetch_write),.value_o(prefetch_next));
             rv32_frequency_word_bank #(.WIDTH(CACHE_TAG_WIDTH)) prefetch_owner (
                 .clk_i(clk_i),.write_i(prefetch_write),.data_i(prefetch_next),.data_o(prefetch_hold[hold_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]));
@@ -379,20 +402,36 @@ module rv32_dcache_nonblocking #(
             );
             end
         end
-        sram_fakeram #(.DEPTH(CACHE_SETS), .WIDTH(CACHE_WAYS*CACHE_TAG_WIDTH),
-                      .WRITE_GRANULARITY(CACHE_TAG_WIDTH)) demand_tags (
-            .clk(clk_i), .en(!reset_i && (tag_array_write || input_fire)),
-            .we(tag_array_write), .wmask(tag_write_mask),
-            .addr(tag_array_write ? tag_write_set : cache_index(dcache_req_addr_i)),
-            .wdata({CACHE_WAYS{tag_write_value}}), .rdata(demand_rdata)
-        );
-        sram_fakeram #(.DEPTH(CACHE_SETS), .WIDTH(CACHE_WAYS*CACHE_TAG_WIDTH),
-                      .WRITE_GRANULARITY(CACHE_TAG_WIDTH)) nextline_tags (
-            .clk(clk_i), .en(!reset_i && (tag_array_write || input_fire)),
-            .we(tag_array_write), .wmask(tag_write_mask),
-            .addr(tag_array_write ? tag_write_set : cache_index(input_prefetch_line)),
-            .wdata({CACHE_WAYS{tag_write_value}}), .rdata(prefetch_rdata)
-        );
+        // Each former word-wide SRAM way retains the SAME global write
+        // mode even when its mask bit is zero: it must not become a read
+        // during the other way's write. Only command distribution changes.
+        localparam integer TAG_PORTS=2*CACHE_WAYS;
+        wire [TAG_PORTS-1:0] tag_port_write,tag_port_enable,tag_port_address_select;
+        wire [TAG_PORTS*CACHE_TAG_WIDTH-1:0] tag_port_data;
+        rv32_frequency_control_tree #(.LEAVES(TAG_PORTS)) tag_port_write_tree (
+            .signal_i(tag_array_write),.views_o(tag_port_write));
+        rv32_frequency_control_tree #(.LEAVES(TAG_PORTS)) tag_port_enable_tree (
+            .signal_i(!reset_i && (tag_array_write || input_fire)),.views_o(tag_port_enable));
+        rv32_frequency_control_tree #(.LEAVES(TAG_PORTS)) tag_port_address_tree (
+            .signal_i(tag_array_write),.views_o(tag_port_address_select));
+        rv32_frequency_control_tree #(.WIDTH(CACHE_TAG_WIDTH),.LEAVES(TAG_PORTS)) tag_port_data_tree (
+            .signal_i(tag_write_value),.views_o(tag_port_data));
+        for(genvar tag_port_way=0;tag_port_way<CACHE_WAYS;tag_port_way=tag_port_way+1) begin:g_tag_port_way
+            sram_fakeram #(.DEPTH(CACHE_SETS),.WIDTH(CACHE_TAG_WIDTH),
+                          .WRITE_GRANULARITY(CACHE_TAG_WIDTH)) demand_tags (
+                .clk(clk_i),.en(tag_port_enable[2*tag_port_way]),
+                .we(tag_port_write[2*tag_port_way]),.wmask(tag_write_mask[tag_port_way]),
+                .addr(tag_port_address_select[2*tag_port_way]?tag_write_set:cache_index(dcache_req_addr_i)),
+                .wdata(tag_port_data[2*tag_port_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]),
+                .rdata(demand_rdata[tag_port_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]));
+            sram_fakeram #(.DEPTH(CACHE_SETS),.WIDTH(CACHE_TAG_WIDTH),
+                          .WRITE_GRANULARITY(CACHE_TAG_WIDTH)) nextline_tags (
+                .clk(clk_i),.en(tag_port_enable[2*tag_port_way+1]),
+                .we(tag_port_write[2*tag_port_way+1]),.wmask(tag_write_mask[tag_port_way]),
+                .addr(tag_port_address_select[2*tag_port_way+1]?tag_write_set:cache_index(input_prefetch_line)),
+                .wdata(tag_port_data[(2*tag_port_way+1)*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]),
+                .rdata(prefetch_rdata[tag_port_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]));
+        end
         always @(posedge clk_i) begin
             if (reset_i) begin
                 query_valid <= 1'b0;
