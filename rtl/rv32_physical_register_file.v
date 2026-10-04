@@ -11,7 +11,9 @@ module rv32_physical_register_file #(
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer READ_MUX_IMPL = 0,
     parameter integer LOCAL_VALUE_ROWS = 0,
-    parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS)
+    parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS),
+    parameter integer EXTERNAL_BYPASS_MATCH = 0,
+    parameter integer EXTERNAL_BYPASS_VALUE = 0
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -22,7 +24,11 @@ module rv32_physical_register_file #(
     input  wire [BE_WIDTH-1:0]           alloc_valid_i,
     input  wire [(BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] write_phys_i,
     input  wire [(BE_WIDTH*32)-1:0]      write_data_i,
-    input  wire [BE_WIDTH-1:0]           write_valid_i
+    input  wire [BE_WIDTH-1:0]           write_valid_i,
+    // Read-major, then write lane. Used only by the parallel read path.
+    input wire [2*BE_WIDTH*BE_WIDTH-1:0] bypass_match_i,
+    input wire [2*BE_WIDTH-1:0] bypass_valid_i,
+    input wire [2*BE_WIDTH*32-1:0] bypass_value_i
 );
     // Keep the value store as a word array so synthesis can implement it as
     // a compact multi-ported memory.  The previous flattened vector forced
@@ -140,12 +146,23 @@ module rv32_physical_register_file #(
                 assign stored_tree[read_node]=stored_tree[2*read_node] | stored_tree[2*read_node+1];
                 assign ready_tree[read_node]=ready_tree[2*read_node] | ready_tree[2*read_node+1];
             end
+            if(EXTERNAL_BYPASS_VALUE!=0) begin:g_fused_bypass
+                // The external router still gates every lane with the actual
+                // write_valid, full-qualified completion grant and original
+                // highest-lane/branch override priority. P0/range stay local.
+                assign bypass_write=legal && bypass_valid_i[rp];
+                assign bypass_value=bypass_value_i[rp*32 +: 32];
+            end else begin:g_local_bypass
             for(wl=0;wl<BE_WIDTH;wl=wl+1) begin:g_bypass
+                // Actual write-valid, P0/range checks and highest-lane
+                // priority remain local even with pre-arbitration equality.
                 assign bypass_match[wl]=legal && write_valid_i[wl] &&
-                    write_phys_i[wl*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==address;
+                    ((EXTERNAL_BYPASS_MATCH!=0) ? bypass_match_i[rp*BE_WIDTH+wl] :
+                     (write_phys_i[wl*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==address));
             end
             rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH)) bypass_selector (
                 .events_i(bypass_match),.values_i(write_data_i),.write_o(bypass_write),.value_o(bypass_value));
+            end
             rv32_frequency_control_tree #(.LEAVES(2)) bypass_choice_tree (
                 .signal_i(bypass_write),.views_o(bypass_select));
             always @* begin

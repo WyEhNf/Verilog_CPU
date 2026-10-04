@@ -41,7 +41,13 @@ module rv32_backend_joint #(
                                          ((BE_WIDTH == 2) ? 8 : 16),
     parameter integer TAG_WIDTH = 1 + 2 +
         ((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES)) +
-        `RV32IM_ROB_GENERATION_WIDTH
+        `RV32IM_ROB_GENERATION_WIDTH,
+    // Default preserves unrestricted standalone trace immediates. The CPU
+    // enables this for its decoder's signed twelve-bit store displacement.
+    parameter integer STORE_ALLOC_IMM12 = 0,
+    parameter integer PRF_BYPASS_PRECOMPARE = 0,
+    parameter integer COMPLETION_LATE_LOAD_SELECT = 0,
+    parameter integer PRF_DIRECT_OPERAND_BYPASS = 0
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -258,6 +264,56 @@ module rv32_backend_joint #(
     wire [(BE_WIDTH*PAW)-1:0] completion_prf_write_phys;
     wire [(BE_WIDTH*32)-1:0] completion_prf_write_data;
     wire [BE_WIDTH-1:0] completion_prf_write_valid;
+    localparam integer PRF_MATCH_ENABLED=(PRF_BYPASS_PRECOMPARE!=0) &&
+        (COMPLETION_BYPASS==2) && (PRF_READ_MUX_IMPL!=0);
+    localparam integer PRF_VALUE_BYPASS_ENABLED=PRF_MATCH_ENABLED && (PRF_DIRECT_OPERAND_BYPASS!=0);
+    localparam integer PRF_MATCH_PORTS=PRF_MATCH_ENABLED ? 2*BE_WIDTH : 0;
+    localparam integer PRF_MATCH_COUNT=PRF_MATCH_ENABLED ? 2*BE_WIDTH : 1;
+    wire [PRF_MATCH_COUNT*BE_WIDTH-1:0] completion_prf_read_match;
+    wire [2*BE_WIDTH*BE_WIDTH-1:0] prf_bypass_match;
+    wire [PRF_MATCH_COUNT-1:0] completion_direct_read_valid;
+    wire [PRF_MATCH_COUNT*32-1:0] completion_direct_read_value;
+    wire [2*BE_WIDTH-1:0] prf_direct_read_valid;
+    wire [2*BE_WIDTH*32-1:0] prf_direct_read_value;
+    genvar direct_read_port,direct_read_word;
+    generate if(PRF_VALUE_BYPASS_ENABLED!=0) begin:g_prf_fused_value
+        for(direct_read_port=0;direct_read_port<2*BE_WIDTH;direct_read_port=direct_read_port+1) begin:g_read
+            wire link_match=(branch_pending && branch_pending_rd_we) &&
+                branch_pending_phys==prf_read_phys[direct_read_port*PAW +: PAW];
+            wire [1:0] link_value_views;
+            rv32_frequency_control_tree #(.LEAVES(2)) link_tree (
+                .signal_i(link_match),.views_o(link_value_views));
+            assign prf_direct_read_valid[direct_read_port]=link_match || completion_direct_read_valid[direct_read_port];
+            for(direct_read_word=0;direct_read_word<2;direct_read_word=direct_read_word+1) begin:g_word
+                assign prf_direct_read_value[direct_read_port*32+direct_read_word*16 +: 16]=link_value_views[direct_read_word] ?
+                    branch_pending_value[direct_read_word*16 +: 16] :
+                    completion_direct_read_value[direct_read_port*32+direct_read_word*16 +: 16];
+            end
+        end
+    end else begin:g_prf_local_value
+        assign prf_direct_read_valid=0;
+        assign prf_direct_read_value=0;
+    end endgenerate
+    // A redirecting JAL/JALR overrides the final active PRF write lane.
+    // Override its equality as well as its value/address, with the same priority.
+    genvar bypass_read,bypass_lane;
+    generate if(PRF_MATCH_ENABLED!=0) begin:g_prf_early_match
+        for(bypass_read=0;bypass_read<2*BE_WIDTH;bypass_read=bypass_read+1) begin:g_read
+            for(bypass_lane=0;bypass_lane<BE_WIDTH;bypass_lane=bypass_lane+1) begin:g_lane
+                if(bypass_lane==CDB_WIDTH-1) begin:g_branch_link
+                    assign prf_bypass_match[bypass_read*BE_WIDTH+bypass_lane]=
+                        (branch_pending && branch_pending_rd_we) ?
+                        (branch_pending_phys==prf_read_phys[bypass_read*PAW +: PAW]) :
+                        completion_prf_read_match[bypass_read*BE_WIDTH+bypass_lane];
+                end else begin:g_completion
+                    assign prf_bypass_match[bypass_read*BE_WIDTH+bypass_lane]=
+                        completion_prf_read_match[bypass_read*BE_WIDTH+bypass_lane];
+                end
+            end
+        end
+    end else begin:g_prf_late_match
+        assign prf_bypass_match=0;
+    end endgenerate
     wire [BE_WIDTH-1:0] completion_live_load_error;
 
     wire [BE_WIDTH-1:0] rs_alloc_valid;
@@ -822,8 +878,17 @@ module rv32_backend_joint #(
             // clear rs_src1_ready below; unresolved bases keep the old AGU path.
             assign lsq_alloc_addr_valid[io_lane] = (EARLY_STORE_ADDRESS != 0) &&
                 d_valid[io_lane] && d_is_store[io_lane] && rs_src1_ready[io_lane];
-            assign lsq_alloc_addr[io_lane*32 +: 32] =
-                rs_src1_value[io_lane*32 +: 32] + d_imm[io_lane*32 +: 32];
+            if(STORE_ALLOC_IMM12!=0) begin:g_store_alloc_simm12
+                // Only stores with alloc_addr_valid observe this payload.
+                // Loads leave addr_ready clear until their ordinary AGU update.
+                rv32_frequency_add_simm12 address_adder (
+                    .base_i(rs_src1_value[io_lane*32 +: 32]),
+                    .immediate_i(d_imm[io_lane*32 +: 12]),
+                    .sum_o(lsq_alloc_addr[io_lane*32 +: 32]));
+            end else begin:g_store_alloc_generic
+                assign lsq_alloc_addr[io_lane*32 +: 32] =
+                    rs_src1_value[io_lane*32 +: 32] + d_imm[io_lane*32 +: 32];
+            end
             assign prf_read_phys[(2*io_lane)*PAW +: PAW] =
                 d_src1_phys[io_lane*PAW +: PAW];
             assign prf_read_phys[(2*io_lane+1)*PAW +: PAW] =
@@ -1312,9 +1377,9 @@ module rv32_backend_joint #(
         .restore_free_bitmap_i(recovery_free_bitmap), .restore_free_count_i(recovery_free_count)
     );
 
-    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL), .LOCAL_VALUE_ROWS(1)) prf (
+    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL), .LOCAL_VALUE_ROWS(1), .EXTERNAL_BYPASS_MATCH(PRF_MATCH_ENABLED), .EXTERNAL_BYPASS_VALUE(PRF_VALUE_BYPASS_ENABLED)) prf (
         .clk_i(clk_i), .reset_i(reset_i), .read_phys_i(prf_read_phys), .read_data_o(prf_read_data), .read_ready_o(prf_read_ready),
-        .alloc_phys_i(prf_alloc_phys), .alloc_valid_i(prf_alloc_valid), .write_phys_i(prf_write_phys), .write_data_i(prf_write_data), .write_valid_i(prf_write_valid)
+        .alloc_phys_i(prf_alloc_phys), .alloc_valid_i(prf_alloc_valid), .write_phys_i(prf_write_phys), .write_data_i(prf_write_data), .write_valid_i(prf_write_valid), .bypass_match_i(prf_bypass_match), .bypass_valid_i(prf_direct_read_valid), .bypass_value_i(prf_direct_read_value)
     );
 
     // Build one RAT checkpoint per lane in program order. A branch in lane N
@@ -1622,7 +1687,17 @@ module rv32_backend_joint #(
     end
     assign alu_exec_ready = alu_exec_ready_r;
 
-    rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .SOURCES(PRODUCERS), .FIFO_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .BYPASS(COMPLETION_BYPASS)) completion (
+    wire [PRF_MATCH_COUNT*PAW-1:0] completion_read_match_queries;
+    generate if(PRF_MATCH_ENABLED!=0) begin:g_completion_read_match_queries
+        assign completion_read_match_queries=prf_read_phys;
+    end else begin:g_no_completion_read_match_queries
+        assign completion_read_match_queries=0;
+    end endgenerate
+
+    rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .SOURCES(PRODUCERS), .FIFO_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .BYPASS(COMPLETION_BYPASS), .READ_MATCH_PORTS(PRF_MATCH_PORTS), .LATE_ELIGIBILITY_SOURCE(COMPLETION_LATE_LOAD_SELECT ? LSQ_SOURCE : -1), .READ_DIRECT_VALUE(PRF_VALUE_BYPASS_ENABLED), .DIRECT_PRF_ENABLE(PRF_VALUE_BYPASS_ENABLED)) completion (
+        .read_match_phys_i(completion_read_match_queries), .prf_read_match_o(completion_prf_read_match),
+        .bypass_write_valid_i(prf_write_valid), .bypass_last_override_i(branch_pending && branch_pending_rd_we),
+        .direct_read_valid_o(completion_direct_read_valid), .direct_read_value_o(completion_direct_read_value),
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .kill_valid_i(recovery_domains[6]), .kill_mask_i(completion_kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready_r), .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live_r), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}}), .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect_valid), .cdb_is_memory_o(cdb_is_memory), .cdb_is_load_o(cdb_is_load), .prf_write_valid_o(completion_prf_write_valid), .prf_write_tag_o(prf_wb_tag), .prf_write_phys_rd_o(completion_prf_write_phys), .prf_write_value_o(completion_prf_write_data), .rob_ready_valid_o(rob_wb_valid), .rob_ready_tag_o(rob_wb_tag), .rob_ready_value_o(rob_wb_value), .wakeup_valid_o(wake_wb_valid), .wakeup_tag_o(wake_wb_tag), .wakeup_value_o(wake_wb_value), .entry_valid_o(completion_entry_valid), .entry_tag_o(completion_entry_tag), .occupancy_o()
     );
     // A valid producer holds its result until the completion network accepts

@@ -507,3 +507,168 @@ module rv32_frequency_add32_select (
         end
     endgenerate
 endmodule
+
+
+// Addition of an RV32 load/store signed 12-bit displacement. The low twelve
+// bits use three carry-select blocks. The upper word changes only by -1, 0,
+// or +1; its increment/decrement prefixes are independent of the low carry.
+// No state, and all arithmetic wraps modulo 2^32.
+(* keep_hierarchy = 1 *)
+module rv32_frequency_add_simm12 (
+    input wire [31:0] base_i,
+    input wire [11:0] immediate_i,
+    output wire [31:0] sum_o
+);
+    wire [2:0] generate_stage [0:2];
+    wire [2:0] propagate_stage [0:2];
+    wire [3:0] sum_zero [0:2],sum_one [0:2];
+    wire [19:0] ones_prefix [0:5],zeros_prefix [0:5];
+    wire increment = generate_stage[2][2] && !immediate_i[11];
+    wire decrement = !generate_stage[2][2] && immediate_i[11];
+    wire [9:0] adjustment_views;
+    rv32_frequency_control_tree #(.WIDTH(2),.LEAVES(5)) adjustment_tree (
+        .signal_i({decrement,increment}),.views_o(adjustment_views));
+    assign ones_prefix[0]=base_i[31:12];
+    assign zeros_prefix[0]=~base_i[31:12];
+    genvar block_index,prefix_level,upper_bit;
+    generate
+        for(block_index=0;block_index<3;block_index=block_index+1) begin:g_low_block
+            wire [4:0] block_sum={1'b0,base_i[block_index*4 +: 4]}+
+                {1'b0,immediate_i[block_index*4 +: 4]};
+            assign sum_zero[block_index]=block_sum[3:0];
+            assign sum_one[block_index]=block_sum[3:0]+4'd1;
+            assign generate_stage[0][block_index]=block_sum[4];
+            assign propagate_stage[0][block_index]=
+                &(base_i[block_index*4 +: 4] ^ immediate_i[block_index*4 +: 4]);
+            if(block_index==0) begin:g_first
+                assign sum_o[0 +: 4]=sum_zero[0];
+            end else begin:g_select
+                assign sum_o[block_index*4 +: 4]=generate_stage[2][block_index-1] ?
+                    sum_one[block_index] : sum_zero[block_index];
+            end
+        end
+        for(prefix_level=0;prefix_level<2;prefix_level=prefix_level+1) begin:g_low_prefix
+            localparam integer DISTANCE=1<<prefix_level;
+            for(block_index=0;block_index<3;block_index=block_index+1) begin:g_block
+                if(block_index>=DISTANCE) begin:g_combine
+                    assign generate_stage[prefix_level+1][block_index]=generate_stage[prefix_level][block_index] |
+                        (propagate_stage[prefix_level][block_index] && generate_stage[prefix_level][block_index-DISTANCE]);
+                    assign propagate_stage[prefix_level+1][block_index]=propagate_stage[prefix_level][block_index] &&
+                        propagate_stage[prefix_level][block_index-DISTANCE];
+                end else begin:g_copy
+                    assign generate_stage[prefix_level+1][block_index]=generate_stage[prefix_level][block_index];
+                    assign propagate_stage[prefix_level+1][block_index]=propagate_stage[prefix_level][block_index];
+                end
+            end
+        end
+        for(prefix_level=0;prefix_level<5;prefix_level=prefix_level+1) begin:g_upper_prefix
+            localparam integer DISTANCE=1<<prefix_level;
+            for(upper_bit=0;upper_bit<20;upper_bit=upper_bit+1) begin:g_bit
+                if(upper_bit>=DISTANCE) begin:g_combine
+                    assign ones_prefix[prefix_level+1][upper_bit]=ones_prefix[prefix_level][upper_bit] &&
+                        ones_prefix[prefix_level][upper_bit-DISTANCE];
+                    assign zeros_prefix[prefix_level+1][upper_bit]=zeros_prefix[prefix_level][upper_bit] &&
+                        zeros_prefix[prefix_level][upper_bit-DISTANCE];
+                end else begin:g_copy
+                    assign ones_prefix[prefix_level+1][upper_bit]=ones_prefix[prefix_level][upper_bit];
+                    assign zeros_prefix[prefix_level+1][upper_bit]=zeros_prefix[prefix_level][upper_bit];
+                end
+            end
+        end
+        for(upper_bit=0;upper_bit<20;upper_bit=upper_bit+1) begin:g_upper_sum
+            localparam integer DOMAIN=upper_bit/4;
+            wire increment_bit=adjustment_views[DOMAIN*2];
+            wire decrement_bit=adjustment_views[DOMAIN*2+1];
+            if(upper_bit==0) begin:g_first
+                assign sum_o[12]=base_i[12] ^ (increment_bit || decrement_bit);
+            end else begin:g_later
+                assign sum_o[12+upper_bit]=base_i[12+upper_bit] ^
+                    ((increment_bit && ones_prefix[5][upper_bit-1]) ||
+                     (decrement_bit && zeros_prefix[5][upper_bit-1]));
+            end
+        end
+    endgenerate
+endmodule
+
+
+// Original completion ranking as a combinational function of eligibility,
+// cursor and held source/full-tag state. Used by both late-load hypotheses.
+(* keep_hierarchy = 1 *)
+module rv32_frequency_completion_grants #(
+    parameter integer SOURCES=6,CDB_WIDTH=3,TAG_WIDTH=17,
+    parameter integer SOURCE_WIDTH=(SOURCES<=1)?1:$clog2(SOURCES),
+    parameter integer RANK_WIDTH=(SOURCES<=1)?1:$clog2(SOURCES+1),
+    parameter integer RANK_LEAVES=1<<$clog2(SOURCES)
+) (
+    input wire [SOURCE_WIDTH-1:0] cursor_i,
+    input wire [SOURCES-1:0] eligible_i,
+    input wire [CDB_WIDTH-1:0] held_valid_i,
+    input wire [CDB_WIDTH*SOURCE_WIDTH-1:0] held_sources_i,
+    input wire [CDB_WIDTH*TAG_WIDTH-1:0] held_tags_i,
+    input wire [SOURCES*TAG_WIDTH-1:0] producer_tag_i,
+    output wire [CDB_WIDTH*SOURCES-1:0] selected_o
+);
+    wire [SOURCE_WIDTH-1:0] direct_rr_reg=cursor_i;
+    wire [SOURCES-1:0] direct_eligible=eligible_i;
+    wire [CDB_WIDTH-1:0] direct_hold_valid=held_valid_i;
+    wire [SOURCE_WIDTH-1:0] direct_hold_source [0:CDB_WIDTH-1];
+    wire [TAG_WIDTH-1:0] direct_hold_tag [0:CDB_WIDTH-1];
+    wire [SOURCES-1:0] direct_used;
+    genvar held_lane;
+    generate for(held_lane=0;held_lane<CDB_WIDTH;held_lane=held_lane+1) begin:g_ports
+        assign direct_hold_source[held_lane]=held_sources_i[held_lane*SOURCE_WIDTH +: SOURCE_WIDTH];
+        assign direct_hold_tag[held_lane]=held_tags_i[held_lane*TAG_WIDTH +: TAG_WIDTH];
+        assign selected_o[held_lane*SOURCES +: SOURCES]=selected_mask[held_lane];
+    end endgenerate
+    wire [SOURCES-1:0] held_source_mask [0:CDB_WIDTH-1];
+    wire [CDB_WIDTH-1:0] held_lane_live;
+    wire [SOURCES-1:0] source_above_cursor;
+    wire [RANK_WIDTH-1:0] source_rank [0:SOURCES-1];
+    wire [RANK_WIDTH-1:0] lane_free_rank [0:CDB_WIDTH-1];
+    wire [SOURCES-1:0] selected_mask [0:CDB_WIDTH-1];
+    genvar rank_source,rank_other,rank_node,rank_lane,rank_prior_lane;
+    generate
+        for(rank_source=0;rank_source<SOURCES;rank_source=rank_source+1) begin:g_source_rank
+            // Above-cursor sources precede wrapped sources; within
+            // either part of the circle static source number determines order.
+            assign source_above_cursor[rank_source]=(rank_source>=direct_rr_reg);
+            wire [CDB_WIDTH-1:0] held_here;
+            for(rank_prior_lane=0;rank_prior_lane<CDB_WIDTH;rank_prior_lane=rank_prior_lane+1) begin:g_held
+                assign held_here[rank_prior_lane]=held_source_mask[rank_prior_lane][rank_source];
+            end
+            assign direct_used[rank_source]=|held_here;
+            wire [RANK_WIDTH-1:0] earlier_count [1:2*RANK_LEAVES-1];
+            for(rank_other=0;rank_other<RANK_LEAVES;rank_other=rank_other+1) begin:g_earlier
+                if(rank_other<SOURCES) begin:g_source
+                    assign earlier_count[RANK_LEAVES+rank_other]=
+                        direct_eligible[rank_other] && !direct_used[rank_other] &&
+                        ((source_above_cursor[rank_other]==source_above_cursor[rank_source]) ?
+                         (rank_other<rank_source) : source_above_cursor[rank_other]);
+                end else begin:g_padding
+                    assign earlier_count[RANK_LEAVES+rank_other]=0;
+                end
+            end
+            for(rank_node=1;rank_node<RANK_LEAVES;rank_node=rank_node+1) begin:g_count
+                assign earlier_count[rank_node]=earlier_count[2*rank_node]+earlier_count[2*rank_node+1];
+            end
+            assign source_rank[rank_source]=earlier_count[1];
+        end
+        for(rank_lane=0;rank_lane<CDB_WIDTH;rank_lane=rank_lane+1) begin:g_lane_rank
+            for(rank_source=0;rank_source<SOURCES;rank_source=rank_source+1) begin:g_held_match
+                assign held_source_mask[rank_lane][rank_source]=direct_hold_valid[rank_lane] &&
+                    direct_hold_source[rank_lane]==rank_source && direct_eligible[rank_source] &&
+                    producer_tag_i[rank_source*TAG_WIDTH +: TAG_WIDTH]==direct_hold_tag[rank_lane];
+                assign selected_mask[rank_lane][rank_source]=held_source_mask[rank_lane][rank_source] ||
+                    (!held_lane_live[rank_lane] && direct_eligible[rank_source] && !direct_used[rank_source] &&
+                     source_rank[rank_source]==lane_free_rank[rank_lane]);
+            end
+            assign held_lane_live[rank_lane]=|held_source_mask[rank_lane];
+            wire [RANK_WIDTH-1:0] free_prefix [0:rank_lane];
+            assign free_prefix[0]=0;
+            for(rank_prior_lane=0;rank_prior_lane<rank_lane;rank_prior_lane=rank_prior_lane+1) begin:g_free_prefix
+                assign free_prefix[rank_prior_lane+1]=free_prefix[rank_prior_lane]+!held_lane_live[rank_prior_lane];
+            end
+            assign lane_free_rank[rank_lane]=free_prefix[rank_lane];
+        end
+    endgenerate
+endmodule

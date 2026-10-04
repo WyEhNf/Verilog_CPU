@@ -14,7 +14,12 @@ module rv32_completion_network #(
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
     parameter integer BYPASS = 0,
     parameter integer SLOT_WIDTH = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH),
-    parameter integer COUNT_WIDTH = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH + 1)
+    parameter integer COUNT_WIDTH = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH + 1),
+    parameter integer READ_MATCH_PORTS = 0,
+    parameter integer READ_MATCH_COUNT = (READ_MATCH_PORTS>0)?READ_MATCH_PORTS:1,
+    parameter integer LATE_ELIGIBILITY_SOURCE = -1,
+    parameter integer READ_DIRECT_VALUE = 0,
+    parameter integer DIRECT_PRF_ENABLE = 0
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -68,7 +73,13 @@ module rv32_completion_network #(
     output wire [(BE_WIDTH*32)-1:0]      wakeup_value_o,
     output wire [FIFO_DEPTH-1:0]        entry_valid_o,
     output wire [(FIFO_DEPTH*TAG_WIDTH)-1:0] entry_tag_o,
-    output wire [COUNT_WIDTH-1:0]       occupancy_o
+    output wire [COUNT_WIDTH-1:0]       occupancy_o,
+    input wire [READ_MATCH_COUNT*PHYS_ADDR_WIDTH-1:0] read_match_phys_i,
+    output wire [READ_MATCH_COUNT*BE_WIDTH-1:0] prf_read_match_o,
+    input wire [BE_WIDTH-1:0] bypass_write_valid_i,
+    input wire bypass_last_override_i,
+    output wire [READ_MATCH_COUNT-1:0] direct_read_valid_o,
+    output wire [READ_MATCH_COUNT*32-1:0] direct_read_value_o
 );
     reg valid_mem [0:FIFO_DEPTH-1];
     reg [TAG_WIDTH-1:0] tag_mem [0:FIFO_DEPTH-1];
@@ -131,58 +142,61 @@ module rv32_completion_network #(
     // source array once for each lane.
     localparam integer RANK_WIDTH=(SOURCES<=1)?1:$clog2(SOURCES+1);
     localparam integer RANK_LEAVES=1<<$clog2(SOURCES);
-    wire [SOURCES-1:0] held_source_mask [0:CDB_WIDTH-1];
-    wire [CDB_WIDTH-1:0] held_lane_live;
-    wire [SOURCES-1:0] source_above_cursor;
-    wire [RANK_WIDTH-1:0] source_rank [0:SOURCES-1];
-    wire [RANK_WIDTH-1:0] lane_free_rank [0:CDB_WIDTH-1];
     wire [SOURCES-1:0] selected_mask [0:CDB_WIDTH-1];
-    genvar rank_source,rank_other,rank_node,rank_lane,rank_prior_lane;
+    wire [CDB_WIDTH*SOURCES-1:0] selected_flat;
+    wire [CDB_WIDTH*SOURCE_WIDTH-1:0] held_sources_flat;
+    wire [CDB_WIDTH*TAG_WIDTH-1:0] held_tags_flat;
+    genvar rank_source,rank_lane,late_word;
     generate
-        for(rank_source=0;rank_source<SOURCES;rank_source=rank_source+1) begin:g_source_rank
-            // Above-cursor sources precede wrapped sources; within
-            // either part of the circle static source number determines order.
-            assign source_above_cursor[rank_source]=(rank_source>=direct_rr_reg);
+        for(rank_source=0;rank_source<SOURCES;rank_source=rank_source+1) begin:g_direct_eligibility
+            // Full normal ROB authority remains on this FINAL decision.
             assign direct_eligible[rank_source]=producer_valid_i[rank_source] &&
                 producer_target_live_i[rank_source] && producer_tag_i[rank_source*TAG_WIDTH] &&
                 (!live_tag_valid_i || producer_tag_i[rank_source*TAG_WIDTH +: TAG_WIDTH]==live_tag_i);
-            wire [CDB_WIDTH-1:0] held_here;
-            for(rank_prior_lane=0;rank_prior_lane<CDB_WIDTH;rank_prior_lane=rank_prior_lane+1) begin:g_held
-                assign held_here[rank_prior_lane]=held_source_mask[rank_prior_lane][rank_source];
-            end
-            assign direct_used[rank_source]=|held_here;
-            wire [RANK_WIDTH-1:0] earlier_count [1:2*RANK_LEAVES-1];
-            for(rank_other=0;rank_other<RANK_LEAVES;rank_other=rank_other+1) begin:g_earlier
-                if(rank_other<SOURCES) begin:g_source
-                    assign earlier_count[RANK_LEAVES+rank_other]=
-                        direct_eligible[rank_other] && !direct_used[rank_other] &&
-                        ((source_above_cursor[rank_other]==source_above_cursor[rank_source]) ?
-                         (rank_other<rank_source) : source_above_cursor[rank_other]);
-                end else begin:g_padding
-                    assign earlier_count[RANK_LEAVES+rank_other]=0;
+        end
+        for(rank_lane=0;rank_lane<CDB_WIDTH;rank_lane=rank_lane+1) begin:g_rank_ports
+            assign held_sources_flat[rank_lane*SOURCE_WIDTH +: SOURCE_WIDTH]=direct_hold_source[rank_lane];
+            assign held_tags_flat[rank_lane*TAG_WIDTH +: TAG_WIDTH]=direct_hold_tag[rank_lane];
+            assign selected_mask[rank_lane]=selected_flat[rank_lane*SOURCES +: SOURCES];
+        end
+        if(BYPASS==2 && LATE_ELIGIBILITY_SOURCE>=0 && LATE_ELIGIBILITY_SOURCE<SOURCES) begin:g_late_eligibility
+            wire [SOURCES-1:0] eligible_without,eligible_with;
+            wire [CDB_WIDTH*SOURCES-1:0] selected_without,selected_with;
+            localparam integer SELECT_WORDS=(CDB_WIDTH*SOURCES+15)/16;
+            wire [SELECT_WORDS-1:0] late_views;
+            for(rank_source=0;rank_source<SOURCES;rank_source=rank_source+1) begin:g_hypothesis
+                if(rank_source==LATE_ELIGIBILITY_SOURCE) begin:g_late
+                    assign eligible_without[rank_source]=1'b0;
+                    assign eligible_with[rank_source]=1'b1;
+                end else begin:g_other
+                    assign eligible_without[rank_source]=direct_eligible[rank_source];
+                    assign eligible_with[rank_source]=direct_eligible[rank_source];
                 end
             end
-            for(rank_node=1;rank_node<RANK_LEAVES;rank_node=rank_node+1) begin:g_count
-                assign earlier_count[rank_node]=earlier_count[2*rank_node]+earlier_count[2*rank_node+1];
+            // Both hypotheses apply the original round-robin, held full-tag
+            // match, rank and free-lane rules. No source can publish until the
+            // original late eligibility chooses its matching hypothesis.
+            rv32_frequency_completion_grants #(.SOURCES(SOURCES),.CDB_WIDTH(CDB_WIDTH),.TAG_WIDTH(TAG_WIDTH)) absent (
+                .cursor_i(direct_rr_reg),.eligible_i(eligible_without),
+                .held_valid_i(direct_hold_valid),.held_sources_i(held_sources_flat),
+                .held_tags_i(held_tags_flat),.producer_tag_i(producer_tag_i),.selected_o(selected_without));
+            rv32_frequency_completion_grants #(.SOURCES(SOURCES),.CDB_WIDTH(CDB_WIDTH),.TAG_WIDTH(TAG_WIDTH)) present (
+                .cursor_i(direct_rr_reg),.eligible_i(eligible_with),
+                .held_valid_i(direct_hold_valid),.held_sources_i(held_sources_flat),
+                .held_tags_i(held_tags_flat),.producer_tag_i(producer_tag_i),.selected_o(selected_with));
+            rv32_frequency_control_tree #(.LEAVES(SELECT_WORDS)) late_tree (
+                .signal_i(direct_eligible[LATE_ELIGIBILITY_SOURCE]),.views_o(late_views));
+            for(late_word=0;late_word<SELECT_WORDS;late_word=late_word+1) begin:g_word
+                localparam integer LOW=late_word*16;
+                localparam integer BITS=(CDB_WIDTH*SOURCES-LOW>=16)?16:CDB_WIDTH*SOURCES-LOW;
+                assign selected_flat[LOW +: BITS]=late_views[late_word] ?
+                    selected_with[LOW +: BITS] : selected_without[LOW +: BITS];
             end
-            assign source_rank[rank_source]=earlier_count[1];
-        end
-        for(rank_lane=0;rank_lane<CDB_WIDTH;rank_lane=rank_lane+1) begin:g_lane_rank
-            for(rank_source=0;rank_source<SOURCES;rank_source=rank_source+1) begin:g_held_match
-                assign held_source_mask[rank_lane][rank_source]=direct_hold_valid[rank_lane] &&
-                    direct_hold_source[rank_lane]==rank_source && direct_eligible[rank_source] &&
-                    producer_tag_i[rank_source*TAG_WIDTH +: TAG_WIDTH]==direct_hold_tag[rank_lane];
-                assign selected_mask[rank_lane][rank_source]=held_source_mask[rank_lane][rank_source] ||
-                    (!held_lane_live[rank_lane] && direct_eligible[rank_source] && !direct_used[rank_source] &&
-                     source_rank[rank_source]==lane_free_rank[rank_lane]);
-            end
-            assign held_lane_live[rank_lane]=|held_source_mask[rank_lane];
-            wire [RANK_WIDTH-1:0] free_prefix [0:rank_lane];
-            assign free_prefix[0]=0;
-            for(rank_prior_lane=0;rank_prior_lane<rank_lane;rank_prior_lane=rank_prior_lane+1) begin:g_free_prefix
-                assign free_prefix[rank_prior_lane+1]=free_prefix[rank_prior_lane]+!held_lane_live[rank_prior_lane];
-            end
-            assign lane_free_rank[rank_lane]=free_prefix[rank_lane];
+        end else begin:g_original_eligibility
+            rv32_frequency_completion_grants #(.SOURCES(SOURCES),.CDB_WIDTH(CDB_WIDTH),.TAG_WIDTH(TAG_WIDTH)) original (
+                .cursor_i(direct_rr_reg),.eligible_i(direct_eligible),
+                .held_valid_i(direct_hold_valid),.held_sources_i(held_sources_flat),
+                .held_tags_i(held_tags_flat),.producer_tag_i(producer_tag_i),.selected_o(selected_flat));
         end
     endgenerate
     always @* begin
@@ -201,6 +215,117 @@ module rv32_completion_network #(
             end
         end
     end
+
+
+    // Equality can run alongside full-tag authority and arbitration. Route
+    // its single-bit result with the EXACT same one-hot source grant as the
+    // physical destination payload, instead of comparing after that payload mux.
+    // Query-dependent bits are never retained in a completion/hold packet.
+    genvar match_source,match_read,match_lane,match_node;
+    generate if(BYPASS==2 && READ_MATCH_PORTS>0) begin:g_direct_read_match
+        wire [READ_MATCH_COUNT-1:0] source_match [0:SOURCES-1];
+        wire [CDB_WIDTH*SOURCES*READ_MATCH_COUNT-1:0] match_grant;
+        for(match_source=0;match_source<SOURCES;match_source=match_source+1) begin:g_source
+            for(match_read=0;match_read<READ_MATCH_COUNT;match_read=match_read+1) begin:g_query
+                assign source_match[match_source][match_read]=
+                    producer_phys_rd_i[match_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==
+                    read_match_phys_i[match_read*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
+            end
+            for(match_lane=0;match_lane<CDB_WIDTH;match_lane=match_lane+1) begin:g_grant
+                // One bounded grant leaf controls at most sixteen match bits.
+                localparam integer WORDS=(READ_MATCH_COUNT+15)/16;
+                wire [WORDS-1:0] grant_views;
+                genvar match_word;
+                rv32_frequency_control_tree #(.LEAVES(WORDS)) grant_tree (
+                    .signal_i(selected_mask[match_lane][match_source] && !reset_i && !flush_i),
+                    .views_o(grant_views));
+                for(match_word=0;match_word<WORDS;match_word=match_word+1) begin:g_word
+                    localparam integer LOW=match_word*16;
+                    localparam integer BITS=(READ_MATCH_COUNT-LOW>=16)?16:READ_MATCH_COUNT-LOW;
+                    assign match_grant[(match_lane*SOURCES+match_source)*READ_MATCH_COUNT+LOW +: BITS]={BITS{grant_views[match_word]}};
+                end
+            end
+        end
+        for(match_read=0;match_read<READ_MATCH_COUNT;match_read=match_read+1) begin:g_read
+            for(match_lane=0;match_lane<BE_WIDTH;match_lane=match_lane+1) begin:g_lane
+                if(match_lane<CDB_WIDTH) begin:g_present
+                    wire match_tree [1:2*RANK_LEAVES-1];
+                    for(match_source=0;match_source<RANK_LEAVES;match_source=match_source+1) begin:g_leaf
+                        if(match_source<SOURCES) begin:g_source
+                            assign match_tree[RANK_LEAVES+match_source]=
+                                match_grant[(match_lane*SOURCES+match_source)*READ_MATCH_COUNT+match_read] && source_match[match_source][match_read];
+                        end else begin:g_padding
+                            assign match_tree[RANK_LEAVES+match_source]=1'b0;
+                        end
+                    end
+                    for(match_node=1;match_node<RANK_LEAVES;match_node=match_node+1) begin:g_reduce
+                        assign match_tree[match_node]=match_tree[2*match_node] || match_tree[2*match_node+1];
+                    end
+                    assign prf_read_match_o[match_read*BE_WIDTH+match_lane]=match_tree[1];
+                end else begin:g_unused_lane
+                    assign prf_read_match_o[match_read*BE_WIDTH+match_lane]=1'b0;
+                end
+            end
+        end
+
+        // Select the last matching ACTUAL PRF write lane, then route its
+        // original producer value directly. This factors two serial payload
+        // muxes into one, while preserving PRF write-valid and lane priority.
+        if(READ_DIRECT_VALUE!=0) begin:g_direct_values
+            genvar value_read,value_lane,value_source,value_node;
+            for(value_read=0;value_read<READ_MATCH_COUNT;value_read=value_read+1) begin:g_read
+                wire [BE_WIDTH-1:0] lane_hit,lane_grant;
+                wire [SOURCES-1:0] source_grant;
+                wire [31:0] value_tree [1:2*RANK_LEAVES-1];
+                for(value_lane=0;value_lane<BE_WIDTH;value_lane=value_lane+1) begin:g_lane
+                    if(value_lane<CDB_WIDTH) begin:g_present
+                        // Branch-link publication overrides the last active
+                        // lane; even a nonmatching link must hide its normal
+                        // completion's physical destination and value.
+                        assign lane_hit[value_lane]=prf_read_match_o[value_read*BE_WIDTH+value_lane] &&
+                            bypass_write_valid_i[value_lane] &&
+                            ((value_lane==CDB_WIDTH-1) ? !bypass_last_override_i : 1'b1);
+                    end else begin:g_unused
+                        assign lane_hit[value_lane]=1'b0;
+                    end
+                    if(value_lane==BE_WIDTH-1) begin:g_last
+                        assign lane_grant[value_lane]=lane_hit[value_lane];
+                    end else begin:g_priority
+                        assign lane_grant[value_lane]=lane_hit[value_lane] && !(|lane_hit[BE_WIDTH-1:value_lane+1]);
+                    end
+                end
+                assign direct_read_valid_o[value_read]=|lane_hit;
+                for(value_source=0;value_source<RANK_LEAVES;value_source=value_source+1) begin:g_source
+                    if(value_source<SOURCES) begin:g_present
+                        wire [CDB_WIDTH-1:0] chosen_lanes;
+                        wire [1:0] data_views;
+                        for(value_lane=0;value_lane<CDB_WIDTH;value_lane=value_lane+1) begin:g_owner
+                            assign chosen_lanes[value_lane]=lane_grant[value_lane] && selected_mask[value_lane][value_source];
+                        end
+                        assign source_grant[value_source]=|chosen_lanes;
+                        rv32_frequency_control_tree #(.LEAVES(2)) data_tree (
+                            .signal_i(source_grant[value_source]),.views_o(data_views));
+                        assign value_tree[RANK_LEAVES+value_source]={
+                            {16{data_views[1]}} & producer_value_i[value_source*32+16 +: 16],
+                            {16{data_views[0]}} & producer_value_i[value_source*32 +: 16]};
+                    end else begin:g_padding
+                        assign value_tree[RANK_LEAVES+value_source]=0;
+                    end
+                end
+                for(value_node=1;value_node<RANK_LEAVES;value_node=value_node+1) begin:g_reduce
+                    assign value_tree[value_node]=value_tree[2*value_node] | value_tree[2*value_node+1];
+                end
+                assign direct_read_value_o[value_read*32 +: 32]=value_tree[1];
+            end
+        end else begin:g_no_direct_values
+            assign direct_read_valid_o=0;
+            assign direct_read_value_o=0;
+        end
+    end else begin:g_no_direct_read_match
+        assign prf_read_match_o=0;
+        assign direct_read_valid_o=0;
+        assign direct_read_value_o=0;
+    end endgenerate
 
     localparam integer DIRECT_META_WIDTH=TAG_WIDTH+PHYS_ADDR_WIDTH+7;
     wire [DIRECT_META_WIDTH-1:0] direct_meta [0:CDB_WIDTH-1];
@@ -447,7 +572,26 @@ module rv32_completion_network #(
         end
     end
 
-    assign prf_write_valid_o = cdb_valid_o & cdb_rd_we_o;
+    // In direct mode the same write-enable is the OR of selected writable
+    // sources. Resolve this single-bit field beside arbitration instead of
+    // waiting for the wide metadata payload's distribution/readback.
+    genvar write_enable_lane,write_enable_source;
+    generate if(BYPASS==2 && DIRECT_PRF_ENABLE!=0) begin:g_local_prf_write_enable
+        for(write_enable_lane=0;write_enable_lane<BE_WIDTH;write_enable_lane=write_enable_lane+1) begin:g_lane
+            if(write_enable_lane<CDB_WIDTH) begin:g_active
+                wire [SOURCES-1:0] writing_sources;
+                for(write_enable_source=0;write_enable_source<SOURCES;write_enable_source=write_enable_source+1) begin:g_source
+                    assign writing_sources[write_enable_source]=selected_mask[write_enable_lane][write_enable_source] &&
+                        producer_rd_we_i[write_enable_source] && !producer_is_store_i[write_enable_source];
+                end
+                assign prf_write_valid_o[write_enable_lane]=!reset_i && !flush_i && (|writing_sources);
+            end else begin:g_unused
+                assign prf_write_valid_o[write_enable_lane]=1'b0;
+            end
+        end
+    end else begin:g_original_prf_write_enable
+        assign prf_write_valid_o = cdb_valid_o & cdb_rd_we_o;
+    end endgenerate
     assign prf_write_tag_o = cdb_tag_o;
     assign prf_write_phys_rd_o = cdb_phys_rd_o;
     assign prf_write_value_o = cdb_value_o;
