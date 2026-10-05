@@ -38,6 +38,10 @@ module rv32_rob #(
     // Select one complete allocation payload per modulo-BE bank, then decode
     // its destination row. Keeps all allocation and completion write priority.
     parameter integer ALLOC_BANKED_WRITE = 0,
+    // Caller offers at most one already-allocated ordinary RAM store event.
+    // Only light local-row command profiles can consume this extra event.
+    parameter integer FAST_STORE_COMPLETE = 0,
+    parameter integer FAST_STORE_IDENTITY_PRESELECT = 0,
     // 1 retires a store after admission into the committed LSQ/store buffer;
     // 0 preserves the precise legacy behavior of waiting for cache ack.
     parameter integer STORE_BUFFERED_RETIRE = 1
@@ -61,6 +65,8 @@ module rv32_rob #(
     output reg  [(BE_WIDTH*TAG_WIDTH)-1:0] alloc_tag_o,
     output reg  [((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))-1:0] alloc_count_o,
 
+    input  wire [BE_WIDTH-1:0]           fast_store_valid_i,
+    input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] fast_store_tag_i,
     input  wire [BE_WIDTH-1:0]           completion_valid_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] completion_tag_i,
     input  wire [(BE_WIDTH*32)-1:0]      completion_value_i,
@@ -1043,6 +1049,26 @@ module rv32_rob #(
     wire [WRITE_DOMAINS*BE_WIDTH-1:0] local_commits;
     wire [WRITE_DOMAINS-1:0] local_store_sends;
     wire [WRITE_DOMAINS*(TAG_WIDTH+2)-1:0] local_acks;
+    localparam integer FAST_STORE_OWNER_ACTIVE=(FAST_STORE_COMPLETE!=0) &&
+        (ALLOC_BANKED_WRITE!=0) && (ROB_ENTRIES>=BE_WIDTH) &&
+        (LIGHT_RETIRE_PAYLOAD!=0) && (MMIO_PREDECODE!=0) &&
+        (LEGACY_HALT_PAYLOAD==0) && (RETURN_VALUE_ENABLE==0);
+    // Preselected mode carries one early saved identity and one late
+    // accepted event, retaining the complete current row/GEN/valid check.
+    localparam integer FAST_STORE_OWNER_LANES=(FAST_STORE_IDENTITY_PRESELECT!=0) ? 1 : BE_WIDTH;
+    localparam integer FAST_STORE_DOMAINS=(ROB_ENTRIES+3)/4;
+    wire [FAST_STORE_DOMAINS*FAST_STORE_OWNER_LANES-1:0] fast_store_valid_views;
+    wire [FAST_STORE_DOMAINS*FAST_STORE_OWNER_LANES*TAG_WIDTH-1:0] fast_store_tag_views;
+    generate if(FAST_STORE_OWNER_ACTIVE!=0) begin:g_fast_store_owner_inputs
+        rv32_frequency_control_tree #(.WIDTH(FAST_STORE_OWNER_LANES),.LEAVES(FAST_STORE_DOMAINS)) valid_tree (
+            .signal_i(fast_store_valid_i[FAST_STORE_OWNER_LANES-1:0]),.views_o(fast_store_valid_views));
+        rv32_frequency_control_tree #(.WIDTH(FAST_STORE_OWNER_LANES*TAG_WIDTH),.LEAVES(FAST_STORE_DOMAINS)) tag_tree (
+            .signal_i(fast_store_tag_i[FAST_STORE_OWNER_LANES*TAG_WIDTH-1:0]),.views_o(fast_store_tag_views));
+    end else begin:g_no_fast_store_owner_inputs
+        assign fast_store_valid_views=0;
+        assign fast_store_tag_views=0;
+    end endgenerate
+
     genvar command_row,command_lane,command_node;
     generate
     if(ALLOC_BANKED_WRITE!=0 && ROB_ENTRIES>=BE_WIDTH) begin:g_local_row_commands
@@ -1159,6 +1185,23 @@ module rv32_rob #(
             for(command_node=1;command_node<LOCAL_COMPLETION_LEAVES;command_node=command_node+1) begin:g_or
                 assign completion_mux[command_node]=completion_mux[2*command_node] | completion_mux[2*command_node+1];
             end
+            // Full current ROB identity is checked independently per D
+            // lane before late allocation-valid qualification. No shortened
+            // generation, selected-tag lookup or ordinary CDB ready is used.
+            wire [FAST_STORE_OWNER_LANES-1:0] fast_store_matches;
+            for(genvar fast_lane=0;fast_lane<FAST_STORE_OWNER_LANES;fast_lane=fast_lane+1) begin:g_fast_store_match
+                if(FAST_STORE_OWNER_ACTIVE!=0) begin:g_enabled
+                    wire [TAG_WIDTH-1:0] tag=
+                        fast_store_tag_views[((command_row/4)*FAST_STORE_OWNER_LANES+fast_lane)*TAG_WIDTH +: TAG_WIDTH];
+                    wire target=tag_matches(tag,command_row) && store_mem[command_row] &&
+                        !rd_we_mem[command_row] && !branch_mem[command_row] && !halt_mem[command_row];
+                    assign fast_store_matches[fast_lane]=normal && target &&
+                        fast_store_valid_views[(command_row/4)*FAST_STORE_OWNER_LANES+fast_lane];
+                end else begin:g_disabled
+                    assign fast_store_matches[fast_lane]=1'b0;
+                end
+            end
+            wire fast_store_completed=|fast_store_matches;
             wire completed=|completion_match;
             wire retire=|retire_match;
             wire ack_valid,ack_error;
@@ -1253,8 +1296,8 @@ module rv32_rob #(
                 new_phys_mem_write_enable[command_row]=allocate;
                 valid_mem_write_enable[command_row]=row_reset || killed || retire || allocate;
                 valid_mem_write_data[command_row]=allocate;
-                ready_mem_write_enable[command_row]=row_reset || killed || completed || retire || allocate;
-                ready_mem_write_data[command_row]=!row_reset && !allocate && !retire && completed;
+                ready_mem_write_enable[command_row]=row_reset || killed || completed || fast_store_completed || retire || allocate;
+                ready_mem_write_data[command_row]=!row_reset && !allocate && !retire && (completed || fast_store_completed);
                 store_wait_mem_write_enable[command_row]=row_reset || killed || acknowledged || retire || allocate;
                 store_wait_mem_write_data[command_row]=!row_reset && !allocate && !retire && acknowledged;
                 store_sent_mem_write_enable[command_row]=row_reset || killed || sent || retire || allocate;
@@ -1274,8 +1317,10 @@ module rv32_rob #(
                 store_data_mem_write_data[command_row]=completed_data;
                 store_mask_mem_write_enable[command_row]=completed;
                 store_mask_mem_write_data[command_row]=completed_mask;
-                mmio_word_mem_write_enable[command_row]=(MMIO_PREDECODE!=0) && completed;
-                mmio_word_mem_write_data[command_row]=completed_mmio;
+                mmio_word_mem_write_enable[command_row]=(MMIO_PREDECODE!=0) && (completed || fast_store_completed);
+                // The extra event is exclusively ordinary RAM. Original CDB
+                // data wins if a caller offers both events for the same tag.
+                mmio_word_mem_write_data[command_row]=completed ? completed_mmio : 1'b0;
                 checkpoint_mem_write_enable[command_row]=(CHECKPOINT_IMPL==0) && allocate;
                 checkpoint_mem_write_data[command_row]=bank_alloc_packet[command_row%BE_WIDTH][0 +: CHECKPOINT_WIDTH];
             end

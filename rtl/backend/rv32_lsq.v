@@ -31,6 +31,9 @@ module rv32_lsq #(
     // Exact youngest-byte selection for the circular power-of-two queue.
     // The original tournament remains the default/other-geometry fallback.
     parameter integer FORWARD_ONEHOT = 0,
+    // Route the same oldest current request packet with circular one-hot
+    // grants; default and other geometry retain the original tournament.
+    parameter integer PICK_ONEHOT = 0,
     parameter integer RECLAIM_WIDTH = 1,
     // Allow the original single completion handshake to retire the second
     // completed load on an edge that already releases the first prefix row.
@@ -866,6 +869,48 @@ module rv32_lsq #(
     // a priority chain of age compares across every physical queue slot.
     genvar pick_node, forward_byte, forward_slot, forward_node;
     generate
+        if(PICK_ONEHOT!=0 && CIRCULAR_ORDER_POWER2 && LSQ_ENTRIES>1) begin:g_onehot_pick
+            wire [LSQ_ENTRIES-1:0] eligible,nonwrapped,grants;
+            wire [LSQ_ENTRIES*PICK_SELECT_WIDTH-1:0] values;
+            localparam integer GRANT_DOMAINS=(LSQ_ENTRIES+3)/4;
+            wire [GRANT_DOMAINS-1:0] no_nonwrapped_views;
+            wire no_requests=!(|eligible);
+            rv32_frequency_control_tree #(.LEAVES(GRANT_DOMAINS)) class_tree (
+                .signal_i(!(|nonwrapped)),.views_o(no_nonwrapped_views));
+            for(genvar pick_row=0;pick_row<LSQ_ENTRIES;pick_row=pick_row+1) begin:g_row
+                assign eligible[pick_row]=pick_valid[LSQ_ENTRIES+pick_row];
+                assign nonwrapped[pick_row]=eligible[pick_row] && !pick_wrap[LSQ_ENTRIES+pick_row];
+                wire first_any,first_nonwrapped;
+                if(pick_row==0) begin:g_first
+                    assign first_any=eligible[pick_row];
+                    assign first_nonwrapped=nonwrapped[pick_row];
+                end else begin:g_later
+                    assign first_any=eligible[pick_row] && !(|eligible[pick_row-1:0]);
+                    assign first_nonwrapped=nonwrapped[pick_row] && !(|nonwrapped[pick_row-1:0]);
+                end
+                // The old all-invalid tournament recursively chooses its
+                // right child, hence the final physical leaf. Preserve even
+                // that unobservable packet rather than inventing zero data.
+                assign grants[pick_row]=first_nonwrapped ||
+                    (no_nonwrapped_views[pick_row/4] && first_any) ||
+                    ((pick_row==LSQ_ENTRIES-1) && no_requests);
+                assign values[pick_row*PICK_SELECT_WIDTH +: PICK_SELECT_WIDTH]={
+                    pick_slot[LSQ_ENTRIES+pick_row],pick_age[LSQ_ENTRIES+pick_row],pick_wrap[LSQ_ENTRIES+pick_row],
+                    pick_addr[LSQ_ENTRIES+pick_row],pick_payload[LSQ_ENTRIES+pick_row]};
+            end
+            wire [PICK_SELECT_WIDTH-1:0] root_packet;
+            rv32_frequency_event_select #(.WIDTH(PICK_SELECT_WIDTH),.EVENTS(LSQ_ENTRIES),.PRIORITY(0)) packet_selector (
+                .events_i(grants),.values_i(values),.write_o(),.value_o(root_packet));
+            assign pick_valid[1]=|eligible;
+            assign {pick_slot[1],pick_age[1],pick_wrap[1],pick_addr[1],pick_payload[1]}=root_packet;
+            // Internal tournament nodes have no consumers in this branch.
+            // Give them constant drivers so no dangling undriven nets remain.
+            for(pick_node=2;pick_node<LSQ_ENTRIES;pick_node=pick_node+1) begin:g_unused_node
+                assign pick_valid[pick_node]=0;
+                assign {pick_slot[pick_node],pick_age[pick_node],pick_wrap[pick_node],
+                        pick_addr[pick_node],pick_payload[pick_node]}=0;
+            end
+        end else begin:g_original_pick
         for (pick_node = 1; pick_node < LSQ_ENTRIES; pick_node = pick_node + 1) begin : g_pick
             wire choose_left = pick_valid[2*pick_node] &&
                 (!pick_valid[2*pick_node+1] ||
@@ -894,6 +939,7 @@ module rv32_lsq #(
             end
             assign {pick_slot[pick_node],pick_age[pick_node],pick_wrap[pick_node],
                     pick_addr[pick_node],pick_payload[pick_node]}=chosen_packet;
+        end
         end
         if(FORWARD_ONEHOT!=0 && CIRCULAR_ORDER_POWER2) begin:g_onehot_forward
             // Ascending physical leaves in the old tournament select the

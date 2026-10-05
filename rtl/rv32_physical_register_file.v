@@ -14,6 +14,9 @@ module rv32_physical_register_file #(
     // Optional combination output for even allocation read ports only.
     // The original read data/ready and storage updates remain independent.
     parameter integer STORE_ADDRESS_READ = 0,
+    // Optional ram/half/word alignment flags computed before the same
+    // stored/write-through address event selector. No state or edge added.
+    parameter integer STORE_ADDRESS_FLAGS = 0,
     parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS)
 ) (
     input  wire                         clk_i,
@@ -27,7 +30,8 @@ module rv32_physical_register_file #(
     input  wire [(BE_WIDTH*32)-1:0]      write_data_i,
     input  wire [BE_WIDTH-1:0]           write_valid_i,
     input  wire [BE_WIDTH*12-1:0]        store_offset_i,
-    output wire [BE_WIDTH*32-1:0]       store_address_o
+    output wire [BE_WIDTH*32-1:0]       store_address_o,
+    output wire [BE_WIDTH*3-1:0]        store_address_flags_o
 );
     // Keep the value store as a word array so synthesis can implement it as
     // a compact multi-ported memory.  The previous flattened vector forced
@@ -176,8 +180,26 @@ module rv32_physical_register_file #(
                     rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH+1),.PRIORITY(1)) address_selector (
                         .events_i(address_events),.values_i(address_values),.write_o(),
                         .value_o(store_address_o[(rp/2)*32 +: 32]));
+                    if(STORE_ADDRESS_FLAGS!=0) begin:g_address_flags
+                        wire [(BE_WIDTH+1)*3-1:0] flag_values;
+                        for(genvar flag_lane=0;flag_lane<BE_WIDTH+1;flag_lane=flag_lane+1) begin:g_candidate
+                            wire [31:0] candidate_address=address_values[flag_lane*32 +: 32];
+                            // bit0: ordinary RAM; bit1: half alignment;
+                            // bit2: word alignment. All wrap/carry is already
+                            // included by the exact original address adder.
+                            assign flag_values[flag_lane*3 +: 3]={
+                                candidate_address[1:0]==2'b00,
+                                !candidate_address[0],candidate_address[31:28]==4'b0000};
+                        end
+                        rv32_frequency_event_select #(.WIDTH(3),.EVENTS(BE_WIDTH+1),.PRIORITY(1)) flags_selector (
+                            .events_i(address_events),.values_i(flag_values),.write_o(),
+                            .value_o(store_address_flags_o[(rp/2)*3 +: 3]));
+                    end else begin:g_no_address_flags
+                        assign store_address_flags_o[(rp/2)*3 +: 3]=0;
+                    end
                 end else begin:g_disabled
                     assign store_address_o[(rp/2)*32 +: 32]=0;
+                    assign store_address_flags_o[(rp/2)*3 +: 3]=0;
                 end
             end
             always @* begin
@@ -188,6 +210,7 @@ module rv32_physical_register_file #(
     end else begin : g_original_read
     // The backend only selects this extra output with parallel read enabled.
     assign store_address_o=0;
+    assign store_address_flags_o=0;
     // Reads are combinational.  Each generated process has constant output
     // slices; @* also expands the word-array dependency for simulators.
     genvar read_port;
