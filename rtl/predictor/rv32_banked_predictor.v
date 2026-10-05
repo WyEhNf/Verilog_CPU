@@ -19,6 +19,7 @@ module rv32_banked_predictor #(
     parameter integer PREFIX_QUERY_HISTORY = 0,
     parameter integer BANK_LOCAL_INSTRUCTION_READ = 0,
     parameter integer BANK_LOCAL_PREFIX_HISTORY = 0,
+    parameter integer BANK_DIRECT_WORD_INDEX = 0,
     parameter integer HISTORY_BITS = 6
 ) (
     input wire clk_i, reset_i,
@@ -92,7 +93,22 @@ module rv32_banked_predictor #(
         for (bank = 0; bank < FE_WIDTH; bank = bank + 1) begin : g_bank
             localparam [1:0] BANK_NUMBER = bank;
             wire [1:0] offset = (BANK_NUMBER - base_bank) & BANK_MASK;
-            wire [2:0] word_index = {1'b0, query_pc_i[3:2]} + {1'b0, offset};
+            wire [2:0] word_index;
+            if(BANK_DIRECT_WORD_INDEX!=0 && FE_WIDTH==4) begin:g_direct_four_word
+                // W+((B-W)&3) is B, or B+4 when this bank precedes W.
+                assign word_index={query_pc_i[3:2]>BANK_NUMBER,BANK_NUMBER};
+            end else if(BANK_DIRECT_WORD_INDEX!=0 && FE_WIDTH==2) begin:g_direct_two_word
+                if(bank==0) begin:g_even_bank
+                    // Round W up to the next even word, including invalid4.
+                    assign word_index={query_pc_i[3]&query_pc_i[2],
+                        query_pc_i[3]^query_pc_i[2],1'b0};
+                end else begin:g_odd_bank
+                    // The next odd word is W with its low bit set.
+                    assign word_index={1'b0,query_pc_i[3],1'b1};
+                end
+            end else begin:g_original_word_index
+                assign word_index={1'b0,query_pc_i[3:2]}+{1'b0,offset};
+            end
             wire [31:0] pc;
             if(BANK_PC_CARRY_SELECT!=0 && FE_WIDTH>1) begin:g_carry_select_pc
                 wire [1:0] line_carry_views;

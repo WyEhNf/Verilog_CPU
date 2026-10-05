@@ -11,6 +11,7 @@ module rv32m_mdu_reservation_station #(
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
     parameter integer RECOVERY_OLDER_ISSUE = 0,
+    parameter integer ISSUE_RECOVERY_PREDECODE = 0,
     parameter integer RECOVERY_WIDTH = 1+2*((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))+$clog2(ROB_ENTRIES+1)
 ) (
     input  wire                         clk_i,
@@ -18,6 +19,7 @@ module rv32m_mdu_reservation_station #(
     input  wire                         flush_i,
     input  wire [RECOVERY_WIDTH-1:0]    recovery_packet_i,
     input  wire                         issue_valid_i,
+    input  wire                         issue_cancel_i,
     output wire                         issue_ready_o,
     input  wire [`RV32IM_OP_WIDTH-1:0]  issue_op_i,
     input  wire [31:0]                  issue_src1_i,
@@ -75,10 +77,16 @@ module rv32m_mdu_reservation_station #(
     // request enters its execution unit.  The pipelined Wallace multiplier
     // can therefore sustain one request per cycle instead of one every two.
     wire issue_cancel;
+    generate if(ISSUE_RECOVERY_PREDECODE!=0 && SELECTIVE_RECOVERY!=0) begin:g_predecoded_issue_cancel
+        // The caller carries the same registered-packet age predicate with
+        // the selected payload. Qualify it with this unit's actual valid.
+        assign issue_cancel=issue_valid_i && issue_cancel_i;
+    end else begin:g_original_issue_cancel
     rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
         .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(1)) issue_cancel_guard (
         .packet_i(recovery_views[0 +: RECOVERY_WIDTH]),
         .active_i(issue_valid_i),.tag_i(issue_rob_tag_i),.cancel_o(issue_cancel));
+    end endgenerate
     assign issue_ready_o = !flush_i &&
                            (!SELECTIVE_RECOVERY || !recovery_packet_i[RECOVERY_WIDTH-1] ||
                             ((RECOVERY_OLDER_ISSUE!=0) && !issue_cancel)) &&

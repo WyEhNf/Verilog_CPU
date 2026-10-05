@@ -28,6 +28,10 @@ module rv32_reservation_station #(
     // Caller filters recovery-edge issue to retained, live older rows.
     // Allocation stays blocked; accepted retained rows must leave exactly once.
     parameter integer RECOVERY_ISSUE_RELEASE = 0,
+    // Combinational row predicate selected with the original issue payload.
+    // This does not filter ready candidates or change their age/rank policy.
+    parameter integer ISSUE_RECOVERY_QUALIFICATION = 0,
+    parameter integer ISSUE_RECOVERY_CANCEL = 0,
     parameter integer SLOT_WIDTH = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES),
     parameter integer AGE_WIDTH = 32
 ) (
@@ -56,6 +60,10 @@ module rv32_reservation_station #(
     input  wire [(WAKE_WIDTH*32)-1:0]      wake_value_i,
 
     input  wire [BE_WIDTH-1:0]           issue_ready_i,
+    input  wire [ENTRIES-1:0]            entry_recovery_qualified_i,
+    output wire [BE_WIDTH-1:0]           issue_recovery_qualified_o,
+    input  wire [ENTRIES-1:0]            entry_issue_cancel_i,
+    output wire [BE_WIDTH-1:0]           issue_cancel_o,
     output wire  [BE_WIDTH-1:0]           issue_valid_o,
     output wire  [(BE_WIDTH*OP_WIDTH)-1:0] issue_op_o,
     output wire  [(BE_WIDTH*32)-1:0]      issue_pc_o,
@@ -577,8 +585,12 @@ module rv32_reservation_station #(
 
     // Rank policy and ready remain unchanged. Each selection controls
     // <=16-bit words before balanced payload reduction.
-    localparam integer ISSUE_DATA_WIDTH=OP_WIDTH+32+TAG_WIDTH+PHYS_ADDR_WIDTH+
+    localparam integer ISSUE_BASE_DATA_WIDTH=OP_WIDTH+32+TAG_WIDTH+PHYS_ADDR_WIDTH+
         64+STORE_DATA_WIDTH+METADATA_WIDTH+SLOT_WIDTH;
+    localparam integer ISSUE_QUALIFIED_DATA_WIDTH=ISSUE_BASE_DATA_WIDTH+
+        ((ISSUE_RECOVERY_QUALIFICATION!=0)?1:0);
+    localparam integer ISSUE_DATA_WIDTH=ISSUE_QUALIFIED_DATA_WIDTH+
+        ((ISSUE_RECOVERY_CANCEL!=0)?1:0);
     localparam integer ISSUE_DATA_WORDS=(ISSUE_DATA_WIDTH+15)/16;
     localparam integer ISSUE_DATA_LEAVES=1<<$clog2(ENTRIES);
     genvar issue_lane,issue_row,issue_word,issue_node;
@@ -588,10 +600,22 @@ module rv32_reservation_station #(
         for(issue_row=0;issue_row<ISSUE_DATA_LEAVES;issue_row=issue_row+1) begin:g_row
             if(issue_row<ENTRIES) begin:g_present
                 wire [ISSUE_DATA_WORDS-1:0] selected_words;
-                wire [ISSUE_DATA_WIDTH-1:0] payload={
+                wire [ISSUE_BASE_DATA_WIDTH-1:0] base_payload={
                     op_mem[issue_row],pc_mem[issue_row],rob_tag_mem[issue_row],phys_rd_mem[issue_row],
                     src1_value_effective[issue_row],src2_value_effective[issue_row],
                     store_data_mem[issue_row],metadata_mem[issue_row],issue_row[SLOT_WIDTH-1:0]};
+                wire [ISSUE_QUALIFIED_DATA_WIDTH-1:0] qualified_payload;
+                if(ISSUE_RECOVERY_QUALIFICATION!=0) begin:g_qualification
+                    assign qualified_payload={entry_recovery_qualified_i[issue_row],base_payload};
+                end else begin:g_original_payload
+                    assign qualified_payload=base_payload;
+                end
+                wire [ISSUE_DATA_WIDTH-1:0] payload;
+                if(ISSUE_RECOVERY_CANCEL!=0) begin:g_cancel_sideband
+                    assign payload={entry_issue_cancel_i[issue_row],qualified_payload};
+                end else begin:g_no_cancel_sideband
+                    assign payload=qualified_payload;
+                end
                 assign selections[issue_row]=ready_candidates[issue_row] && ready_rank_match[issue_row][issue_lane];
                 rv32_frequency_control_tree #(.LEAVES(ISSUE_DATA_WORDS)) selection_tree (
                     .signal_i(selections[issue_row]),.views_o(selected_words));
@@ -609,11 +633,21 @@ module rv32_reservation_station #(
             assign payload_tree[issue_node]=payload_tree[2*issue_node] | payload_tree[2*issue_node+1];
         end
         assign issue_valid_o[issue_lane]=|selections;
+        if(ISSUE_RECOVERY_CANCEL!=0) begin:g_selected_cancel
+            assign issue_cancel_o[issue_lane]=payload_tree[1][ISSUE_QUALIFIED_DATA_WIDTH];
+        end else begin:g_no_cancel
+            assign issue_cancel_o[issue_lane]=1'b0;
+        end
+        if(ISSUE_RECOVERY_QUALIFICATION!=0) begin:g_selected_qualification
+            assign issue_recovery_qualified_o[issue_lane]=payload_tree[1][ISSUE_BASE_DATA_WIDTH];
+        end else begin:g_no_qualification
+            assign issue_recovery_qualified_o[issue_lane]=1'b0;
+        end
         assign {issue_op_o[issue_lane*OP_WIDTH +: OP_WIDTH],issue_pc_o[issue_lane*32 +: 32],
             issue_rob_tag_o[issue_lane*TAG_WIDTH +: TAG_WIDTH],issue_phys_rd_o[issue_lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
             issue_src1_value_o[issue_lane*32 +: 32],issue_src2_value_o[issue_lane*32 +: 32],
             issue_store_data_o[issue_lane*STORE_DATA_WIDTH +: STORE_DATA_WIDTH],
-            issue_metadata_o[issue_lane*METADATA_WIDTH +: METADATA_WIDTH],issue_slot_o[issue_lane*SLOT_WIDTH +: SLOT_WIDTH]}=payload_tree[1];
+            issue_metadata_o[issue_lane*METADATA_WIDTH +: METADATA_WIDTH],issue_slot_o[issue_lane*SLOT_WIDTH +: SLOT_WIDTH]}=payload_tree[1][0 +: ISSUE_BASE_DATA_WIDTH];
     end endgenerate
 
     // Allocate a contiguous prefix and choose the oldest ready entries for

@@ -28,6 +28,9 @@ module rv32_backend_joint #(
     parameter integer EARLY_FRONT_REDIRECT = 0,
     parameter integer RECOVERY_PREVIEW_OLDER_ISSUE = 0,
     parameter integer RECOVERY_APPLY_OLDER_ISSUE = 0,
+    parameter integer RS_ROW_RECOVERY_QUALIFICATION = 0,
+    parameter integer RS_ROW_LIVE_MEMBERSHIP = 0,
+    parameter integer RS_PREDECODE_ISSUE_CANCEL = 0,
     parameter integer DISPATCH_ELASTIC = 0,
     parameter integer DISPATCH_FULL_REPLACE = 0,
     parameter integer EARLY_STORE_ADDRESS = 0,
@@ -313,6 +316,18 @@ module rv32_backend_joint #(
     wire [15:0] rs_free_count = (rs_occupancy < RS_ENTRIES) ? RS_ENTRIES - rs_occupancy : 16'd0;
     wire [BE_WIDTH-1:0] rs_issue_ready;
     wire [BE_WIDTH-1:0] rs_issue_allowed;
+    localparam integer RS_ROW_QUALIFICATION_ACTIVE=(RS_ROW_RECOVERY_QUALIFICATION!=0) &&
+        (LOCAL_EXEC_RECOVERY!=0) && (ISSUE_PIPELINE==0);
+    localparam integer RS_ROW_LIVE_MEMBERSHIP_ACTIVE=(RS_ROW_LIVE_MEMBERSHIP!=0) &&
+        RS_ROW_QUALIFICATION_ACTIVE && (RECOVERY_APPLY_OLDER_ISSUE!=0);
+    localparam integer RS_ISSUE_CANCEL_PREDECODE_ACTIVE=(RS_PREDECODE_ISSUE_CANCEL!=0) &&
+        RS_ROW_QUALIFICATION_ACTIVE && (RECOVERY_APPLY_OLDER_ISSUE!=0);
+    wire [RS_ENTRIES-1:0] rs_entry_issue_cancel;
+    wire [BE_WIDTH-1:0] raw_rs_issue_cancel;
+    wire mdu_issue_cancel;
+    wire [RS_ENTRIES-1:0] rs_entry_current_live_match;
+    wire [RS_ENTRIES-1:0] rs_entry_recovery_qualified;
+    wire [BE_WIDTH-1:0] raw_rs_issue_recovery_qualified;
     // In direct completion modes every CDB packet is a view of a
     // still-valid held producer. That producer already broadcasts to RS.
     localparam integer RS_DIRECT_WAKE=(RS_PHYSICAL_WAKEUP!=0) &&
@@ -960,6 +975,10 @@ module rv32_backend_joint #(
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_DIVU) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REM) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REMU);
+            if(RS_ROW_QUALIFICATION_ACTIVE!=0) begin:g_row_qualified_issue
+                assign rs_issue_allowed[io_lane]=!branch_busy_domains[0] ||
+                    raw_rs_issue_recovery_qualified[io_lane];
+            end else begin:g_original_issue_qualification
             // Preview uses the live head. Apply uses the captured recovery
             // packet, and can issue only a retained row with the exact current
             // ROB generation. The RS now releases accepted retained rows on
@@ -997,6 +1016,7 @@ module rv32_backend_joint #(
                 assign older_apply=1'b0;
             end
             assign rs_issue_allowed[io_lane]=!branch_busy_domains[0] || older_preview || older_apply;
+            end
             assign rs_issue_ready[io_lane] = rs_issue_allowed[io_lane] &&
                 (rs_issue_is_mdu[io_lane] ?
                  (mdu_select[io_lane] && mdu_issue_ready) :
@@ -1312,7 +1332,9 @@ module rv32_backend_joint #(
     // One shared MDU accepts the oldest M-class selection while independent
     // ALUs may accept all other selected instructions in the same cycle.
 
-    localparam integer MDU_ISSUE_PAYLOAD_WIDTH=`RV32IM_OP_WIDTH+64+TAG_WIDTH+PAW;
+    localparam integer MDU_ISSUE_BASE_PAYLOAD_WIDTH=`RV32IM_OP_WIDTH+64+TAG_WIDTH+PAW;
+    localparam integer MDU_ISSUE_PAYLOAD_WIDTH=MDU_ISSUE_BASE_PAYLOAD_WIDTH+
+        ((RS_ISSUE_CANCEL_PREDECODE_ACTIVE!=0)?1:0);
     localparam integer MDU_LANE_WIDTH=(BE_WIDTH<=1)?1:$clog2(BE_WIDTH);
     wire [BE_WIDTH-1:0] mdu_candidates=rs_issue_valid & rs_issue_is_mdu & rs_issue_allowed;
     wire mdu_found;
@@ -1324,14 +1346,27 @@ module rv32_backend_joint #(
     genvar mdu_route_lane;
     generate for(mdu_route_lane=0;mdu_route_lane<BE_WIDTH;mdu_route_lane=mdu_route_lane+1) begin:g_mdu_route
         assign mdu_select[mdu_route_lane]=mdu_found && mdu_lane==mdu_route_lane;
-        assign mdu_values[mdu_route_lane*MDU_ISSUE_PAYLOAD_WIDTH +: MDU_ISSUE_PAYLOAD_WIDTH]={
+        wire [MDU_ISSUE_BASE_PAYLOAD_WIDTH-1:0] base_payload={
             rs_issue_op[mdu_route_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH],
             rs_issue_src1[mdu_route_lane*32 +: 32],rs_issue_src2[mdu_route_lane*32 +: 32],
             rs_issue_tag[mdu_route_lane*TAG_WIDTH +: TAG_WIDTH],rs_issue_phys[mdu_route_lane*PAW +: PAW]};
+        if(RS_ISSUE_CANCEL_PREDECODE_ACTIVE!=0) begin:g_cancel_sideband
+            assign mdu_values[mdu_route_lane*MDU_ISSUE_PAYLOAD_WIDTH +: MDU_ISSUE_PAYLOAD_WIDTH]=
+                {raw_rs_issue_cancel[mdu_route_lane],base_payload};
+        end else begin:g_original_payload
+            assign mdu_values[mdu_route_lane*MDU_ISSUE_PAYLOAD_WIDTH +: MDU_ISSUE_PAYLOAD_WIDTH]=base_payload;
+        end
     end endgenerate
+    wire [MDU_ISSUE_PAYLOAD_WIDTH-1:0] mdu_selected_payload;
     rv32_frequency_event_select #(.WIDTH(MDU_ISSUE_PAYLOAD_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) mdu_payload_selector (
-        .events_i(mdu_select),.values_i(mdu_values),.write_o(),
-        .value_o({mdu_issue_op,mdu_issue_src1,mdu_issue_src2,mdu_issue_tag,mdu_issue_phys}));
+        .events_i(mdu_select),.values_i(mdu_values),.write_o(),.value_o(mdu_selected_payload));
+    assign {mdu_issue_op,mdu_issue_src1,mdu_issue_src2,mdu_issue_tag,mdu_issue_phys}=
+        mdu_selected_payload[0 +: MDU_ISSUE_BASE_PAYLOAD_WIDTH];
+    generate if(RS_ISSUE_CANCEL_PREDECODE_ACTIVE!=0) begin:g_mdu_selected_cancel
+        assign mdu_issue_cancel=mdu_selected_payload[MDU_ISSUE_BASE_PAYLOAD_WIDTH];
+    end else begin:g_no_mdu_selected_cancel
+        assign mdu_issue_cancel=1'b0;
+    end endgenerate
     assign mdu_issue_valid = (|mdu_select);
     // Issue acceptance is independent from completion/CDB backpressure.  The
     // previous wiring reused alu_exec_ready for both directions, creating a
@@ -1591,6 +1626,79 @@ module rv32_backend_joint #(
     localparam integer RECOVERY_APPLY_ISSUE_ACTIVE=(RECOVERY_APPLY_OLDER_ISSUE!=0) &&
         (LOCAL_EXEC_RECOVERY!=0) && (ISSUE_PIPELINE==0);
 
+    // Evaluate the same preview/apply predicates from saved RS row tags.
+    // Ready/rank selection then carries one qualified bit beside its payload;
+    // a late wakeup cannot enter a post-selection ROB generation read.
+    genvar qualification_row;
+    generate if(RS_ROW_QUALIFICATION_ACTIVE!=0) begin:g_rs_row_qualification
+        wire [RS_ENTRIES*EXEC_RECOVERY_WIDTH-1:0] packet_views;
+        rv32_frequency_control_tree #(.WIDTH(EXEC_RECOVERY_WIDTH),.LEAVES(RS_ENTRIES)) packet_tree (
+            .signal_i({recovery_domains[6],recovery_descriptor_occupancy,
+                recovery_descriptor_head,execution_branch_age}),.views_o(packet_views));
+        for(qualification_row=0;qualification_row<RS_ENTRIES;qualification_row=qualification_row+1) begin:g_row
+            wire [TAG_WIDTH-1:0] row_tag=rs_entry_rob_tag[qualification_row*TAG_WIDTH +: TAG_WIDTH];
+            wire [ROB_SLOT_WIDTH-1:0] row_age=row_tag[3 +: ROB_SLOT_WIDTH]-rob_head;
+            wire [ROB_SLOT_WIDTH-1:0] pending_age=recovery_tag_views[3 +: ROB_SLOT_WIDTH]-rob_head;
+            wire older_preview=(RECOVERY_PREVIEW_OLDER_ISSUE!=0) && branch_pending &&
+                rob_recovery_preview && !recovery_descriptor_valid && !reset_i && !flush_i &&
+                rs_entry_valid[qualification_row] && row_tag[0] &&
+                row_age<pending_age && row_age<rob_occupancy;
+            wire older_apply;
+            if(RECOVERY_APPLY_ISSUE_ACTIVE!=0) begin:g_apply
+                wire row_live_match;
+                wire row_cancel;
+                if(RS_ROW_LIVE_MEMBERSHIP_ACTIVE!=0) begin:g_direct_membership
+                    localparam integer IDENTITY_WIDTH=ROB_SLOT_WIDTH+ROB_GENERATION_WIDTH;
+                    localparam integer MEMBERSHIP_LEAVES=1<<ROB_SLOT_WIDTH;
+                    localparam integer QUERY_DOMAINS=(ROB_ENTRIES+3)/4;
+                    wire [QUERY_DOMAINS*IDENTITY_WIDTH-1:0] query_views;
+                    wire live_tree [1:2*MEMBERSHIP_LEAVES-1];
+                    rv32_frequency_control_tree #(.WIDTH(IDENTITY_WIDTH),.LEAVES(QUERY_DOMAINS)) query_tree (
+                        .signal_i(row_tag[3 +: IDENTITY_WIDTH]),.views_o(query_views));
+                    for(genvar member=0;member<MEMBERSHIP_LEAVES;member=member+1) begin:g_member
+                        if(member<ROB_ENTRIES) begin:g_present
+                            assign live_tree[MEMBERSHIP_LEAVES+member]=rob_entry_valid[member] &&
+                                query_views[(member/4)*IDENTITY_WIDTH +: IDENTITY_WIDTH]==
+                                {rob_entry_generation[member*ROB_GENERATION_WIDTH +: ROB_GENERATION_WIDTH],
+                                 member[ROB_SLOT_WIDTH-1:0]};
+                        end else begin:g_padding
+                            assign live_tree[MEMBERSHIP_LEAVES+member]=1'b0;
+                        end
+                    end
+                    for(genvar member_node=1;member_node<MEMBERSHIP_LEAVES;member_node=member_node+1) begin:g_or
+                        assign live_tree[member_node]=live_tree[2*member_node] || live_tree[2*member_node+1];
+                    end
+                    assign row_live_match=row_tag[0] && live_tree[1];
+                end else begin:g_original_live_read
+                    wire [ROB_LIVE_WIDTH-1:0] row_live;
+                    rv32_frequency_array_read #(.WIDTH(ROB_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),
+                        .INDEX_WIDTH(ROB_SLOT_WIDTH)) live_read (
+                        .rows_i(rob_live_rows),.index_i(row_tag[3 +: ROB_SLOT_WIDTH]),.value_o(row_live));
+                    assign row_live_match=row_tag[0] && row_live[ROB_GENERATION_WIDTH] &&
+                        row_tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]==row_live[0 +: ROB_GENERATION_WIDTH];
+                end
+                assign rs_entry_current_live_match[qualification_row]=row_live_match;
+                assign rs_entry_issue_cancel[qualification_row]=row_cancel;
+                rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+                    .ENABLED(1),.KILL_BRANCH(1)) age_guard (
+                    .packet_i(packet_views[qualification_row*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]),
+                    .active_i(rs_entry_valid[qualification_row]),.tag_i(row_tag),.cancel_o(row_cancel));
+                assign older_apply=branch_pending && recovery_descriptor_valid && recovery_domains[4] &&
+                    !reset_i && !flush_i && rs_entry_valid[qualification_row] &&
+                    row_live_match && !row_cancel;
+            end else begin:g_no_apply
+                assign older_apply=1'b0;
+                assign rs_entry_current_live_match[qualification_row]=1'b0;
+                assign rs_entry_issue_cancel[qualification_row]=1'b0;
+            end
+            assign rs_entry_recovery_qualified[qualification_row]=older_preview || older_apply;
+        end
+    end else begin:g_no_row_qualification
+        assign rs_entry_current_live_match={RS_ENTRIES{1'b0}};
+        assign rs_entry_issue_cancel={RS_ENTRIES{1'b0}};
+        assign rs_entry_recovery_qualified={RS_ENTRIES{1'b0}};
+    end endgenerate
+
     // Registered RS selection / execution boundary.
     localparam integer ISSUE_PAYLOAD_WIDTH = `RV32IM_OP_WIDTH + 32 + TAG_WIDTH + PAW + 32 + 32 + 32 + RS_METADATA_WIDTH + ((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES));
     wire [BE_WIDTH-1:0] raw_rs_issue_valid, raw_rs_issue_ready;
@@ -1603,7 +1711,10 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] raw_rs_issue_store;
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] raw_rs_issue_metadata;
     wire [BE_WIDTH*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))-1:0] raw_rs_issue_slot;
-    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE)) rs (
+    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_QUALIFICATION(RS_ROW_QUALIFICATION_ACTIVE), .ISSUE_RECOVERY_CANCEL(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) rs (
+        .entry_issue_cancel_i(rs_entry_issue_cancel), .issue_cancel_o(raw_rs_issue_cancel),
+        .entry_recovery_qualified_i(rs_entry_recovery_qualified),
+        .issue_recovery_qualified_o(raw_rs_issue_recovery_qualified),
         .alloc_metadata_i(rs_alloc_metadata), .issue_metadata_o(raw_rs_issue_metadata), .entry_metadata_o(rs_entry_metadata),
         .entry_base_ready_o(rs_entry_base_ready), .entry_base_value_o(rs_entry_base_value),
         .alloc_slot_o(rs_alloc_slot),.entry_release_o(rs_entry_release),
@@ -1649,7 +1760,7 @@ module rv32_backend_joint #(
     genvar alu_lane;
     generate
         for (alu_lane = 0; alu_lane < BE_WIDTH; alu_lane = alu_lane + 1) begin : g_alu
-            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .COMPACT_PRED_TARGET(COMPACT_PRED_TARGET), .FORWARD_METADATA(RS_ISSUE_METADATA), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY), .RECOVERY_OLDER_ISSUE(RECOVERY_APPLY_ISSUE_ACTIVE)) alu (
+            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .COMPACT_PRED_TARGET(COMPACT_PRED_TARGET), .FORWARD_METADATA(RS_ISSUE_METADATA), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY), .RECOVERY_OLDER_ISSUE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_PREDECODE(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) alu (
                 .exec_source_pc_o(alu_exec_source_pc[alu_lane*32 +: 32]),
                 .exec_pred_taken_o(alu_exec_pred_taken[alu_lane]),
                 .exec_pred_target_o(alu_exec_pred_target[alu_lane*32 +: 32]),
@@ -1660,6 +1771,7 @@ module rv32_backend_joint #(
                                (alu_lane < INT_ISSUE_WIDTH) &&
                                rs_issue_valid[alu_lane] &&
                                !rs_issue_is_mdu[alu_lane]),
+                .issue_cancel_i(raw_rs_issue_cancel[alu_lane]),
                 .issue_ready_o(alu_issue_ready[alu_lane]),
                 .issue_op_i(rs_issue_op[alu_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH]),
                 .issue_pc_i(rs_issue_pc[alu_lane*32 +: 32]),
@@ -1698,8 +1810,8 @@ module rv32_backend_joint #(
         end
     endgenerate
 
-    rv32m_mdu_reservation_station #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .MUL_IMPL(MUL_IMPL), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY), .RECOVERY_OLDER_ISSUE(RECOVERY_APPLY_ISSUE_ACTIVE)) mdu (
-        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(execution_recovery_views[BE_WIDTH*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
+    rv32m_mdu_reservation_station #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .MUL_IMPL(MUL_IMPL), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY), .RECOVERY_OLDER_ISSUE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_PREDECODE(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) mdu (
+        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(execution_recovery_views[BE_WIDTH*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .issue_valid_i(mdu_issue_valid), .issue_cancel_i(mdu_issue_cancel), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
     rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (

@@ -16,6 +16,7 @@ module rv32i_alu #(
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
     parameter integer RECOVERY_OLDER_ISSUE = 0,
+    parameter integer ISSUE_RECOVERY_PREDECODE = 0,
     parameter integer RECOVERY_WIDTH = 1+2*((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))+$clog2(ROB_ENTRIES+1)
 ) (
     input  wire                         clk_i,
@@ -24,6 +25,7 @@ module rv32i_alu #(
     input  wire [RECOVERY_WIDTH-1:0]    recovery_packet_i,
 
     input  wire                         issue_valid_i,
+    input  wire                         issue_cancel_i,
     output wire                         issue_ready_o,
     input  wire [OP_WIDTH-1:0]          issue_op_i,
     input  wire [31:0]                  issue_pc_i,
@@ -250,9 +252,15 @@ module rv32i_alu #(
         .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(1)) result_cancel_guard (
         .packet_i(recovery_packet_i),.active_i(result_valid_reg || shift_busy),.tag_i(result_rob_tag_reg),.cancel_o(result_cancel));
     wire issue_cancel;
+    generate if(ISSUE_RECOVERY_PREDECODE!=0 && SELECTIVE_RECOVERY!=0) begin:g_predecoded_issue_cancel
+        // The caller carries the same registered-packet age predicate with
+        // the selected payload. Qualify it with this unit's actual valid.
+        assign issue_cancel=issue_valid_i && issue_cancel_i;
+    end else begin:g_original_issue_cancel
     rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
         .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(1)) issue_cancel_guard (
         .packet_i(recovery_packet_i),.active_i(issue_valid_i),.tag_i(issue_rob_tag_i),.cancel_o(issue_cancel));
+    end endgenerate
     wire result_visible = result_valid_reg && !result_cancel &&
         (!live_tag_valid_i || (result_rob_tag_reg == live_tag_i));
     assign exec_valid_o = result_visible;

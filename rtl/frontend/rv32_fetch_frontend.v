@@ -18,6 +18,8 @@ module rv32_fetch_frontend #(
     parameter integer RESPONSE_BYPASS = 0,
     parameter integer RESPONSE_LOCAL_PC = 0,
     parameter integer PARALLEL_BUNDLE_CONTROL = 0,
+    parameter integer RESPONSE_WORD_OFFSET_READ = 0,
+    parameter integer DIRECT_WORD_BOUNDS = 0,
     parameter integer PREDICTOR_META = 0
 ) (
     input  wire                         clk_i,
@@ -240,7 +242,8 @@ module rv32_fetch_frontend #(
             end
             wire [2:0] word_number={1'b0,response_base_pc[3:2]}+3'(bypass_lane);
             assign bypass_lane_valid[bypass_lane]=response_bypass && bypass_prefix[bypass_lane] &&
-                word_number<3'd4;
+                ((DIRECT_WORD_BOUNDS!=0) ?
+                    (response_base_pc[3:2]<=(3-bypass_lane)) : (word_number<3'd4));
         end
         for(response_lane=0;response_lane<FE_WIDTH;response_lane=response_lane+1) begin:g_response_lane
             wire [2:0] index={1'b0,response_base_pc[3:2]}+response_lane;
@@ -264,8 +267,16 @@ module rv32_fetch_frontend #(
                     if_resp_pred_target_i[response_lane*32 +: 12]:12'b0)}:
                 if_resp_pred_target_i[response_lane*32 +: 32];
             assign bundle_pred_kind[response_lane*2 +: 2]=if_resp_pred_kind_i[response_lane*2 +: 2];
-            rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_word_reader (
-                .rows_i(if_resp_line_data_i),.index_i(index),.value_o(response_words[response_lane*32 +: 32]));
+            if(RESPONSE_WORD_OFFSET_READ!=0) begin:g_offset_word_read
+                // Shift is constant wiring. Unavailable trailing words are0.
+                wire [127:0] lane_words=if_resp_line_data_i>>(response_lane*32);
+                rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(2)) instruction_word_reader (
+                    .rows_i(lane_words),.index_i(response_base_pc[3:2]),
+                    .value_o(response_words[response_lane*32 +: 32]));
+            end else begin:g_original_word_read
+                rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_word_reader (
+                    .rows_i(if_resp_line_data_i),.index_i(index),.value_o(response_words[response_lane*32 +: 32]));
+            end
             if(PARALLEL_BUNDLE_CONTROL==0) begin:g_legacy_next_pc
                 wire [1:0] predicted_views;
                 wire [31:0] sequential_pc=response_base_pc+((response_lane+1)*32'd4);
@@ -310,7 +321,7 @@ module rv32_fetch_frontend #(
     endgenerate
     generate if(PARALLEL_BUNDLE_CONTROL!=0) begin:g_parallel_bundle_control
         rv32_frontend_parallel_bundle_control #(.FE_WIDTH(FE_WIDTH),.FQ_DEPTH(FQ_DEPTH),
-            .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) control (
+            .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT),.DIRECT_WORD_BOUNDS(DIRECT_WORD_BOUNDS)) control (
             .base_pc_i(response_base_pc),.words_i(response_words),
             .taken_i(if_resp_pred_taken_i),.targets_i(if_resp_pred_target_i),
             .queue_count_i(count_reg),.response_error_i(if_resp_error_i),
@@ -523,7 +534,8 @@ endmodule
 // Same accepted prefix as bundle_count, without count encoding/decoding on
 // next-PC or response-capacity paths. No new state or acceptance boundary.
 module rv32_frontend_parallel_bundle_control #(
-    parameter integer FE_WIDTH=4,FQ_DEPTH=16,LEGACY_SENTINEL_HALT=0
+    parameter integer FE_WIDTH=4,FQ_DEPTH=16,LEGACY_SENTINEL_HALT=0,
+    parameter integer DIRECT_WORD_BOUNDS=0
 ) (
     input wire [31:0] base_pc_i,
     input wire [FE_WIDTH*32-1:0] words_i,targets_i,
@@ -539,6 +551,15 @@ module rv32_frontend_parallel_bundle_control #(
     genvar lane;
     generate for(lane=0;lane<FE_WIDTH;lane=lane+1) begin:g_lane
         wire [2:0] word_number={1'b0,base_pc_i[3:2]}+3'(lane);
+        wire word_in_line,word_is_last;
+        if(DIRECT_WORD_BOUNDS!=0) begin:g_direct_bound
+            localparam [1:0] LAST_START=3-lane;
+            assign word_in_line=base_pc_i[3:2]<=LAST_START;
+            assign word_is_last=base_pc_i[3:2]==LAST_START;
+        end else begin:g_original_bound
+            assign word_in_line=word_number<3'd4;
+            assign word_is_last=word_number==3'd3;
+        end
         wire prior_prefix_live;
         assign stops[lane]=taken_i[lane] || ((LEGACY_SENTINEL_HALT!=0) &&
             words_i[lane*32 +: 32]==32'h0ff00513);
@@ -547,9 +568,9 @@ module rv32_frontend_parallel_bundle_control #(
         end else begin:g_later
             assign prior_prefix_live=!(|stops[lane-1:0]);
         end
-        assign lane_live[lane]=!response_error_i && prior_prefix_live && word_number<3'd4;
+        assign lane_live[lane]=!response_error_i && prior_prefix_live && word_in_line;
         wire ends_bundle=lane_live[lane] &&
-            (stops[lane] || (lane==FE_WIDTH-1) || word_number==3'd3);
+            (stops[lane] || (lane==FE_WIDTH-1) || word_is_last);
         // An error has no bundle. Otherwise exactly one live lane ends it.
         // Target/sequential events are disjoint and directly select data.
         assign events[2*lane]=ends_bundle && taken_i[lane];
