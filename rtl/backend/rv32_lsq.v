@@ -33,6 +33,7 @@ module rv32_lsq #(
     // Optional atomic caller supplies its raw sparse memory-lane plan.
     // Whenever any actual allocation fires, its plan must equal fire_o.
     parameter integer ALLOC_SLOT_PRESELECT = 0,
+    parameter integer ALLOC_PAYLOAD_PRESELECT = 0,
     parameter integer ALLOC_FIRE_DISTRIBUTE = 0,
     // 0: registered selection; 1: empty fallthrough with AGU lookthrough;
     // 2: empty fallthrough from registered addresses only (shorter timing path).
@@ -86,6 +87,9 @@ module rv32_lsq #(
     output reg  [BE_WIDTH-1:0]           alloc_fire_o,
     output reg  [ALLOC_COUNT_WIDTH-1:0]  alloc_count_o,
     output reg  [(BE_WIDTH*TAG_WIDTH)-1:0] alloc_lsq_tag_o,
+    // Private payload is observed only with the original alloc_fire event.
+    // The planned slot/full GEN can precede that late acceptance decision.
+    output wire [(BE_WIDTH*TAG_WIDTH)-1:0] alloc_payload_tag_o,
     input  wire [BE_WIDTH-1:0]           alloc_is_load_i,
     input  wire [BE_WIDTH-1:0]           alloc_is_store_i,
     input  wire [(BE_WIDTH*ROB_TAG_WIDTH)-1:0] alloc_rob_tag_i,
@@ -777,8 +781,8 @@ module rv32_lsq #(
                 !allocation_prior_unresolved_store[early_lane] && alloc_fire_o[early_lane] &&
                 alloc_is_load_i[early_lane] && !alloc_is_store_i[early_lane] && alloc_addr_valid_i[early_lane];
             assign allocation_load_values[early_lane*SELECTION_PAYLOAD_WIDTH +: SELECTION_PAYLOAD_WIDTH]={
-                alloc_lsq_tag_o[early_lane*TAG_WIDTH+3 +: SLOT_WIDTH],
-                alloc_lsq_tag_o[early_lane*TAG_WIDTH +: TAG_WIDTH],
+                alloc_payload_tag_o[early_lane*TAG_WIDTH+3 +: SLOT_WIDTH],
+                alloc_payload_tag_o[early_lane*TAG_WIDTH +: TAG_WIDTH],
                 alloc_rob_tag_i[early_lane*ROB_TAG_WIDTH +: ROB_TAG_WIDTH],
                 alloc_addr_i[early_lane*32 +: 32],1'b1,
                 alloc_size_i[early_lane*2 +: 2],alloc_unsigned_i[early_lane],4'b0,32'b0};
@@ -1268,8 +1272,19 @@ module rv32_lsq #(
             head_packet_metadata[0 +: TAG_WIDTH],store_ack_rob_query_tag_o};
         // Head choice implies original report-valid; absent any valid saved
         // or held row the normal tree is0. No second wide validity mask needed.
-        assign prepared_report_payload=load_report_identity_head_o ?
-            head_packet : saved_identity_tree[1][0 +: REPORT_BASE_WIDTH];
+        // A late head/saved choice must not drive the entire report word.
+        // All priced tree leaves carry exactly the same original choice;
+        // each leaf selects at most 16 payload bits, without another edge.
+        localparam integer HEAD_CHOICE_WORDS=(REPORT_BASE_WIDTH+15)/16;
+        wire [HEAD_CHOICE_WORDS-1:0] head_choice_views;
+        rv32_frequency_control_tree #(.LEAVES(HEAD_CHOICE_WORDS)) head_choice_tree (
+            .signal_i(load_report_identity_head_o),.views_o(head_choice_views));
+        for(genvar head_choice_word=0;head_choice_word<HEAD_CHOICE_WORDS;head_choice_word=head_choice_word+1) begin:g_choice_word
+            localparam integer LOW=head_choice_word*16;
+            localparam integer BITS=(REPORT_BASE_WIDTH-LOW>=16)?16:REPORT_BASE_WIDTH-LOW;
+            assign prepared_report_payload[LOW +: BITS]=head_choice_views[head_choice_word] ?
+                head_packet[LOW +: BITS] : saved_identity_tree[1][LOW +: BITS];
+        end
     end else begin:g_original_load_packet
         assign head_packet_metadata=0;
         assign prepared_report_payload=report_payload_tree[1][0 +: REPORT_BASE_WIDTH];
@@ -1870,6 +1885,14 @@ module rv32_lsq #(
             wire [BE_WIDTH-1:0] slot_plan=(ALLOC_SLOT_PRESELECT!=0) ? alloc_plan_valid_i : alloc_fire_o;
             wire [31:0] offset=tail_reg+alloc_count_before_lane(payload_lane,slot_plan);
             assign payload_alloc_slot[payload_lane]=(offset>=LSQ_ENTRIES)?offset-LSQ_ENTRIES:offset;
+            if(ALLOC_PAYLOAD_PRESELECT!=0 && ALLOC_SLOT_PRESELECT!=0) begin:g_planned_identity
+                assign alloc_payload_tag_o[payload_lane*TAG_WIDTH +: TAG_WIDTH]=
+                    make_lsq_tag(payload_alloc_slot[payload_lane],
+                        generation_next_mem[payload_alloc_slot[payload_lane]]);
+            end else begin:g_original_identity
+                assign alloc_payload_tag_o[payload_lane*TAG_WIDTH +: TAG_WIDTH]=
+                    alloc_lsq_tag_o[payload_lane*TAG_WIDTH +: TAG_WIDTH];
+            end
         end
         for(payload_row=0;payload_row<LSQ_ENTRIES;payload_row=payload_row+1) begin:g_payload_row
             wire enabled=!payload_modes[payload_row*3] && !payload_modes[payload_row*3+1];
