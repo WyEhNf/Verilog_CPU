@@ -18,6 +18,7 @@ module rv32_lsq #(
     parameter integer REQUEST_PIPELINE = 0,
     parameter integer LOAD_ADDRESS_LOOKTHROUGH = 0,
     parameter integer LOAD_COMPLETION_BYPASS = 0,
+    parameter integer LOAD_WAKE_BYPASS = 0,
     // Decode each saved byte offset before late response-row selection and
     // route query payload from the original complete response match events.
     parameter integer RESPONSE_QUERY_PREDECODE = 0,
@@ -117,6 +118,12 @@ module rv32_lsq #(
     output reg  [PHYS_ADDR_WIDTH-1:0]    load_complete_phys_rd_o,
     output reg                          load_complete_unretired_o,
     output reg                          load_complete_error_o,
+    // Early speculative wake is independent of CDB acceptance/completion.
+    // The original row still captures the response for formal publication.
+    output wire                         load_return_wake_valid_o,
+    output wire [ROB_TAG_WIDTH-1:0]      load_return_wake_rob_tag_o,
+    output wire [PHYS_ADDR_WIDTH-1:0]    load_return_wake_phys_o,
+    output wire [31:0]                  load_return_wake_value_o,
 
     input  wire                         dcache_store_ack_valid_i,
     input  wire [TAG_WIDTH-1:0]         dcache_store_ack_lsq_tag_i,
@@ -1002,6 +1009,24 @@ module rv32_lsq #(
         assign report_hold_tag=0;
     end endgenerate
 
+    localparam integer RETURN_WAKE_META_WIDTH=ROB_TAG_WIDTH+PHYS_ADDR_WIDTH;
+    wire [LSQ_ENTRIES-1:0] return_wake_rows;
+    wire [LSQ_ENTRIES*RETURN_WAKE_META_WIDTH-1:0] return_wake_metadata;
+    generate if(LOAD_WAKE_BYPASS!=0 && LOCAL_REPORT_CANCEL!=0) begin:g_return_wake_selector
+        rv32_frequency_event_select #(.WIDTH(RETURN_WAKE_META_WIDTH),.EVENTS(LSQ_ENTRIES),.PRIORITY(0)) return_owner_selector (
+            .events_i(return_wake_rows),.values_i(return_wake_metadata),
+            .write_o(load_return_wake_valid_o),
+            .value_o({load_return_wake_rob_tag_o,load_return_wake_phys_o}));
+        // Exactly the value captured by the original selected response row:
+        // line/word choice, byte forwarding merge, size and signed extension.
+        assign load_return_wake_value_o=payload_response_value;
+    end else begin:g_no_return_wake
+        assign load_return_wake_valid_o=1'b0;
+        assign load_return_wake_rob_tag_o=0;
+        assign load_return_wake_phys_o=0;
+        assign load_return_wake_value_o=0;
+    end endgenerate
+
     genvar report_row,report_word,report_node,report_decode;
     generate
         for(report_row=0;report_row<REPORT_ROWS;report_row=report_row+1) begin:g_report_row
@@ -1017,6 +1042,18 @@ module rv32_lsq #(
                     .KILL_BRANCH(0),.WIDTH(REPORT_RECOVERY_WIDTH)) cancel_guard (
                     .packet_i(report_recovery_views[report_row*REPORT_RECOVERY_WIDTH +: REPORT_RECOVERY_WIDTH]),
                     .active_i(1'b1),.tag_i(rob_tag_mem[report_row]),.cancel_o(row_cancel));
+                // Full LSQ generation and live row ownership qualify wake.
+                // A retired/stale/killed/store row cannot wake a reclaimed
+                // physical register. No oldest-report arbitration or ROB
+                // table lookup sits on this notification path.
+                assign return_wake_rows[report_row]=(LOAD_WAKE_BYPASS!=0) &&
+                    (LOCAL_REPORT_CANCEL!=0) && !reset_i && !flush_i && !recovery_valid_i &&
+                    response_match_rows[report_row] && load_mem[report_row] && !store_mem[report_row] &&
+                    request_sent_mem[report_row] && !complete_mem[report_row] &&
+                    !load_reported_mem[report_row] && !retired_mem[report_row] &&
+                    rob_tag_mem[report_row][0] && !row_cancel;
+                assign return_wake_metadata[report_row*RETURN_WAKE_META_WIDTH +: RETURN_WAKE_META_WIDTH]={
+                    rob_tag_mem[report_row],physical_destinations[report_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]};
                 // Reuse the exact existing LSQ response value: full byte
                 // forwarding merge and signed/unsigned load formatting.
                 // response_match_rows already checks LSQ valid/generation
