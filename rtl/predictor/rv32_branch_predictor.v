@@ -12,6 +12,11 @@ module rv32_branch_predictor #(
     parameter integer COMPACT_INDIRECT_BTB = 0,
     parameter integer COMPACT_BTB_ENTRIES = 64,
     parameter integer HYBRID_DIRECTION = 0,
+    // Optional candidate-target contract: a conditional direct target can be
+    // meaningful even when not taken. Caller selects it only when taken, and
+    // omits unused direct targets from saved resolution metadata.
+    parameter integer DIRECTION_INDEPENDENT_TARGET = 0,
+    parameter integer NARROW_DIRECTION_READ = 0,
     parameter integer HISTORY_BITS = 6
 ) (
     input  wire        clk_i,
@@ -145,8 +150,13 @@ module rv32_branch_predictor #(
             assign btb_rows[predictor_row*59 +: 59]={btb_valid[predictor_row],btb_tag[predictor_row],btb_target[predictor_row],btb_kind[predictor_row]};
         end
     endgenerate
-    rv32_frequency_array_read #(.WIDTH(3),.ENTRIES(BHT_ENTRIES),.INDEX_WIDTH(BHT_INDEX_WIDTH)) bht_query (
-        .rows_i(bht_rows),.index_i(query_bht_index),.value_o(query_bht_word));
+    generate if(NARROW_DIRECTION_READ!=0) begin:g_narrow_bht_query
+        rv32_frequency_narrow_array_read #(.WIDTH(3),.ENTRIES(BHT_ENTRIES),.INDEX_WIDTH(BHT_INDEX_WIDTH)) query (
+            .rows_i(bht_rows),.index_i(query_bht_index),.value_o(query_bht_word));
+    end else begin:g_regular_bht_query
+        rv32_frequency_array_read #(.WIDTH(3),.ENTRIES(BHT_ENTRIES),.INDEX_WIDTH(BHT_INDEX_WIDTH)) query (
+            .rows_i(bht_rows),.index_i(query_bht_index),.value_o(query_bht_word));
+    end endgenerate
     rv32_frequency_array_read #(.WIDTH(59),.ENTRIES(BTB_ENTRIES),.INDEX_WIDTH(BTB_INDEX_WIDTH)) btb_query (
         .rows_i(btb_rows),.index_i(query_btb_index),.value_o(query_btb_word));
 
@@ -238,10 +248,20 @@ module rv32_branch_predictor #(
         end
         // All three tables query in parallel. Choice is a final direction mux,
         // never an extra serialized index lookup before either direction table.
-        rv32_frequency_array_read #(.WIDTH(3),.ENTRIES(BHT_ENTRIES),.INDEX_WIDTH(BHT_INDEX_WIDTH)) bimodal_query (
-            .rows_i(bimodal_rows),.index_i(query_pc_i[9:2+BANK_BITS]),.value_o(query_bimodal_word));
-        rv32_frequency_array_read #(.WIDTH(2),.ENTRIES(CHOICE_ENTRIES),.INDEX_WIDTH(CHOICE_INDEX_WIDTH)) choice_query (
-            .rows_i(choice_rows),.index_i(query_pc_i[7:2+BANK_BITS]),.value_o(query_choice));
+        if(NARROW_DIRECTION_READ!=0) begin:g_narrow_bimodal_query
+            rv32_frequency_narrow_array_read #(.WIDTH(3),.ENTRIES(BHT_ENTRIES),.INDEX_WIDTH(BHT_INDEX_WIDTH)) query (
+                .rows_i(bimodal_rows),.index_i(query_pc_i[9:2+BANK_BITS]),.value_o(query_bimodal_word));
+        end else begin:g_regular_bimodal_query
+            rv32_frequency_array_read #(.WIDTH(3),.ENTRIES(BHT_ENTRIES),.INDEX_WIDTH(BHT_INDEX_WIDTH)) query (
+                .rows_i(bimodal_rows),.index_i(query_pc_i[9:2+BANK_BITS]),.value_o(query_bimodal_word));
+        end
+        if(NARROW_DIRECTION_READ!=0) begin:g_narrow_choice_query
+            rv32_frequency_narrow_array_read #(.WIDTH(2),.ENTRIES(CHOICE_ENTRIES),.INDEX_WIDTH(CHOICE_INDEX_WIDTH)) query (
+                .rows_i(choice_rows),.index_i(query_pc_i[7:2+BANK_BITS]),.value_o(query_choice));
+        end else begin:g_regular_choice_query
+            rv32_frequency_array_read #(.WIDTH(2),.ENTRIES(CHOICE_ENTRIES),.INDEX_WIDTH(CHOICE_INDEX_WIDTH)) query (
+                .rows_i(choice_rows),.index_i(query_pc_i[7:2+BANK_BITS]),.value_o(query_choice));
+        end
     end else begin:g_no_hybrid_direction
         assign query_bimodal_word=3'b000;
         assign query_choice=2'b10;
@@ -300,13 +320,23 @@ module rv32_branch_predictor #(
     wire [31:0] default_next_pc=query_pc_i+32'd4;
     wire [31:0] direct_branch_pc=query_pc_i+branch_imm;
     wire [31:0] direct_jal_pc=query_pc_i+jal_imm;
-    assign target_classes[0]=!pred_taken_o;
-    assign target_classes[1]=pred_taken_o && pred_kind_o==`RV32IM_PRED_BRANCH &&
-        ((DIRECT_BRANCH_TARGET!=0) || !pred_btb_hit_o);
-    assign target_classes[2]=pred_taken_o && pred_kind_o==`RV32IM_PRED_JAL;
-    assign target_classes[3]=pred_taken_o &&
-        (pred_kind_o==`RV32IM_PRED_JALR ||
-         (pred_kind_o==`RV32IM_PRED_BRANCH && DIRECT_BRANCH_TARGET==0 && pred_btb_hit_o));
+    generate if(DIRECTION_INDEPENDENT_TARGET!=0 && DIRECT_BRANCH_TARGET!=0) begin:g_early_target
+        // Kind/BTB query is independent of direction-table readout. Compute
+        // a conditional target before the global/bimodal/choice decision;
+        // frontend direction remains the final target-versus-sequential choice.
+        assign target_classes[1]=pred_kind_o==`RV32IM_PRED_BRANCH;
+        assign target_classes[2]=pred_kind_o==`RV32IM_PRED_JAL;
+        assign target_classes[3]=pred_kind_o==`RV32IM_PRED_JALR && pred_btb_hit_o;
+        assign target_classes[0]=!(|target_classes[3:1]);
+    end else begin:g_qualified_target
+        assign target_classes[0]=!pred_taken_o;
+        assign target_classes[1]=pred_taken_o && pred_kind_o==`RV32IM_PRED_BRANCH &&
+            ((DIRECT_BRANCH_TARGET!=0) || !pred_btb_hit_o);
+        assign target_classes[2]=pred_taken_o && pred_kind_o==`RV32IM_PRED_JAL;
+        assign target_classes[3]=pred_taken_o &&
+            (pred_kind_o==`RV32IM_PRED_JALR ||
+             (pred_kind_o==`RV32IM_PRED_BRANCH && DIRECT_BRANCH_TARGET==0 && pred_btb_hit_o));
+    end endgenerate
     assign target_values={query_btb_word[33:2],direct_jal_pc,direct_branch_pc,default_next_pc};
     // The four legal target classes are exhaustive and mutually exclusive.
     rv32_frequency_event_select #(.WIDTH(32),.EVENTS(4),.PRIORITY(0)) target_selector (

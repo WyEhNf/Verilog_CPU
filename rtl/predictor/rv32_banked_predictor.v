@@ -13,6 +13,12 @@ module rv32_banked_predictor #(
     parameter integer COMPACT_BTB_ENTRIES = 64,
     parameter integer FEEDBACK_LANES = 1, MULTI_FEEDBACK = 0,
     parameter integer HYBRID_DIRECTION = 0,
+    parameter integer DIRECTION_INDEPENDENT_TARGET = 0,
+    parameter integer NARROW_DIRECTION_READ = 0,
+    parameter integer BANK_PC_CARRY_SELECT = 0,
+    parameter integer PREFIX_QUERY_HISTORY = 0,
+    parameter integer BANK_LOCAL_INSTRUCTION_READ = 0,
+    parameter integer BANK_LOCAL_PREFIX_HISTORY = 0,
     parameter integer HISTORY_BITS = 6
 ) (
     input wire clk_i, reset_i,
@@ -47,6 +53,9 @@ module rv32_banked_predictor #(
                                ((FE_WIDTH == 2) ? 2'b01 : 2'b11);
     wire [1:0] base_bank = query_pc_i[3:2] & BANK_MASK;
     wire [1:0] feedback_bank = feedback_pc_i[3:2] & BANK_MASK;
+    // Compute this constant increment before the bank-dependent offset arrives.
+    // Truncation preserves modulo-2^32 PC wrap after reattaching the low bits.
+    wire [27:0] next_line_high=query_pc_i[31:4]+28'd1;
     localparam integer MULTI_ACTIVE=(MULTI_FEEDBACK!=0) && (DIRECT_BRANCH_TARGET!=0);
     localparam integer HYBRID_ACTIVE=(HYBRID_DIRECTION!=0) &&
         (DIRECT_BRANCH_TARGET==2) && (HISTORY_BITS<=6);
@@ -84,7 +93,55 @@ module rv32_banked_predictor #(
             localparam [1:0] BANK_NUMBER = bank;
             wire [1:0] offset = (BANK_NUMBER - base_bank) & BANK_MASK;
             wire [2:0] word_index = {1'b0, query_pc_i[3:2]} + {1'b0, offset};
-            wire [31:0] pc = query_pc_i + {28'd0, offset, 2'b00};
+            wire [31:0] pc;
+            if(BANK_PC_CARRY_SELECT!=0 && FE_WIDTH>1) begin:g_carry_select_pc
+                wire [1:0] line_carry_views;
+                rv32_frequency_control_tree #(.LEAVES(2)) line_carry_tree (
+                    .signal_i(word_index[2]),.views_o(line_carry_views));
+                assign pc[1:0]=query_pc_i[1:0];
+                assign pc[3:2]=word_index[1:0];
+                for(genvar pc_word=0;pc_word<2;pc_word=pc_word+1) begin:g_high_word
+                    localparam integer LOW=pc_word*16;
+                    localparam integer BITS=(28-LOW>=16)?16:28-LOW;
+                    assign pc[4+LOW +: BITS]=line_carry_views[pc_word]?
+                        next_line_high[LOW +: BITS]:query_pc_i[4+LOW +: BITS];
+                end
+            end else begin:g_original_pc
+                assign pc=query_pc_i+{28'd0,offset,2'b00};
+            end
+            wire [7:0] bank_query_history;
+            if(PREFIX_QUERY_HISTORY!=0 && DIRECT_BRANCH_TARGET==2 && FE_WIDTH>1) begin:g_prefix_history
+                wire [2:0] preceding_conditions;
+                for(genvar word=0;word<3;word=word+1) begin:g_preceding_word
+                    // A later accepted instruction implies every earlier
+                    // conditional in this prefix was predicted not taken.
+                    // Inspect fixed line words, never another table's output.
+                    if(BANK_LOCAL_PREFIX_HISTORY!=0 && FE_WIDTH==4) begin:g_fixed_bank_prefix
+                        if(word<bank) begin:g_earlier_word
+                            assign preceding_conditions[word]=
+                                query_line_i[word*32 +: 7]==7'b1100011 && query_pc_i[3:2]<=word;
+                        end else begin:g_not_earlier
+                            assign preceding_conditions[word]=1'b0;
+                        end
+                    end else begin:g_original_prefix_mask
+                        assign preceding_conditions[word]=
+                            query_line_i[word*32 +: 7]==7'b1100011 &&
+                            query_pc_i[3:2]<=word && word_index>word && !word_index[2];
+                    end
+                end
+                wire [1:0] preceding_count={
+                    (preceding_conditions[0]&preceding_conditions[1]) |
+                    (preceding_conditions[0]&preceding_conditions[2]) |
+                    (preceding_conditions[1]&preceding_conditions[2]),
+                    preceding_conditions[0]^preceding_conditions[1]^preceding_conditions[2]};
+                assign bank_query_history=
+                    ({8{preceding_count==2'd0}} & (global_history & HISTORY_MASK)) |
+                    ({8{preceding_count==2'd1}} & ((global_history<<1) & HISTORY_MASK)) |
+                    ({8{preceding_count==2'd2}} & ((global_history<<2) & HISTORY_MASK)) |
+                    ({8{preceding_count==2'd3}} & ((global_history<<3) & HISTORY_MASK));
+            end else begin:g_original_history
+                assign bank_query_history=global_history;
+            end
             wire [31:0] inst;
             wire update_valid,update_taken,update_pred_taken;
             wire [31:0] update_pc,update_target,update_pred_target;
@@ -134,16 +191,35 @@ module rv32_banked_predictor #(
             assign bank_feedback_valid[bank]=update_valid;
             assign bank_feedback_correct[bank]=update_valid && update_pred_taken==update_taken &&
                 (!update_taken || update_pred_target==update_target);
-            rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_query (
-                .rows_i(query_line_i),.index_i(word_index),.value_o(inst));
+            if(BANK_LOCAL_INSTRUCTION_READ!=0 && FE_WIDTH==4) begin:g_fixed_instruction
+                // word_index[1:0] is this bank, even on a cross-line query.
+                // Preserve the old padded-array zero on invalid words4..6.
+                wire [1:0] within_line_views;
+                rv32_frequency_control_tree #(.LEAVES(2)) within_line_tree (
+                    .signal_i(!word_index[2]),.views_o(within_line_views));
+                for(genvar part=0;part<2;part=part+1) begin:g_half_word
+                    assign inst[part*16 +: 16]=query_line_i[bank*32+part*16 +: 16] &
+                        {16{within_line_views[part]}};
+                end
+            end else if(BANK_LOCAL_INSTRUCTION_READ!=0 && FE_WIDTH==2) begin:g_two_instruction_words
+                wire [63:0] bank_instruction_rows={query_line_i[(bank+2)*32 +: 32],
+                    query_line_i[bank*32 +: 32]};
+                // Its parity is fixed. The retained high index includes the
+                // cross-line bit and padded rows therefore still return zero.
+                rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(2),.INDEX_WIDTH(2)) instruction_query (
+                    .rows_i(bank_instruction_rows),.index_i(word_index[2:1]),.value_o(inst));
+            end else begin:g_original_instruction_query
+                rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_query (
+                    .rows_i(query_line_i),.index_i(word_index),.value_o(inst));
+            end
             assign bank_query_packets[bank*40 +: 40]={bank_component_directions[bank*2 +: 2],bank_taken[bank],bank_hit[bank],
                 bank_target[bank*32 +: 32],bank_kind[bank*2 +: 2],bank_counter[bank*2 +: 2]};
             rv32_branch_predictor #(.BANK_BITS(BANK_BITS), .DIRECT_BRANCH_TARGET(DIRECT_BRANCH_TARGET),
-                .HISTORY_BITS(HISTORY_BITS), .HYBRID_DIRECTION(HYBRID_DIRECTION), .COMPACT_INDIRECT_BTB(COMPACT_INDIRECT_BTB), .COMPACT_BTB_ENTRIES(COMPACT_BTB_ENTRIES)) predictor (
+                .HISTORY_BITS(HISTORY_BITS), .HYBRID_DIRECTION(HYBRID_DIRECTION), .DIRECTION_INDEPENDENT_TARGET(DIRECTION_INDEPENDENT_TARGET), .NARROW_DIRECTION_READ(NARROW_DIRECTION_READ), .COMPACT_INDIRECT_BTB(COMPACT_INDIRECT_BTB), .COMPACT_BTB_ENTRIES(COMPACT_BTB_ENTRIES)) predictor (
                 .clk_i(clk_i), .reset_i(reset_i),
                 .query_valid_i(query_valid_i && word_index < 3'd4),
                 .query_pc_i(pc), .query_inst_i(inst),
-                .query_history_i(global_history),
+                .query_history_i(bank_query_history),
                 .pred_training_index_o(bank_training_index[bank*8 +: 8]),
                 .pred_taken_o(bank_taken[bank]), .pred_btb_hit_o(bank_hit[bank]),
                 .pred_target_o(bank_target[bank*32 +: 32]),
@@ -174,9 +250,9 @@ module rv32_banked_predictor #(
             assign pred_btb_index_o[lane*4 +: 4] = pc[5:2];
         end
     endgenerate
-    // Parallel queries share the pre-bundle history and disjoint PC banks.
-    // Save that exact table index, plus a per-instruction program-order
-    // history checkpoint. Only accepted prefix instructions advance history.
+    // Save the exact index used by each parallel query, plus its
+    // program-order history checkpoint. Optional prefix query history is
+    // formed independently of directions; accepted-prefix update stays here.
     always @* begin
         history_after_bundle = global_history;
         history_prefix_live = query_valid_i;
