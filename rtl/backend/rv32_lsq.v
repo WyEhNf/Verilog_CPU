@@ -1088,16 +1088,16 @@ module rv32_lsq #(
     assign {response_query_rob_tag,response_query_offset,response_query_forward,
             response_query_mask,response_query_size,response_query_unsigned}=response_query_packet;
     generate if(RESPONSE_QUERY_PREDECODE!=0) begin:g_direct_response_query
-        wire [LSQ_ENTRIES-1:0] matches,events;
+        wire [LSQ_ENTRIES-1:0] response_query_matches,events;
         for(genvar query_row=0;query_row<LSQ_ENTRIES;query_row=query_row+1) begin:g_match
             // Identical predicate to the original scalar response-slot walk.
             // No generation, validity or response-wait authority is omitted.
-            assign matches[query_row]=response_match_rows[query_row];
+            assign response_query_matches[query_row]=response_match_rows[query_row];
             if(query_row==0) begin:g_default_row
                 // The old scalar walk initializes response_slot to row zero.
-                assign events[query_row]=matches[query_row] || !(|matches);
+                assign events[query_row]=response_query_matches[query_row] || !(|response_query_matches);
             end else begin:g_other_row
-                assign events[query_row]=matches[query_row];
+                assign events[query_row]=response_query_matches[query_row];
             end
         end
         // Highest matching row wins, even for inconsistent duplicate matches.
