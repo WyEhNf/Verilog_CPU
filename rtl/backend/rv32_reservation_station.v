@@ -17,6 +17,9 @@ module rv32_reservation_station #(
     parameter integer STORE_DATA_WIDTH = 32,
     parameter integer METADATA_WIDTH = 1,
     parameter integer WAKE_MUX_IMPL = 0,
+    // Only the read-only store-address probe uses saved operands. Ordinary
+    // issue continues to fold current-cycle wakeups into both operands.
+    parameter integer REGISTERED_BASE_PROBE = 0,
     parameter integer ALLOC_STATIC_WRITE = 0,
     // 0: numeric comparison, 1: cached numeric comparison,
     // 2: relative allocation-order matrix (requires static allocation).
@@ -65,7 +68,8 @@ module rv32_reservation_station #(
     input  wire [ENTRIES-1:0]            flush_kill_mask_i,
     output wire [ENTRIES-1:0]            entry_valid_o,
     output wire [(ENTRIES*TAG_WIDTH)-1:0] entry_rob_tag_o,
-    // A read-only view of the existing base operand, including CDB bypass.
+    // A read-only base operand view. REGISTERED_BASE_PROBE separates
+    // the opportunistic address probe from current-cycle CDB bypass.
     // Store address probing does not consume an issue slot or dequeue work.
     output wire [ENTRIES-1:0]            entry_base_ready_o,
     output wire [(ENTRIES*32)-1:0]       entry_base_value_o,
@@ -145,10 +149,13 @@ module rv32_reservation_station #(
         for (entry_index = 0; entry_index < ENTRIES; entry_index = entry_index + 1) begin : g_entry_state
             assign entry_valid_o[entry_index] = valid_mem[entry_index];
             assign entry_rob_tag_o[(entry_index*TAG_WIDTH) +: TAG_WIDTH] = rob_tag_mem[entry_index];
+            wire probe_base_ready=(REGISTERED_BASE_PROBE!=0) ?
+                src1_ready_mem[entry_index] : src1_ready_effective[entry_index];
             assign entry_base_ready_o[entry_index] = valid_mem[entry_index] &&
-                target_live_mem[entry_index] && src1_ready_effective[entry_index] &&
-                !flush_valid_i;
-            assign entry_base_value_o[(entry_index*32) +: 32] = src1_value_effective[entry_index];
+                target_live_mem[entry_index] && probe_base_ready && !flush_valid_i;
+            assign entry_base_value_o[(entry_index*32) +: 32] =
+                (REGISTERED_BASE_PROBE!=0) ? src1_value_mem[entry_index] :
+                    src1_value_effective[entry_index];
             assign entry_metadata_o[(entry_index*METADATA_WIDTH) +: METADATA_WIDTH] = metadata_mem[entry_index];
             assign ready_candidates[entry_index] = valid_mem[entry_index] &&
                 target_live_mem[entry_index] && src1_ready_effective[entry_index] &&

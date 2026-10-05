@@ -640,11 +640,20 @@ module rv32_dcache_nonblocking #(
 
     assign request_is_store = core_req_is_store && !core_req_is_load;
     wire request_is_load = core_req_is_load && !core_req_is_store;
-    wire response_matches = response_found &&
-                            (mem_resp_line_addr_i ==
-                             (query_response_mshr_writeback ?
-                              query_response_mshr_victim_addr :
-                              {query_response_mshr_addr[31:4], 4'b0}));
+    // Registered per-row identity is ready before the returning MSHR index.
+    // Compare both legal address sources in parallel; late selection carries
+    // one comparison bit instead of a selected flag plus a 32-bit address mux.
+    wire [MSHR_ENTRIES-1:0] response_address_match_rows;
+    wire selected_response_address_match;
+    generate for(genvar match_mshr=0;match_mshr<MSHR_ENTRIES;match_mshr=match_mshr+1) begin:g_response_address_match
+        assign response_address_match_rows[match_mshr]=
+            (mshr_writeback[match_mshr] && mem_resp_line_addr_i==mshr_victim_addr[match_mshr]) ||
+            (!mshr_writeback[match_mshr] && mem_resp_line_addr_i=={mshr_addr[match_mshr][31:4],4'b0});
+    end endgenerate
+    rv32_frequency_array_read #(.WIDTH(1),.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(8)) response_address_match_read (
+        .rows_i(response_address_match_rows),.index_i(mem_resp_id_i),.value_o(selected_response_address_match));
+    // The original valid/sent/range response authority remains mandatory.
+    wire response_matches=response_found && selected_response_address_match;
     wire response_writeback_failed = response_found &&
                                      query_response_mshr_writeback &&
                                      (mem_resp_error_i || !response_matches);

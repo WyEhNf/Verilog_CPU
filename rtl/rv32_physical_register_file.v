@@ -11,6 +11,9 @@ module rv32_physical_register_file #(
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer READ_MUX_IMPL = 0,
     parameter integer LOCAL_VALUE_ROWS = 0,
+    // Optional combination output for even allocation read ports only.
+    // The original read data/ready and storage updates remain independent.
+    parameter integer STORE_ADDRESS_READ = 0,
     parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS)
 ) (
     input  wire                         clk_i,
@@ -22,7 +25,9 @@ module rv32_physical_register_file #(
     input  wire [BE_WIDTH-1:0]           alloc_valid_i,
     input  wire [(BE_WIDTH*PHYS_ADDR_WIDTH)-1:0] write_phys_i,
     input  wire [(BE_WIDTH*32)-1:0]      write_data_i,
-    input  wire [BE_WIDTH-1:0]           write_valid_i
+    input  wire [BE_WIDTH-1:0]           write_valid_i,
+    input  wire [BE_WIDTH*12-1:0]        store_offset_i,
+    output wire [BE_WIDTH*32-1:0]       store_address_o
 );
     // Keep the value store as a word array so synthesis can implement it as
     // a compact multi-ported memory.  The previous flattened vector forced
@@ -148,12 +153,41 @@ module rv32_physical_register_file #(
                 .events_i(bypass_match),.values_i(write_data_i),.write_o(bypass_write),.value_o(bypass_value));
             rv32_frequency_control_tree #(.LEAVES(2)) bypass_choice_tree (
                 .signal_i(bypass_write),.views_o(bypass_select));
+            if((rp%2)==0) begin:g_store_address_output
+                if(STORE_ADDRESS_READ!=0) begin:g_parallel_calculation
+                    wire [BE_WIDTH:0] address_events;
+                    wire [(BE_WIDTH+1)*32-1:0] address_values;
+                    // The fallback is the SAME un-bypassed read-tree value.
+                    // P0 and out-of-range rows already read zero from this tree.
+                    assign address_events[0]=!bypass_write;
+                    rv32_frequency_add_simm12 stored_address (
+                        .base_i(stored_tree[1]),
+                        .immediate_i(store_offset_i[(rp/2)*12 +: 12]),
+                        .sum_o(address_values[0 +: 32]));
+                    for(genvar address_lane=0;address_lane<BE_WIDTH;address_lane=address_lane+1) begin:g_write_address
+                        // Reuse legal/write-valid/phys equality. Highest write
+                        // lane still wins, including the branch-link lane.
+                        assign address_events[address_lane+1]=bypass_match[address_lane];
+                        rv32_frequency_add_simm12 write_address (
+                            .base_i(write_data_i[address_lane*32 +: 32]),
+                            .immediate_i(store_offset_i[(rp/2)*12 +: 12]),
+                            .sum_o(address_values[(address_lane+1)*32 +: 32]));
+                    end
+                    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH+1),.PRIORITY(1)) address_selector (
+                        .events_i(address_events),.values_i(address_values),.write_o(),
+                        .value_o(store_address_o[(rp/2)*32 +: 32]));
+                end else begin:g_disabled
+                    assign store_address_o[(rp/2)*32 +: 32]=0;
+                end
+            end
             always @* begin
                 read_data_o[rp*32 +: 32]={bypass_select[1]?bypass_value[31:16]:stored_tree[1][31:16],bypass_select[0]?bypass_value[15:0]:stored_tree[1][15:0]};
                 read_ready_o[rp]=(address==0) || ready_tree[1] || bypass_write;
             end
         end
     end else begin : g_original_read
+    // The backend only selects this extra output with parallel read enabled.
+    assign store_address_o=0;
     // Reads are combinational.  Each generated process has constant output
     // slices; @* also expands the word-array dependency for simulators.
     genvar read_port;

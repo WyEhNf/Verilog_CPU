@@ -47,8 +47,11 @@ module rv32_backend_joint #(
     parameter integer STORE_ALLOC_IMM12 = 0,
     // Independent control of the opportunistic allocation-edge address.
     // Ordinary AGU and EARLY_STORE_ADDRESS=2 shared probing remain available.
+    // 0 removes the optional allocation-edge address, 1 uses the original
+    // post-read adder, 2 selects parallel PRF address candidates when supported.
     parameter integer STORE_ALLOC_EARLY_ADDRESS = 1,
-    parameter integer LSQ_ROB_QUERY_PREDECODE = 0
+    parameter integer LSQ_ROB_QUERY_PREDECODE = 0,
+    parameter integer LSQ_RESPONSE_QUERY_PREDECODE = 0
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
@@ -849,7 +852,9 @@ module rv32_backend_joint #(
             if(STORE_ALLOC_EARLY_ADDRESS!=0) begin:g_alloc_address_enabled
                 assign lsq_alloc_addr_valid[io_lane] = (EARLY_STORE_ADDRESS != 0) &&
                     d_valid[io_lane] && d_is_store[io_lane] && rs_src1_ready[io_lane];
-                if(STORE_ALLOC_IMM12!=0) begin:g_store_alloc_simm12
+                if(STORE_ALLOC_EARLY_ADDRESS==2 && STORE_ALLOC_IMM12!=0 && PRF_READ_MUX_IMPL!=0) begin:g_parallel_prf_address
+                    assign lsq_alloc_addr[io_lane*32 +: 32]=prf_store_address[io_lane*32 +: 32];
+                end else if(STORE_ALLOC_IMM12!=0) begin:g_store_alloc_simm12
                     // Only stores with alloc_addr_valid observe this payload.
                     // Loads leave addr_ready clear until their ordinary AGU update.
                     rv32_frequency_add_simm12 address_adder (
@@ -1352,8 +1357,16 @@ module rv32_backend_joint #(
         .restore_free_bitmap_i(recovery_free_bitmap), .restore_free_count_i(recovery_free_count)
     );
 
-    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL), .LOCAL_VALUE_ROWS(1)) prf (
+    localparam integer PARALLEL_STORE_ADDRESS=(STORE_ALLOC_EARLY_ADDRESS==2) &&
+        (STORE_ALLOC_IMM12!=0) && (PRF_READ_MUX_IMPL!=0);
+    wire [BE_WIDTH*12-1:0] prf_store_offsets;
+    wire [BE_WIDTH*32-1:0] prf_store_address;
+    generate for(genvar store_offset_lane=0;store_offset_lane<BE_WIDTH;store_offset_lane=store_offset_lane+1) begin:g_store_offset
+        assign prf_store_offsets[store_offset_lane*12 +: 12]=d_imm[store_offset_lane*32 +: 12];
+    end endgenerate
+    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL), .LOCAL_VALUE_ROWS(1), .STORE_ADDRESS_READ(PARALLEL_STORE_ADDRESS)) prf (
         .clk_i(clk_i), .reset_i(reset_i), .read_phys_i(prf_read_phys), .read_data_o(prf_read_data), .read_ready_o(prf_read_ready),
+        .store_offset_i(prf_store_offsets), .store_address_o(prf_store_address),
         .alloc_phys_i(prf_alloc_phys), .alloc_valid_i(prf_alloc_valid), .write_phys_i(prf_write_phys), .write_data_i(prf_write_data), .write_valid_i(prf_write_valid)
     );
 
@@ -1408,7 +1421,7 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] raw_rs_issue_store;
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] raw_rs_issue_metadata;
     wire [BE_WIDTH*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))-1:0] raw_rs_issue_slot;
-    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH)) rs (
+    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH)) rs (
         .alloc_metadata_i(rs_alloc_metadata), .issue_metadata_o(raw_rs_issue_metadata), .entry_metadata_o(rs_entry_metadata),
         .entry_base_ready_o(rs_entry_base_ready), .entry_base_value_o(rs_entry_base_value),
         .alloc_slot_o(rs_alloc_slot),.entry_release_o(rs_entry_release),
@@ -1507,7 +1520,7 @@ module rv32_backend_joint #(
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(execution_recovery_views[BE_WIDTH*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
-    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
+    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
         .early_addr_valid_i(shared_store_addr_valid), .early_addr_tag_i(shared_store_addr_tag),
         .early_addr_i(shared_store_addr), .store_addr_pending_o(lsq_store_addr_pending),
         .store_addr_rob_tag_o(lsq_store_addr_rob_tag), .store_addr_lsq_tag_o(lsq_store_addr_lsq_tag),

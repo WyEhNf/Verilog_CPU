@@ -16,6 +16,9 @@ module rv32_lsq #(
     parameter integer STORE_ADMISSION_BYPASS = 0,
     parameter integer STORE_ADDRESS_PROBE = 0,
     parameter integer REQUEST_PIPELINE = 0,
+    // Decode each saved byte offset before late response-row selection and
+    // route query payload from the original complete response match events.
+    parameter integer RESPONSE_QUERY_PREDECODE = 0,
     parameter integer SLOT_WIDTH = (LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES),
     parameter integer GENERATION_WIDTH = (TAG_WIDTH > (SLOT_WIDTH + 3)) ?
                                           (TAG_WIDTH - SLOT_WIDTH - 3) : 1,
@@ -273,6 +276,22 @@ module rv32_lsq #(
     wire request_fire;
     reg response_match;
     reg response_fire;
+    // The returning full LSQ identity drives independent four-row domains.
+    // Scalar slot walk and direct payload query reuse the SAME row matches.
+    localparam integer RESPONSE_MATCH_DOMAINS=(LSQ_ENTRIES+3)/4;
+    localparam integer RESPONSE_MATCH_WIDTH=TAG_WIDTH+1;
+    wire [RESPONSE_MATCH_DOMAINS*RESPONSE_MATCH_WIDTH-1:0] response_match_views;
+    wire [LSQ_ENTRIES-1:0] response_match_rows;
+    rv32_frequency_control_tree #(.WIDTH(RESPONSE_MATCH_WIDTH),.LEAVES(RESPONSE_MATCH_DOMAINS)) response_match_tree (
+        .signal_i({dcache_resp_valid_i,dcache_resp_lsq_tag_i}),.views_o(response_match_views));
+    generate for(genvar match_row=0;match_row<LSQ_ENTRIES;match_row=match_row+1) begin:g_response_match_row
+        wire local_valid;
+        wire [TAG_WIDTH-1:0] local_tag;
+        assign {local_valid,local_tag}=
+            response_match_views[(match_row/4)*RESPONSE_MATCH_WIDTH +: RESPONSE_MATCH_WIDTH];
+        assign response_match_rows[match_row]=local_valid &&
+            tag_matches_slot(local_tag,match_row) && response_wait_mem[match_row];
+    end endgenerate
     reg complete_slot_found;
     reg commit_fire;
     reg commit_slot_found;
@@ -763,7 +782,7 @@ module rv32_lsq #(
         response_match = 1'b0;
         response_slot = 0;
         for (i = 0; i < LSQ_ENTRIES; i = i + 1)
-            if (dcache_resp_valid_i && tag_matches_slot(dcache_resp_lsq_tag_i, i) && response_wait_mem[i]) begin
+            if (response_match_rows[i]) begin
                 response_match = 1'b1;
                 response_slot = i;
             end
@@ -1036,29 +1055,74 @@ module rv32_lsq #(
     // Returning-cache identity previously selected separate dynamic arrays
     // with shared, wide decoded drivers. One static packet query reads the
     // exact same row; only the low address nibble is needed for extraction.
-    localparam integer RESPONSE_QUERY_WIDTH=ROB_TAG_WIDTH+43;
+    localparam integer RESPONSE_OFFSET_WIDTH=(RESPONSE_QUERY_PREDECODE!=0)?16:4;
+    localparam integer RESPONSE_QUERY_WIDTH=ROB_TAG_WIDTH+39+RESPONSE_OFFSET_WIDTH;
     wire [LSQ_ENTRIES*RESPONSE_QUERY_WIDTH-1:0] response_query_rows;
-    wire [3:0] response_query_offset,response_query_mask;
+    wire [RESPONSE_OFFSET_WIDTH-1:0] response_query_offset;
+    wire [3:0] response_query_mask;
     wire [31:0] response_query_forward;
     wire [1:0] response_query_size;
     wire response_query_unsigned;
     wire [ROB_TAG_WIDTH-1:0] response_query_rob_tag;
-    rv32_frequency_array_read #(.WIDTH(RESPONSE_QUERY_WIDTH),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) response_query_read (
-        .rows_i(response_query_rows),.index_i(response_slot[SLOT_WIDTH-1:0]),
-        .value_o({response_query_rob_tag,response_query_offset,response_query_forward,
-                  response_query_mask,response_query_size,response_query_unsigned}));
+    wire [RESPONSE_QUERY_WIDTH-1:0] response_query_packet;
+    assign {response_query_rob_tag,response_query_offset,response_query_forward,
+            response_query_mask,response_query_size,response_query_unsigned}=response_query_packet;
+    generate if(RESPONSE_QUERY_PREDECODE!=0) begin:g_direct_response_query
+        wire [LSQ_ENTRIES-1:0] matches,events;
+        for(genvar query_row=0;query_row<LSQ_ENTRIES;query_row=query_row+1) begin:g_match
+            // Identical predicate to the original scalar response-slot walk.
+            // No generation, validity or response-wait authority is omitted.
+            assign matches[query_row]=response_match_rows[query_row];
+            if(query_row==0) begin:g_default_row
+                // The old scalar walk initializes response_slot to row zero.
+                assign events[query_row]=matches[query_row] || !(|matches);
+            end else begin:g_other_row
+                assign events[query_row]=matches[query_row];
+            end
+        end
+        // Highest matching row wins, even for inconsistent duplicate matches.
+        rv32_frequency_event_select #(.WIDTH(RESPONSE_QUERY_WIDTH),.EVENTS(LSQ_ENTRIES),.PRIORITY(1)) response_query_read (
+            .events_i(events),.values_i(response_query_rows),.write_o(),.value_o(response_query_packet));
+    end else begin:g_original_response_query
+        rv32_frequency_array_read #(.WIDTH(RESPONSE_QUERY_WIDTH),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) response_query_read (
+            .rows_i(response_query_rows),.index_i(response_slot[SLOT_WIDTH-1:0]),.value_o(response_query_packet));
+    end endgenerate
     generate for(genvar response_row=0;response_row<LSQ_ENTRIES;response_row=response_row+1) begin:g_response_query
+        wire [RESPONSE_OFFSET_WIDTH-1:0] offset_code;
+        if(RESPONSE_QUERY_PREDECODE!=0) begin:g_offset_onehot
+            for(genvar byte_offset=0;byte_offset<16;byte_offset=byte_offset+1) begin:g_byte
+                assign offset_code[byte_offset]=(addr_mem[response_row][3:0]==byte_offset);
+            end
+        end else begin:g_offset_binary
+            assign offset_code=addr_mem[response_row][3:0];
+        end
         assign response_query_rows[response_row*RESPONSE_QUERY_WIDTH +: RESPONSE_QUERY_WIDTH]={
-            rob_tag_mem[response_row],addr_mem[response_row][3:0],forward_data_mem[response_row],
+            rob_tag_mem[response_row],offset_code,forward_data_mem[response_row],
             forward_mask_mem[response_row],size_mem[response_row],unsigned_mem[response_row]};
     end endgenerate
     wire [LSQ_ENTRIES*SLOT_WIDTH-1:0] response_slot_views;
     rv32_frequency_control_tree #(.WIDTH(SLOT_WIDTH),.LEAVES(LSQ_ENTRIES)) response_slot_tree (
         .signal_i(response_slot[SLOT_WIDTH-1:0]),.views_o(response_slot_views));
     wire [31:0] response_line_word,payload_response_word;
-    rv32_frequency_line_extract32 response_extract (
-        .line_i(dcache_resp_line_data_i),.offset_i(response_query_offset),
-        .size_i(2'd2),.unsigned_i(1'b1),.value_o(response_line_word));
+    generate if(RESPONSE_QUERY_PREDECODE!=0) begin:g_direct_response_extract
+        wire [16*32-1:0] windows;
+        for(genvar byte_offset=0;byte_offset<16;byte_offset=byte_offset+1) begin:g_byte
+            for(genvar window_bit=0;window_bit<32;window_bit=window_bit+1) begin:g_bit
+                localparam integer LINE_BIT=byte_offset*8+window_bit;
+                if(LINE_BIT<128) begin:g_present
+                    assign windows[byte_offset*32+window_bit]=dcache_resp_line_data_i[LINE_BIT];
+                end else begin:g_zero
+                    assign windows[byte_offset*32+window_bit]=1'b0;
+                end
+            end
+        end
+        rv32_frequency_event_select #(.WIDTH(32),.EVENTS(16),.PRIORITY(0)) response_extract (
+            .events_i(response_query_offset),.values_i(windows),.write_o(),.value_o(response_line_word));
+    end else begin:g_original_response_extract
+        rv32_frequency_line_extract32 response_extract (
+            .line_i(dcache_resp_line_data_i),.offset_i(response_query_offset),
+            .size_i(2'd2),.unsigned_i(1'b1),.value_o(response_line_word));
+    end endgenerate
     wire [1:0] response_line_views;
     rv32_frequency_control_tree #(.LEAVES(2)) response_line_tree (
         .signal_i(dcache_resp_line_valid_i),.views_o(response_line_views));
