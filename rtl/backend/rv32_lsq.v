@@ -489,6 +489,9 @@ module rv32_lsq #(
     wire [31:0] forwarding_hold_data;
     localparam integer SELECT_STATE_WIDTH=GENERATION_WIDTH+8;
     localparam integer PICK_PAYLOAD_WIDTH=GENERATION_WIDTH+ROB_TAG_WIDTH+40;
+    localparam integer PICK_SELECT_WIDTH=2*SLOT_WIDTH+33+PICK_PAYLOAD_WIDTH;
+    localparam integer PICK_SELECT_WORDS=(PICK_SELECT_WIDTH+15)/16;
+    wire [PICK_PAYLOAD_WIDTH-1:0] pick_payload [1:2*LSQ_ENTRIES-1];
     wire [LSQ_ENTRIES*SELECT_STATE_WIDTH-1:0] selection_state_rows;
     wire [LSQ_ENTRIES*PICK_PAYLOAD_WIDTH-1:0] pick_payload_rows;
     wire [LSQ_ENTRIES*4-1:0] candidate_state_rows;
@@ -505,9 +508,10 @@ module rv32_lsq #(
         .rows_i(selection_state_rows),.index_i(selection_slot),
         .value_o({selection_row_generation,selection_row_valid,selection_row_sent,selection_row_complete,selection_row_wait,
                   selection_row_store,selection_row_commit,selection_row_load,selection_row_retired}));
-    rv32_frequency_array_read #(.WIDTH(PICK_PAYLOAD_WIDTH),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) pick_payload_read (
-        .rows_i(pick_payload_rows),.index_i(pick_slot[1]),
-        .value_o({pick_generation,pick_rob_tag,pick_store_data,pick_store_mask,pick_load,pick_size,pick_unsigned}));
+    // The original tournament carries the complete row packet alongside
+    // its winning slot. Avoid encode slot -> decode -> second payload read.
+    assign {pick_generation,pick_rob_tag,pick_store_data,pick_store_mask,pick_load,pick_size,pick_unsigned}=
+        pick_payload[1];
     rv32_frequency_array_read #(.WIDTH(4),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) candidate_state_read (
         .rows_i(candidate_state_rows),.index_i(candidate[SLOT_WIDTH-1:0]),
         .value_o({candidate_wait,candidate_load,candidate_sent,candidate_complete}));
@@ -518,6 +522,11 @@ module rv32_lsq #(
         assign pick_payload_rows[query_row*PICK_PAYLOAD_WIDTH +: PICK_PAYLOAD_WIDTH]={
             generation_mem[query_row],rob_tag_mem[query_row],data_mem[query_row],mask_mem[query_row],
             load_mem[query_row],size_mem[query_row],unsigned_mem[query_row]};
+        // Match the original leaf slot assignment, including explicit
+        // SLOT_WIDTH overrides, before replacing its indexed payload read.
+        localparam [SLOT_WIDTH-1:0] PAYLOAD_SLOT=query_row;
+        assign pick_payload[LSQ_ENTRIES+query_row]=
+            pick_payload_rows[PAYLOAD_SLOT*PICK_PAYLOAD_WIDTH +: PICK_PAYLOAD_WIDTH];
         assign candidate_state_rows[query_row*4 +: 4]={
             response_wait_mem[query_row],load_mem[query_row],request_sent_mem[query_row],complete_mem[query_row]};
     end endgenerate
@@ -687,12 +696,28 @@ module rv32_lsq #(
                  (CIRCULAR_ORDER_POWER2 ? (!pick_wrap[2*pick_node] || pick_wrap[2*pick_node+1]) :
                   (pick_age[2*pick_node] <= pick_age[2*pick_node+1])));
             assign pick_valid[pick_node] = pick_valid[2*pick_node] || pick_valid[2*pick_node+1];
-            assign pick_slot[pick_node] = choose_left ? pick_slot[2*pick_node] : pick_slot[2*pick_node+1];
-            assign pick_age[pick_node] = choose_left ? pick_age[2*pick_node] : pick_age[2*pick_node+1];
-            assign pick_wrap[pick_node] = choose_left ? pick_wrap[2*pick_node] : pick_wrap[2*pick_node+1];
-            // Carry the address alongside the winning age/slot. The cache
-            // need not wait for a second binary-indexed read after selection.
-            assign pick_addr[pick_node] = choose_left ? pick_addr[2*pick_node] : pick_addr[2*pick_node+1];
+            // All fields follow the identical original choose_left, even
+            // when both children are invalid. Each final choice view owns
+            // at most 16 mux bits; slot/address aliases cannot regain a wide
+            // unpartitioned data-select consumer at this node.
+            wire [PICK_SELECT_WORDS-1:0] choose_views;
+            wire [PICK_SELECT_WIDTH-1:0] left_packet={
+                pick_slot[2*pick_node],pick_age[2*pick_node],pick_wrap[2*pick_node],
+                pick_addr[2*pick_node],pick_payload[2*pick_node]};
+            wire [PICK_SELECT_WIDTH-1:0] right_packet={
+                pick_slot[2*pick_node+1],pick_age[2*pick_node+1],pick_wrap[2*pick_node+1],
+                pick_addr[2*pick_node+1],pick_payload[2*pick_node+1]};
+            wire [PICK_SELECT_WIDTH-1:0] chosen_packet;
+            rv32_frequency_control_tree #(.LEAVES(PICK_SELECT_WORDS)) choice_tree (
+                .signal_i(choose_left),.views_o(choose_views));
+            for(genvar pick_word=0;pick_word<PICK_SELECT_WORDS;pick_word=pick_word+1) begin:g_packet_word
+                localparam integer LOW=pick_word*16;
+                localparam integer BITS=(PICK_SELECT_WIDTH-LOW>=16)?16:PICK_SELECT_WIDTH-LOW;
+                assign chosen_packet[LOW +: BITS]=choose_views[pick_word]?
+                    left_packet[LOW +: BITS]:right_packet[LOW +: BITS];
+            end
+            assign {pick_slot[pick_node],pick_age[pick_node],pick_wrap[pick_node],
+                    pick_addr[pick_node],pick_payload[pick_node]}=chosen_packet;
         end
         // Each byte independently selects the youngest overlapping older
         // store. Static reads replace repeated head-relative array muxes.
@@ -1063,16 +1088,16 @@ module rv32_lsq #(
     assign {response_query_rob_tag,response_query_offset,response_query_forward,
             response_query_mask,response_query_size,response_query_unsigned}=response_query_packet;
     generate if(RESPONSE_QUERY_PREDECODE!=0) begin:g_direct_response_query
-        wire [LSQ_ENTRIES-1:0] matches,events;
+        wire [LSQ_ENTRIES-1:0] response_query_matches,events;
         for(genvar query_row=0;query_row<LSQ_ENTRIES;query_row=query_row+1) begin:g_match
             // Identical predicate to the original scalar response-slot walk.
             // No generation, validity or response-wait authority is omitted.
-            assign matches[query_row]=response_match_rows[query_row];
+            assign response_query_matches[query_row]=response_match_rows[query_row];
             if(query_row==0) begin:g_default_row
                 // The old scalar walk initializes response_slot to row zero.
-                assign events[query_row]=matches[query_row] || !(|matches);
+                assign events[query_row]=response_query_matches[query_row] || !(|response_query_matches);
             end else begin:g_other_row
-                assign events[query_row]=matches[query_row];
+                assign events[query_row]=response_query_matches[query_row];
             end
         end
         // Highest matching row wins, even for inconsistent duplicate matches.
