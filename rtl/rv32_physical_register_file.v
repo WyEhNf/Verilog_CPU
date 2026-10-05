@@ -17,6 +17,8 @@ module rv32_physical_register_file #(
     // Optional ram/half/word alignment flags computed before the same
     // stored/write-through address event selector. No state or edge added.
     parameter integer STORE_ADDRESS_FLAGS = 0,
+    // Private saved-operand qualification; never changes public read data.
+    parameter integer STORE_SAVED_QUERY = 0,
     parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS)
 ) (
     input  wire                         clk_i,
@@ -31,7 +33,10 @@ module rv32_physical_register_file #(
     input  wire [BE_WIDTH-1:0]           write_valid_i,
     input  wire [BE_WIDTH*12-1:0]        store_offset_i,
     output wire [BE_WIDTH*32-1:0]       store_address_o,
-    output wire [BE_WIDTH*3-1:0]        store_address_flags_o
+    output wire [BE_WIDTH*3-1:0]        store_address_flags_o,
+    output wire [2*BE_WIDTH-1:0]       read_stored_ready_o,
+    output wire [2*BE_WIDTH-1:0]       read_bypass_pending_o,
+    output wire [BE_WIDTH*3-1:0]       store_saved_flags_o
 );
     // Keep the value store as a word array so synthesis can implement it as
     // a compact multi-ported memory.  The previous flattened vector forced
@@ -157,6 +162,13 @@ module rv32_physical_register_file #(
                 .events_i(bypass_match),.values_i(write_data_i),.write_o(bypass_write),.value_o(bypass_value));
             rv32_frequency_control_tree #(.LEAVES(2)) bypass_choice_tree (
                 .signal_i(bypass_write),.views_o(bypass_select));
+            if(STORE_SAVED_QUERY!=0) begin:g_saved_operand_query
+                assign read_stored_ready_o[rp]=(address==0) || ready_tree[1];
+                assign read_bypass_pending_o[rp]=bypass_write;
+            end else begin:g_no_saved_operand_query
+                assign read_stored_ready_o[rp]=1'b0;
+                assign read_bypass_pending_o[rp]=1'b0;
+            end
             if((rp%2)==0) begin:g_store_address_output
                 if(STORE_ADDRESS_READ!=0) begin:g_parallel_calculation
                     wire [BE_WIDTH:0] address_events;
@@ -168,6 +180,14 @@ module rv32_physical_register_file #(
                         .base_i(stored_tree[1]),
                         .immediate_i(store_offset_i[(rp/2)*12 +: 12]),
                         .sum_o(address_values[0 +: 32]));
+                    if(STORE_SAVED_QUERY!=0) begin:g_saved_address_flags
+                        wire [31:0] saved_address=address_values[0 +: 32];
+                        assign store_saved_flags_o[(rp/2)*3 +: 3]={
+                            saved_address[1:0]==2'b00,!saved_address[0],
+                            saved_address[31:28]==4'b0000};
+                    end else begin:g_no_saved_address_flags
+                        assign store_saved_flags_o[(rp/2)*3 +: 3]=0;
+                    end
                     for(genvar address_lane=0;address_lane<BE_WIDTH;address_lane=address_lane+1) begin:g_write_address
                         // Reuse legal/write-valid/phys equality. Highest write
                         // lane still wins, including the branch-link lane.
@@ -200,6 +220,7 @@ module rv32_physical_register_file #(
                 end else begin:g_disabled
                     assign store_address_o[(rp/2)*32 +: 32]=0;
                     assign store_address_flags_o[(rp/2)*3 +: 3]=0;
+                    assign store_saved_flags_o[(rp/2)*3 +: 3]=0;
                 end
             end
             always @* begin
@@ -211,6 +232,9 @@ module rv32_physical_register_file #(
     // The backend only selects this extra output with parallel read enabled.
     assign store_address_o=0;
     assign store_address_flags_o=0;
+    assign read_stored_ready_o=0;
+    assign read_bypass_pending_o=0;
+    assign store_saved_flags_o=0;
     // Reads are combinational.  Each generated process has constant output
     // slices; @* also expands the word-array dependency for simulators.
     genvar read_port;

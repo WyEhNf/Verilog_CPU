@@ -42,6 +42,9 @@ module rv32_rob #(
     // Only light local-row command profiles can consume this extra event.
     parameter integer FAST_STORE_COMPLETE = 0,
     parameter integer FAST_STORE_IDENTITY_PRESELECT = 0,
+    // Publish at most one following ordinary store when every older lane
+    // actually retires on this edge; its own retirement still uses saved sent.
+    parameter integer STORE_PREFIX_ADMISSION = 0,
     // 1 retires a store after admission into the committed LSQ/store buffer;
     // 0 preserves the precise legacy behavior of waiting for cache ack.
     parameter integer STORE_BUFFERED_RETIRE = 1
@@ -881,6 +884,34 @@ module rv32_rob #(
     rv32_frequency_array_read #(.WIDTH(RECOVERY_DEST_WIDTH),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) recovery_dest_reader (
         .rows_i(recovery_dest_rows),.index_i(SLOT_WIDTH'(chosen_slot)),.value_o(recovery_selected_dest));
 
+    localparam integer STORE_PREFIX_ADMISSION_ACTIVE=(STORE_PREFIX_ADMISSION!=0) &&
+        (BE_WIDTH>1) && (ROB_ENTRIES>=BE_WIDTH) && (ALLOC_BANKED_WRITE!=0) &&
+        (STORE_BUFFERED_RETIRE!=0) && (LIGHT_RETIRE_PAYLOAD!=0) &&
+        (MMIO_PREDECODE!=0) && (LEGACY_HALT_PAYLOAD==0) && (RETURN_VALUE_ENABLE==0);
+    wire [TAG_WIDTH-1:0] prefix_admission_tag;
+    generate if(STORE_PREFIX_ADMISSION_ACTIVE!=0) begin:g_store_prefix_identity
+        wire [BE_WIDTH-1:0] potential,grants;
+        wire [BE_WIDTH*TAG_WIDTH-1:0] tags;
+        for(genvar admission_lane=0;admission_lane<BE_WIDTH;admission_lane=admission_lane+1) begin:g_lane
+            wire [31:0] raw_slot=head_commit_index+admission_lane;
+            wire [31:0] slot=(raw_slot>=ROB_ENTRIES) ? raw_slot-ROB_ENTRIES : raw_slot;
+            // Identity depends only on saved head fields, before the late
+            // true-retirement prefix and LSQ admission-ready qualification.
+            assign potential[admission_lane]=head_valid[admission_lane] &&
+                head_store[admission_lane] && !head_store_sent[admission_lane];
+            if(admission_lane==0) begin:g_first
+                assign grants[admission_lane]=potential[admission_lane];
+            end else begin:g_later
+                assign grants[admission_lane]=potential[admission_lane] && !(|potential[admission_lane-1:0]);
+            end
+            assign tags[admission_lane*TAG_WIDTH +: TAG_WIDTH]=make_tag(slot,head_generation[admission_lane]);
+        end
+        rv32_frequency_event_select #(.WIDTH(TAG_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) identity_selector (
+            .events_i(grants),.values_i(tags),.write_o(),.value_o(prefix_admission_tag));
+    end else begin:g_original_store_identity
+        assign prefix_admission_tag=0;
+    end endgenerate
+
     // Allocation and all observable outputs are evaluated from old state.
     always @* begin
         commit_lane = 0;
@@ -980,12 +1011,11 @@ module rv32_rob #(
                         commit_tag_o[(commit_lane*TAG_WIDTH) +: TAG_WIDTH] = make_tag(commit_slot, head_generation[commit_lane]);
                         commit_old_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = head_old_phys[commit_lane];
                         commit_new_phys_o[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] = head_new_phys[commit_lane];
-                        // Stores must become the actual ROB head before they
-                        // enter the committed portion of the LSQ.  Admission
-                        // to that queue is the retirement point; the LSQ then
-                        // retains and drains the store like a store buffer.
-                        // A store behind another lane is retried as lane zero
-                        // because there is one store-admission port.
+                        // A store retires only from its registered admission
+                        // state as actual head. Optional prefix admission may
+                        // publish a following ordinary store on the same edge
+                        // that all preceding lanes truly retire; no younger
+                        // store retires here and there is still only one port.
                         if (head_store[commit_lane]) begin
                             if (commit_lane == 0) begin
                                 if ((STORE_BUFFERED_RETIRE != 0) &&
@@ -1001,11 +1031,15 @@ module rv32_rob #(
                             else
                                 commit_valid_o[commit_lane] = 1'b0;
                         end
-                        if (commit_lane == 0 && head_store[commit_lane] &&
-                            !head_store_sent[commit_lane] &&
+                        if ((commit_lane == 0 ||
+                             (STORE_PREFIX_ADMISSION_ACTIVE!=0 && commit_ready_i &&
+                              !head_mmio_word[commit_lane] && !head_halt[commit_lane] && !head_error[commit_lane])) &&
+                            head_store[commit_lane] && !head_store_sent[commit_lane] &&
+                            !store_commit_valid_o &&
                             ((STORE_BUFFERED_RETIRE != 0) || !head_store_wait[commit_lane])) begin
                             store_commit_valid_o = 1'b1;
-                            store_commit_tag_o = make_tag(commit_slot, head_generation[commit_lane]);
+                            store_commit_tag_o = (STORE_PREFIX_ADMISSION_ACTIVE!=0) ?
+                                prefix_admission_tag : make_tag(commit_slot, head_generation[commit_lane]);
                             store_commit_addr_o = head_store_addr[commit_lane];
                             store_commit_mask_o = line_mask_from_relative(
                                 head_store_mask[commit_lane], head_store_addr[commit_lane]);
@@ -1048,6 +1082,13 @@ module rv32_rob #(
     wire [WRITE_DOMAINS*3*SLOT_WIDTH-1:0] local_indexes;
     wire [WRITE_DOMAINS*BE_WIDTH-1:0] local_commits;
     wire [WRITE_DOMAINS-1:0] local_store_sends;
+    wire [WRITE_DOMAINS*SLOT_WIDTH-1:0] local_store_send_slots;
+    generate if(STORE_PREFIX_ADMISSION_ACTIVE!=0) begin:g_prefix_send_slots
+        rv32_frequency_control_tree #(.WIDTH(SLOT_WIDTH),.LEAVES(WRITE_DOMAINS)) slot_tree (
+            .signal_i(prefix_admission_tag[SLOT_LSB +: SLOT_WIDTH]),.views_o(local_store_send_slots));
+    end else begin:g_original_send_slots
+        assign local_store_send_slots=0;
+    end endgenerate
     wire [WRITE_DOMAINS*(TAG_WIDTH+2)-1:0] local_acks;
     localparam integer FAST_STORE_OWNER_ACTIVE=(FAST_STORE_COMPLETE!=0) &&
         (ALLOC_BANKED_WRITE!=0) && (ROB_ENTRIES>=BE_WIDTH) &&
@@ -1208,7 +1249,9 @@ module rv32_rob #(
             wire [TAG_WIDTH-1:0] ack_tag;
             assign {ack_valid,ack_error,ack_tag}=local_acks[DOMAIN*(TAG_WIDTH+2) +: TAG_WIDTH+2];
             wire acknowledged=normal && ack_valid && tag_matches(ack_tag,command_row);
-            wire sent=normal && local_store_sends[DOMAIN] && row_commit_head==command_row;
+            wire [SLOT_WIDTH-1:0] row_send_slot=(STORE_PREFIX_ADMISSION_ACTIVE!=0) ?
+                local_store_send_slots[DOMAIN*SLOT_WIDTH +: SLOT_WIDTH] : row_commit_head;
+            wire sent=normal && local_store_sends[DOMAIN] && row_send_slot==command_row;
             wire [GENERATION_WIDTH-1:0] next_generation_local=
                 (generation_next_mem[command_row]==0) ? {{(GENERATION_WIDTH-1){1'b0}},1'b1} : generation_next_mem[command_row];
             wire [GENERATION_WIDTH-1:0] generation_after_allocate=

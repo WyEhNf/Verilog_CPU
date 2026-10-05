@@ -60,6 +60,7 @@ module rv32_dcache_nonblocking #(
     output wire                     dcache_store_ack_valid_o,
     input  wire                     dcache_store_ack_ready_i,
     output wire [TAG_WIDTH-1:0]     dcache_store_ack_lsq_tag_o,
+    output wire [TAG_WIDTH-1:0]     dcache_store_ack_query_tag_o,
     output wire                     dcache_store_ack_error_o,
     output wire                     mem_req_valid_o,
     input  wire                     mem_req_ready_i,
@@ -868,6 +869,18 @@ module rv32_dcache_nonblocking #(
             core_req_lsq_tag[LOW +: BITS]:ack_lsq_reg[LOW +: BITS];
     end endgenerate
     assign dcache_store_ack_error_o = !ack_output_views[RESPONSE_TAG_WORDS] && ack_error_reg;
+    // Private candidate identity, meaningful only with actual ack-valid.
+    // A saved ack wins; otherwise a valid bypass must belong to core_req.
+    // Public valid/tag/error and all capture/consumption rules stay exact.
+    wire [RESPONSE_TAG_WORDS-1:0] saved_ack_identity_views;
+    rv32_frequency_control_tree #(.LEAVES(RESPONSE_TAG_WORDS)) ack_identity_tree (
+        .signal_i(ack_valid_reg),.views_o(saved_ack_identity_views));
+    generate for(genvar query_word=0;query_word<RESPONSE_TAG_WORDS;query_word=query_word+1) begin:g_ack_query_tag
+        localparam integer LOW=query_word*16;
+        localparam integer BITS=(TAG_WIDTH-LOW>=16)?16:TAG_WIDTH-LOW;
+        assign dcache_store_ack_query_tag_o[LOW +: BITS]=saved_ack_identity_views[query_word] ?
+            ack_lsq_reg[LOW +: BITS] : core_req_lsq_tag[LOW +: BITS];
+    end endgenerate
 
     assign mem_req_valid_o = send_found;
     assign mem_req_write_o = send_found && query_send_mshr_writeback;

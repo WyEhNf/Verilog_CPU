@@ -14,6 +14,8 @@ module rv32_lsq #(
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
     parameter integer STORE_ADMISSION_BYPASS = 0,
+    parameter integer ACK_SOURCE_QUERY = 0,
+    parameter integer HEAD_STORE_ACK_BYPASS = 0,
     parameter integer STORE_ADDRESS_PROBE = 0,
     parameter integer REQUEST_PIPELINE = 0,
     parameter integer LOAD_ADDRESS_LOOKTHROUGH = 0,
@@ -147,9 +149,12 @@ module rv32_lsq #(
     input  wire                         dcache_store_ack_valid_i,
     input  wire [TAG_WIDTH-1:0]         dcache_store_ack_lsq_tag_i,
     input  wire                         dcache_store_ack_error_i,
+    input  wire [1:0]                   store_ack_query_valid_i,
+    input  wire [2*TAG_WIDTH-1:0]       store_ack_query_tag_i,
     output reg                          store_ack_valid_o,
     input  wire                         store_ack_ready_i,
     output reg  [ROB_TAG_WIDTH-1:0]     store_ack_rob_tag_o,
+    output wire [ROB_TAG_WIDTH-1:0]    store_ack_rob_query_tag_o,
     output reg  [TAG_WIDTH-1:0]         store_ack_lsq_tag_o,
     output reg                          store_ack_error_o,
 
@@ -1175,6 +1180,42 @@ module rv32_lsq #(
     wire [REPORT_WIDTH-1:0] report_payload_tree [1:2*REPORT_ROWS-1];
     wire [ACK_WIDTH-1:0] ack_payload_tree [1:2*REPORT_ROWS-1];
     wire ack_valid_tree [1:2*REPORT_ROWS-1];
+    wire [LSQ_ENTRIES-1:0] query_ack_accepted;
+    localparam integer HEAD_STORE_ACK_ACTIVE=(HEAD_STORE_ACK_BYPASS!=0) && (ACK_SOURCE_QUERY!=0);
+    wire [LSQ_ENTRIES-1:0] fast_head_store_acks;
+    wire fast_head_store_ack_present=|fast_head_store_acks;
+    // Public ACK tag remains the original selected packet. The ROB's
+    // optional private query can inspect saved head identity before ACK-valid.
+    generate if(HEAD_STORE_ACK_ACTIVE!=0) begin:g_head_store_ack_identity
+        wire [LSQ_ENTRIES*ROB_TAG_WIDTH-1:0] rows;
+        for(genvar ack_head_row=0;ack_head_row<LSQ_ENTRIES;ack_head_row=ack_head_row+1) begin:g_row
+            assign rows[ack_head_row*ROB_TAG_WIDTH +: ROB_TAG_WIDTH]=rob_tag_mem[ack_head_row];
+        end
+        rv32_frequency_array_read #(.WIDTH(ROB_TAG_WIDTH),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) head_reader (
+            .rows_i(rows),.index_i(head_reg),.value_o(store_ack_rob_query_tag_o));
+    end else begin:g_original_store_ack_identity
+        assign store_ack_rob_query_tag_o=store_ack_rob_tag_o;
+    end endgenerate
+    generate if(ACK_SOURCE_QUERY!=0) begin:g_store_ack_source_query
+        localparam integer DOMAINS=(LSQ_ENTRIES+3)/4;
+        wire [DOMAINS*2-1:0] validity_views;
+        // Source1 is cache and has exactly the original core priority over
+        // source0 MMIO. Identities are compared independently before this
+        // late actual-valid qualification; never invent a completion event.
+        rv32_frequency_control_tree #(.WIDTH(2),.LEAVES(DOMAINS)) validity_tree (
+            .signal_i({store_ack_query_valid_i[1],
+                store_ack_query_valid_i[0] && !store_ack_query_valid_i[1]}),.views_o(validity_views));
+        for(genvar query_row=0;query_row<LSQ_ENTRIES;query_row=query_row+1) begin:g_row
+            wire waiting=request_sent_mem[query_row] && response_wait_mem[query_row];
+            wire mmio_match=tag_matches_slot(store_ack_query_tag_i[0 +: TAG_WIDTH],query_row) && waiting;
+            wire cache_match=tag_matches_slot(store_ack_query_tag_i[TAG_WIDTH +: TAG_WIDTH],query_row) && waiting;
+            assign query_ack_accepted[query_row]=
+                (mmio_match && validity_views[(query_row/4)*2]) ||
+                (cache_match && validity_views[(query_row/4)*2+1]);
+        end
+    end else begin:g_original_store_ack_query
+        assign query_ack_accepted=0;
+    end endgenerate
     wire [LSQ_ENTRIES*REPORT_RECOVERY_WIDTH-1:0] report_recovery_views;
     generate if(LOCAL_REPORT_CANCEL!=0) begin:g_report_cancel_domains
         rv32_frequency_control_tree #(.WIDTH(REPORT_RECOVERY_WIDTH),.LEAVES(LSQ_ENTRIES)) recovery_tree (
@@ -1314,7 +1355,13 @@ module rv32_lsq #(
                 end else begin:g_original_query
                     assign report_payload=base_report_payload;
                 end
-                wire [ACK_WIDTH-1:0] ack_payload={store_ack_error_mem[report_row],
+                assign fast_head_store_acks[report_row]=(HEAD_STORE_ACK_ACTIVE!=0) &&
+                    !reset_i && !flush_i && !recovery_valid_i && occupancy_reg!=0 &&
+                    head_query_views[report_row*SLOT_WIDTH +: SLOT_WIDTH]==report_row &&
+                    valid_mem[report_row] && store_mem[report_row] && !load_mem[report_row] &&
+                    store_commit_mem[report_row] && !store_ack_mem[report_row] && query_ack_accepted[report_row];
+                wire ack_error=fast_head_store_acks[report_row] ? dcache_store_ack_error_i : store_ack_error_mem[report_row];
+                wire [ACK_WIDTH-1:0] ack_payload={ack_error,
                     make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
                 localparam integer ROW_MOD=report_row%REPORT_AGE_MODULUS;
                 wire [REPORT_BOUND_WIDTH-1:0] row_end=
@@ -1361,7 +1408,8 @@ module rv32_lsq #(
                     rob_tag_mem[report_row]==store_commit_rob_tag_i;
                 assign commit_slot_tree[REPORT_ROWS+report_row]=report_row;
                 assign ack_valid_tree[REPORT_ROWS+report_row]=occupancy_reg!=0 && head_query_views[report_row*SLOT_WIDTH +: SLOT_WIDTH]==report_row &&
-                    valid_mem[report_row] && store_mem[report_row] && store_ack_mem[report_row];
+                    valid_mem[report_row] && store_mem[report_row] &&
+                    (store_ack_mem[report_row] || fast_head_store_acks[report_row]);
                 rv32_frequency_control_tree #(.LEAVES(REPORT_WORDS)) report_selection_tree (
                     .signal_i(report_first[report_row]),.views_o(report_select));
                 rv32_frequency_control_tree #(.LEAVES(ACK_WORDS)) ack_selection_tree (
@@ -1661,7 +1709,8 @@ module rv32_lsq #(
         ((head_load &&
           ((head_complete && (head_reported || head_report_accepted)) ||
            ((LOAD_COMPLETION_BYPASS==2) && fast_head_present && head_report_accepted))) ||
-         (head_store && head_ack && store_ack_ready_i));
+         (head_store && store_ack_ready_i &&
+          (head_ack || ((HEAD_STORE_ACK_ACTIVE!=0) && fast_head_store_ack_present && store_ack_valid_o))));
     wire metadata_second_pop;
     wire [LSQ_ENTRIES-1:0] second_pop_views;
     wire [1:0] metadata_pop_count=metadata_pop?
@@ -1756,9 +1805,10 @@ module rv32_lsq #(
         assign recovery_kill_slot_tree[LSQ_ENTRIES+metadata_row]=metadata_row;
         wire commit_event=metadata_events[metadata_row*7] && commit_slot_select==metadata_row;
         wire report_event=metadata_events[metadata_row*7+1] && complete_slot_select==metadata_row;
-        wire ack_event=metadata_events[metadata_row*7+2] &&
-            tag_matches_slot(dcache_store_ack_lsq_tag_i,metadata_row) &&
-            request_sent_mem[metadata_row] && response_wait_mem[metadata_row];
+        wire ack_event=(ACK_SOURCE_QUERY!=0) ? query_ack_accepted[metadata_row] :
+            (metadata_events[metadata_row*7+2] &&
+             tag_matches_slot(dcache_store_ack_lsq_tag_i,metadata_row) &&
+             request_sent_mem[metadata_row] && response_wait_mem[metadata_row]);
         wire response_event=metadata_events[metadata_row*7+3] && response_slot_views[metadata_row*SLOT_WIDTH +: SLOT_WIDTH]==metadata_row;
         wire request_event=metadata_events[metadata_row*7+4] && candidate==metadata_row;
         wire forward_event=metadata_events[metadata_row*7+5] && candidate==metadata_row;
