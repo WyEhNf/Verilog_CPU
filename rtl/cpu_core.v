@@ -13,7 +13,10 @@ module cpu_core #(
     parameter integer FRONTEND_REDIRECT_REQUEST = 0,
     parameter integer FRONTEND_PARALLEL_BUNDLE_CONTROL = 0,
     parameter integer FRONTEND_RAS_PREDECODE = 0,
+    parameter integer FRONTEND_RAS_PARALLEL_CONTROL = 0,
     parameter integer RAS_REPEAT_COMPRESSION = 0,
+    // Compare possible call return PCs before late accepted-call selection.
+    parameter integer RAS_REPEAT_MATCH_PREDECODE = 0,
     parameter integer RAS_REPEAT_COUNTER_BITS = 6,
     parameter integer FRONTEND_RESPONSE_WORD_OFFSET_READ = 0,
     parameter integer FRONTEND_DIRECT_WORD_BOUNDS = 0,
@@ -32,9 +35,13 @@ module cpu_core #(
     parameter integer LOAD_WAKE_BYPASS = 0,
     parameter integer ALLOC_LOAD_SELECTION_BYPASS = 0,
     parameter integer LSQ_RECLAIM_WIDTH = 1,
+    parameter integer LSQ_SECOND_REPORT_RECLAIM = 0,
     parameter integer LSQ_EMPTY_SELECTION_BYPASS = 0,
     parameter integer EARLY_FRONT_REDIRECT = 0,
+    parameter integer BRANCH_CAPTURE_REDIRECT_READY = 0,
+    parameter integer BRANCH_CAPTURE_PHASE_VALID = 0,
     parameter integer RECOVERY_DIRECT_APPLY = 0,
+    parameter integer RECOVERY_ROB_CREDIT = 0,
     parameter integer RECOVERY_PREVIEW_OLDER_ISSUE = 0,
     parameter integer RECOVERY_APPLY_OLDER_ISSUE = 0,
     parameter integer RS_ROW_RECOVERY_QUALIFICATION = 0,
@@ -288,8 +295,43 @@ module cpu_core #(
         wire [RAS_REPEAT_COUNTER_BITS-1:0] top_repeats;
         rv32_frequency_array_read #(.WIDTH(RAS_REPEAT_COUNTER_BITS),.ENTRIES(4),.INDEX_WIDTH(2)) repeat_query (
             .rows_i(repeat_rows),.index_i(ras_top_index),.value_o(top_repeats));
+        wire selected_repeat_match;
+        if(RAS_REPEAT_MATCH_PREDECODE!=0) begin:g_predecoded_match
+            wire [FE_WIDTH-1:0] lane_matches;
+            if(FE_WIDTH<=4) begin:g_shared_pc_parts
+                // +4..+16 changes only word bits and one carry into [31:4].
+                // Reuse two early high comparisons for all supported lanes.
+                wire [27:0] next_pc_high=response_base_pc[31:4]+28'd1;
+                wire high_same=ras_target[31:4]==response_base_pc[31:4];
+                wire high_next=ras_target[31:4]==next_pc_high;
+                wire low_same=ras_target[1:0]==response_base_pc[1:0];
+                for(genvar match_lane=0;match_lane<FE_WIDTH;match_lane=match_lane+1) begin:g_lane
+                    wire [1:0] return_word=response_base_pc[3:2]+2'(match_lane+1);
+                    wire carry_high;
+                    if(match_lane==3) begin:g_full_line
+                        assign carry_high=1'b1;
+                    end else begin:g_partial_line
+                        assign carry_high=response_base_pc[3:2]>=2'(3-match_lane);
+                    end
+                    assign lane_matches[match_lane]=low_same &&
+                        ras_target[3:2]==return_word && (carry_high?high_next:high_same);
+                end
+            end else begin:g_general_pc_parts
+                for(genvar match_lane=0;match_lane<FE_WIDTH;match_lane=match_lane+1) begin:g_lane
+                    assign lane_matches[match_lane]=
+                        ras_target==ras_return_addresses[match_lane*32 +: 32];
+                end
+            end
+            // The original first-call rule makes ras_push_lanes one-hot.
+            // Late predictor/response acceptance now selects one bit only.
+            rv32_frequency_event_select #(.WIDTH(1),.EVENTS(FE_WIDTH),.PRIORITY(0)) match_select (
+                .events_i(ras_push_lanes),.values_i(lane_matches),
+                .write_o(),.value_o(selected_repeat_match));
+        end else begin:g_selected_address_match
+            assign selected_repeat_match=ras_target==ras_push_address;
+        end
         assign ras_repeat_push=ras_push && ras_count!=0 &&
-            ras_target==ras_push_address && !(&top_repeats);
+            selected_repeat_match && !(&top_repeats);
         assign ras_repeat_pop=ras_pop && top_repeats!=0;
         for(genvar repeat_row=0;repeat_row<4;repeat_row=repeat_row+1) begin:g_row
             wire [RAS_REPEAT_COUNTER_BITS-1:0] saved_repeats;
@@ -403,6 +445,40 @@ module cpu_core #(
         end
     endgenerate
 
+    generate if(FRONTEND_RAS_PARALLEL_CONTROL!=0) begin:g_parallel_ras_events
+        wire [FE_WIDTH-1:0] response_accept_views;
+        wire [FE_WIDTH-1:0] ras_events,ras_first_events,ras_call_grants,ras_return_grants;
+        rv32_frequency_control_tree #(.LEAVES(FE_WIDTH)) response_accept_tree (
+            .signal_i((ENABLE_PREDICTOR!=0) && if_resp_valid && if_resp_ready),
+            .views_o(response_accept_views));
+        for(genvar event_lane=0;event_lane<FE_WIDTH;event_lane=event_lane+1) begin:g_lane
+            wire within_line;
+            if(event_lane<4) begin:g_present
+                // W+L<4 is W<=3-L, with a constant per-lane bound.
+                assign within_line=response_base_pc[3:2]<=2'(3-event_lane);
+            end else begin:g_outside_line
+                assign within_line=1'b0;
+            end
+            assign ras_events[event_lane]=within_line &&
+                (ras_query_flags[event_lane*2+1] || ras_query_flags[event_lane*2] || pred_taken_bus[event_lane]);
+            if(event_lane==0) begin:g_first
+                assign ras_first_events[event_lane]=ras_events[event_lane];
+            end else begin:g_later
+                assign ras_first_events[event_lane]=ras_events[event_lane] && !(|ras_events[event_lane-1:0]);
+            end
+            // Response acceptance is only a final local qualifier. A call
+            // wins over a return flag exactly as the original if/else loop.
+            assign ras_call_grants[event_lane]=response_accept_views[event_lane] &&
+                ras_first_events[event_lane] && ras_query_flags[event_lane*2+1];
+            assign ras_return_grants[event_lane]=response_accept_views[event_lane] &&
+                ras_first_events[event_lane] && !ras_query_flags[event_lane*2+1] && ras_query_flags[event_lane*2];
+        end
+        always @* begin
+            ras_push_lanes=ras_call_grants;
+            ras_push=|ras_call_grants;
+            ras_pop=(|ras_return_grants) && ras_count!=0;
+        end
+    end else begin:g_original_ras_events
     always @* begin
         ras_push = 1'b0;
         ras_pop = 1'b0;
@@ -431,6 +507,8 @@ module cpu_core #(
         end
     end
 
+
+    end endgenerate
 
     // The first accepted call wins; return/taken events close the
     // prefix even when they do not push. Each payload mask drives <=16 bits.
@@ -1020,7 +1098,7 @@ module cpu_core #(
     assign perf_branch_pending = 1'b0;
     assign perf_mdu_busy = 1'b0;
     end else begin : g_ooo_backend
-    rv32_backend_joint #(.LSQ_RESPONSE_QUERY_PREDECODE(1), .STORE_ALLOC_EARLY_ADDRESS(2), .LSQ_ROB_QUERY_PREDECODE(1), .STORE_ALLOC_IMM12(1), .RS_PHYSICAL_WAKEUP(1), .DISPATCH_PIPELINE(1), .DISPATCH_ELASTIC(DISPATCH_ELASTIC), .DISPATCH_FULL_REPLACE(DISPATCH_FULL_REPLACE), .ISSUE_PIPELINE(ISSUE_PIPELINE), .LOCAL_EXEC_RECOVERY(1), .BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_LOAD_ADDRESS(EARLY_LOAD_ADDRESS), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(LOAD_WAKE_BYPASS), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .LSQ_RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .LSQ_EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .EARLY_FRONT_REDIRECT(EARLY_FRONT_REDIRECT), .RECOVERY_DIRECT_APPLY(RECOVERY_DIRECT_APPLY), .RECOVERY_PREVIEW_OLDER_ISSUE(RECOVERY_PREVIEW_OLDER_ISSUE), .RECOVERY_APPLY_OLDER_ISSUE(RECOVERY_APPLY_OLDER_ISSUE), .RS_ROW_RECOVERY_QUALIFICATION(RS_ROW_RECOVERY_QUALIFICATION), .RS_ROW_LIVE_MEMBERSHIP(RS_ROW_LIVE_MEMBERSHIP), .RS_PREDECODE_ISSUE_CANCEL(RS_PREDECODE_ISSUE_CANCEL), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .STORE_ALLOC_EARLY_DATA(STORE_ALLOC_EARLY_DATA), .RS_ISSUE_METADATA(RS_ISSUE_METADATA), .RS_WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .RS_ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .RS_AGE_WIDTH(RS_AGE_WIDTH), .PRF_READ_MUX_IMPL(PRF_READ_MUX_IMPL), .RAT_READ_BYPASS(RAT_READ_BYPASS), .RENAME_RETAIN_FREE_POOL(RENAME_RETAIN_FREE_POOL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .ROB_COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ROB_ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .ROB_UNIQUE_RECLAIM_COUNT(ROB_UNIQUE_RECLAIM_COUNT), .ROB_MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .ROB_LEGACY_HALT_PAYLOAD(LEGACY_SENTINEL_HALT), .ROB_RETURN_VALUE_ENABLE(RETURN_VALUE_ENABLE), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .RAT_SUFFIX_BRANCH_MAPPING(RAT_SUFFIX_BRANCH_MAPPING), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
+    rv32_backend_joint #(.LSQ_RESPONSE_QUERY_PREDECODE(1), .STORE_ALLOC_EARLY_ADDRESS(2), .LSQ_ROB_QUERY_PREDECODE(1), .STORE_ALLOC_IMM12(1), .RS_PHYSICAL_WAKEUP(1), .DISPATCH_PIPELINE(1), .DISPATCH_ELASTIC(DISPATCH_ELASTIC), .DISPATCH_FULL_REPLACE(DISPATCH_FULL_REPLACE), .ISSUE_PIPELINE(ISSUE_PIPELINE), .LOCAL_EXEC_RECOVERY(1), .BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_LOAD_ADDRESS(EARLY_LOAD_ADDRESS), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(LOAD_WAKE_BYPASS), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .LSQ_RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .LSQ_SECOND_REPORT_RECLAIM(LSQ_SECOND_REPORT_RECLAIM), .LSQ_EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .EARLY_FRONT_REDIRECT(EARLY_FRONT_REDIRECT), .BRANCH_CAPTURE_REDIRECT_READY(BRANCH_CAPTURE_REDIRECT_READY), .BRANCH_CAPTURE_PHASE_VALID(BRANCH_CAPTURE_PHASE_VALID), .RECOVERY_DIRECT_APPLY(RECOVERY_DIRECT_APPLY), .RECOVERY_ROB_CREDIT(RECOVERY_ROB_CREDIT), .RECOVERY_PREVIEW_OLDER_ISSUE(RECOVERY_PREVIEW_OLDER_ISSUE), .RECOVERY_APPLY_OLDER_ISSUE(RECOVERY_APPLY_OLDER_ISSUE), .RS_ROW_RECOVERY_QUALIFICATION(RS_ROW_RECOVERY_QUALIFICATION), .RS_ROW_LIVE_MEMBERSHIP(RS_ROW_LIVE_MEMBERSHIP), .RS_PREDECODE_ISSUE_CANCEL(RS_PREDECODE_ISSUE_CANCEL), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .STORE_ALLOC_EARLY_DATA(STORE_ALLOC_EARLY_DATA), .RS_ISSUE_METADATA(RS_ISSUE_METADATA), .RS_WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .RS_ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .RS_AGE_WIDTH(RS_AGE_WIDTH), .PRF_READ_MUX_IMPL(PRF_READ_MUX_IMPL), .RAT_READ_BYPASS(RAT_READ_BYPASS), .RENAME_RETAIN_FREE_POOL(RENAME_RETAIN_FREE_POOL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .ROB_COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ROB_ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .ROB_UNIQUE_RECLAIM_COUNT(ROB_UNIQUE_RECLAIM_COUNT), .ROB_MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .ROB_LEGACY_HALT_PAYLOAD(LEGACY_SENTINEL_HALT), .ROB_RETURN_VALUE_ENABLE(RETURN_VALUE_ENABLE), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .RAT_SUFFIX_BRANCH_MAPPING(RAT_SUFFIX_BRANCH_MAPPING), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),

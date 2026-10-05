@@ -24,6 +24,9 @@ module rv32_lsq #(
     // 2: empty fallthrough from registered addresses only (shorter timing path).
     parameter integer EMPTY_SELECTION_BYPASS = 0,
     parameter integer RECLAIM_WIDTH = 1,
+    // Allow the original single completion handshake to retire the second
+    // completed load on an edge that already releases the first prefix row.
+    parameter integer SECOND_REPORT_RECLAIM = 0,
     // Decode each saved byte offset before late response-row selection and
     // route query payload from the original complete response match events.
     parameter integer RESPONSE_QUERY_PREDECODE = 0,
@@ -1542,11 +1545,17 @@ module rv32_lsq #(
         end
         rv32_frequency_array_read #(.WIDTH(4),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) next_read (
             .rows_i(rows),.index_i(next_head),.value_o(next_state));
-        // No second completion/acknowledgement port: this next load has
-        // already published its full-tag completion on an earlier edge.
+        // A second prefix load must be complete and published. The
+        // existing single report port can publish this exact row on the
+        // current edge; no extra completion/acknowledgement port is created.
         // Stores remain queued until their original head-only ack handshake.
+        wire next_reported_now=load_complete_valid_o && load_complete_ready_i &&
+            complete_slot_select==next_head;
+        wire next_reclaimable=(SECOND_REPORT_RECLAIM!=0)?
+            ((&next_state[3:1]) && (next_state[0] || next_reported_now)):
+            (&next_state);
         assign metadata_second_pop=metadata_pop && occupancy_reg>=2 &&
-            !reset_i && !flush_i && !recovery_valid_i && (&next_state);
+            !reset_i && !flush_i && !recovery_valid_i && next_reclaimable;
         rv32_frequency_control_tree #(.LEAVES(LSQ_ENTRIES)) pop_tree (
             .signal_i(metadata_second_pop),.views_o(second_pop_views));
     end else begin:g_single_prefix_reclaim

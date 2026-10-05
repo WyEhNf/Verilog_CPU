@@ -44,6 +44,9 @@ module rv32i_alu #(
     input  wire                         issue_mem_unsigned_i,
 
     output wire                         exec_valid_o,
+    // Private capture query: saved result validity before selective recovery.
+    // It is not an execution/completion handshake or cancellation bypass.
+    output wire                         exec_saved_valid_o,
     input  wire                         exec_ready_i,
     output wire [31:0]                  exec_value_o,
     output wire [PHYS_ADDR_WIDTH-1:0]   exec_phys_rd_o,
@@ -264,6 +267,8 @@ module rv32i_alu #(
     wire result_visible = result_valid_reg && !result_cancel &&
         (!live_tag_valid_i || (result_rob_tag_reg == live_tag_i));
     assign exec_valid_o = result_visible;
+    assign exec_saved_valid_o = result_valid_reg &&
+        (!live_tag_valid_i || (result_rob_tag_reg == live_tag_i));
     // The canceled result is invisible before the clock. A qualified
     // retained older instruction may replace that result on this same edge.
     // Surviving older results still require the original output handshake.

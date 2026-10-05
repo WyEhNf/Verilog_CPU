@@ -24,11 +24,19 @@ module rv32_backend_joint #(
     parameter integer LOAD_WAKE_BYPASS = 0,
     parameter integer ALLOC_LOAD_SELECTION_BYPASS = 0,
     parameter integer LSQ_RECLAIM_WIDTH = 1,
+    parameter integer LSQ_SECOND_REPORT_RECLAIM = 0,
     parameter integer LSQ_EMPTY_SELECTION_BYPASS = 0,
     parameter integer EARLY_FRONT_REDIRECT = 0,
+    // Capture knows valid+redirect+!pending. Use the exact corresponding
+    // redirect-ready priority, independently of ordinary completion ready.
+    parameter integer BRANCH_CAPTURE_REDIRECT_READY = 0,
+    parameter integer BRANCH_CAPTURE_PHASE_VALID = 0,
     // The branch result remains captured. Apply its full qualified recovery
     // on the next edge, using the original direct ROB recovery implementation.
     parameter integer RECOVERY_DIRECT_APPLY = 0,
+    // Only the fully qualified direct apply can advertise its post-edge ROB
+    // capacity. Ordinary allocation credits keep their original conservative rule.
+    parameter integer RECOVERY_ROB_CREDIT = 0,
     parameter integer RECOVERY_PREVIEW_OLDER_ISSUE = 0,
     parameter integer RECOVERY_APPLY_OLDER_ISSUE = 0,
     parameter integer RS_ROW_RECOVERY_QUALIFICATION = 0,
@@ -367,6 +375,7 @@ module rv32_backend_joint #(
     reg [RS_ENTRIES-1:0] rs_preview_kill_mask;
 
     wire [BE_WIDTH-1:0] alu_exec_valid, alu_exec_ready, alu_issue_ready;
+    wire [BE_WIDTH-1:0] alu_exec_saved_valid;
     wire [BE_WIDTH-1:0] alu_exec_rd_we, alu_exec_is_branch;
     wire [BE_WIDTH-1:0] alu_exec_branch_taken, alu_exec_redirect_valid, alu_exec_is_memory;
     wire [BE_WIDTH-1:0] alu_exec_is_load, alu_exec_is_store, alu_exec_mem_unsigned;
@@ -851,6 +860,33 @@ module rv32_backend_joint #(
     wire [CREDIT_WIDTH-1:0] phys_credit;
     reg [CREDIT_WIDTH-1:0] used_rob_credit, used_rs_credit, used_lsq_credit, used_phys_credit;
     integer credit_lane;
+    wire [CREDIT_WIDTH-1:0] recovery_rob_credit;
+    generate if(RECOVERY_ROB_CREDIT!=0 && RECOVERY_DIRECT_ACTIVE!=0) begin:g_recovery_rob_credit
+        // Qualified apply holds head, blocks rename/commit, and leaves the
+        // prefix through the pending branch: free'=ROB_ENTRIES-1-branch_age.
+        // Decode only the small saturated credit classes, avoiding a late
+        // free-count subtract/compare on the recovery qualification path.
+        wire [BE_WIDTH-1:0] credit_events;
+        wire [BE_WIDTH*CREDIT_WIDTH-1:0] credit_values;
+        genvar credit_class;
+        for(credit_class=1;credit_class<=BE_WIDTH;credit_class=credit_class+1) begin:g_class
+            localparam integer AGE_BOUND=ROB_ENTRIES-1-credit_class;
+            if(credit_class>ROB_ENTRIES-1) begin:g_impossible
+                assign credit_events[credit_class-1]=1'b0;
+            end else if(credit_class==BE_WIDTH) begin:g_saturated
+                assign credit_events[credit_class-1]=
+                    execution_branch_age<=ROB_SLOT_WIDTH'(AGE_BOUND);
+            end else begin:g_exact
+                assign credit_events[credit_class-1]=
+                    execution_branch_age==ROB_SLOT_WIDTH'(AGE_BOUND);
+            end
+            assign credit_values[(credit_class-1)*CREDIT_WIDTH +: CREDIT_WIDTH]=CREDIT_WIDTH'(credit_class);
+        end
+        rv32_frequency_event_select #(.WIDTH(CREDIT_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) select_credit (
+            .events_i(credit_events),.values_i(credit_values),.write_o(),.value_o(recovery_rob_credit));
+    end else begin:g_original_recovery_credit
+        assign recovery_rob_credit=0;
+    end endgenerate
     function [CREDIT_WIDTH-1:0] bounded_credit;
         input [15:0] available;
         input [CREDIT_WIDTH-1:0] consumed;
@@ -888,7 +924,9 @@ module rv32_backend_joint #(
         if(reset_i || flush_i) begin
             rob_credit<=0;rs_credit<=0;lsq_credit<=0;
         end else begin
-            rob_credit<=bounded_credit(rob_free_count,used_rob_credit);
+            if(RECOVERY_ROB_CREDIT!=0 && RECOVERY_DIRECT_ACTIVE!=0 && recovery_domains[7])
+                rob_credit<=recovery_rob_credit;
+            else rob_credit<=bounded_credit(rob_free_count,used_rob_credit);
             rs_credit<=reserved_credit(rs_free_count,d_reserved_rs,used_rs_credit);
             lsq_credit<=reserved_credit(lsq_free_count,d_reserved_lsq,used_lsq_credit);
         end
@@ -1799,7 +1837,7 @@ module rv32_backend_joint #(
                 .issue_pred_kind_i(rs_issue_pred_kind[alu_lane*2 +: 2]),
                 .issue_mem_size_i(rs_issue_mem_size[alu_lane*2 +: 2]),
                 .issue_mem_unsigned_i(rs_issue_mem_unsigned[alu_lane]),
-                .exec_valid_o(alu_exec_valid[alu_lane]),
+                .exec_valid_o(alu_exec_valid[alu_lane]), .exec_saved_valid_o(alu_exec_saved_valid[alu_lane]),
                 .exec_ready_i(alu_exec_ready[alu_lane]),
                 .exec_value_o(alu_exec_value[alu_lane*32 +: 32]),
                 .exec_phys_rd_o(alu_exec_phys[alu_lane*PAW +: PAW]),
@@ -1826,7 +1864,7 @@ module rv32_backend_joint #(
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(execution_recovery_views[BE_WIDTH*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .issue_valid_i(mdu_issue_valid), .issue_cancel_i(mdu_issue_cancel), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
-    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
+    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .SECOND_REPORT_RECLAIM(LSQ_SECOND_REPORT_RECLAIM), .EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
         .early_addr_valid_i(shared_store_addr_valid), .early_addr_tag_i(shared_store_addr_tag),
         .early_addr_i(shared_store_addr), .store_addr_pending_o(lsq_store_addr_pending),
         .store_addr_rob_tag_o(lsq_store_addr_rob_tag), .store_addr_lsq_tag_o(lsq_store_addr_lsq_tag),
@@ -2274,10 +2312,31 @@ module rv32_backend_joint #(
     // Only accepted live redirects can acquire this packet. Select the first
     // lane exactly as the old ordered loop, then distribute the qualified
     // grants and write enable into at most sixteen payload bits per leaf.
+    // Direct ROB apply is sourced only by branch_pending. Capture
+    // requires !branch_pending, so selective apply cancellation is zero in
+    // its whole acceptance domain. All real execution ports keep cancel.
+    localparam integer CAPTURE_PHASE_VALID_ACTIVE=(BRANCH_CAPTURE_PHASE_VALID!=0) &&
+        (BRANCH_CAPTURE_REDIRECT_READY!=0) && (RECOVERY_DIRECT_ACTIVE!=0);
+    wire [BE_WIDTH-1:0] branch_capture_valid=(CAPTURE_PHASE_VALID_ACTIVE!=0)?
+        alu_exec_saved_valid:alu_exec_valid;
+    wire [BE_WIDTH-1:0] capture_redirect_claim=
+        branch_capture_valid & alu_exec_redirect_valid & ~alu_exec_is_load;
+    wire [BE_WIDTH-1:0] capture_redirect_ready;
     genvar capture_lane;
     generate for(capture_lane=0;capture_lane<BE_WIDTH;capture_lane=capture_lane+1) begin:g_branch_capture
+        // Under valid+redirect+!pending, the original ready loop selects
+        // loads unconditionally; otherwise only earlier valid non-load
+        // redirects can block this lane. Their GEN validity does not change
+        // that original priority. Ordinary producer_ready cannot affect it.
+        if(capture_lane==0) begin:g_first_ready
+            assign capture_redirect_ready[capture_lane]=1'b1;
+        end else begin:g_later_ready
+            assign capture_redirect_ready[capture_lane]=alu_exec_is_load[capture_lane] ||
+                !(|capture_redirect_claim[capture_lane-1:0]);
+        end
         assign branch_capture_match[capture_lane]=!reset_i && !flush_i && !branch_pending &&
-            alu_exec_valid[capture_lane] && alu_exec_ready[capture_lane] &&
+            branch_capture_valid[capture_lane] &&
+            ((BRANCH_CAPTURE_REDIRECT_READY!=0)?capture_redirect_ready[capture_lane]:alu_exec_ready[capture_lane]) &&
             branch_training_live[capture_lane] && alu_exec_redirect_valid[capture_lane];
         if(capture_lane==0) begin:g_first
             assign branch_capture_grant[capture_lane]=branch_capture_match[capture_lane];
