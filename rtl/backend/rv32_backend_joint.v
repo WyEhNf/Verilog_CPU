@@ -107,6 +107,8 @@ module rv32_backend_joint #(
     parameter integer FAST_STORE_ADDRESS_PREDECODE = 0,
     parameter integer FAST_STORE_SAVED_OPERANDS = 0,
     parameter integer FAST_STORE_WB_DATA = 0,
+    parameter integer FAST_STORE_CLASS_COMPARE = 0,
+    parameter integer FAST_STORE_BATCH = 0,
     parameter integer LSQ_ROB_QUERY_PREDECODE = 0,
     parameter integer LSQ_RESPONSE_QUERY_PREDECODE = 0
 ) (
@@ -1271,6 +1273,7 @@ module rv32_backend_joint #(
         (ROB_RETURN_VALUE_ENABLE==0);
     localparam integer FAST_STORE_SAVED_ACTIVE=(FAST_STORE_SAVED_OPERANDS!=0) &&
         FAST_STORE_COMPLETE_ACTIVE && PARALLEL_STORE_ADDRESS;
+    localparam integer FAST_STORE_BATCH_ACTIVE=(FAST_STORE_BATCH!=0) && FAST_STORE_SAVED_ACTIVE;
     wire [BE_WIDTH-1:0] ready_store_candidates,store_without_agu,rob_fast_store_valid;
     wire [BE_WIDTH-1:0] potential_store_candidates,potential_store_grants;
     wire [TAG_WIDTH-1:0] preselected_store_tag;
@@ -1278,9 +1281,9 @@ module rv32_backend_joint #(
     // intentionally precedes PRF readiness and address-class qualification.
     rv32_frequency_event_select #(.WIDTH(TAG_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) store_identity_selector (
         .events_i(potential_store_grants),.values_i(d_tag),.write_o(),.value_o(preselected_store_tag));
-    wire [BE_WIDTH-1:0] rob_fast_store_publish_valid=(FAST_STORE_IDENTITY_PRESELECT!=0) ?
+    wire [BE_WIDTH-1:0] rob_fast_store_publish_valid=((FAST_STORE_IDENTITY_PRESELECT!=0) && !FAST_STORE_BATCH_ACTIVE) ?
         {{(BE_WIDTH-1){1'b0}},(|rob_fast_store_valid)} : rob_fast_store_valid;
-    wire [BE_WIDTH*TAG_WIDTH-1:0] rob_fast_store_publish_tag=(FAST_STORE_IDENTITY_PRESELECT!=0) ?
+    wire [BE_WIDTH*TAG_WIDTH-1:0] rob_fast_store_publish_tag=((FAST_STORE_IDENTITY_PRESELECT!=0) && !FAST_STORE_BATCH_ACTIVE) ?
         {{((BE_WIDTH-1)*TAG_WIDTH){1'b0}},preselected_store_tag} : d_tag;
     generate if(FAST_STORE_COMPLETE_ACTIVE!=0) begin:g_ready_ram_store_complete
         for(genvar ready_store_lane=0;ready_store_lane<BE_WIDTH;ready_store_lane=ready_store_lane+1) begin:g_lane
@@ -1331,13 +1334,14 @@ module rv32_backend_joint #(
             if(ready_store_lane==0) begin:g_first
                 assign potential_store_grants[ready_store_lane]=potential_store_candidates[ready_store_lane];
                 assign store_without_agu[ready_store_lane]=ready_store_candidates[ready_store_lane] &&
-                    ((FAST_STORE_IDENTITY_PRESELECT==0) || potential_store_grants[ready_store_lane]);
+                    (FAST_STORE_BATCH_ACTIVE || (FAST_STORE_IDENTITY_PRESELECT==0) || potential_store_grants[ready_store_lane]);
             end else begin:g_later
                 assign potential_store_grants[ready_store_lane]=potential_store_candidates[ready_store_lane] &&
                     !(|potential_store_candidates[ready_store_lane-1:0]);
                 assign store_without_agu[ready_store_lane]=ready_store_candidates[ready_store_lane] &&
-                    ((FAST_STORE_IDENTITY_PRESELECT!=0) ? potential_store_grants[ready_store_lane] :
-                    !(|ready_store_candidates[ready_store_lane-1:0]));
+                    (FAST_STORE_BATCH_ACTIVE ||
+                     ((FAST_STORE_IDENTITY_PRESELECT!=0) ? potential_store_grants[ready_store_lane] :
+                      !(|ready_store_candidates[ready_store_lane-1:0])));
             end
             // Only a real atomic D/LSQ allocation may publish completion.
             // Saved D tags remain separate per lane, so ROB identity matching
@@ -1361,8 +1365,8 @@ module rv32_backend_joint #(
     wire [BE_WIDTH-1:0] d_lsq_need=d_valid & (d_is_load | d_is_store);
     localparam integer LSQ_ALLOC_SLOT_PRESELECT_ACTIVE=(LSQ_ALLOC_SLOT_PRESELECT!=0) &&
         (DISPATCH_PIPELINE!=0) && (DISPATCH_ELASTIC!=0);
-    // At most one store skips RS. Compute both capacity cases before
-    // its late qualification, instead of counting that bit then comparing.
+    // Default mode lets one store skip RS. Its two capacity cases
+    // precede late qualification; batch mode prepares every threshold below.
     wire [BE_WIDTH-1:0] d_rs_base_need=d_valid & ~load_without_agu;
     reg [CREDIT_WIDTH-1:0] d_rs_demand,d_lsq_demand;
     reg [CREDIT_WIDTH-1:0] d_rs_base_demand;
@@ -1396,7 +1400,40 @@ module rv32_backend_joint #(
     // Extend the original 16-bit free count before adding one: no wrap at
     // 16'hffff. F=1 implies base demand>=1, so no subtraction underflows.
     wire d_rs_room_with_fast=(d_rs_base_demand<=({1'b0,rs_free_count}+17'd1));
-    wire d_rs_capacity_ok=(FAST_STORE_SAVED_ACTIVE!=0) ?
+    // In batch mode every qualified RAM store may skip RS. Prepare all
+    // capacity thresholds before those late one-bit qualifiers. Existence
+    // of a qualifying subset S with B<=free+|S| is exactly B-F<=free,
+    // where F counts all fast stores. No late popcount/subtract/compare chain.
+    function integer fast_store_subset_count;
+        input integer mask;
+        integer subset_bit;
+        begin
+            fast_store_subset_count=0;
+            for(subset_bit=0;subset_bit<BE_WIDTH;subset_bit=subset_bit+1)
+                fast_store_subset_count=fast_store_subset_count+((mask>>subset_bit)&1);
+        end
+    endfunction
+    wire d_rs_batch_capacity_ok;
+    generate if(FAST_STORE_BATCH_ACTIVE!=0) begin:g_batch_store_capacity
+        localparam integer SUBSETS=(1<<BE_WIDTH)-1;
+        wire [BE_WIDTH:0] room;
+        wire [SUBSETS-1:0] qualifying_subsets;
+        for(genvar capacity_case=0;capacity_case<=BE_WIDTH;capacity_case=capacity_case+1) begin:g_room
+            localparam [16:0] CREDIT=capacity_case;
+            assign room[capacity_case]=d_rs_base_demand<=({1'b0,rs_free_count}+CREDIT);
+        end
+        for(genvar capacity_subset=0;capacity_subset<SUBSETS;capacity_subset=capacity_subset+1) begin:g_subset
+            localparam [BE_WIDTH-1:0] MASK=capacity_subset+1;
+            localparam integer CREDIT=fast_store_subset_count(capacity_subset+1);
+            assign qualifying_subsets[capacity_subset]=
+                ((store_without_agu & MASK)==MASK) && room[CREDIT];
+        end
+        assign d_rs_batch_capacity_ok=room[0] || (|qualifying_subsets);
+    end else begin:g_no_batch_store_capacity
+        assign d_rs_batch_capacity_ok=1'b0;
+    end endgenerate
+    wire d_rs_capacity_ok=(FAST_STORE_BATCH_ACTIVE!=0) ? d_rs_batch_capacity_ok :
+        (FAST_STORE_SAVED_ACTIVE!=0) ?
         (d_rs_room_ordinary || ((|store_without_agu) && d_rs_room_with_fast)) :
         (d_rs_demand<=rs_free_count);
     assign d_admit=(DISPATCH_ELASTIC==0) ||
@@ -1786,7 +1823,7 @@ module rv32_backend_joint #(
     generate for(genvar store_offset_lane=0;store_offset_lane<BE_WIDTH;store_offset_lane=store_offset_lane+1) begin:g_store_offset
         assign prf_store_offsets[store_offset_lane*12 +: 12]=d_imm[store_offset_lane*32 +: 12];
     end endgenerate
-    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL), .LOCAL_VALUE_ROWS(1), .STORE_ADDRESS_READ(PARALLEL_STORE_ADDRESS), .STORE_ADDRESS_FLAGS((FAST_STORE_ADDRESS_PREDECODE!=0) && FAST_STORE_COMPLETE_ACTIVE && PARALLEL_STORE_ADDRESS), .STORE_SAVED_QUERY(FAST_STORE_SAVED_ACTIVE)) prf (
+    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL), .LOCAL_VALUE_ROWS(1), .STORE_ADDRESS_READ(PARALLEL_STORE_ADDRESS), .STORE_ADDRESS_FLAGS((FAST_STORE_ADDRESS_PREDECODE!=0) && FAST_STORE_COMPLETE_ACTIVE && PARALLEL_STORE_ADDRESS), .STORE_SAVED_QUERY(FAST_STORE_SAVED_ACTIVE), .STORE_CLASS_COMPARE((FAST_STORE_CLASS_COMPARE!=0) && FAST_STORE_SAVED_ACTIVE)) prf (
         .clk_i(clk_i), .reset_i(reset_i), .read_phys_i(prf_read_phys), .read_data_o(prf_read_data), .read_ready_o(prf_read_ready),
         .store_offset_i(prf_store_offsets), .store_address_o(prf_store_address), .store_address_flags_o(prf_store_address_flags),
         .read_stored_ready_o(prf_read_stored_ready), .read_bypass_pending_o(prf_read_bypass_pending),
@@ -1817,7 +1854,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STAGED_RECOVERY(RECOVERY_DIRECT_ACTIVE==0), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .RECLAIM_UNIQUE_DESTINATIONS(ROB_UNIQUE_RECLAIM_COUNT), .FAST_STORE_COMPLETE(FAST_STORE_COMPLETE_ACTIVE), .FAST_STORE_IDENTITY_PRESELECT(FAST_STORE_IDENTITY_PRESELECT), .STORE_PREFIX_ADMISSION(ROB_STORE_PREFIX_ADMISSION), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .LEGACY_HALT_PAYLOAD(ROB_LEGACY_HALT_PAYLOAD), .RETURN_VALUE_ENABLE(ROB_RETURN_VALUE_ENABLE), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
+    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STAGED_RECOVERY(RECOVERY_DIRECT_ACTIVE==0), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .RECLAIM_UNIQUE_DESTINATIONS(ROB_UNIQUE_RECLAIM_COUNT), .FAST_STORE_COMPLETE(FAST_STORE_COMPLETE_ACTIVE), .FAST_STORE_IDENTITY_PRESELECT(FAST_STORE_IDENTITY_PRESELECT), .FAST_STORE_BATCH(FAST_STORE_BATCH_ACTIVE), .STORE_PREFIX_ADMISSION(ROB_STORE_PREFIX_ADMISSION), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .LEGACY_HALT_PAYLOAD(ROB_LEGACY_HALT_PAYLOAD), .RETURN_VALUE_ENABLE(ROB_RETURN_VALUE_ENABLE), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rob_alloc_valid), .alloc_pc_i(rob_alloc_pc), .alloc_inst_i(rob_alloc_inst), .alloc_rd_i(rob_alloc_rd),
         .alloc_rd_we_i(rename_rd_we), .alloc_old_phys_i(rob_alloc_old_phys), .alloc_new_phys_i(rob_alloc_new_phys), .alloc_is_store_i(rob_alloc_is_store),
         .alloc_is_branch_i(rob_alloc_is_branch), .alloc_is_halt_i(rob_alloc_is_halt), .alloc_is_error_i(rob_alloc_is_error), .alloc_checkpoint_i(rob_alloc_checkpoint),

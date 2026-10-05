@@ -555,10 +555,13 @@ endmodule
 // or +1; its increment/decrement prefixes are independent of the low carry.
 // No state, and all arithmetic wraps modulo 2^32.
 (* keep_hierarchy = 1 *)
-module rv32_frequency_add_simm12 (
+module rv32_frequency_add_simm12 #(
+    parameter integer CLASS_COMPARE=0
+) (
     input wire [31:0] base_i,
     input wire [11:0] immediate_i,
-    output wire [31:0] sum_o
+    output wire [31:0] sum_o,
+    output wire [2:0] class_flags_o
 );
     wire [2:0] generate_stage [0:2];
     wire [2:0] propagate_stage [0:2];
@@ -629,6 +632,25 @@ module rv32_frequency_add_simm12 (
             end
         end
     endgenerate
+    // A signed12 displacement changes base[31:12] by only -1,0,+1.
+    // Classify each possible high word before the existing low12 carry;
+    // do not form four late adjusted sum bits and then reduce them.
+    generate if(CLASS_COMPARE!=0) begin:g_class_compare
+        wire high_zero=base_i[31:28]==4'h0;
+        wire high_ones=base_i[31:28]==4'hf;
+        wire high_one=base_i[31:28]==4'h1;
+        // These exact lower16 reductions already exist for the full sum.
+        wire middle_ones=ones_prefix[5][15];
+        wire middle_zero=zeros_prefix[5][15];
+        wire ram_increment=middle_ones ? high_ones : high_zero;
+        wire ram_decrement=middle_zero ? high_one : high_zero;
+        wire ram_carry_zero=immediate_i[11] ? ram_decrement : high_zero;
+        wire ram_carry_one=immediate_i[11] ? high_zero : ram_increment;
+        wire ram=generate_stage[2][2] ? ram_carry_one : ram_carry_zero;
+        assign class_flags_o={sum_o[1:0]==2'b00,!sum_o[0],ram};
+    end else begin:g_no_class_compare
+        assign class_flags_o=3'b0;
+    end endgenerate
 endmodule
 
 

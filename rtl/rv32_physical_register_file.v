@@ -19,6 +19,7 @@ module rv32_physical_register_file #(
     parameter integer STORE_ADDRESS_FLAGS = 0,
     // Private saved-operand qualification; never changes public read data.
     parameter integer STORE_SAVED_QUERY = 0,
+    parameter integer STORE_CLASS_COMPARE = 0,
     parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS)
 ) (
     input  wire                         clk_i,
@@ -176,15 +177,20 @@ module rv32_physical_register_file #(
                     // The fallback is the SAME un-bypassed read-tree value.
                     // P0 and out-of-range rows already read zero from this tree.
                     assign address_events[0]=!bypass_write;
-                    rv32_frequency_add_simm12 stored_address (
+                    wire [2:0] stored_class_flags;
+                    rv32_frequency_add_simm12 #(.CLASS_COMPARE(STORE_CLASS_COMPARE)) stored_address (
                         .base_i(stored_tree[1]),
                         .immediate_i(store_offset_i[(rp/2)*12 +: 12]),
-                        .sum_o(address_values[0 +: 32]));
+                        .sum_o(address_values[0 +: 32]),.class_flags_o(stored_class_flags));
                     if(STORE_SAVED_QUERY!=0) begin:g_saved_address_flags
-                        wire [31:0] saved_address=address_values[0 +: 32];
-                        assign store_saved_flags_o[(rp/2)*3 +: 3]={
-                            saved_address[1:0]==2'b00,!saved_address[0],
-                            saved_address[31:28]==4'b0000};
+                        if(STORE_CLASS_COMPARE!=0) begin:g_direct_class
+                            assign store_saved_flags_o[(rp/2)*3 +: 3]=stored_class_flags;
+                        end else begin:g_original_class
+                            wire [31:0] saved_address=address_values[0 +: 32];
+                            assign store_saved_flags_o[(rp/2)*3 +: 3]={
+                                saved_address[1:0]==2'b00,!saved_address[0],
+                                saved_address[31:28]==4'b0000};
+                        end
                     end else begin:g_no_saved_address_flags
                         assign store_saved_flags_o[(rp/2)*3 +: 3]=0;
                     end

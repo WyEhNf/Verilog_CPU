@@ -42,6 +42,7 @@ module rv32_rob #(
     // Only light local-row command profiles can consume this extra event.
     parameter integer FAST_STORE_COMPLETE = 0,
     parameter integer FAST_STORE_IDENTITY_PRESELECT = 0,
+    parameter integer FAST_STORE_BATCH = 0,
     // Publish at most one following ordinary store when every older lane
     // actually retires on this edge; its own retirement still uses saved sent.
     parameter integer STORE_PREFIX_ADMISSION = 0,
@@ -1096,7 +1097,8 @@ module rv32_rob #(
         (LEGACY_HALT_PAYLOAD==0) && (RETURN_VALUE_ENABLE==0);
     // Preselected mode carries one early saved identity and one late
     // accepted event, retaining the complete current row/GEN/valid check.
-    localparam integer FAST_STORE_OWNER_LANES=(FAST_STORE_IDENTITY_PRESELECT!=0) ? 1 : BE_WIDTH;
+    localparam integer FAST_STORE_OWNER_LANES=
+        ((FAST_STORE_IDENTITY_PRESELECT!=0) && (FAST_STORE_BATCH==0)) ? 1 : BE_WIDTH;
     localparam integer FAST_STORE_DOMAINS=(ROB_ENTRIES+3)/4;
     wire [FAST_STORE_DOMAINS*FAST_STORE_OWNER_LANES-1:0] fast_store_valid_views;
     wire [FAST_STORE_DOMAINS*FAST_STORE_OWNER_LANES*TAG_WIDTH-1:0] fast_store_tag_views;
