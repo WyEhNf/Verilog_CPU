@@ -26,6 +26,9 @@ module rv32_backend_joint #(
     parameter integer LSQ_RECLAIM_WIDTH = 1,
     parameter integer LSQ_EMPTY_SELECTION_BYPASS = 0,
     parameter integer EARLY_FRONT_REDIRECT = 0,
+    // The branch result remains captured. Apply its full qualified recovery
+    // on the next edge, using the original direct ROB recovery implementation.
+    parameter integer RECOVERY_DIRECT_APPLY = 0,
     parameter integer RECOVERY_PREVIEW_OLDER_ISSUE = 0,
     parameter integer RECOVERY_APPLY_OLDER_ISSUE = 0,
     parameter integer RS_ROW_RECOVERY_QUALIFICATION = 0,
@@ -40,6 +43,7 @@ module rv32_backend_joint #(
     parameter integer RS_ALLOC_STATIC_WRITE = 0,
     parameter integer PRF_READ_MUX_IMPL = 0,
     parameter integer RAT_READ_BYPASS = 0,
+    parameter integer RENAME_RETAIN_FREE_POOL = 0,
     parameter integer ASAP7_FANOUT_BUFFERS = 0,
     parameter integer ROB_CONTROL_REGISTER_BANKS = 0,
     parameter integer ROB_COMMIT_BANKED_READ = 0,
@@ -48,6 +52,7 @@ module rv32_backend_joint #(
     parameter integer ROB_RETURN_VALUE_ENABLE = 1,
     parameter integer ROB_MMIO_PREDECODE = 0,
     parameter integer ROB_ALLOC_BANKED_WRITE = 0,
+    parameter integer ROB_UNIQUE_RECLAIM_COUNT = 0,
     parameter integer PREDICTOR_META = 0,
     parameter integer COMPACT_PRED_TARGET = 0,
     parameter integer INT_ISSUE_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
@@ -59,6 +64,7 @@ module rv32_backend_joint #(
     parameter integer PHYS_TAG_IMPL = 0,
     parameter integer CHECKPOINT_IMPL = 0,
     parameter integer RAT_RECOVERY_IMPL = 0,
+    parameter integer RAT_SUFFIX_BRANCH_MAPPING = 0,
     parameter integer STORE_BUFFERED_RETIRE = 1,
     parameter integer COMPLETION_BYPASS = 0,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
@@ -704,16 +710,21 @@ module rv32_backend_joint #(
     wire branch_capture_write;
     wire [BRANCH_CAPTURE_WIDTH-1:0] branch_capture_next,branch_capture_saved;
     reg branch_pending;
-    reg recovery_descriptor_valid;
+    localparam integer RECOVERY_DIRECT_ACTIVE=(RECOVERY_DIRECT_APPLY!=0) &&
+        (EARLY_FRONT_REDIRECT!=0) && (LOCAL_EXEC_RECOVERY!=0) &&
+        (CHECKPOINT_IMPL!=0) && (RAT_RECOVERY_IMPL!=0);
+    wire recovery_descriptor_valid;
     wire [CHECK_RAT_WIDTH-1:0] recovery_descriptor_rat;
     wire [PHYS_REGS-1:0] recovery_descriptor_reclaim;
-    reg [FREE_COUNT_WIDTH-1:0] recovery_descriptor_reclaim_count;
-    reg [ROB_SLOT_WIDTH-1:0] recovery_descriptor_head;
-    reg [ROB_COUNT_WIDTH-1:0] recovery_descriptor_occupancy;
-    reg [RS_ENTRIES-1:0] recovery_descriptor_rs_kill;
+    wire [FREE_COUNT_WIDTH-1:0] recovery_descriptor_reclaim_count;
+    wire [ROB_SLOT_WIDTH-1:0] recovery_descriptor_head;
+    wire [ROB_COUNT_WIDTH-1:0] recovery_descriptor_occupancy;
+    wire [RS_ENTRIES-1:0] recovery_descriptor_rs_kill;
     wire rob_recovery_preview;
+    // Preview remains the same qualified branch event. In direct mode
+    // it is also the apply edge; no descriptor-valid feedback drives preview.
     wire recovery_preview_fire = branch_pending && rob_recovery_preview &&
-        !recovery_descriptor_valid && !flush_i;
+        ((RECOVERY_DIRECT_ACTIVE!=0) || !recovery_descriptor_valid) && !flush_i;
     wire [3:0] branch_busy_domains;
     wire [3:0] recovery_capture_domains;
     rv32_frequency_control_tree #(.LEAVES(4)) branch_busy_tree (
@@ -1388,7 +1399,8 @@ module rv32_backend_joint #(
     // and returns only destinations allocated by the killed younger suffix.
     wire [CHECK_RAT_WIDTH-1:0] parallel_recovery_rat;
     generate if (RAT_RECOVERY_IMPL != 0 && CHECKPOINT_IMPL != 0) begin : g_parallel_rat_recovery
-        rv32_rat_recovery #(.ROB_ENTRIES(ROB_ENTRIES), .PAW(PAW), .IMPL(2)) rat_recovery (
+        rv32_rat_recovery #(.ROB_ENTRIES(ROB_ENTRIES), .PAW(PAW), .IMPL(2),
+            .SUFFIX_KEEPS_BRANCH_MAPPING(RAT_SUFFIX_BRANCH_MAPPING)) rat_recovery (
             .rat_i(rat_state), .head_i(rob_head_views[0 +: ROB_SLOT_WIDTH]),
             .branch_slot_i(recovery_tag_views[TAG_WIDTH+3 +: ROB_SLOT_WIDTH]),
             .occupancy_i(rob_occupancy), .valid_i(rob_entry_valid),
@@ -1553,7 +1565,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rename_unit #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .RAT_READ_BYPASS(RAT_READ_BYPASS), .REGISTERED_FREE_POOL(1)) rename (
+    rv32_rename_unit #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .RAT_READ_BYPASS(RAT_READ_BYPASS), .REGISTERED_FREE_POOL(1), .RETAIN_FREE_POOL_ON_RESTORE(RENAME_RETAIN_FREE_POOL)) rename (
         .clk_i(clk_i), .reset_i(reset_i), .rename_ready_i(!halted_o && !flush_i && !branch_busy_domains[1] && dispatch_packet_ready),
         .decoded_valid_i(dec_valid), .decoded_rd_we_i(dec_rd_we), .decoded_rs1_used_i(dec_rs1_used), .decoded_rs2_used_i(dec_rs2_used),
         .decoded_rs_need_i(dec_rs_need), .decoded_lsq_need_i(dec_lsq_need), .decoded_rd_i(dec_rd), .decoded_rs1_i(dec_rs1), .decoded_rs2_i(dec_rs2),
@@ -1605,7 +1617,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STAGED_RECOVERY(1), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .LEGACY_HALT_PAYLOAD(ROB_LEGACY_HALT_PAYLOAD), .RETURN_VALUE_ENABLE(ROB_RETURN_VALUE_ENABLE), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
+    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STAGED_RECOVERY(RECOVERY_DIRECT_ACTIVE==0), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .RECLAIM_UNIQUE_DESTINATIONS(ROB_UNIQUE_RECLAIM_COUNT), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .LEGACY_HALT_PAYLOAD(ROB_LEGACY_HALT_PAYLOAD), .RETURN_VALUE_ENABLE(ROB_RETURN_VALUE_ENABLE), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rob_alloc_valid), .alloc_pc_i(rob_alloc_pc), .alloc_inst_i(rob_alloc_inst), .alloc_rd_i(rob_alloc_rd),
         .alloc_rd_we_i(rename_rd_we), .alloc_old_phys_i(rob_alloc_old_phys), .alloc_new_phys_i(rob_alloc_new_phys), .alloc_is_store_i(rob_alloc_is_store),
         .alloc_is_branch_i(rob_alloc_is_branch), .alloc_is_halt_i(rob_alloc_is_halt), .alloc_is_error_i(rob_alloc_is_error), .alloc_checkpoint_i(rob_alloc_checkpoint),
@@ -2217,6 +2229,27 @@ module rv32_backend_joint #(
     assign rob_store_ack_valid = lsq_store_ack_valid;
     assign rob_store_ack_tag = lsq_store_ack_rob_tag;
 
+    generate if(RECOVERY_DIRECT_ACTIVE!=0) begin:g_direct_recovery_descriptor
+        // All consumers share the current pre-edge ROB prefix. No allocation
+        // or commit occurs on this apply edge; full GEN authority stays in ROB.
+        assign recovery_descriptor_valid=branch_pending && rob_recovery_preview;
+        assign recovery_descriptor_rat=recovery_rat_state;
+        assign recovery_descriptor_reclaim=rob_recovery_reclaim_bitmap;
+        assign recovery_descriptor_reclaim_count=rob_recovery_reclaim_count;
+        assign recovery_descriptor_head=rob_head_views[0 +: ROB_SLOT_WIDTH];
+        assign recovery_descriptor_occupancy=rob_occupancy;
+        assign recovery_descriptor_rs_kill=rs_preview_kill_mask;
+    end else begin:g_staged_recovery_descriptor
+        reg recovery_descriptor_valid_saved;
+        reg [FREE_COUNT_WIDTH-1:0] recovery_descriptor_reclaim_count_saved;
+        reg [ROB_SLOT_WIDTH-1:0] recovery_descriptor_head_saved;
+        reg [ROB_COUNT_WIDTH-1:0] recovery_descriptor_occupancy_saved;
+        reg [RS_ENTRIES-1:0] recovery_descriptor_rs_kill_saved;
+        assign recovery_descriptor_valid=recovery_descriptor_valid_saved;
+        assign recovery_descriptor_reclaim_count=recovery_descriptor_reclaim_count_saved;
+        assign recovery_descriptor_head=recovery_descriptor_head_saved;
+        assign recovery_descriptor_occupancy=recovery_descriptor_occupancy_saved;
+        assign recovery_descriptor_rs_kill=recovery_descriptor_rs_kill_saved;
     rv32_frequency_word_bank #(.WIDTH(CHECK_RAT_WIDTH)) rat_descriptor_owner (
         .clk_i(clk_i),.write_i(recovery_capture_domains[1]),
         .data_i(recovery_rat_state),.data_o(recovery_descriptor_rat));
@@ -2224,19 +2257,19 @@ module rv32_backend_joint #(
         .clk_i(clk_i),.write_i(recovery_capture_domains[2]),
         .data_i(rob_recovery_reclaim_bitmap),.data_o(recovery_descriptor_reclaim));
     always @(posedge clk_i) begin
-        if(reset_i || flush_i) recovery_descriptor_valid<=1'b0;
-        else if(recovery_domains[7]) recovery_descriptor_valid<=1'b0;
-        else if(recovery_capture_domains[0]) recovery_descriptor_valid<=1'b1;
+        if(reset_i || flush_i) recovery_descriptor_valid_saved<=1'b0;
+        else if(recovery_domains[7]) recovery_descriptor_valid_saved<=1'b0;
+        else if(recovery_capture_domains[0]) recovery_descriptor_valid_saved<=1'b1;
         if(recovery_capture_domains[2]) begin
-            recovery_descriptor_reclaim_count<=rob_recovery_reclaim_count;
+            recovery_descriptor_reclaim_count_saved<=rob_recovery_reclaim_count;
         end
         if(recovery_capture_domains[3]) begin
-            recovery_descriptor_head<=rob_head_views[0 +: ROB_SLOT_WIDTH];
-            recovery_descriptor_occupancy<=rob_occupancy;
-            recovery_descriptor_rs_kill<=rs_preview_kill_mask;
+            recovery_descriptor_head_saved<=rob_head_views[0 +: ROB_SLOT_WIDTH];
+            recovery_descriptor_occupancy_saved<=rob_occupancy;
+            recovery_descriptor_rs_kill_saved<=rs_preview_kill_mask;
         end
     end
-
+    end endgenerate
 
     // Only accepted live redirects can acquire this packet. Select the first
     // lane exactly as the old ordered loop, then distribute the qualified

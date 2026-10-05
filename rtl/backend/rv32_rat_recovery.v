@@ -5,6 +5,10 @@ module rv32_rat_recovery #(
     parameter integer ROB_ENTRIES = 32,
     parameter integer PAW = 6,
     parameter integer IMPL = 1,
+    // Caller guarantees rat_i is the current speculative map and old_phys_i
+    // records every accepted rename in program order. Suffix undo already
+    // keeps the branch's own destination under this contract.
+    parameter integer SUFFIX_KEEPS_BRANCH_MAPPING = 0,
     parameter integer SLOT_WIDTH = $clog2(ROB_ENTRIES),
     parameter integer COUNT_WIDTH = $clog2(ROB_ENTRIES + 1)
 ) (
@@ -142,9 +146,15 @@ module rv32_rat_recovery #(
                 (upper_found?upper_value:any_value):rat_i[arch*PAW +: PAW];
         end
     end endgenerate
-    generate for (arch = 0; arch < 32; arch = arch + 1) begin : g_keep_branch
-        assign restore_o[arch*PAW +: PAW] = (arch != 0 && branch_rd_we_i && branch_rd_i == arch) ?
-            branch_new_phys_i : undo_result[arch*PAW +: PAW];
+    generate if(SUFFIX_KEEPS_BRANCH_MAPPING!=0) begin:g_suffix_keeps_branch
+        // The oldest killed writer's old map is the retained prefix map.
+        // With no killed writer, the current RAT already is that same map.
+        assign restore_o=undo_result;
+    end else begin:g_explicit_branch_mapping
+        for (arch = 0; arch < 32; arch = arch + 1) begin : g_keep_branch
+            assign restore_o[arch*PAW +: PAW] = (arch != 0 && branch_rd_we_i && branch_rd_i == arch) ?
+                branch_new_phys_i : undo_result[arch*PAW +: PAW];
+        end
     end endgenerate
     initial begin
         if (ROB_ENTRIES < 2 || (ROB_ENTRIES & (ROB_ENTRIES-1)) != 0 ||

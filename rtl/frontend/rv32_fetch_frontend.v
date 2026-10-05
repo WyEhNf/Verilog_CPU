@@ -17,6 +17,9 @@ module rv32_fetch_frontend #(
     parameter integer COMPACT_PRED_TARGET = 0,
     parameter integer RESPONSE_BYPASS = 0,
     parameter integer RESPONSE_LOCAL_PC = 0,
+    // Caller supplies the redirect epoch to its registered-response cache on
+    // this same edge. Old responses remain blocked while the new PC is offered.
+    parameter integer REDIRECT_REQUEST = 0,
     parameter integer PARALLEL_BUNDLE_CONTROL = 0,
     parameter integer RESPONSE_WORD_OFFSET_READ = 0,
     parameter integer DIRECT_WORD_BOUNDS = 0,
@@ -340,8 +343,13 @@ module rv32_fetch_frontend #(
     // otherwise mandatory idle cycle between warm line requests.
     wire response_can_chain = if_resp_valid_i && if_resp_ready_o &&
                               !freeze_after_response && !stop_i && !error_i;
-    assign if_req_valid_o = !reset_i && !frozen_reg && !stop_i && !error_i &&
-                            (!req_pending_reg || response_can_chain);
+    wire redirect_request=(REDIRECT_REQUEST!=0) && redirect_valid_i;
+    wire [3:0] redirect_request_views;
+    rv32_frequency_control_tree #(.LEAVES(4)) redirect_request_tree (
+        .signal_i(redirect_request),.views_o(redirect_request_views));
+    assign if_req_valid_o = !reset_i && !stop_i && !error_i &&
+        (!frozen_reg || redirect_request_views[0]) &&
+        (!req_pending_reg || response_can_chain || redirect_request_views[0]);
 
     wire [31:0] pc_update;
     wire pc_write;
@@ -363,11 +371,12 @@ module rv32_fetch_frontend #(
         .signal_i(response_can_chain),.views_o(chain_views));
     genvar request_half;
     generate for(request_half=0;request_half<2;request_half=request_half+1) begin:g_request_pc
-        assign if_req_pc_o[request_half*16 +: 16]=chain_views[request_half]?
-            next_pc_comb[request_half*16 +: 16]:pc_reg[request_half*16 +: 16];
+        assign if_req_pc_o[request_half*16 +: 16]=redirect_request_views[request_half+1]?
+             redirect_pc_i[request_half*16 +: 16]:(chain_views[request_half]?
+             next_pc_comb[request_half*16 +: 16]:pc_reg[request_half*16 +: 16]);
     end endgenerate
 
-    assign if_req_epoch_o = epoch_reg;
+    assign if_req_epoch_o = redirect_request_views[3] ? redirect_epoch_i : epoch_reg;
     assign if_resp_ready_o = !reset_i && !redirect_valid_i && response_live && queue_space;
 
     always @* begin
@@ -439,7 +448,9 @@ module rv32_fetch_frontend #(
             event_stall_o <= (count_reg != 0) && (deq_count == 0);
 
             if (redirect_valid_i) begin
-                req_pending_reg <= 1'b0;
+                // PC/epoch owners take the redirect regardless of readiness.
+                // Record pending ownership only for the new accepted request.
+                req_pending_reg <= (REDIRECT_REQUEST!=0) && req_fire;
                 frozen_reg <= 1'b0;
                 head_reg <= {PTR_WIDTH{1'b0}};
                 tail_reg <= {PTR_WIDTH{1'b0}};

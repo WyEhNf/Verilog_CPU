@@ -8,6 +8,9 @@ module rv32_rename_unit #(
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer RAT_READ_BYPASS = 0,
     parameter integer REGISTERED_FREE_POOL = 0,
+    // Caller restores the complete logical free set, including current unused
+    // pool entries, and prevents architectural rename on that restore edge.
+    parameter integer RETAIN_FREE_POOL_ON_RESTORE = 0,
     parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS),
     parameter integer COUNT_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1)
 ) (
@@ -120,10 +123,13 @@ module rv32_rename_unit #(
         pool_next_count=pool_retained+pool_refilled;
     end
     always @(posedge clk_i) begin
-        // Restore receives the complete logical free bitmap, including all
-        // previous pool entries. Return them and refill from that new bitmap.
-        if(reset_i || restore_valid_i || REGISTERED_FREE_POOL==0) pool_count<=0;
-        else pool_count<=pool_next_count;
+        // Payload writes remain suppressed on restore. Retained unused
+        // candidates already belong to the restored free set; no new priority
+        // search or instruction acceptance occurs on this recovery edge.
+        if(reset_i || REGISTERED_FREE_POOL==0) pool_count<=0;
+        else if(restore_valid_i) begin
+            if(RETAIN_FREE_POOL_ON_RESTORE==0) pool_count<=0;
+        end else pool_count<=pool_next_count;
     end
 
     localparam integer FREE_WORDS=(PHYS_REGS+15)/16;
@@ -171,8 +177,13 @@ module rv32_rename_unit #(
                 bits_next=bits_q;
                 phys_index=0;
                 if(rename_reset_views[32+free_word]) bits_next={BITS{1'b1}};
-                else if(rename_restore_views[32+free_word])
-                    bits_next=restore_free_bitmap_i[LOW +: BITS];
+                else if(rename_restore_views[32+free_word]) begin
+                    // Keep logical F as disjoint owners: unreserved F\P and
+                    // the unchanged unused pool P. Export still returns F.
+                    if(REGISTERED_FREE_POOL!=0 && RETAIN_FREE_POOL_ON_RESTORE!=0)
+                        bits_next=restore_free_bitmap_i[LOW +: BITS] & ~pool_bitmap[LOW +: BITS];
+                    else bits_next=restore_free_bitmap_i[LOW +: BITS];
+                end
                 else begin
                     if(REGISTERED_FREE_POOL!=0)
                         bits_next=bits_q & ~pool_reserve_mask[LOW +: BITS];

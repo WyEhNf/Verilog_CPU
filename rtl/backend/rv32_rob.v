@@ -24,6 +24,9 @@ module rv32_rob #(
     // LSQ store payload and the MMIO side effect do not use this owner.
     parameter integer RETURN_VALUE_ENABLE = 1,
     parameter integer CHECKPOINT_IMPL = 0,
+    // Caller guarantees distinct nonzero physical destinations for all live
+    // rd-writing entries. Default preserves arbitrary duplicate-input handling.
+    parameter integer RECLAIM_UNIQUE_DESTINATIONS = 0,
     // Preview captures a recovery transaction; apply is a later clock edge.
     // Default 0 preserves the standalone legacy interface behavior.
     parameter integer STAGED_RECOVERY = 0,
@@ -800,6 +803,29 @@ module rv32_rob #(
         end
     endgenerate
 
+    wire [RECLAIM_COUNT_WIDTH-1:0] recovery_reclaim_count;
+    generate if(RECLAIM_UNIQUE_DESTINATIONS!=0) begin:g_unique_reclaim_count
+        // Bitmap decode and count are parallel. Each qualified ROB owner
+        // contributes one; no late physical decoder/OR feeds the count tree.
+        localparam integer ROW_LEAVES=1<<SLOT_WIDTH;
+        wire [RECLAIM_COUNT_WIDTH-1:0] counts [1:2*ROW_LEAVES-1];
+        for(genvar row=0;row<ROW_LEAVES;row=row+1) begin:g_leaf
+            if(row<ROB_ENTRIES) begin:g_present
+                wire [PHYS_ADDR_WIDTH-1:0] destination=new_phys_mem[row];
+                assign counts[ROW_LEAVES+row]=reclaim_eligible[row] &&
+                    destination!=0 && destination<PHYS_REGS;
+            end else begin:g_padding
+                assign counts[ROW_LEAVES+row]=0;
+            end
+        end
+        for(genvar node=1;node<ROW_LEAVES;node=node+1) begin:g_sum
+            assign counts[node]=counts[2*node]+counts[2*node+1];
+        end
+        assign recovery_reclaim_count=counts[1];
+    end else begin:g_distinct_bitmap_reclaim_count
+        assign recovery_reclaim_count=reclaim_count_tree[1];
+    end endgenerate
+
     initial begin
         if ((BE_WIDTH != 1) && (BE_WIDTH != 2) && (BE_WIDTH != 4)) begin
             $display("ERROR: invalid ROB BE_WIDTH=%0d; expected 1, 2, or 4", BE_WIDTH);
@@ -896,7 +922,7 @@ module rv32_rob #(
         recovery_rd_o = 5'b0;
         recovery_new_phys_o = {PHYS_ADDR_WIDTH{1'b0}};
         recovery_reclaim_bitmap_o = reclaim_bitmap;
-        recovery_reclaim_count_o = reclaim_count_tree[1];
+        recovery_reclaim_count_o = recovery_reclaim_count;
         if (recovery_preview_domains[2]) begin
             redirect_pc_o = recovery_pc_i[0 +: 32];
             if (CHECKPOINT_IMPL == 0)
