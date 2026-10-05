@@ -24,10 +24,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=ROOT/'tools/course_windows_config.json')
     parser.add_argument('--correctness', action='store_true', help='Run the official full correctness suite once after the CPU build')
+    parser.add_argument('--correctness-max-cycles', type=int, default=1000000,
+                        help='Explicit official correctness cycle budget; performance retains its original 1000000-cycle budget')
     phases=parser.add_mutually_exclusive_group()
     phases.add_argument('--timing-only',action='store_true',help='One course synth/STA/area run; do not build or run the CPU simulator')
     phases.add_argument('--reuse-synth',action='store_true',help='Reuse this exact frozen timing-only report for a later IPC/correctness phase')
     args = parser.parse_args()
+    if not 1 <= args.correctness_max_cycles < 2**63:
+        parser.error('--correctness-max-cycles must be in 1..2^63-1')
     if args.timing_only and args.correctness:
         parser.error('--timing-only cannot run correctness')
     if os.name != 'nt':
@@ -83,7 +87,7 @@ def main():
                   '--make', str(Path(config['build_bin'])/'make.exe')],
         'perf': [python, str(scripts/'testcase.py'), '--kind', 'perf',
                  '--testcases', str(framework/'testcases'),
-                 '--sim', str(out/'build/sim'), '--latency', '10'],
+                 '--sim', str(out/'build/sim'), '--latency', '10', '--max-cycles', '1000000'],
         'synth': [python, str(scripts/'synth.py'), '--filelist', 'verilog/filelist.f',
                   '--out', str(out/'synth'), '--mode', 'opt', '--clock-period', '2.0',
                   '--appimage', '', '--yosys', config['yosys'], '--abc', config['abc'],
@@ -91,7 +95,8 @@ def main():
     }
     commands['correctness'] = [python, str(scripts/'testcase.py'), '--kind', 'correctness',
                               '--testcases', str(framework/'testcases'),
-                              '--sim', str(Path(config['native_build_path'])/'sim'), '--latency', '10']
+                              '--sim', str(Path(config['native_build_path'])/'sim'), '--latency', '10',
+                              '--max-cycles', str(args.correctness_max_cycles)]
     prebuilt_record = Path(config['native_build_path'])/'build_identity.json'
     prebuilt = None
     if prebuilt_record.exists():
@@ -112,6 +117,9 @@ def main():
                     source=str(source), parameter_overrides=manifest['parameter_overrides'],
                     latency=10, official_scripts_unmodified=True,
                     official_sim_cpp_unmodified=True, ipc_numerator='official metrics.json')
+    identity.update(perf_max_cycles=1000000,
+                    correctness_max_cycles=args.correctness_max_cycles if args.correctness else None,
+                    host_runner_sha256=sha(Path(__file__)))
     identity['prebuilt_cpu'] = prebuilt
     host_build = [python, str(ROOT/'tools/prebuild_course_windows.py'), '--config', str(args.config.resolve())]
     identity['windows_host_build'] = host_build
@@ -246,6 +254,10 @@ def main():
                   official_correctness_suite_not_run=not args.correctness,
                   official_correctness_suite_passed=bool(args.correctness),
                   official_perf_expected_results_passed=True,
+                  perf_max_cycles=1000000,
+                  correctness_max_cycles=args.correctness_max_cycles if args.correctness else None,
+                  thread_objective_numeric_requirements_met=(fmax > 300 and
+                      results['ipc']['geomean_ipc'] >= 1.1 and official['area']['area_um2'] <= 36000),
                   tier3_numeric_requirements_met=(fmax >= 300 and
                       results['ipc']['geomean_ipc'] >= 1.0985 and official['area']['area_um2'] <= 36000))
     (out/'result.json').write_text(json.dumps(record, indent=2)+'\n')

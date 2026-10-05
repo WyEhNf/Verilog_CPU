@@ -1,0 +1,128 @@
+"""Create a new A84-A92 serial manager without changing terminal A83 tools."""
+from pathlib import Path
+
+from manage_frozen_baseline_programs import ROOT, sha
+
+
+def once(text, old, new):
+    assert text.count(old) == 1, old
+    return text.replace(old, new)
+
+
+def main():
+    source = ROOT/'tools/manage_er1_a83_measurement.py'
+    target = ROOT/'tools/manage_er1_a92_measurement.py'
+    assert not target.exists()
+    assert sha(source) == '3ef611a73b5b0b5b9435f80ab4b78cce1d057c1a7a34e7eaf176ec9efcd4c554'
+    text = source.read_text(encoding='utf-8')
+    replacements = [
+        ('Windows A76-A83 characterization.','Windows A84-A92 characterization.'),
+        ('from manage_er1_a75_measurement import check as check_a75','from manage_er1_a83_measurement import check as check_a83'),
+        ("REFERENCE=Path('F:/CPU2026CourseRuns/ER1_A75_tier3_20261006')","REFERENCE=Path('F:/CPU2026CourseRuns/ER1_A83_tier3_20261006')"),
+        ("CANDIDATE=Path('F:/CPU2026Candidates/tier3_er1_20261005/A83_fast_store_identity_preselect')","CANDIDATE=Path('F:/CPU2026Candidates/tier3_er1_20261005/A92_load_response_source_query')"),
+        ("RUN=Path('F:/CPU2026CourseRuns/ER1_A83_tier3_20261006')","RUN=Path('F:/CPU2026CourseRuns/ER1_A92_tier3_20261006')"),
+        ("REPORT=ROOT/'reports/ER1_A83_pretest_2026-10-06.md'","REPORT=ROOT/'reports/ER1_A92_pretest_2026-10-06.md'"),
+        ('    check_a75()','    check_a83()'),
+        ("terminal=read(ROOT/'build/cpu2026/er1_a75_complete_result_20261006.json')['metrics']","terminal=read(ROOT/'build/cpu2026/er1_a83_complete_result_20261006.json')['metrics']"),
+        ("assert terminal['candidate']=='A75_branch_capture_phase_valid'","assert terminal['candidate']=='A83_fast_store_identity_preselect'"),
+        ("previous=Path('F:/CPU2026Candidates/tier3_er1_20261005/A75_branch_capture_phase_valid')","previous=Path('F:/CPU2026Candidates/tier3_er1_20261005/A83_fast_store_identity_preselect')"),
+        ('for number in range(76,84):','for number in range(84,93):'),
+        ("['host_sha256','tool_sha256','source_reviews_sha256','source_progress_sha256']","['host_sha256','tool_sha256','source_reviews_sha256','source_scripts_sha256','source_progress_sha256']"),
+        ("'FAST_STORE_COMPLETE','FAST_STORE_ADDRESS_PREDECODE','FAST_STORE_IDENTITY_PRESELECT'):",
+         "'FAST_STORE_COMPLETE','FAST_STORE_ADDRESS_PREDECODE','FAST_STORE_IDENTITY_PRESELECT',\n        'ROB_STORE_PREFIX_ADMISSION','LSQ_STORE_ACK_SOURCE_QUERY','LSQ_HEAD_STORE_ACK_BYPASS',\n        'FAST_STORE_SAVED_OPERANDS','LSQ_SAVED_REPORT_PRIORITY','LSQ_HEAD_LOAD_IDENTITY_QUERY',\n        'LSQ_ALLOC_SLOT_PRESELECT','LSQ_HEAD_LOAD_PACKET_PRESELECT','LSQ_RESPONSE_SOURCE_QUERY'):"),
+        ('source_reviews_sha256=reviews,source_progress_sha256=progress,','source_reviews_sha256=reviews,source_scripts_sha256=scripts,source_progress_sha256=progress,'),
+    ]
+    for old,new in replacements:
+        text = once(text,old,new)
+    text = text.replace('a75_reference.json','a83_reference.json')
+    marker = '\n\n\ndef check():'
+    preparers = '''
+PREPARERS={
+    84:'prepare_er1_rob_store_prefix_admission.py',
+    85:'prepare_er1_store_ack_source_query.py',
+    86:'prepare_er1_head_store_ack_bypass.py',
+    87:'prepare_er1_saved_store_operands_parallel_admission.py',
+    88:'prepare_er1_saved_load_report_priority.py',
+    89:'prepare_er1_load_report_identity_prequalification.py',
+    90:'prepare_er1_lsq_allocation_slot_preselect.py',
+    91:'prepare_er1_head_load_packet_preselect.py',
+    92:'prepare_er1_load_response_source_query.py',
+}
+'''
+    text = once(text,marker,'\n'+preparers+marker)
+    marker = '        reviews[str(review_path)]=sha(review_path)'
+    text = once(text,marker,'''        preparer=ROOT/'tools'/PREPARERS[number]
+        assert sha(preparer)==record['preparation_script_sha256'],preparer
+        scripts[str(preparer)]=sha(preparer)
+'''+marker)
+    old = "for proof_name in ['er1_a76_source_progress_20261006.json',\n        'er1_a75_partial_ppa_a77_a78_source_progress_20261006.json',\n        'er1_a75_complete_result_20261006.json',\n        'er1_ready_store_source_opportunity_20261006.json']:"
+    new = "for proof_name in ['er1_a83_complete_result_20261006.json',\n        'er1_a84_background_progress_20261006.json',\n        'er1_a85_a86_background_progress_20261006.json',\n        'er1_a87_a90_source_progress_20261006.json',\n        'er1_a91_a92_source_progress_20261006.json']:"
+    text = once(text,old,new)
+    start = text.index("    REPORT.write_text(f'''")
+    end = text.index('    tool_paths=',start)
+    report = """    REPORT.write_text(f'''# ER1 A92：A84–A92集中测量前汇报
+
+目标保持严格>300MHz、六项原性能程序IPC几何平均≥1.1、含SRAM面积≤36000μm²，以及完整RV32IM、OoO、顺序提交、MMIO与参数化。
+
+最新同版本基准A83：IPC{original['ipc']:.8f}、Fmax{original['fmax_mhz']:.5f}MHz、总面积{original['area_um2']:.5f}μm²，六项性能答案通过，19正确性未运行。它比A75 IPC提高2.1417%，但频率下降54.5568MHz。A83还需IPC相对提高{(1.1/original['ipc']-1)*100:.4f}%，周期缩短超过{(original['minimum_period_ns']-1000/300)*1000:.3f}ps，面积余量{36000-original['area_um2']:.3f}μm²。频率/面积达标的已测最优仍A55R2（1.01714182/306.86245MHz/35480.53090μm²）。A92目前没有实测指标。
+
+## 本批九项已完成修改
+
+| 候选 | 具体行为/结构变化 |
+|---|---|
+| A84 | 原commit循环真实通过的更老退休前缀与随后一条普通存储授权重叠；存储自身仍等待原注册sent才能退休，保持单授权口、MMIO/error/更老阻塞规则。连续已就绪存储可去掉一条独立授权等待间隔。 |
+| A85 | 缓存/MMIO确认身份分别提前进行全LSQ GEN/valid/row/sent/wait核对，真实有效沿用原缓存优先级。 |
+| A86 | 合法已提交实际队首存储收到原ACK时可当拍正式上报/释放，省原capture后等待边沿；暂停使用原行保存包/error，其他行/陈旧/恢复响应保持原路。 |
+| A87 | 快存储只采用原保存就绪操作数和地址分类，当前匹配WB走原RS；RS普通/少一项容量提前计算，资格只选最后bool，D替换信用保持。 |
+| A88 | 原held/head-fast优先级下，通用加载排序只看原保存完成行，移走新响应进入未使用通用wrap/prefix网络的依赖。 |
+| A89 | 保存/held与队首完整ROB身份分别提前核对当前valid/全GEN，真实返回只选择有效资格；原恢复/cancel/实际事件保持。 |
+| A90 | 保存D稀疏内存需求与tail提前计算LSQ分配槽；原子admit保证任何实际fire时计划等于原fire向量，实际fire仍门控全部原行写入。 |
+| A91 | 保存/held完整报告包及query提前选择；队首保存元数据提前读，当前回复只选准备包，值/error来自原格式器。保持held优先级/原valid/全票据/捕获与回收。 |
+| A92 | 缓存保存/命中旁路响应的完整LSQ候选票据分别提前核对，原真实源有效位只门控匹配；公开响应/数据/错误/握手/状态保持。blocking/uncached精确单候选回退，serial仍原接口。 |
+
+## 可观收益依据与范围
+
+A83最慢五条均为4.032/4.030ns同一链：注册内存response-ID→cache bypass→选public LSQ ticket0.7946ns→LSQ匹配/wrap1.260ns→报告ROB query1.597ns→当前live读取1.785ns→完成选择2.091ns→PRF写回值2.292ns→WB存储地址高位分类2.755ns→D入队/valid3.319ns→LSQ分配lane1选择3.626ns→GEN写控制3.830ns→FF4.032ns。
+
+本批将完整身份、保存优先级/包、存储分类、容量条件与分配索引搬到真实晚事件之前，让晚返回/入队事件只选择原真实结果并门控原状态更新。直接移走多个实测串行环节，另有A84/A86实际存储等待机会，故值得一次集中表征。不能把上述区间相加当保证节省，或把少等待机会当每程序必然节省周期。A87缩小WB辅助快存储覆盖可能损IPC；其他选项面积/扇出也可能抵消收益。
+
+本批无新增声明FF/SRAM/常规流水边沿/端口容量，保留FE4/BE2/整数2/CDB2、ROB32/PRF56/RS8/LSQ16、缓存/MSHR/预测表、8ROBGEN和9LSQGEN。A89双live查询、A91完整候选85bit/额外24bit队首读、A92双票据比较均可能耗组合面积；没有以无新增FF推定面积达标。没有false-path、缩GEN、减ISA或越序内存副作用。
+
+源码审阅覆盖：原整包admit/替换信用、at-most-one快存储与两容量代数、保存PRF/所有WB优先级、地址carry/sign/对齐/RAM界、完整LSQ/ROB身份、held/head/saved三种报告选择和所有包/query位域、ACK接受/暂停/错误、缓存保存/旁路源优先级、稀疏分配prefix及实际fire、原状态写/恢复/顺序提交。仅作源级推导和冻结检查，未运行HDL/lint/形式/仿真/综合/STA/单元测试，不声称完整正确性已经验证。可选独立组件私有查询/计划输入须与实际公开包/整包分配一致；core从原信号保证，不声称相互矛盾接口元组等价。
+
+## 其他方向审查
+
+- 更多已存在的取指请求/RS唤醒/加载唤醒旁路无额外边沿可直接去掉；这些机制与cache hit coissue已经启用。
+- 扩容PRF/RS/ROB/LSQ/cache、新大型预测器/RAS检查点：同版本覆盖/方向错误分布与成本依据不足，现有面积余量仅352.966μm²，不盲加状态。
+- 部分D入队、任意非队首更激进正式完成/授权、再拆普通流水：改变原子/暂停/提交协议，可能重建晚ready/recovery到取指链；目前无新瓶颈证据支持额外改造。
+- cache响应格式、存储前递、GEN/资格扇出、保存队首读或新组合路径仍可能成为限制，但A83最慢报告只证明旧链。需本批映射结果判断新瓶颈，不以猜测堆更多改动。
+
+这条实测链上当前有明确身份/状态/成本依据的九项修改已落盘；暂无额外可直接说明可观收益的未完成同链修改。并不声称已穷尽长期架构方案，也不缩小最终目标。准备一次整批测量，不逐改测试。运行时继续独立分析已有数据和后续IPC/面积机会，不改测量快照。
+
+## 测量规范
+
+Windows原生课程链，禁止WSL：框架54fc150ffc290f52aa024209ffb9a29d43856f6d、测试29f980727f7d99a1842a58f34091c7579ba3fe85、Yosys0.63/OpenSTA3.1/Verilator5.020、课程ASAP7 RVT TT/FakeRAM、latency10。映射clock2ns与原约束/负载保持，最终报告真实Fmax和含SRAM总面积。冻结{len(names)}文件，其中{len(dependencies)}课程依赖与A83逐字节相同。
+
+一次新监督任务：串行--timing-only，再按同一manifest/config/toolchain/报告--reuse-synth；仅一次综合/STA与一次CPU构建，六项原perf各1000000周期并核对答案/动态指令分子/GEOMEAN。完整19正确性及M/恢复/GEN/MMIO/参数专项，在明确改善并采用前集中验证。不并行大型前端、不自动重试、不覆盖旧结果或重启旧PID。主E EU40文件保持原快照，所有运行在F盘。
+
+报告生成时尚未启动HDL或构建；须先在对话汇报，再调度。measurement_plan绑定九份审阅/准备脚本、原A83终态/源码记录、所有工具/库/主机脚本与完整测量源。新候选和原A83不可互借指标。
+
+候选SHA256：{sha(CANDIDATE/'candidate.json')}
+
+源码manifest SHA256：{sha(RUN/'source_manifest.json')}
+''',encoding='utf-8')
+"""
+    text = text[:start]+report+text[end:]
+    for old,new in [
+        ('A83_FROZEN_SERIAL_PRETEST_NOT_STARTED','A92_FROZEN_SERIAL_PRETEST_NOT_STARTED'),
+        ('PROGRESS_A76_A83_OWNERSHIP_CRITICAL_PATH_AREA_TRADEOFF_NATIVE_PRETEST_FROZEN','PROGRESS_A84_A92_MEASURED_CHAIN_EVENT_IDENTITY_PREPARATION_NATIVE_PRETEST_FROZEN'),
+        ('A83_SERIAL_CHARACTERIZATION_IN_PROGRESS','A92_SERIAL_CHARACTERIZATION_IN_PROGRESS'),
+        ('PROGRESS_A83_CUMULATIVE_PRETEST_REPORTED_NATIVE_SERIAL_DISPATCH','PROGRESS_A92_CUMULATIVE_PRETEST_REPORTED_NATIVE_SERIAL_DISPATCH')]:
+        text = once(text,old,new)
+    target.write_text(text,encoding='utf-8')
+    print(dict(status='A92_NEW_SERIAL_MANAGER_CREATED_NO_HDL_EXECUTION',manager=str(target),
+        manager_sha256=sha(target),template_sha256=sha(source)))
+
+
+if __name__ == '__main__':
+    main()
