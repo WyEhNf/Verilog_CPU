@@ -469,9 +469,9 @@ module rv32_lsq #(
     genvar address_row,address_lane,address_word;
     generate for(address_row=0;address_row<LSQ_ENTRIES;address_row=address_row+1) begin:g_load_address_lookthrough
         if(LOAD_ADDRESS_LOOKTHROUGH!=0 && REQUEST_PIPELINE!=0) begin:g_enabled
-            wire [BE_WIDTH-1:0] matches;
+            wire [BE_WIDTH-1:0] load_address_matches;
             for(address_lane=0;address_lane<BE_WIDTH;address_lane=address_lane+1) begin:g_match
-                assign matches[address_lane]=!reset_i && !flush_i && !recovery_valid_i &&
+                assign load_address_matches[address_lane]=!reset_i && !flush_i && !recovery_valid_i &&
                     load_mem[address_row] && !store_mem[address_row] && !addr_ready_mem[address_row] &&
                     addr_update_valid_i[address_lane] &&
                     tag_matches_slot(addr_update_tag_i[address_lane*TAG_WIDTH +: TAG_WIDTH],address_row);
@@ -479,7 +479,7 @@ module rv32_lsq #(
             wire update_present;
             wire [31:0] updated_address;
             rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH)) update_select (
-                .events_i(matches),.values_i(addr_update_i),.write_o(update_present),.value_o(updated_address));
+                .events_i(load_address_matches),.values_i(addr_update_i),.write_o(update_present),.value_o(updated_address));
             wire [1:0] update_views;
             rv32_frequency_control_tree #(.LEAVES(2)) update_tree (
                 .signal_i(update_present),.views_o(update_views));
