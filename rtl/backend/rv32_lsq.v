@@ -1212,13 +1212,6 @@ module rv32_lsq #(
     wire commit_valid_tree [1:2*REPORT_ROWS-1];
     wire [SLOT_WIDTH-1:0] commit_slot_tree [1:2*REPORT_ROWS-1];
     wire [REPORT_WIDTH-1:0] report_payload_tree [1:2*REPORT_ROWS-1];
-    localparam integer REPORT_IDENTITY_WIDTH=(HEAD_LOAD_PACKET_ACTIVE!=0) ?
-        REPORT_WIDTH : ROB_TAG_WIDTH+REPORT_ROB_QUERY_WIDTH;
-    localparam integer SAVED_IDENTITY_QUERY_LSB=(HEAD_LOAD_PACKET_ACTIVE!=0) ? REPORT_BASE_WIDTH : ROB_TAG_WIDTH;
-    wire [REPORT_IDENTITY_WIDTH-1:0] saved_identity_tree [1:2*REPORT_ROWS-1];
-    wire [ACK_WIDTH-1:0] ack_payload_tree [1:2*REPORT_ROWS-1];
-    wire ack_valid_tree [1:2*REPORT_ROWS-1];
-    wire [LSQ_ENTRIES-1:0] query_ack_accepted;
     localparam integer HEAD_STORE_ACK_ACTIVE=(HEAD_STORE_ACK_BYPASS!=0) && (ACK_SOURCE_QUERY!=0);
     // Reuse the existing saved-head ROB tag read; unsupported profiles retain
     // their original selected-public-packet query and generation checks.
@@ -1226,6 +1219,13 @@ module rv32_lsq #(
         (SAVED_REPORT_PRIORITY!=0) && (LOAD_COMPLETION_BYPASS==2) &&
         (REPORT_ROB_PREDECODE!=0) && HEAD_STORE_ACK_ACTIVE;
     localparam integer HEAD_LOAD_PACKET_ACTIVE=(HEAD_LOAD_PACKET_PRESELECT!=0) && HEAD_LOAD_IDENTITY_ACTIVE;
+    localparam integer REPORT_IDENTITY_WIDTH=(HEAD_LOAD_PACKET_ACTIVE!=0) ?
+        REPORT_WIDTH : ROB_TAG_WIDTH+REPORT_ROB_QUERY_WIDTH;
+    localparam integer SAVED_IDENTITY_QUERY_LSB=(HEAD_LOAD_PACKET_ACTIVE!=0) ? REPORT_BASE_WIDTH : ROB_TAG_WIDTH;
+    wire [REPORT_IDENTITY_WIDTH-1:0] saved_identity_tree [1:2*REPORT_ROWS-1];
+    wire [ACK_WIDTH-1:0] ack_payload_tree [1:2*REPORT_ROWS-1];
+    wire ack_valid_tree [1:2*REPORT_ROWS-1];
+    wire [LSQ_ENTRIES-1:0] query_ack_accepted;
     localparam integer HEAD_PACKET_META_WIDTH=TAG_WIDTH+PHYS_ADDR_WIDTH+2;
     wire [LSQ_ENTRIES*HEAD_PACKET_META_WIDTH-1:0] head_packet_metadata_rows;
     wire [HEAD_PACKET_META_WIDTH-1:0] head_packet_metadata;

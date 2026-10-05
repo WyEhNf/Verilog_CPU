@@ -106,6 +106,7 @@ module rv32_backend_joint #(
     parameter integer LSQ_HEAD_STORE_ACK_BYPASS = 0,
     parameter integer FAST_STORE_ADDRESS_PREDECODE = 0,
     parameter integer FAST_STORE_SAVED_OPERANDS = 0,
+    parameter integer FAST_STORE_WB_DATA = 0,
     parameter integer LSQ_ROB_QUERY_PREDECODE = 0,
     parameter integer LSQ_RESPONSE_QUERY_PREDECODE = 0
 ) (
@@ -1259,6 +1260,8 @@ module rv32_backend_joint #(
     wire [BE_WIDTH-1:0] load_without_agu = (EARLY_LOAD_ADDRESS>=2) ?
         (d_is_load & ~d_is_store & lsq_alloc_addr_valid) : {BE_WIDTH{1'b0}};
 
+    localparam integer PARALLEL_STORE_ADDRESS=(STORE_ALLOC_EARLY_ADDRESS==2) &&
+        (STORE_ALLOC_IMM12!=0) && (PRF_READ_MUX_IMPL!=0);
     localparam integer FAST_STORE_COMPLETE_ACTIVE=(FAST_STORE_COMPLETE!=0) &&
         (DISPATCH_PIPELINE!=0) && (DISPATCH_ELASTIC!=0) &&
         (STORE_ALLOC_EARLY_ADDRESS!=0) && (EARLY_STORE_ADDRESS!=0) &&
@@ -1298,13 +1301,18 @@ module rv32_backend_joint #(
             // LSQ already trusts these authoritative address/data values.
             // Exclude MMIO/non-RAM and malformed/misaligned tuples from this
             // optimization; they retain their original execution protocol.
-            // Matching WB uses the original RS execution fallback, even if
-            // a stored value was already ready. No extra D hold is introduced.
+            // The base must still be saved and cannot have a current WB:
+            // its saved address flags must describe the actual LSQ address.
+            // Data has no address-class role. Allow its original WB readiness
+            // and exact original LSQ data capture, without a data-value test.
+            wire data_qualified=(FAST_STORE_WB_DATA!=0) ?
+                (prf_read_stored_ready[2*ready_store_lane+1] ||
+                 prf_read_bypass_pending[2*ready_store_lane+1]) :
+                (prf_read_stored_ready[2*ready_store_lane+1] &&
+                 !prf_read_bypass_pending[2*ready_store_lane+1]);
             wire operands_qualified=(FAST_STORE_SAVED_ACTIVE!=0) ?
                 (prf_read_stored_ready[2*ready_store_lane] &&
-                 prf_read_stored_ready[2*ready_store_lane+1] &&
-                 !prf_read_bypass_pending[2*ready_store_lane] &&
-                 !prf_read_bypass_pending[2*ready_store_lane+1]) :
+                 !prf_read_bypass_pending[2*ready_store_lane] && data_qualified) :
                 (lsq_alloc_addr_valid[ready_store_lane] && lsq_alloc_data_valid[ready_store_lane]);
             assign ready_store_candidates[ready_store_lane]=d_valid[ready_store_lane] &&
                 d_is_store[ready_store_lane] && !d_is_load[ready_store_lane] &&
@@ -1770,8 +1778,6 @@ module rv32_backend_joint #(
         .restore_free_bitmap_i(recovery_free_bitmap), .restore_free_count_i(recovery_free_count)
     );
 
-    localparam integer PARALLEL_STORE_ADDRESS=(STORE_ALLOC_EARLY_ADDRESS==2) &&
-        (STORE_ALLOC_IMM12!=0) && (PRF_READ_MUX_IMPL!=0);
     wire [BE_WIDTH*12-1:0] prf_store_offsets;
     wire [BE_WIDTH*32-1:0] prf_store_address;
     wire [BE_WIDTH*3-1:0] prf_store_address_flags;
