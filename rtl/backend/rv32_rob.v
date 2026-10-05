@@ -47,6 +47,7 @@ module rv32_rob #(
     // actually retires on this edge; its own retirement still uses saved sent.
     parameter integer STORE_PREFIX_ADMISSION = 0,
     parameter integer RECOVERY_ROW_LIVE_QUALIFY = 0,
+    parameter integer OCCUPANCY_DISTRIBUTE = 0,
     // 1 retires a store after admission into the committed LSQ/store buffer;
     // 0 preserves the precise legacy behavior of waiting for cache ack.
     parameter integer STORE_BUFFERED_RETIRE = 1
@@ -243,6 +244,17 @@ module rv32_rob #(
     endgenerate
     reg [SLOT_WIDTH-1:0] tail_reg;
     reg [COUNT_WIDTH-1:0] occupancy_reg;
+    // The count remains this one original state owner. Isolate its row
+    // recovery comparators and three separate public/query/lane consumers.
+    localparam integer OCCUPANCY_ROW_DOMAINS=(ROB_ENTRIES+3)/4;
+    localparam integer OCCUPANCY_DOMAINS=OCCUPANCY_ROW_DOMAINS+3;
+    wire [OCCUPANCY_DOMAINS*COUNT_WIDTH-1:0] occupancy_views;
+    generate if(OCCUPANCY_DISTRIBUTE!=0) begin:g_occupancy_domains
+        rv32_frequency_control_tree #(.WIDTH(COUNT_WIDTH),.LEAVES(OCCUPANCY_DOMAINS)) tree (
+            .signal_i(occupancy_reg),.views_o(occupancy_views));
+    end else begin:g_occupancy_direct
+        assign occupancy_views={OCCUPANCY_DOMAINS{occupancy_reg}};
+    end endgenerate
     reg [3:0] epoch_reg;
     integer alloc_lane;
     integer complete_lane;
@@ -297,7 +309,7 @@ module rv32_rob #(
     wire [RECOVERY_QUERY_DOMAINS*RECOVERY_QUERY_WIDTH-1:0] recovery_query_views;
     wire [ROB_ENTRIES-1:0] recovery_row_preview;
     rv32_frequency_control_tree #(.WIDTH(RECOVERY_QUERY_WIDTH),.LEAVES(RECOVERY_QUERY_DOMAINS)) recovery_query_tree (
-        .signal_i({recovery_preview_domains[2],head_recovery_index,COUNT_WIDTH'(chosen_age),occupancy_reg}),
+        .signal_i({recovery_preview_domains[2],head_recovery_index,COUNT_WIDTH'(chosen_age),occupancy_views[(OCCUPANCY_ROW_DOMAINS+2)*COUNT_WIDTH +: COUNT_WIDTH]}),
         .views_o(recovery_query_views));
     genvar recovery_row;
     generate for(recovery_row=0;recovery_row<ROB_ENTRIES;recovery_row=recovery_row+1) begin:g_recovery_descriptor
@@ -724,7 +736,7 @@ module rv32_rob #(
 
     assign head_o = head_views[4*SLOT_WIDTH +: SLOT_WIDTH];
     assign tail_o = tail_reg;
-    assign occupancy_o = occupancy_reg;
+    assign occupancy_o = occupancy_views[(OCCUPANCY_ROW_DOMAINS+1)*COUNT_WIDTH +: COUNT_WIDTH];
     assign alloc_ready_o = (alloc_count_o != 0) && !recovery_domains[3] && !recovery_hold;
 
     genvar entry_index;
@@ -978,7 +990,7 @@ module rv32_rob #(
             age = recovery_slot - head_recovery_index;
             if (recovery_valid_i[recovery_lane] &&
                 recovery_lane_live[recovery_lane] &&
-                (age < occupancy_reg) && (!recovery_found || age < chosen_age)) begin
+                (age < occupancy_views[OCCUPANCY_ROW_DOMAINS*COUNT_WIDTH +: COUNT_WIDTH]) && (!recovery_found || age < chosen_age)) begin
                 recovery_found = 1'b1;
                 chosen_age = age;
                 chosen_slot = recovery_slot;
@@ -1217,7 +1229,7 @@ module rv32_rob #(
             wire [SLOT_WIDTH-1:0] row_age=command_row-row_head;
             wire killed=!row_reset && row_recovery &&
                 (STAGED_RECOVERY ? recovery_saved_kill[command_row] :
-                 (valid_mem[command_row] && row_age>row_branch_age && row_age<occupancy_reg));
+                 (valid_mem[command_row] && row_age>row_branch_age && row_age<occupancy_views[(command_row/4)*COUNT_WIDTH +: COUNT_WIDTH]));
             wire allocate=normal && bank_alloc_fire[command_row%BE_WIDTH] &&
                 bank_alloc_slot[command_row%BE_WIDTH]==command_row;
             wire [BE_WIDTH-1:0] completion_match,completion_grant,completion_errors,retire_match;
@@ -1478,7 +1490,7 @@ module rv32_rob #(
             for (bank_reset_slot = 0; bank_reset_slot < ROB_ENTRIES; bank_reset_slot = bank_reset_slot + 1) begin
                 bank_younger_age = bank_reset_slot - head_update_index;
                 if (STAGED_RECOVERY ? recovery_saved_kill[bank_reset_slot] :
-                    (valid_mem[bank_reset_slot] && (bank_younger_age > bank_branch_age) && (bank_younger_age < occupancy_reg))) begin
+                    (valid_mem[bank_reset_slot] && (bank_younger_age > bank_branch_age) && (bank_younger_age < occupancy_views[(bank_reset_slot/4)*COUNT_WIDTH +: COUNT_WIDTH]))) begin
                     begin valid_mem_write_data[bank_reset_slot] = 1'b0; valid_mem_write_enable[bank_reset_slot] = 1'b1; end
                     begin ready_mem_write_data[bank_reset_slot] = 1'b0; ready_mem_write_enable[bank_reset_slot] = 1'b1; end
                     begin store_wait_mem_write_data[bank_reset_slot] = 1'b0; store_wait_mem_write_enable[bank_reset_slot] = 1'b1; end
@@ -1648,7 +1660,7 @@ module rv32_rob #(
             for (reset_slot = 0; reset_slot < ROB_ENTRIES; reset_slot = reset_slot + 1) begin
                 younger_age = reset_slot - head_update_index;
                 if (STAGED_RECOVERY ? recovery_saved_kill[reset_slot] :
-                    (valid_mem[reset_slot] && (younger_age > branch_age) && (younger_age < occupancy_reg))) begin
+                    (valid_mem[reset_slot] && (younger_age > branch_age) && (younger_age < occupancy_views[(reset_slot/4)*COUNT_WIDTH +: COUNT_WIDTH]))) begin
                     ;
                     ;
                     ;
