@@ -52,6 +52,8 @@ module rv32_dcache_nonblocking #(
     output wire                     dcache_resp_valid_o,
     input  wire                     dcache_resp_ready_i,
     output wire [TAG_WIDTH-1:0]     dcache_resp_lsq_tag_o,
+    output wire [1:0]              dcache_resp_query_valid_o,
+    output wire [2*TAG_WIDTH-1:0]   dcache_resp_query_tags_o,
     output wire [31:0]              dcache_resp_addr_o,
     output wire [127:0]             dcache_resp_line_data_o,
     output wire [31:0]              dcache_resp_word_data_o,
@@ -809,6 +811,10 @@ module rv32_dcache_nonblocking #(
          request_is_load && request_hit && request_data_ready && !resp_valid_reg &&
          !waiter_load_ready_found && !response_emits_load);
     assign dcache_resp_valid_o = resp_valid_reg || bypass_load_hit;
+    // Same actual public source priority. Candidate identities are available
+    // independently before the late bypass decision routes a public ticket.
+    assign dcache_resp_query_valid_o={bypass_load_hit,resp_valid_reg && !bypass_load_hit};
+    assign dcache_resp_query_tags_o={core_req_lsq_tag,resp_lsq_reg};
 
     localparam integer RESPONSE_TAG_WORDS=(TAG_WIDTH+15)/16;
     localparam integer RESPONSE_OUTPUT_WORDS=RESPONSE_TAG_WORDS+13;
