@@ -53,6 +53,11 @@ module rv32m_mdu_iterative #(
     wire [31:0] req_abs_b = req_b_negative ? (~req_src2_i + 32'd1) : req_src2_i;
 
     reg busy;
+    // One extra completion edge separates iteration from sign correction.
+    // No request may replace operation/tag state while this phase is valid.
+    reg finishing;
+    reg [31:0] finishing_magnitude;
+    reg finishing_negate,finishing_increment;
     reg mode_mul;
     reg [5:0] step;
     reg [64:0] shift_state;
@@ -84,11 +89,11 @@ module rv32m_mdu_iterative #(
     wire [2*RECOVERY_WIDTH-1:0] recovery_views;
     rv32_frequency_control_tree #(.WIDTH(RECOVERY_WIDTH),.LEAVES(2)) recovery_tree (
         .signal_i(recovery_packet_i),.views_o(recovery_views));
-    assign occupied_o=busy || out_valid;
+    assign occupied_o=busy || finishing || out_valid;
     wire operation_cancel;
     rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
         .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(0)) operation_cancel_guard (
-        .packet_i(recovery_views[0 +: RECOVERY_WIDTH]),.active_i(busy),.tag_i(operation_tag),.cancel_o(operation_cancel));
+        .packet_i(recovery_views[0 +: RECOVERY_WIDTH]),.active_i(busy || finishing),.tag_i(operation_tag),.cancel_o(operation_cancel));
     wire out_cancel;
     rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
         .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(0)) out_cancel_guard (
@@ -101,17 +106,96 @@ module rv32m_mdu_iterative #(
         (live_tag_valid_i && (out_tag != live_tag_i)));
     wire out_slot_ready = !out_valid || resp_ready_i || out_discard;
 
+    // The lower-word carry also supplies the 33-bit unsigned
+    // subtraction decision. u33 >= d32 iff u33[32] or low-word no-borrow.
+    // The difference top bit is u33[32] XOR borrow, including u33[32]=1.
+    wire [64:0] division_shifted=shift_state<<1;
+    // Multiply and divide cannot execute together. Select their operands
+    // before one common feedback adder; final correction stays in its own
+    // registered completion interval. Each mode leaf controls 16 mux bits.
+    wire [3:0] feedback_mode_views;
+    rv32_frequency_control_tree #(.LEAVES(4)) feedback_mode_tree (
+        .signal_i(mode_mul),.views_o(feedback_mode_views));
+    wire [31:0] feedback_lhs,feedback_rhs;
+    genvar feedback_word;
+    generate for(feedback_word=0;feedback_word<2;feedback_word=feedback_word+1) begin:g_feedback_operands
+        assign feedback_lhs[feedback_word*16 +: 16]=feedback_mode_views[feedback_word]?
+            shift_state[32+feedback_word*16 +: 16]:division_shifted[32+feedback_word*16 +: 16];
+        assign feedback_rhs[feedback_word*16 +: 16]=feedback_mode_views[2+feedback_word]?
+            (shift_state[0]?operand[feedback_word*16 +: 16]:16'b0):~operand[feedback_word*16 +: 16];
+    end endgenerate
+    wire [32:0] feedback_sum=prefix_add32(feedback_lhs,feedback_rhs,!mode_mul);
+    wire [32:0] multiply_upper_sum={shift_state[64]^feedback_sum[32],feedback_sum[31:0]};
+    wire division_no_borrow=division_shifted[64] || feedback_sum[32];
+    wire [32:0] division_difference={division_shifted[64]^!feedback_sum[32],feedback_sum[31:0]};
+    wire [32:0] finishing_correction=prefix_add32(~finishing_magnitude,32'b0,finishing_increment);
+    wire [31:0] finishing_corrected=finishing_negate?finishing_correction[31:0]:finishing_magnitude;
+    wire operation_is_remainder=(operation==`RV32IM_OP_REM || operation==`RV32IM_OP_REMU);
+    wire [31:0] finishing_value=(!mode_mul && divide_zero)?
+        (operation_is_remainder?original_a:32'hffffffff):
+        ((!mode_mul && signed_overflow)?
+         ((operation==`RV32IM_OP_REM)?32'b0:32'h80000000):finishing_corrected);
+    function [32:0] prefix_add32;
+        input [31:0] lhs;
+        input [31:0] adjusted_rhs;
+        input carry_in;
+        reg [7:0] g0, p0, g1, p1, g2, p2, g3, p3;
+        reg [8:0] carry;
+        reg [4:0] chunk_sum;
+        reg [31:0] sum_zero,sum_one;
+        integer chunk;
+        begin
+            for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
+                chunk_sum = {1'b0, lhs[chunk*4 +: 4]} +
+                            {1'b0, adjusted_rhs[chunk*4 +: 4]};
+                // Both nibble results precede the group carry tree.
+                // A late carry selects four bits; it does not start an adder.
+                sum_zero[chunk*4 +: 4] = chunk_sum[3:0];
+                sum_one[chunk*4 +: 4] = chunk_sum[3:0] + 4'd1;
+                g0[chunk] = chunk_sum[4];
+                p0[chunk] = &(lhs[chunk*4 +: 4] ^ adjusted_rhs[chunk*4 +: 4]);
+            end
+            for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
+                g1[chunk] = g0[chunk]; p1[chunk] = p0[chunk];
+                if (chunk >= 1) begin
+                    g1[chunk] = g0[chunk] | (p0[chunk] & g0[chunk-1]);
+                    p1[chunk] = p0[chunk] & p0[chunk-1];
+                end
+            end
+            for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
+                g2[chunk] = g1[chunk]; p2[chunk] = p1[chunk];
+                if (chunk >= 2) begin
+                    g2[chunk] = g1[chunk] | (p1[chunk] & g1[chunk-2]);
+                    p2[chunk] = p1[chunk] & p1[chunk-2];
+                end
+            end
+            for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
+                g3[chunk] = g2[chunk]; p3[chunk] = p2[chunk];
+                if (chunk >= 4) begin
+                    g3[chunk] = g2[chunk] | (p2[chunk] & g2[chunk-4]);
+                    p3[chunk] = p2[chunk] & p2[chunk-4];
+                end
+            end
+            carry[0] = carry_in;
+            for (chunk = 0; chunk < 8; chunk = chunk + 1) begin
+                carry[chunk+1] = g3[chunk] | (p3[chunk] & carry_in);
+                prefix_add32[chunk*4 +: 4] = carry[chunk] ?
+                    sum_one[chunk*4 +: 4] : sum_zero[chunk*4 +: 4];
+            end
+            prefix_add32[32]=carry[8];
+        end
+    endfunction
+
     always @* begin
         next_state = shift_state;
         upper_sum = 33'b0;
         if (mode_mul) begin
-            upper_sum = shift_state[64:32] +
-                (shift_state[0] ? {1'b0, operand} : 33'b0);
+            upper_sum = multiply_upper_sum;
             next_state = {upper_sum, shift_state[31:0]} >> 1;
         end else begin
-            next_state = shift_state << 1;
-            if (next_state[64:32] >= {1'b0, operand}) begin
-                next_state[64:32] = next_state[64:32] - {1'b0, operand};
+            next_state = division_shifted;
+            if (division_no_borrow) begin
+                next_state[64:32] = division_difference;
                 next_state[0] = 1'b1;
             end
         end
@@ -151,7 +235,7 @@ module rv32m_mdu_iterative #(
         end
     end
 
-    assign req_ready_o = !flush_i && !operation_cancel && !request_cancel && !busy && out_slot_ready;
+    assign req_ready_o = !flush_i && !operation_cancel && !request_cancel && !busy && !finishing && out_slot_ready;
     assign resp_valid_o = out_valid && !out_cancel && out_live &&
         (!live_tag_valid_i || (out_tag == live_tag_i));
     assign resp_value_o = out_value;
@@ -162,24 +246,33 @@ module rv32m_mdu_iterative #(
     always @(posedge clk_i) begin
         if (reset_i || flush_i) begin
             busy <= 1'b0;
+            finishing <= 1'b0;
             out_valid <= 1'b0;
         end else begin
             if (out_slot_ready)
                 out_valid <= 1'b0;
 
-            if(operation_cancel) busy<=1'b0;
+            if(operation_cancel) begin busy<=1'b0;finishing<=1'b0;end
             if (busy && !operation_cancel) begin
                 shift_state <= next_state;
                 if (step == 6'd31) begin
                     busy <= 1'b0;
-                    out_valid <= 1'b1;
-                    out_value <= final_value;
-                    out_tag <= operation_tag;
-                    out_phys <= operation_phys;
-                    out_live <= operation_live;
+                    finishing <= 1'b1;
+                    finishing_magnitude <= result_magnitude;
+                    finishing_negate <= result_needs_negate;
+                    finishing_increment <= result_negate_increment;
                 end else begin
                     step <= step + 1'b1;
                 end
+            end
+
+            if(finishing && !operation_cancel && out_slot_ready) begin
+                finishing<=1'b0;
+                out_valid<=1'b1;
+                out_value<=finishing_value;
+                out_tag<=operation_tag;
+                out_phys<=operation_phys;
+                out_live<=operation_live;
             end
 
             if (req_valid_i && req_ready_o) begin

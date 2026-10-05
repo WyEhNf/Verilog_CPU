@@ -17,6 +17,7 @@ module rv32_lsq #(
     parameter integer STORE_ADDRESS_PROBE = 0,
     parameter integer REQUEST_PIPELINE = 0,
     parameter integer LOAD_ADDRESS_LOOKTHROUGH = 0,
+    parameter integer LOAD_COMPLETION_BYPASS = 0,
     // Decode each saved byte offset before late response-row selection and
     // route query payload from the original complete response match events.
     parameter integer RESPONSE_QUERY_PREDECODE = 0,
@@ -970,6 +971,37 @@ module rv32_lsq #(
     wire [REPORT_GRANT_DOMAINS-1:0] report_wrap_enable_views;
     rv32_frequency_control_tree #(.LEAVES(REPORT_GRANT_DOMAINS)) report_wrap_enable_tree (
         .signal_i(!(|report_upper)),.views_o(report_wrap_enable_views));
+
+    // A bypassed response is always captured by its original row on this
+    // edge. If CDB cannot accept it, lock that full LSQ identity and select
+    // the same saved packet until accepted or killed/recycled. No duplicate
+    // value buffer is needed; incoming and saved values have identical format.
+    wire report_hold_valid;
+    wire [TAG_WIDTH-1:0] report_hold_tag;
+    wire [LSQ_ENTRIES-1:0] report_hold_matches;
+    localparam integer REPORT_HOLD_DOMAINS=(LSQ_ENTRIES+3)/4;
+    wire [REPORT_HOLD_DOMAINS*TAG_WIDTH-1:0] report_hold_tag_views;
+    rv32_frequency_control_tree #(.WIDTH(TAG_WIDTH),.LEAVES(REPORT_HOLD_DOMAINS)) report_hold_tag_tree (
+        .signal_i(report_hold_tag),.views_o(report_hold_tag_views));
+    wire report_hold_live=report_hold_valid && (|report_hold_matches);
+    wire [REPORT_HOLD_DOMAINS:0] report_hold_live_views;
+    rv32_frequency_control_tree #(.LEAVES(REPORT_HOLD_DOMAINS+1)) report_hold_live_tree (
+        .signal_i(report_hold_live),.views_o(report_hold_live_views));
+    generate if(LOAD_COMPLETION_BYPASS!=0) begin:g_report_hold_owner
+        reg valid;
+        assign report_hold_valid=valid;
+        wire capture=!reset_i && !flush_i && load_complete_valid_o && !load_complete_ready_i;
+        rv32_frequency_word_bank #(.WIDTH(TAG_WIDTH)) identity_owner (
+            .clk_i(clk_i),.write_i(capture),.data_i(load_complete_lsq_tag_o),.data_o(report_hold_tag));
+        always @(posedge clk_i) begin
+            if(reset_i || flush_i) valid<=1'b0;
+            else valid<=load_complete_valid_o && !load_complete_ready_i;
+        end
+    end else begin:g_no_report_hold_owner
+        assign report_hold_valid=1'b0;
+        assign report_hold_tag=0;
+    end endgenerate
+
     genvar report_row,report_word,report_node,report_decode;
     generate
         for(report_row=0;report_row<REPORT_ROWS;report_row=report_row+1) begin:g_report_row
@@ -985,9 +1017,25 @@ module rv32_lsq #(
                     .KILL_BRANCH(0),.WIDTH(REPORT_RECOVERY_WIDTH)) cancel_guard (
                     .packet_i(report_recovery_views[report_row*REPORT_RECOVERY_WIDTH +: REPORT_RECOVERY_WIDTH]),
                     .active_i(1'b1),.tag_i(rob_tag_mem[report_row]),.cancel_o(row_cancel));
+                // Reuse the exact existing LSQ response value: full byte
+                // forwarding merge and signed/unsigned load formatting.
+                // response_match_rows already checks LSQ valid/generation
+                // and response_wait; only ordinary live loads may bypass.
+                wire row_fast_response=(LOAD_COMPLETION_BYPASS!=0) &&
+                    !reset_i && !flush_i && !recovery_valid_i &&
+                    response_match_rows[report_row] && load_mem[report_row] &&
+                    !store_mem[report_row] && request_sent_mem[report_row] &&
+                    !complete_mem[report_row] && !load_reported_mem[report_row];
+                wire [2:0] row_fast_views;
+                rv32_frequency_control_tree #(.LEAVES(3)) fast_mode_tree (
+                    .signal_i(row_fast_response),.views_o(row_fast_views));
+                wire [31:0] report_value;
+                assign report_value[15:0]=row_fast_views[0]?payload_response_value[15:0]:complete_value_mem[report_row][15:0];
+                assign report_value[31:16]=row_fast_views[1]?payload_response_value[31:16]:complete_value_mem[report_row][31:16];
+                wire report_error=row_fast_views[2]?dcache_resp_error_i:complete_error_mem[report_row];
                 wire [REPORT_BASE_WIDTH-1:0] base_report_payload={
                     row_cancel,!retired_mem[report_row],physical_destinations[report_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
-                    complete_error_mem[report_row],complete_value_mem[report_row],
+                    report_error,report_value,
                     make_lsq_tag(report_row,generation_mem[report_row]),rob_tag_mem[report_row]};
                 wire [REPORT_WIDTH-1:0] report_payload;
                 if(REPORT_ROB_PREDECODE!=0) begin:g_predecoded_query
@@ -1021,17 +1069,26 @@ module rv32_lsq #(
                 wire row_in_report_range=wrapped ?
                     (row_end>REPORT_AGE_MODULUS+ROW_MOD) : (row_end>ROW_MOD);
                 assign report_valid_tree[REPORT_ROWS+report_row]=row_in_report_range &&
-                    valid_mem[report_row] && load_mem[report_row] && complete_mem[report_row] && !load_reported_mem[report_row];
+                    valid_mem[report_row] && load_mem[report_row] && (complete_mem[report_row] || row_fast_response) && !load_reported_mem[report_row];
                 assign report_slot_tree[REPORT_ROWS+report_row]=report_row;
                 assign report_wrap_tree[REPORT_ROWS+report_row]=circular_wrap_views[report_row*8+5];
                 assign report_eligible[report_row]=report_valid_tree[REPORT_ROWS+report_row];
                 assign report_upper[report_row]=report_eligible[report_row] &&
                     !report_wrap_tree[REPORT_ROWS+report_row];
+                // A held packet is already saved; keep new-return validity
+                // out of the full-tag lock -> priority control path.
+                assign report_hold_matches[report_row]=row_in_report_range &&
+                    valid_mem[report_row] && load_mem[report_row] && complete_mem[report_row] &&
+                    !load_reported_mem[report_row] &&
+                    tag_matches_slot(report_hold_tag_views[(report_row/4)*TAG_WIDTH +: TAG_WIDTH],report_row);
+                wire report_priority;
+                assign report_first[report_row]=report_hold_live_views[report_row/4]?
+                    report_hold_matches[report_row]:report_priority;
                 if(report_row==0) begin:g_first_direct_report
-                    assign report_first[report_row]=report_upper[report_row] ||
+                    assign report_priority=report_upper[report_row] ||
                         (report_wrap_enable_views[report_row/4] && report_eligible[report_row]);
                 end else begin:g_later_direct_report
-                    assign report_first[report_row]=
+                    assign report_priority=
                         (report_upper[report_row] && !(|report_upper[report_row-1:0])) ||
                         (report_wrap_enable_views[report_row/4] && report_eligible[report_row] &&
                          !(|report_eligible[report_row-1:0]));
@@ -1093,7 +1150,9 @@ module rv32_lsq #(
 
     always @* begin
         complete_slot_found=report_valid_tree[1];
-        complete_slot_select=complete_slot_found?report_slot_tree[1]:head_reg;
+        complete_slot_select=complete_slot_found?
+            (report_hold_live_views[REPORT_HOLD_DOMAINS]?
+             report_hold_tag[TAG_SLOT_LSB +: SLOT_WIDTH]:report_slot_tree[1]):head_reg;
         load_complete_valid_o=complete_slot_found;
         {load_complete_cancel_o,load_complete_unretired_o,load_complete_phys_rd_o,load_complete_error_o,load_complete_value_o,load_complete_lsq_tag_o,load_complete_rob_tag_o}=report_payload_tree[1][0 +: REPORT_BASE_WIDTH];
         store_ack_valid_o=ack_valid_tree[1];

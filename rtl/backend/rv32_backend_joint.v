@@ -20,7 +20,9 @@ module rv32_backend_joint #(
     // 0: ordinary AGU; 1: allocate ready address and retain AGU;
     // 2 or above: skip redundant RS/AGU work only for a qualified ready load.
     parameter integer EARLY_LOAD_ADDRESS = 0,
+    parameter integer LOAD_COMPLETION_BYPASS = 0,
     parameter integer DISPATCH_ELASTIC = 0,
+    parameter integer DISPATCH_FULL_REPLACE = 0,
     parameter integer EARLY_STORE_ADDRESS = 0,
     parameter integer RS_ISSUE_METADATA = 0,
     parameter integer RS_WAKE_MUX_IMPL = 0,
@@ -1030,7 +1032,7 @@ module rv32_backend_joint #(
                 d_src2_phys[dispatch_lane*PAW +: PAW]}=d_payload_out[dispatch_lane*DISPATCH_PAYLOAD_WIDTH +: DISPATCH_PAYLOAD_WIDTH];
         end
         if(DISPATCH_PIPELINE!=0 && DISPATCH_ELASTIC!=0) begin:g_elastic_dispatch
-            rv32_elastic_dispatch_packet #(.LANES(BE_WIDTH),.PAYLOAD_WIDTH(DISPATCH_PAYLOAD_WIDTH),
+            rv32_elastic_dispatch_packet #(.FULL_REPLACE(DISPATCH_FULL_REPLACE),.LANES(BE_WIDTH),.PAYLOAD_WIDTH(DISPATCH_PAYLOAD_WIDTH),
                 .TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES)) packet (
                 .clk_i(clk_i),.reset_i(reset_i),.flush_i(flush_i),.hold_i(branch_busy_domains[3]),
                 .recovery_i(recovery_domains[7]),
@@ -1040,7 +1042,7 @@ module rv32_backend_joint #(
                 .rob_valid_i(rob_entry_valid),.rob_generation_i(rob_entry_generation),
                 .valid_i(dispatch_valid & rob_alloc_fire),.tag_i(rob_alloc_tag),.data_i(d_payload_in),
                 .ready_o(dispatch_packet_ready),.valid_o(d_valid),.tag_o(d_tag),.data_o(d_payload_out),
-                .consume_i(d_admit));
+                .replace_credit_i(d_replace_credit),.consume_i(d_admit));
             assign d_reserved_rs=0;assign d_reserved_lsq=0;
         end else if(DISPATCH_PIPELINE!=0) begin:g_reserved_dispatch
             assign dispatch_packet_ready=1'b1;
@@ -1084,6 +1086,23 @@ module rv32_backend_joint #(
             d_lsq_demand=d_lsq_demand+d_lsq_need[demand_lane];
         end
     end
+    // This conservative credit path intentionally has no PRF read, early
+    // load readiness, allocation result or R-input dependency. Counting ALL
+    // valid lanes as RS demand guarantees admission regardless of which
+    // ready loads later skip RS. Thus replace_credit implies d_admit/pop.
+    reg [CREDIT_WIDTH-1:0] d_replace_rs_demand,d_replace_lsq_demand;
+    integer replace_lane;
+    always @* begin
+        d_replace_rs_demand=0;d_replace_lsq_demand=0;
+        for(replace_lane=0;replace_lane<BE_WIDTH;replace_lane=replace_lane+1) begin
+            d_replace_rs_demand=d_replace_rs_demand+d_valid[replace_lane];
+            d_replace_lsq_demand=d_replace_lsq_demand+
+                (d_valid[replace_lane] && (d_is_load[replace_lane] || d_is_store[replace_lane]));
+        end
+    end
+    wire d_replace_credit=(DISPATCH_FULL_REPLACE!=0) && (|d_valid) &&
+        !reset_i && !flush_i && !branch_busy_domains[3] &&
+        d_replace_rs_demand<=rs_free_count && d_replace_lsq_demand<=lsq_free_count;
     assign d_admit=(DISPATCH_ELASTIC==0) ||
         (!reset_i && !flush_i && !branch_busy_domains[3] &&
          (d_rs_demand<=rs_free_count) && (d_lsq_demand<=lsq_free_count));
@@ -1577,7 +1596,7 @@ module rv32_backend_joint #(
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(execution_recovery_views[BE_WIDTH*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
-    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
+    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
         .early_addr_valid_i(shared_store_addr_valid), .early_addr_tag_i(shared_store_addr_tag),
         .early_addr_i(shared_store_addr), .store_addr_pending_o(lsq_store_addr_pending),
         .store_addr_rob_tag_o(lsq_store_addr_rob_tag), .store_addr_lsq_tag_o(lsq_store_addr_lsq_tag),
@@ -2237,6 +2256,7 @@ endmodule
 // bundle only when both its actual RS and LSQ demands fit the saved free
 // counts. Recovery retains only full-generation-live, older ROB tags.
 module rv32_elastic_dispatch_packet #(
+    parameter integer FULL_REPLACE=0,
     parameter integer LANES=2,PAYLOAD_WIDTH=160,TAG_WIDTH=16,ROB_ENTRIES=32,
     parameter integer SW=(ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES),
     parameter integer GW=TAG_WIDTH-SW-3
@@ -2254,6 +2274,9 @@ module rv32_elastic_dispatch_packet #(
     output wire [LANES-1:0] valid_o,
     output wire [LANES*TAG_WIDTH-1:0] tag_o,
     output wire [LANES*PAYLOAD_WIDTH-1:0] data_o,
+    // Caller guarantees consume_i when this credit is asserted. It is a
+    // saved-capacity proof, not a late consume/PRF combinational ready path.
+    input wire replace_credit_i,
     input wire consume_i
 );
     reg [1:0] count;
@@ -2264,7 +2287,11 @@ module rv32_elastic_dispatch_packet #(
     wire [LANES-1:0] recovery_keep [0:1];
     wire [ROB_ENTRIES*(GW+1)-1:0] live_rows;
     wire normal=!reset_i && !flush_i && !hold_i && !recovery_i;
-    assign ready_o=normal && count<2;
+    // At full occupancy read_slot==write_slot. The old head is consumed
+    // before this edge; nonblocking writes replace it as the new tail. The
+    // existing pop-then-push validity priority deliberately makes push win.
+    assign ready_o=normal && (count<2 ||
+        ((FULL_REPLACE!=0) && count==2 && replace_credit_i));
     wire push=(|valid_i) && ready_o;
     wire pop=normal && count!=0 && consume_i;
     wire [SW-1:0] branch_age=recovery_tag_i[3 +: SW]-recovery_head_i;
