@@ -6,6 +6,7 @@ module rv32_axi_lite_bridge #(
     parameter integer READ_LINES = 16,
     parameter integer WRITE_LINES = 8,
     parameter integer WORD_QUEUE = 64,
+    parameter integer READ_PAYLOAD_SRAM = 0,
     parameter integer RESPONSE_FIFO_DEPTH = 0
 ) (
     input wire clock, reset,
@@ -306,10 +307,28 @@ module rv32_axi_lite_bridge #(
             wire [RPW-1:0] return_slot;
             wire [1:0] return_word;
             assign {return_valid,return_slot,return_word}=read_return_views[(payload_row/4)*(RPW+3) +: RPW+3];
-            for(payload_word=0;payload_word<4;payload_word=payload_word+1) begin:g_word
-                rv32_frequency_word_bank #(.WIDTH(32)) word_owner (
-                    .clk_i(clock),.write_i(return_valid && return_slot==payload_row && return_word==payload_word),
-                    .data_i(read_return_data[(payload_row/4)*32 +: 32]),.data_o(read_data[payload_row][payload_word*32 +: 32]));
+            if(READ_PAYLOAD_SRAM!=0) begin:g_sram_words
+                wire row_return=return_valid && return_slot==payload_row;
+                wire write_prefix=row_return && return_word!=2'd3;
+                wire [31:0] word_data=read_return_data[(payload_row/4)*32 +: 32];
+                // AXI-Lite returns the issued words in FIFO order 0,1,2,3.
+                // On the final-word edge this prefix bank reads, while word3
+                // is captured independently. All 128 bits are ready when the
+                // unchanged received==4 condition publishes the line.
+                // Reread on idle edges: FakeRAM Q does not retain idle data.
+                sram_fakeram #(.DEPTH(1),.WIDTH(96),.WRITE_GRANULARITY(32)) prefix (
+                    .clk(clock),.en(!reset),.we(write_prefix),
+                    .wmask(3'b001 << return_word),.addr(1'b0),
+                    .wdata({3{word_data}}),.rdata(read_data[payload_row][95:0]));
+                rv32_frequency_word_bank #(.WIDTH(32)) final_word (
+                    .clk_i(clock),.write_i(row_return && return_word==2'd3),
+                    .data_i(word_data),.data_o(read_data[payload_row][127:96]));
+            end else begin:g_register_words
+                for(payload_word=0;payload_word<4;payload_word=payload_word+1) begin:g_word
+                    rv32_frequency_word_bank #(.WIDTH(32)) word_owner (
+                        .clk_i(clock),.write_i(return_valid && return_slot==payload_row && return_word==payload_word),
+                        .data_i(read_return_data[(payload_row/4)*32 +: 32]),.data_o(read_data[payload_row][payload_word*32 +: 32]));
+                end
             end
         end
         for(payload_row=0;payload_row<WRITE_LINES;payload_row=payload_row+1) begin:g_write_payload_owner

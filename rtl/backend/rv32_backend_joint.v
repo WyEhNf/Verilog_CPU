@@ -22,6 +22,7 @@ module rv32_backend_joint #(
     parameter integer EARLY_LOAD_ADDRESS = 0,
     parameter integer LOAD_COMPLETION_BYPASS = 0,
     parameter integer LOAD_WAKE_BYPASS = 0,
+    parameter integer ALLOC_LOAD_SELECTION_BYPASS = 0,
     parameter integer EARLY_FRONT_REDIRECT = 0,
     parameter integer DISPATCH_ELASTIC = 0,
     parameter integer DISPATCH_FULL_REPLACE = 0,
@@ -41,6 +42,7 @@ module rv32_backend_joint #(
     parameter integer ROB_MMIO_PREDECODE = 0,
     parameter integer ROB_ALLOC_BANKED_WRITE = 0,
     parameter integer PREDICTOR_META = 0,
+    parameter integer COMPACT_PRED_TARGET = 0,
     parameter integer INT_ISSUE_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer CDB_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer MUL_IMPL = 0,
@@ -1213,9 +1215,15 @@ module rv32_backend_joint #(
                 rv32_frequency_array_read #(.WIDTH(67),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(ROB_SLOT_WIDTH)) metadata_read (
                     .rows_i(metadata_rows),.index_i(slot),.value_o({pc,kind,pred_taken,pred_target}));
             end
+            // Expand only after execution, outside FQ/dispatch/RS storage.
+            // Training receives the full expected target for a page-qualified
+            // JALR or the exact computed target for direct control flow.
+            wire [31:0] full_pred_target=(COMPACT_PRED_TARGET!=0)?
+                ((kind==`RV32IM_PRED_JALR)?{pc[31:12],pred_target[11:0]}:
+                    alu_exec_branch_target[feedback_source*32 +: 32]):pred_target;
             assign feedback_values[feedback_source*FEEDBACK_PACKET_WIDTH +: FEEDBACK_PACKET_WIDTH]={
                 slot,pc,kind,alu_exec_branch_taken[feedback_source],
-                alu_exec_branch_target[feedback_source*32 +: 32],pred_taken,pred_target};
+                alu_exec_branch_target[feedback_source*32 +: 32],pred_taken,full_pred_target};
         end
         if(PREDICTOR_META!=0) begin:g_feedback_history
             wire [ROB_ENTRIES*16-1:0] history_rows;
@@ -1567,7 +1575,7 @@ module rv32_backend_joint #(
     genvar alu_lane;
     generate
         for (alu_lane = 0; alu_lane < BE_WIDTH; alu_lane = alu_lane + 1) begin : g_alu
-            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .FORWARD_METADATA(RS_ISSUE_METADATA), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY)) alu (
+            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .COMPACT_PRED_TARGET(COMPACT_PRED_TARGET), .FORWARD_METADATA(RS_ISSUE_METADATA), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY)) alu (
                 .exec_source_pc_o(alu_exec_source_pc[alu_lane*32 +: 32]),
                 .exec_pred_taken_o(alu_exec_pred_taken[alu_lane]),
                 .exec_pred_target_o(alu_exec_pred_target[alu_lane*32 +: 32]),
@@ -1620,7 +1628,7 @@ module rv32_backend_joint #(
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(execution_recovery_views[BE_WIDTH*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
-    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
+    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
         .early_addr_valid_i(shared_store_addr_valid), .early_addr_tag_i(shared_store_addr_tag),
         .early_addr_i(shared_store_addr), .store_addr_pending_o(lsq_store_addr_pending),
         .store_addr_rob_tag_o(lsq_store_addr_rob_tag), .store_addr_lsq_tag_o(lsq_store_addr_lsq_tag),

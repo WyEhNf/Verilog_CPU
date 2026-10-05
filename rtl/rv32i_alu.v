@@ -12,6 +12,7 @@ module rv32i_alu #(
     parameter integer SHIFT_IMPL = 0,
     parameter integer SHIFT_SHARED_BARREL = 0,
     parameter integer FORWARD_METADATA = 0,
+    parameter integer COMPACT_PRED_TARGET = 0,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
     parameter integer RECOVERY_WIDTH = 1+2*((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))+$clog2(ROB_ENTRIES+1)
@@ -389,9 +390,17 @@ module rv32i_alu #(
                    (conditional_branch && !calc_branch_taken)}),
         .values_i({(address_sum & 32'hfffffffe),pc_relative_sum,pc_plus_four}),
         .write_o(),.value_o(calc_redirect_pc));
+    wire [31:0] indirect_predicted_target={issue_pc_i[31:12],issue_pred_target_i[11:0]};
+    // Direct-mode conditional/JAL targets are exact PC+decoded immediate.
+    // For JALR only, reconstruct the page-qualified metadata. The frontend
+    // forces an out-of-page raw prediction to a direction mismatch, so an
+    // alias of these low bits can never conceal a wrong fetch target.
+    wire predicted_target_mismatch=(COMPACT_PRED_TARGET!=0)?
+        ((issue_op_i==`RV32IM_OP_JALR) && indirect_predicted_target!=calc_branch_target):
+        (issue_pred_target_i!=calc_branch_target);
     assign calc_redirect_valid=calc_is_branch &&
         ((issue_pred_taken_i!=calc_branch_taken) ||
-         (calc_branch_taken && issue_pred_target_i!=calc_branch_target));
+         (calc_branch_taken && predicted_target_mismatch));
     rv32_frequency_event_select #(.WIDTH(32),.EVENTS(1)) memory_address_selector (
         .events_i(calc_is_memory),.values_i(address_sum),.write_o(),.value_o(calc_mem_addr));
     wire [1:0] store_fallback_views;

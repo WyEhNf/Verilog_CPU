@@ -9,6 +9,7 @@ module rv32_banked_predictor #(
     parameter integer FE_WIDTH = 4,
     parameter integer LEGACY_SENTINEL_HALT = 0,
     parameter integer DIRECT_BRANCH_TARGET = 0,
+    parameter integer COMPACT_INDIRECT_BTB = 0,
     parameter integer HISTORY_BITS = 6
 ) (
     input wire clk_i, reset_i,
@@ -75,7 +76,7 @@ module rv32_banked_predictor #(
             assign bank_query_packets[bank*38 +: 38]={bank_taken[bank],bank_hit[bank],
                 bank_target[bank*32 +: 32],bank_kind[bank*2 +: 2],bank_counter[bank*2 +: 2]};
             rv32_branch_predictor #(.BANK_BITS(BANK_BITS), .DIRECT_BRANCH_TARGET(DIRECT_BRANCH_TARGET),
-                .HISTORY_BITS(HISTORY_BITS)) predictor (
+                .HISTORY_BITS(HISTORY_BITS), .COMPACT_INDIRECT_BTB(COMPACT_INDIRECT_BTB)) predictor (
                 .clk_i(clk_i), .reset_i(reset_i),
                 .query_valid_i(query_valid_i && word_index < 3'd4),
                 .query_pc_i(pc), .query_inst_i(inst),

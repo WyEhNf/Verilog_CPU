@@ -9,6 +9,7 @@ module rv32_branch_predictor #(
     // BANK_BITS=0 preserves the standalone full-table predictor interface.
     parameter integer BANK_BITS = 0,
     parameter integer DIRECT_BRANCH_TARGET = 0,
+    parameter integer COMPACT_INDIRECT_BTB = 0,
     parameter integer HISTORY_BITS = 6
 ) (
     input  wire        clk_i,
@@ -41,6 +42,20 @@ module rv32_branch_predictor #(
 );
     localparam integer BHT_ENTRIES = 256 >> BANK_BITS;
     localparam integer BTB_ENTRIES = 64 >> BANK_BITS;
+    localparam integer BTB_COMPACT_ACTIVE=(COMPACT_INDIRECT_BTB!=0) && (DIRECT_BRANCH_TARGET==1);
+    localparam integer BTB_PAYLOAD_WIDTH=BTB_COMPACT_ACTIVE?39:58;
+    // A predictor tag may alias; execution still compares the full resolved
+    // target before retirement. Keep all entries, with an eight-bit folded
+    // identity instead of twenty-four exact bits in indirect-only mode.
+    function [7:0] folded_btb_tag;
+        input [31:0] pc;
+        begin folded_btb_tag=pc[15:8] ^ pc[23:16] ^ pc[31:24];end
+    endfunction
+    wire [BTB_PAYLOAD_WIDTH-1:0] btb_update_payload=BTB_COMPACT_ACTIVE?
+        {folded_btb_tag(feedback_pc_i),feedback_btb_target[31:1]}:
+        {feedback_pc_i[31:8],feedback_btb_target,feedback_kind_i};
+    wire [23:0] query_btb_identity=BTB_COMPACT_ACTIVE?
+        {16'b0,folded_btb_tag(query_pc_i)}:query_pc_i[31:8];
 
     wire [1:0] bht [0:BHT_ENTRIES-1];
     wire bht_trained [0:BHT_ENTRIES-1];
@@ -59,7 +74,7 @@ module rv32_branch_predictor #(
     wire [BHT_DOMAINS*BHT_INDEX_WIDTH-1:0] bht_write_queries;
     wire [BHT_DOMAINS-1:0] bht_write_events,bht_directions;
     wire [BTB_DOMAINS*BTB_INDEX_WIDTH-1:0] btb_write_queries;
-    wire [BTB_DOMAINS*58-1:0] btb_write_payloads;
+    wire [BTB_DOMAINS*BTB_PAYLOAD_WIDTH-1:0] btb_write_payloads;
     wire [BTB_DOMAINS-1:0] btb_write_events;
     wire [BHT_ENTRIES+BTB_ENTRIES+4-1:0] reset_views;
     rv32_frequency_control_tree #(.LEAVES(BHT_ENTRIES+BTB_ENTRIES+4)) reset_tree (
@@ -74,8 +89,8 @@ module rv32_branch_predictor #(
         .signal_i(feedback_btb_index),.views_o(btb_write_queries));
     rv32_frequency_control_tree #(.LEAVES(BTB_DOMAINS)) btb_event_tree (
         .signal_i(feedback_btb_write),.views_o(btb_write_events));
-    rv32_frequency_control_tree #(.WIDTH(58),.LEAVES(BTB_DOMAINS)) btb_payload_tree (
-        .signal_i({feedback_pc_i[31:8],feedback_btb_target,feedback_kind_i}),.views_o(btb_write_payloads));
+    rv32_frequency_control_tree #(.WIDTH(BTB_PAYLOAD_WIDTH),.LEAVES(BTB_DOMAINS)) btb_payload_tree (
+        .signal_i(btb_update_payload),.views_o(btb_write_payloads));
     genvar predictor_row;
     generate
         for(predictor_row=0;predictor_row<BHT_ENTRIES;predictor_row=predictor_row+1) begin:g_bht_owner
@@ -91,10 +106,21 @@ module rv32_branch_predictor #(
             localparam integer DOMAIN=predictor_row/4;
             wire update=btb_write_events[DOMAIN] &&
                 btb_write_queries[DOMAIN*BTB_INDEX_WIDTH +: BTB_INDEX_WIDTH]==predictor_row;
-            rv32_predictor_btb_row row (
-                .clk_i(clk_i),.reset_i(reset_views[BHT_ENTRIES+predictor_row]),.update_i(update),
-                .payload_i(btb_write_payloads[DOMAIN*58 +: 58]),.valid_o(btb_valid[predictor_row]),
-                .tag_o(btb_tag[predictor_row]),.target_o(btb_target[predictor_row]),.kind_o(btb_kind[predictor_row]));
+            if(BTB_COMPACT_ACTIVE) begin:g_compact
+                rv32_predictor_indirect_btb_row row (
+                    .clk_i(clk_i),.reset_i(reset_views[BHT_ENTRIES+predictor_row]),.update_i(update),
+                    .payload_i(btb_write_payloads[DOMAIN*BTB_PAYLOAD_WIDTH +: BTB_PAYLOAD_WIDTH]),
+                    .valid_o(btb_valid[predictor_row]),.tag_o(btb_tag[predictor_row][7:0]),
+                    .target_o(btb_target[predictor_row]));
+                assign btb_tag[predictor_row][23:8]=16'b0;
+                assign btb_kind[predictor_row]=`RV32IM_PRED_JALR;
+            end else begin:g_full
+                rv32_predictor_btb_row row (
+                    .clk_i(clk_i),.reset_i(reset_views[BHT_ENTRIES+predictor_row]),.update_i(update),
+                    .payload_i(btb_write_payloads[DOMAIN*BTB_PAYLOAD_WIDTH +: BTB_PAYLOAD_WIDTH]),
+                    .valid_o(btb_valid[predictor_row]),.tag_o(btb_tag[predictor_row]),
+                    .target_o(btb_target[predictor_row]),.kind_o(btb_kind[predictor_row]));
+            end
             assign btb_rows[predictor_row*59 +: 59]={btb_valid[predictor_row],btb_tag[predictor_row],btb_target[predictor_row],btb_kind[predictor_row]};
         end
     endgenerate
@@ -111,7 +137,7 @@ module rv32_branch_predictor #(
     assign pred_training_index_o = query_full_index;
     wire [5-BANK_BITS:0] query_btb_index = query_pc_i[7:2+BANK_BITS];
     wire query_btb_match = query_btb_word[58] &&
-                           (query_btb_word[57:34] == query_pc_i[31:8]);
+                           (query_btb_word[57:34] == query_btb_identity);
     wire [31:0] jal_imm = {{11{query_inst_i[31]}}, query_inst_i[31],
                            query_inst_i[19:12], query_inst_i[20],
                            query_inst_i[30:21], 1'b0};
@@ -253,6 +279,27 @@ module rv32_predictor_btb_row (
     rv32_frequency_word_bank #(.WIDTH(58)) payload_owner (
         .clk_i(clk_i),.write_i(!reset_i && update_i),.data_i(payload_i),.data_o(payload));
     assign {tag_o,target_o,kind_o}=payload;
+    always @(posedge clk_i) begin
+        if(reset_i) valid_o<=0;
+        else if(update_i) valid_o<=1;
+    end
+endmodule
+
+
+// In direct-target mode only JALR allocates the BTB. Its kind and target bit0
+// are constants; the hash is predictor metadata, never architectural identity.
+module rv32_predictor_indirect_btb_row (
+    input wire clk_i,reset_i,update_i,
+    input wire [38:0] payload_i,
+    output reg valid_o,
+    output wire [7:0] tag_o,
+    output wire [31:0] target_o
+);
+    wire [38:0] payload;
+    rv32_frequency_word_bank #(.WIDTH(39)) payload_owner (
+        .clk_i(clk_i),.write_i(!reset_i && update_i),.data_i(payload_i),.data_o(payload));
+    assign tag_o=payload[38:31];
+    assign target_o={payload[30:0],1'b0};
     always @(posedge clk_i) begin
         if(reset_i) valid_o<=0;
         else if(update_i) valid_o<=1;

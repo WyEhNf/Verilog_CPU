@@ -14,6 +14,7 @@ module rv32_fetch_frontend #(
     parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH,
     parameter integer NARROW_OCCUPANCY = 0, LEGACY_SENTINEL_HALT = 0,
     parameter integer QUEUE_PAYLOAD_BANKS = 0,
+    parameter integer COMPACT_PRED_TARGET = 0,
     parameter integer PREDICTOR_META = 0
 ) (
     input  wire                         clk_i,
@@ -213,9 +214,23 @@ module rv32_fetch_frontend #(
             wire [31:0] sequential_pc=if_resp_pc_i+((response_lane+1)*32'd4);
             assign bundle_pc[response_lane*32 +: 32]=if_resp_pc_i+(response_lane*32'd4);
             assign bundle_inst[response_lane*32 +: 32]=response_words[response_lane*32 +: 32];
-            assign bundle_pred_taken[response_lane]=if_resp_pred_taken_i[response_lane];
+            // Raw full-target prediction still controls fetch and bundle
+            // boundaries. This flag is only the saved resolution metadata.
+            // JALR is always taken: an out-of-page prediction is marked
+            // not-taken so resolution must redirect even if low bits alias.
+            wire target_in_page=if_resp_pred_target_i[response_lane*32+12 +: 20]==
+                bundle_pc[response_lane*32+12 +: 20];
+            assign bundle_pred_taken[response_lane]=if_resp_pred_taken_i[response_lane] &&
+                ((COMPACT_PRED_TARGET==0) ||
+                 (if_resp_pred_kind_i[response_lane*2 +: 2]!=`RV32IM_PRED_JALR) || target_in_page);
             assign bundle_pred_btb_hit[response_lane]=if_resp_pred_btb_hit_i[response_lane];
-            assign bundle_pred_target[response_lane*32 +: 32]=if_resp_pred_target_i[response_lane*32 +: 32];
+            // Only indirect page-offset targets need to travel through
+            // FQ/decode/dispatch/RS. Direct branch/JAL targets are determined
+            // by the saved PC/instruction; noncontrol metadata is unused.
+            assign bundle_pred_target[response_lane*32 +: 32]=(COMPACT_PRED_TARGET!=0)?
+                {20'b0,((if_resp_pred_kind_i[response_lane*2 +: 2]==`RV32IM_PRED_JALR)?
+                    if_resp_pred_target_i[response_lane*32 +: 12]:12'b0)}:
+                if_resp_pred_target_i[response_lane*32 +: 32];
             assign bundle_pred_kind[response_lane*2 +: 2]=if_resp_pred_kind_i[response_lane*2 +: 2];
             rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_word_reader (
                 .rows_i(if_resp_line_data_i),.index_i(index),.value_o(response_words[response_lane*32 +: 32]));
