@@ -476,13 +476,14 @@ module rv32_lsq #(
     // Selection and forwarding belong to separate clock stages. A stalled
     // load also retains the forwarding snapshot, rather than re-evaluating
     // its public request as older stores depart the queue.
-    reg selection_valid,selection_load,selection_unsigned;
-    reg [SLOT_WIDTH-1:0] selection_slot;
-    reg [TAG_WIDTH-1:0] selection_lsq_tag;
-    reg [ROB_TAG_WIDTH-1:0] selection_rob_tag;
-    reg [31:0] selection_addr,selection_store_data;
-    reg [1:0] selection_size;
-    reg [3:0] selection_store_mask;
+    reg selection_valid;
+    wire selection_load,selection_unsigned;
+    wire [SLOT_WIDTH-1:0] selection_slot;
+    wire [TAG_WIDTH-1:0] selection_lsq_tag;
+    wire [ROB_TAG_WIDTH-1:0] selection_rob_tag;
+    wire [31:0] selection_addr,selection_store_data;
+    wire [1:0] selection_size;
+    wire [3:0] selection_store_mask;
     reg forwarding_hold_valid;
     wire [3:0] forwarding_hold_mask;
     wire [31:0] forwarding_hold_data;
@@ -551,9 +552,15 @@ module rv32_lsq #(
         (selection_load && candidate_found && ((fwd_mask & target_mask)==target_mask)));
     wire selection_input_fire=(REQUEST_PIPELINE!=0) && !reset_i && !flush_i && !recovery_valid_i &&
         (!selection_valid || selection_discard || selection_done) && pick_valid[1];
-    wire [4:0] selection_write_views;
-    rv32_frequency_control_tree #(.LEAVES(5)) selection_write_tree (
-        .signal_i(selection_input_fire),.views_o(selection_write_views));
+    // Same unreset selection fields, data and clock edge. Bound each final
+    // qualified enable to at most 16 payload hold muxes, including the tags.
+    localparam integer SELECTION_PAYLOAD_WIDTH=SLOT_WIDTH+TAG_WIDTH+ROB_TAG_WIDTH+72;
+    rv32_frequency_word_bank #(.WIDTH(SELECTION_PAYLOAD_WIDTH)) selection_payload_owner (
+        .clk_i(clk_i),.write_i(selection_input_fire),
+        .data_i({pick_slot[1],make_lsq_tag(pick_slot[1],pick_generation),pick_rob_tag,
+                 pick_addr[1],pick_load,pick_size,pick_unsigned,pick_store_mask,pick_store_data}),
+        .data_o({selection_slot,selection_lsq_tag,selection_rob_tag,selection_addr,
+                 selection_load,selection_size,selection_unsigned,selection_store_mask,selection_store_data}));
     wire forwarding_hold_write=(REQUEST_PIPELINE!=0) && candidate_found && selected_load &&
         dcache_req_valid_o && !dcache_req_ready_i && !forwarding_hold_valid;
     // Same 36 unreset payload bits and write edge, with existing word owners.
@@ -577,18 +584,6 @@ module rv32_lsq #(
             if(selection_input_fire || selection_done || selection_discard) forwarding_hold_valid<=0;
             else if(forwarding_hold_write) forwarding_hold_valid<=1;
         end
-        if(selection_write_views[0]) begin
-            selection_slot<=pick_slot[1];
-            selection_lsq_tag<=make_lsq_tag(pick_slot[1],pick_generation);
-            selection_rob_tag<=pick_rob_tag;
-        end
-        if(selection_write_views[1]) selection_addr<=pick_addr[1];
-        if(selection_write_views[2]) begin
-            selection_load<=pick_load;selection_size<=pick_size;
-            selection_unsigned<=pick_unsigned;
-        end
-        if(selection_write_views[3]) selection_store_mask<=pick_store_mask;
-        if(selection_write_views[4]) selection_store_data<=pick_store_data;
     end
 
     genvar age_slot;

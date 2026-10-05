@@ -25,6 +25,9 @@ module rv32_dcache_nonblocking #(
     // Active only with synchronous tags and actual state banks (mode 2).
     parameter integer LOCAL_METADATA_QUERY = 0,
     parameter integer LOCAL_ACTION_DECODE = 0,
+    // Default retains the fast hit reply. Zero uses existing held response
+    // metadata/data owners, adding no state and cutting late arbitration.
+    parameter integer HIT_BYPASS = 1,
     parameter integer CACHE_SETS = CACHE_LINES / CACHE_WAYS,
     parameter integer CACHE_INDEX_WIDTH = $clog2(CACHE_SETS),
     parameter integer CACHE_TAG_WIDTH = 32 - 4 - CACHE_INDEX_WIDTH
@@ -769,7 +772,7 @@ module rv32_dcache_nonblocking #(
                                   matching_index == local_fill_index) &&
                                 ((request_is_load && load_can_accept) ||
                                  (request_is_store && store_can_accept));
-    wire bypass_load_hit = (TAG_SRAM != 0) && !reset_i && core_req_valid &&
+    wire bypass_load_hit = (HIT_BYPASS != 0) && (TAG_SRAM != 0) && !reset_i && core_req_valid &&
         request_is_load && request_hit && !resp_valid_reg &&
         !waiter_load_ready_found && !response_emits_load;
     assign dcache_resp_valid_o = resp_valid_reg || bypass_load_hit;

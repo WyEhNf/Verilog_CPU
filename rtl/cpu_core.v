@@ -392,8 +392,13 @@ module cpu_core #(
     wire mmio_exit_request = memory_dreq_valid && memory_dreq_store &&
                              (memory_dreq_addr == 32'h80000000) &&
                              (memory_dreq_mask == 16'h000f);
-    wire normal_memory_dreq_valid = memory_dreq_valid && !mmio_exit_request;
-    assign memory_dreq_ready = mmio_exit_request ? mem_d_req_ready :
+    // Qualify once, then partition the final request consumers. The
+    // acknowledgement retains the original predicate and capture edge.
+    wire [16:0] mmio_exit_views;
+    rv32_frequency_control_tree #(.LEAVES(17)) mmio_exit_request_tree (
+        .signal_i(mmio_exit_request),.views_o(mmio_exit_views));
+    wire normal_memory_dreq_valid = memory_dreq_valid && !mmio_exit_views[0];
+    assign memory_dreq_ready = mmio_exit_views[1] ? mem_d_req_ready :
                                 normal_memory_dreq_ready;
     generate
     if (DCACHE_REQUEST_PIPELINE != 0) begin : g_dcache_request_pipeline
@@ -458,16 +463,26 @@ module cpu_core #(
     wire normal_mem_d_resp_ready;
     wire normal_mem_d_resp_valid = mem_d_resp_valid &&
                                    (mem_d_resp_id != 8'hfe);
-    assign mem_d_req_valid = mmio_exit_request || normal_mem_d_req_valid;
-    assign mem_d_req_write = mmio_exit_request ? 1'b1 : normal_mem_d_req_write;
-    assign mem_d_req_line_addr = mmio_exit_request ? 32'h80000000 :
-                                  normal_mem_d_req_line_addr;
-    assign mem_d_req_wdata = mmio_exit_request ? memory_dreq_wdata :
-                              normal_mem_d_req_wdata;
-    assign mem_d_req_wmask = mmio_exit_request ? 16'h000f :
-                              normal_mem_d_req_wmask;
-    assign mem_d_req_id = mmio_exit_request ? 8'hfe : normal_mem_d_req_id;
-    assign normal_mem_d_req_ready = mem_d_req_ready && !mmio_exit_request;
+    assign mem_d_req_valid = mmio_exit_views[2] || normal_mem_d_req_valid;
+    assign mem_d_req_write = mmio_exit_views[3] ? 1'b1 : normal_mem_d_req_write;
+    assign normal_mem_d_req_ready = mem_d_req_ready && !mmio_exit_views[4];
+    genvar mmio_word;
+    generate for(mmio_word=0;mmio_word<2;mmio_word=mmio_word+1) begin:g_mmio_request_word
+        localparam [15:0] EXIT_ADDRESS_WORD=32'h80000000 >> (16*mmio_word);
+        assign mem_d_req_line_addr[mmio_word*16 +: 16]=mmio_exit_views[5+mmio_word] ?
+            EXIT_ADDRESS_WORD : normal_mem_d_req_line_addr[mmio_word*16 +: 16];
+        assign mem_d_req_wdata[mmio_word*16 +: 16]=mmio_exit_views[7+mmio_word] ?
+            memory_dreq_wdata[mmio_word*16 +: 16] : normal_mem_d_req_wdata[mmio_word*16 +: 16];
+    end endgenerate
+    // Every MMIO exit has mask 000f. Upper words issue no AXI write;
+    // zero them during MMIO instead of selecting arbitrary MMIO data. This
+    // keeps the entire held request stable even if normal cache data changes.
+    generate for(genvar upper_word=0;upper_word<6;upper_word=upper_word+1) begin:g_mmio_masked_word
+        assign mem_d_req_wdata[32+upper_word*16 +: 16]=
+            {16{!mmio_exit_views[11+upper_word]}} & normal_mem_d_req_wdata[32+upper_word*16 +: 16];
+    end endgenerate
+    assign mem_d_req_wmask = mmio_exit_views[9] ? 16'h000f : normal_mem_d_req_wmask;
+    assign mem_d_req_id = mmio_exit_views[10] ? 8'hfe : normal_mem_d_req_id;
     assign mem_d_resp_ready = (mem_d_resp_id == 8'hfe) ? 1'b1 :
                               normal_mem_d_resp_ready;
     wire dc_event_request, dc_event_hit, dc_event_miss, dc_event_refill, dc_event_writeback, dc_event_stall;
@@ -524,7 +539,7 @@ module cpu_core #(
     end
 
     if (DCACHE_MSHRS > 1) begin : g_nonblocking_dcache
-    rv32_dcache_nonblocking #(.LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), 
+    rv32_dcache_nonblocking #(.HIT_BYPASS(0), .LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), 
         .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS),
         .CACHE_LINES(DCACHE_LINES), .CACHE_WAYS(DCACHE_WAYS),
         .INDEX_HASH(DCACHE_INDEX_HASH), .STORE_MERGE_DELAY(DCACHE_STORE_MERGE_DELAY),
