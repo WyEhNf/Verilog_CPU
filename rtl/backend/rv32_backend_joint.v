@@ -1364,9 +1364,65 @@ module rv32_backend_joint #(
     generate for(genvar store_offset_lane=0;store_offset_lane<BE_WIDTH;store_offset_lane=store_offset_lane+1) begin:g_store_offset
         assign prf_store_offsets[store_offset_lane*12 +: 12]=d_imm[store_offset_lane*32 +: 12];
     end endgenerate
-    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL), .LOCAL_VALUE_ROWS(1), .STORE_ADDRESS_READ(PARALLEL_STORE_ADDRESS)) prf (
+    // This is allocation-query arithmetic, not new producer state.
+    // Current dispatch offsets may change while a direct lane is held; all
+    // derived sums follow the same current offset as the original PRF output.
+    localparam integer SOURCE_STORE_ADDRESS=PARALLEL_STORE_ADDRESS && (COMPLETION_BYPASS==2);
+    wire [BE_WIDTH*PRODUCERS-1:0] completion_source_select;
+    wire [BE_WIDTH*BE_WIDTH*32-1:0] prf_precomputed_store_addresses;
+    generate if(SOURCE_STORE_ADDRESS!=0) begin:g_source_store_address
+        wire [BE_WIDTH*PRODUCERS*32-1:0] producer_base_views;
+        wire [BE_WIDTH*32-1:0] link_base_views;
+        // A producer value gains one bounded distribution root rather than
+        // directly driving the four new allocation adders in addition to CDB.
+        rv32_frequency_control_tree #(.WIDTH(PRODUCERS*32),.LEAVES(BE_WIDTH)) producer_base_tree (
+            .signal_i(producer_value),.views_o(producer_base_views));
+        rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(BE_WIDTH)) link_base_tree (
+            .signal_i(branch_pending_value),.views_o(link_base_views));
+        for(genvar allocation_lane=0;allocation_lane<BE_WIDTH;allocation_lane=allocation_lane+1) begin:g_allocation
+            wire [PRODUCERS*32-1:0] source_addresses;
+            wire [31:0] zero_address={{20{prf_store_offsets[allocation_lane*12+11]}},
+                prf_store_offsets[allocation_lane*12 +: 12]};
+            for(genvar producer_id=0;producer_id<PRODUCERS;producer_id=producer_id+1) begin:g_source
+                rv32_frequency_add_simm12 address_adder (
+                    .base_i(producer_base_views[(allocation_lane*PRODUCERS+producer_id)*32 +: 32]),
+                    .immediate_i(prf_store_offsets[allocation_lane*12 +: 12]),
+                    .sum_o(source_addresses[producer_id*32 +: 32]));
+            end
+            for(genvar write_lane=0;write_lane<BE_WIDTH;write_lane=write_lane+1) begin:g_write_lane
+                wire [PRODUCERS-1:0] sources=
+                    completion_source_select[write_lane*PRODUCERS +: PRODUCERS];
+                wire [PRODUCERS:0] events={sources,!(|sources)};
+                wire [(PRODUCERS+1)*32-1:0] values={source_addresses,zero_address};
+                wire [31:0] normal_address;
+                // The direct completion masks are one-hot. No source uses
+                // the exact old zero CDB data plus the same signed immediate.
+                rv32_frequency_event_select #(.WIDTH(32),.EVENTS(PRODUCERS+1),.PRIORITY(0)) source_selector (
+                    .events_i(events),.values_i(values),.write_o(),.value_o(normal_address));
+                if(write_lane==CDB_WIDTH-1) begin:g_branch_link
+                    wire [31:0] link_address;
+                    wire [1:0] link_views;
+                    rv32_frequency_add_simm12 link_adder (
+                        .base_i(link_base_views[allocation_lane*32 +: 32]),
+                        .immediate_i(prf_store_offsets[allocation_lane*12 +: 12]),
+                        .sum_o(link_address));
+                    rv32_frequency_control_tree #(.LEAVES(2)) link_tree (
+                        .signal_i(branch_pending && branch_pending_rd_we),.views_o(link_views));
+                    for(genvar word_id=0;word_id<2;word_id=word_id+1) begin:g_word
+                        assign prf_precomputed_store_addresses[(allocation_lane*BE_WIDTH+write_lane)*32+word_id*16 +: 16]=
+                            link_views[word_id]?link_address[word_id*16 +: 16]:normal_address[word_id*16 +: 16];
+                    end
+                end else begin:g_normal
+                    assign prf_precomputed_store_addresses[(allocation_lane*BE_WIDTH+write_lane)*32 +: 32]=normal_address;
+                end
+            end
+        end
+    end else begin:g_original_store_address
+        assign prf_precomputed_store_addresses=0;
+    end endgenerate
+    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL), .LOCAL_VALUE_ROWS(1), .STORE_ADDRESS_READ(PARALLEL_STORE_ADDRESS), .STORE_ADDRESS_PRECOMPUTED(SOURCE_STORE_ADDRESS)) prf (
         .clk_i(clk_i), .reset_i(reset_i), .read_phys_i(prf_read_phys), .read_data_o(prf_read_data), .read_ready_o(prf_read_ready),
-        .store_offset_i(prf_store_offsets), .store_address_o(prf_store_address),
+        .store_offset_i(prf_store_offsets), .store_precomputed_i(prf_precomputed_store_addresses), .store_address_o(prf_store_address),
         .alloc_phys_i(prf_alloc_phys), .alloc_valid_i(prf_alloc_valid), .write_phys_i(prf_write_phys), .write_data_i(prf_write_data), .write_valid_i(prf_write_valid)
     );
 
@@ -1676,6 +1732,7 @@ module rv32_backend_joint #(
     assign alu_exec_ready = alu_exec_ready_r;
 
     rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .SOURCES(PRODUCERS), .FIFO_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .BYPASS(COMPLETION_BYPASS)) completion (
+        .source_select_o(completion_source_select),
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .kill_valid_i(recovery_domains[6]), .kill_mask_i(completion_kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready_r), .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live_r), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}}), .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect_valid), .cdb_is_memory_o(cdb_is_memory), .cdb_is_load_o(cdb_is_load), .prf_write_valid_o(completion_prf_write_valid), .prf_write_tag_o(prf_wb_tag), .prf_write_phys_rd_o(completion_prf_write_phys), .prf_write_value_o(completion_prf_write_data), .rob_ready_valid_o(rob_wb_valid), .rob_ready_tag_o(rob_wb_tag), .rob_ready_value_o(rob_wb_value), .wakeup_valid_o(wake_wb_valid), .wakeup_tag_o(wake_wb_tag), .wakeup_value_o(wake_wb_value), .entry_valid_o(completion_entry_valid), .entry_tag_o(completion_entry_tag), .occupancy_o()
     );
     // A valid producer holds its result until the completion network accepts

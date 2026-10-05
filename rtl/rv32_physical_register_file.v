@@ -14,6 +14,9 @@ module rv32_physical_register_file #(
     // Optional combination output for even allocation read ports only.
     // The original read data/ready and storage updates remain independent.
     parameter integer STORE_ADDRESS_READ = 0,
+    // Optional query arithmetic supplied before producer/CDB selection.
+    // Default retains the original standalone interface behavior.
+    parameter integer STORE_ADDRESS_PRECOMPUTED = 0,
     parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS)
 ) (
     input  wire                         clk_i,
@@ -27,6 +30,7 @@ module rv32_physical_register_file #(
     input  wire [(BE_WIDTH*32)-1:0]      write_data_i,
     input  wire [BE_WIDTH-1:0]           write_valid_i,
     input  wire [BE_WIDTH*12-1:0]        store_offset_i,
+    input  wire [BE_WIDTH*BE_WIDTH*32-1:0] store_precomputed_i,
     output wire [BE_WIDTH*32-1:0]       store_address_o
 );
     // Keep the value store as a word array so synthesis can implement it as
@@ -168,10 +172,15 @@ module rv32_physical_register_file #(
                         // Reuse legal/write-valid/phys equality. Highest write
                         // lane still wins, including the branch-link lane.
                         assign address_events[address_lane+1]=bypass_match[address_lane];
-                        rv32_frequency_add_simm12 write_address (
-                            .base_i(write_data_i[address_lane*32 +: 32]),
-                            .immediate_i(store_offset_i[(rp/2)*12 +: 12]),
-                            .sum_o(address_values[(address_lane+1)*32 +: 32]));
+                        if(STORE_ADDRESS_PRECOMPUTED!=0) begin:g_precomputed
+                            assign address_values[(address_lane+1)*32 +: 32]=
+                                store_precomputed_i[((rp/2)*BE_WIDTH+address_lane)*32 +: 32];
+                        end else begin:g_original
+                            rv32_frequency_add_simm12 write_address (
+                                .base_i(write_data_i[address_lane*32 +: 32]),
+                                .immediate_i(store_offset_i[(rp/2)*12 +: 12]),
+                                .sum_o(address_values[(address_lane+1)*32 +: 32]));
+                        end
                     end
                     rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH+1),.PRIORITY(1)) address_selector (
                         .events_i(address_events),.values_i(address_values),.write_o(),

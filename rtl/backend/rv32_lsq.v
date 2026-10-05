@@ -690,6 +690,78 @@ module rv32_lsq #(
     // a priority chain of age compares across every physical queue slot.
     genvar pick_node, forward_byte, forward_slot, forward_node;
     generate
+        if(CIRCULAR_ORDER_POWER2 && LSQ_ENTRIES>1) begin:g_prefix_pick
+            // Power-of-two leaves are in ascending physical order. Within
+            // each wrap class the first eligible row wins; unwrapped rows
+            // precede wrapped rows. No indexed read follows this decision.
+            localparam integer GROUPS=(LSQ_ENTRIES+3)/4;
+            wire [LSQ_ENTRIES-1:0] unwrapped,wrapped;
+            wire [GROUPS-1:0] unwrapped_any,wrapped_any,wrapped_allowed;
+            wire [PICK_SELECT_WIDTH-1:0] packet_tree [1:2*LSQ_ENTRIES-1];
+            assign pick_valid[1]=|request_eligible;
+            rv32_frequency_control_tree #(.LEAVES(GROUPS)) wrap_class_tree (
+                .signal_i(!( |unwrapped_any)),.views_o(wrapped_allowed));
+            for(genvar group_id=0;group_id<GROUPS;group_id=group_id+1) begin:g_group
+                localparam integer LOW=group_id*4;
+                localparam integer BITS=(LSQ_ENTRIES-LOW>=4)?4:LSQ_ENTRIES-LOW;
+                wire before_unwrapped,before_wrapped;
+                wire [3*BITS-1:0] group_views;
+                assign unwrapped_any[group_id]=|unwrapped[LOW +: BITS];
+                assign wrapped_any[group_id]=|wrapped[LOW +: BITS];
+                if(group_id==0) begin:g_first
+                    assign before_unwrapped=1'b0;
+                    assign before_wrapped=1'b0;
+                end else begin:g_later
+                    assign before_unwrapped=|unwrapped_any[group_id-1:0];
+                    assign before_wrapped=|wrapped_any[group_id-1:0];
+                end
+                rv32_frequency_control_tree #(.WIDTH(3),.LEAVES(BITS)) prefix_tree (
+                    .signal_i({wrapped_allowed[group_id],before_wrapped,before_unwrapped}),
+                    .views_o(group_views));
+                for(genvar local_row=0;local_row<BITS;local_row=local_row+1) begin:g_row
+                    localparam integer ROW=LOW+local_row;
+                    wire local_before_unwrapped,local_before_wrapped;
+                    wire winner,packet_grant;
+                    wire [PICK_SELECT_WORDS-1:0] grant_views;
+                    wire [PICK_SELECT_WIDTH-1:0] row_packet={
+                        pick_slot[LSQ_ENTRIES+ROW],pick_age[LSQ_ENTRIES+ROW],
+                        pick_wrap[LSQ_ENTRIES+ROW],pick_addr[LSQ_ENTRIES+ROW],
+                        pick_payload[LSQ_ENTRIES+ROW]};
+                    assign unwrapped[ROW]=request_eligible[ROW] && !pick_wrap[LSQ_ENTRIES+ROW];
+                    assign wrapped[ROW]=request_eligible[ROW] && pick_wrap[LSQ_ENTRIES+ROW];
+                    if(local_row==0) begin:g_first
+                        assign local_before_unwrapped=1'b0;
+                        assign local_before_wrapped=1'b0;
+                    end else begin:g_later
+                        assign local_before_unwrapped=|unwrapped[ROW-1:LOW];
+                        assign local_before_wrapped=|wrapped[ROW-1:LOW];
+                    end
+                    assign winner=(unwrapped[ROW] && !group_views[local_row*3] &&
+                        !local_before_unwrapped) ||
+                        (wrapped[ROW] && group_views[local_row*3+2] &&
+                        !group_views[local_row*3+1] && !local_before_wrapped);
+                    if(ROW==LSQ_ENTRIES-1) begin:g_default
+                        // Preserve the original invalid/invalid right branch:
+                        // with no eligible row, root metadata is the last leaf.
+                        assign packet_grant=winner || !pick_valid[1];
+                    end else begin:g_present
+                        assign packet_grant=winner;
+                    end
+                    rv32_frequency_control_tree #(.LEAVES(PICK_SELECT_WORDS)) grant_tree (
+                        .signal_i(packet_grant),.views_o(grant_views));
+                    for(genvar word_id=0;word_id<PICK_SELECT_WORDS;word_id=word_id+1) begin:g_word
+                        localparam integer WORD_LOW=word_id*16;
+                        localparam integer WORD_BITS=(PICK_SELECT_WIDTH-WORD_LOW>=16)?16:PICK_SELECT_WIDTH-WORD_LOW;
+                        assign packet_tree[LSQ_ENTRIES+ROW][WORD_LOW +: WORD_BITS]=
+                            {WORD_BITS{grant_views[word_id]}} & row_packet[WORD_LOW +: WORD_BITS];
+                    end
+                end
+            end
+            for(genvar merge_node=1;merge_node<LSQ_ENTRIES;merge_node=merge_node+1) begin:g_merge
+                assign packet_tree[merge_node]=packet_tree[2*merge_node] | packet_tree[2*merge_node+1];
+            end
+            assign {pick_slot[1],pick_age[1],pick_wrap[1],pick_addr[1],pick_payload[1]}=packet_tree[1];
+        end else begin:g_original_pick
         for (pick_node = 1; pick_node < LSQ_ENTRIES; pick_node = pick_node + 1) begin : g_pick
             wire choose_left = pick_valid[2*pick_node] &&
                 (!pick_valid[2*pick_node+1] ||
@@ -718,6 +790,7 @@ module rv32_lsq #(
             end
             assign {pick_slot[pick_node],pick_age[pick_node],pick_wrap[pick_node],
                     pick_addr[pick_node],pick_payload[pick_node]}=chosen_packet;
+        end
         end
         // Each byte independently selects the youngest overlapping older
         // store. Static reads replace repeated head-relative array muxes.

@@ -68,7 +68,10 @@ module rv32_completion_network #(
     output wire [(BE_WIDTH*32)-1:0]      wakeup_value_o,
     output wire [FIFO_DEPTH-1:0]        entry_valid_o,
     output wire [(FIFO_DEPTH*TAG_WIDTH)-1:0] entry_tag_o,
-    output wire [COUNT_WIDTH-1:0]       occupancy_o
+    output wire [COUNT_WIDTH-1:0]       occupancy_o,
+    // Same direct payload mask, including reset/flush and held-source rules.
+    // This combinational query export does not grant a new transaction.
+    output wire [BE_WIDTH*SOURCES-1:0]  source_select_o
 );
     reg valid_mem [0:FIFO_DEPTH-1];
     reg [TAG_WIDTH-1:0] tag_mem [0:FIFO_DEPTH-1];
@@ -226,6 +229,8 @@ module rv32_completion_network #(
                     producer_value_i[payload_source*32 +: 32],producer_addr_i[payload_source*32 +: 32],
                     producer_store_data_i[payload_source*32 +: 32],producer_branch_target_i[payload_source*32 +: 32]};
                 wire [DATA_WIDTH-1:0] selected_data;
+                assign source_select_o[payload_lane*SOURCES+payload_source]=
+                    (BYPASS==2) && selected_mask[payload_lane][payload_source] && !reset_i && !flush_i;
                 rv32_frequency_control_tree #(.LEAVES(WORDS)) select_tree (
                     .signal_i(selected_mask[payload_lane][payload_source] && !reset_i && !flush_i),
                     .views_o(selected_views));
@@ -255,6 +260,9 @@ module rv32_completion_network #(
         assign direct_value[payload_lane]=value_tree[1];
         assign direct_memory[payload_lane]=memory_tree[1];
         assign direct_target[payload_lane]=target_tree[1];
+    end
+    for(genvar unused_lane=CDB_WIDTH;unused_lane<BE_WIDTH;unused_lane=unused_lane+1) begin:g_unused_source_query
+        assign source_select_o[unused_lane*SOURCES +: SOURCES]=0;
     end endgenerate
 
     always @(posedge clk_i) begin
