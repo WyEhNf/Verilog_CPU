@@ -12,6 +12,7 @@ module rv32_icache_nonblocking #(
     parameter integer TAG_MATCH_PARALLEL = 0,
     parameter integer LOCAL_RESPONSE_READY = 0,
     parameter integer REQUEST_PIPELINE = 0,
+    parameter integer LOOP_BUFFER_LINES = 0,
     parameter integer REFILL_PROTECT_PENDING_HIT = 1,
     parameter integer NEXT_LINE_PREFETCH = 1,
     parameter integer PREFETCH_DISTANCE = 3,
@@ -56,17 +57,69 @@ module rv32_icache_nonblocking #(
     output reg                        event_refill_o,
     output reg                        event_stall_o
 );
+    wire  primary_if_req_valid;
+    wire  primary_if_req_ready;
+    wire [31:0] primary_if_req_pc;
+    wire [EPOCH_WIDTH-1:0] primary_if_req_epoch;
+    wire  primary_if_resp_valid;
+    wire  primary_if_resp_ready;
+    wire [31:0] primary_if_resp_pc;
+    wire [31:0] primary_if_resp_line_addr;
+    wire [127:0] primary_if_resp_line_data;
+    wire [EPOCH_WIDTH-1:0] primary_if_resp_epoch;
+    wire  primary_if_resp_error;
+    // Cached instruction bytes survive redirects exactly as the primary
+    // I-cache does. Only transaction validity is qualified by the epoch.
+    generate if(LOOP_BUFFER_LINES!=0) begin:g_instruction_line_filter
+        rv32_instruction_line_filter #(.LINES(LOOP_BUFFER_LINES),.EPOCH_WIDTH(EPOCH_WIDTH)) lines (
+            .clk_i(clk_i),.reset_i(reset_i),.current_epoch_i(current_epoch_i),
+            .if_req_valid_i(if_req_valid_i),
+            .primary_req_valid_o(primary_if_req_valid),
+            .if_req_ready_o(if_req_ready_o),
+            .primary_req_ready_i(primary_if_req_ready),
+            .if_req_pc_i(if_req_pc_i),
+            .primary_req_pc_o(primary_if_req_pc),
+            .if_req_epoch_i(if_req_epoch_i),
+            .primary_req_epoch_o(primary_if_req_epoch),
+            .if_resp_valid_o(if_resp_valid_o),
+            .primary_resp_valid_i(primary_if_resp_valid),
+            .if_resp_ready_i(if_resp_ready_i),
+            .primary_resp_ready_o(primary_if_resp_ready),
+            .if_resp_pc_o(if_resp_pc_o),
+            .primary_resp_pc_i(primary_if_resp_pc),
+            .if_resp_line_addr_o(if_resp_line_addr_o),
+            .primary_resp_line_addr_i(primary_if_resp_line_addr),
+            .if_resp_line_data_o(if_resp_line_data_o),
+            .primary_resp_line_data_i(primary_if_resp_line_data),
+            .if_resp_epoch_o(if_resp_epoch_o),
+            .primary_resp_epoch_i(primary_if_resp_epoch),
+            .if_resp_error_o(if_resp_error_o),
+            .primary_resp_error_i(primary_if_resp_error));
+    end else begin:g_no_instruction_line_filter
+        assign primary_if_req_valid=if_req_valid_i;
+        assign if_req_ready_o=primary_if_req_ready;
+        assign primary_if_req_pc=if_req_pc_i;
+        assign primary_if_req_epoch=if_req_epoch_i;
+        assign if_resp_valid_o=primary_if_resp_valid;
+        assign primary_if_resp_ready=if_resp_ready_i;
+        assign if_resp_pc_o=primary_if_resp_pc;
+        assign if_resp_line_addr_o=primary_if_resp_line_addr;
+        assign if_resp_line_data_o=primary_if_resp_line_data;
+        assign if_resp_epoch_o=primary_if_resp_epoch;
+        assign if_resp_error_o=primary_if_resp_error;
+    end endgenerate
+
     wire lookup_req_valid,lookup_req_ready;
     wire [31:0] lookup_req_pc;
     wire [EPOCH_WIDTH-1:0] lookup_req_epoch;
     generate if(REQUEST_PIPELINE!=0) begin:g_request_pipeline
         rv32_icache_query_queue #(.EPOCH_WIDTH(EPOCH_WIDTH)) requests (
             .clk_i(clk_i),.reset_i(reset_i),.current_epoch_i(current_epoch_i),
-            .valid_i(if_req_valid_i),.ready_o(if_req_ready_o),.pc_i(if_req_pc_i),.epoch_i(if_req_epoch_i),
+            .valid_i(primary_if_req_valid),.ready_o(primary_if_req_ready),.pc_i(primary_if_req_pc),.epoch_i(primary_if_req_epoch),
             .valid_o(lookup_req_valid),.ready_i(lookup_req_ready),.pc_o(lookup_req_pc),.epoch_o(lookup_req_epoch));
     end else begin:g_direct_request
-        assign lookup_req_valid=if_req_valid_i;assign if_req_ready_o=lookup_req_ready;
-        assign lookup_req_pc=if_req_pc_i;assign lookup_req_epoch=if_req_epoch_i;
+        assign lookup_req_valid=primary_if_req_valid;assign primary_if_req_ready=lookup_req_ready;
+        assign lookup_req_pc=primary_if_req_pc;assign lookup_req_epoch=primary_if_req_epoch;
     end endgenerate
 
     wire [CACHE_LINES-1:0] valid_bits;
@@ -131,7 +184,7 @@ module rv32_icache_nonblocking #(
     wire [CACHE_ENTRY_WIDTH-1:0] request_entry =
         request_hit_way1 ? request_way1 : request_way0;
     wire response_live = resp_valid_reg && (resp_epoch_reg == current_epoch_i);
-    wire response_slot_free = !resp_valid_reg || !response_live || if_resp_ready_i;
+    wire response_slot_free = !resp_valid_reg || !response_live || primary_if_resp_ready;
 
     integer k;
     integer request_match_index;
@@ -394,18 +447,18 @@ module rv32_icache_nonblocking #(
                             !(refill_array_candidate && request_hit) &&
                             !request_would_conflict &&
                             (request_hit || request_match_found || free_found);
-    assign if_resp_valid_o = response_live;
-    assign if_resp_pc_o = resp_pc_reg;
-    assign if_resp_line_addr_o = resp_line_reg;
+    assign primary_if_resp_valid = response_live;
+    assign primary_if_resp_pc = resp_pc_reg;
+    assign primary_if_resp_line_addr = resp_line_reg;
     wire [7:0] response_line_views;
     rv32_frequency_control_tree #(.LEAVES(8)) response_line_tree (
         .signal_i(resp_from_sram),.views_o(response_line_views));
     generate for(genvar output_word=0;output_word<8;output_word=output_word+1) begin:g_response_line
-        assign if_resp_line_data_o[output_word*16 +: 16]=response_line_views[output_word]?
+        assign primary_if_resp_line_data[output_word*16 +: 16]=response_line_views[output_word]?
             data_rdata[output_word*16 +: 16]:resp_data_reg[output_word*16 +: 16];
     end endgenerate
-    assign if_resp_epoch_o = resp_epoch_reg;
-    assign if_resp_error_o = resp_error_reg;
+    assign primary_if_resp_epoch = resp_epoch_reg;
+    assign primary_if_resp_error = resp_error_reg;
 
     assign mem_req_valid_o = send_found;
     assign mem_req_line_addr_o = send_found ? mshr_line[send_index] : 32'd0;
@@ -763,9 +816,9 @@ module rv32_icache_nonblocking #(
                     .request_match_found_i(request_match_found),
                     .request_match_index_i(request_match_index),
                     .free_index_i(free_index),
-                    .if_req_pc_i(lookup_req_pc),
+                    .primary_if_req_pc(lookup_req_pc),
                     .request_line_i(request_line),
-                    .if_req_epoch_i(lookup_req_epoch),
+                    .primary_if_req_epoch(lookup_req_epoch),
                     .prefetch_step_allocates_i(prefetch_step_allocates),
                     .prefetch_control_stream_i(prefetch_control_stream),
                     .prefetch_next_line_i(prefetch_next_line),
@@ -1056,5 +1109,119 @@ module rv32_icache_query_queue #(parameter integer EPOCH_WIDTH=4) (
             if(pop) read_slot<=!read_slot;
             if(push) write_slot<=!write_slot;
         end
+    end
+endmodule
+
+// A small direct-mapped L0 over the immutable instruction-line interface.
+// It has one registered response, at most one primary miss in flight, and
+// accepts a replacement request on the same edge as a consumed response.
+// There is no combinational path from a new request to response validity.
+module rv32_instruction_line_filter #(
+    parameter integer LINES=16,EPOCH_WIDTH=4,
+    parameter integer INDEX_WIDTH=$clog2(LINES),
+    parameter integer TAG_BITS=28-INDEX_WIDTH
+) (
+    input wire clk_i,reset_i,
+    input wire [EPOCH_WIDTH-1:0] current_epoch_i,
+    input wire if_req_valid_i,
+    output wire if_req_ready_o,
+    input wire [31:0] if_req_pc_i,
+    input wire [EPOCH_WIDTH-1:0] if_req_epoch_i,
+    output wire if_resp_valid_o,
+    input wire if_resp_ready_i,
+    output wire [31:0] if_resp_pc_o,if_resp_line_addr_o,
+    output wire [127:0] if_resp_line_data_o,
+    output wire [EPOCH_WIDTH-1:0] if_resp_epoch_o,
+    output wire if_resp_error_o,
+    output wire primary_req_valid_o,
+    input wire primary_req_ready_i,
+    output wire [31:0] primary_req_pc_o,
+    output wire [EPOCH_WIDTH-1:0] primary_req_epoch_o,
+    input wire primary_resp_valid_i,
+    output wire primary_resp_ready_o,
+    input wire [31:0] primary_resp_pc_i,primary_resp_line_addr_i,
+    input wire [127:0] primary_resp_line_data_i,
+    input wire [EPOCH_WIDTH-1:0] primary_resp_epoch_i,
+    input wire primary_resp_error_i
+);
+    reg [LINES-1:0] valid;
+    wire [TAG_BITS+128-1:0] row_payload [0:LINES-1];
+    wire [LINES*128-1:0] row_lines;
+    wire [LINES-1:0] hits;
+    wire [LINES*28-1:0] request_line_views;
+    rv32_frequency_control_tree #(.WIDTH(28),.LEAVES(LINES)) request_views (
+        .signal_i(if_req_pc_i[31:4]),.views_o(request_line_views));
+    wire [127:0] hit_line;
+    rv32_frequency_event_select #(.WIDTH(128),.EVENTS(LINES),.PRIORITY(0)) line_select (
+        .events_i(hits),.values_i(row_lines),.write_o(),.value_o(hit_line));
+    wire hit=|hits;
+
+    reg fast_valid,miss_pending;
+    wire [31:0] fast_pc,pending_pc;
+    wire [EPOCH_WIDTH-1:0] fast_epoch,pending_epoch;
+    wire [127:0] fast_line;
+    wire fast_live=fast_valid && fast_epoch==current_epoch_i;
+    wire miss_live=miss_pending && pending_epoch==current_epoch_i;
+    wire primary_live=miss_live && primary_resp_valid_i &&
+        primary_resp_epoch_i==pending_epoch && primary_resp_pc_i==pending_pc;
+    wire release_miss=primary_live && if_resp_ready_i;
+    wire fast_slot_free=!fast_valid || !fast_live || if_resp_ready_i;
+    wire can_start=!reset_i && (!miss_live || release_miss) && fast_slot_free;
+    assign if_req_ready_o=can_start && (hit || primary_req_ready_i);
+    wire request_fire=if_req_valid_i && if_req_ready_o;
+    wire accept_hit=request_fire && hit && if_req_epoch_i==current_epoch_i;
+    wire accept_miss=request_fire && !hit;
+    assign primary_req_valid_o=if_req_valid_i && can_start && !hit;
+    assign primary_req_pc_o=if_req_pc_i;
+    assign primary_req_epoch_o=if_req_epoch_i;
+    // Unexpected or epoch-stale primary outputs drain without publishing.
+    // A live primary response obeys the original frontend backpressure.
+    assign primary_resp_ready_o=!reset_i && (!primary_live || if_resp_ready_i);
+    assign if_resp_valid_o=!reset_i && (fast_live || primary_live);
+    localparam integer RESPONSE_WIDTH=65+128+EPOCH_WIDTH;
+    rv32_frequency_event_select #(.WIDTH(RESPONSE_WIDTH),.EVENTS(2),.PRIORITY(0)) response_select (
+        .events_i({fast_live,primary_live}),
+        .values_i({fast_pc,{fast_pc[31:4],4'b0},fast_line,fast_epoch,1'b0,
+            primary_resp_pc_i,primary_resp_line_addr_i,primary_resp_line_data_i,
+            primary_resp_epoch_i,primary_resp_error_i}),.write_o(),
+        .value_o({if_resp_pc_o,if_resp_line_addr_o,if_resp_line_data_o,if_resp_epoch_o,if_resp_error_o}));
+    rv32_frequency_word_bank #(.WIDTH(32+EPOCH_WIDTH+128)) fast_response (
+        .clk_i(clk_i),.write_i(accept_hit),.data_i({if_req_pc_i,if_req_epoch_i,hit_line}),
+        .data_o({fast_pc,fast_epoch,fast_line}));
+    rv32_frequency_word_bank #(.WIDTH(32+EPOCH_WIDTH)) miss_identity (
+        .clk_i(clk_i),.write_i(accept_miss),.data_i({if_req_pc_i,if_req_epoch_i}),
+        .data_o({pending_pc,pending_epoch}));
+    wire fill=!reset_i && primary_live && if_resp_ready_i && !primary_resp_error_i &&
+        primary_resp_line_addr_i=={primary_resp_pc_i[31:4],4'b0};
+    genvar row;
+    generate for(row=0;row<LINES;row=row+1) begin:g_row
+        localparam [INDEX_WIDTH-1:0] ROW=row;
+        wire [27:0] request_line=request_line_views[row*28 +: 28];
+        wire [TAG_BITS-1:0] row_tag=row_payload[row][128 +: TAG_BITS];
+        assign hits[row]=valid[row] && request_line[INDEX_WIDTH-1:0]==ROW &&
+            request_line[27:INDEX_WIDTH]==row_tag;
+        assign row_lines[row*128 +: 128]=row_payload[row][127:0];
+        wire row_write=fill && primary_resp_line_addr_i[4 +: INDEX_WIDTH]==ROW;
+        rv32_frequency_word_bank #(.WIDTH(TAG_BITS+128)) payload (
+            .clk_i(clk_i),.write_i(row_write),
+            .data_i({primary_resp_line_addr_i[31:4+INDEX_WIDTH],primary_resp_line_data_i}),
+            .data_o(row_payload[row]));
+        always @(posedge clk_i) begin
+            if(reset_i) valid[row]<=1'b0;
+            else if(row_write) valid[row]<=1'b1;
+        end
+    end endgenerate
+    always @(posedge clk_i) begin
+        if(reset_i) begin fast_valid<=1'b0;miss_pending<=1'b0;end
+        else begin
+            if(fast_slot_free) fast_valid<=1'b0;
+            if(accept_hit) fast_valid<=1'b1;
+            if(!miss_live || release_miss) miss_pending<=1'b0;
+            if(accept_miss) miss_pending<=1'b1;
+        end
+    end
+    initial begin
+        if(LINES<2 || LINES>32 || (LINES & (LINES-1))!=0)
+            $fatal(1,"Instruction line filter needs a power-of-two line count in 2..32");
     end
 endmodule

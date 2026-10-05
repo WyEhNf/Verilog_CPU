@@ -10,6 +10,7 @@ module rv32i_alu #(
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
     parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH,
     parameter integer SHIFT_IMPL = 0,
+    parameter integer SHIFT_SHARED_BARREL = 0,
     parameter integer FORWARD_METADATA = 0,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
@@ -183,7 +184,19 @@ module rv32i_alu #(
     wire [31:0] register_shift_left,register_shift_right;
     wire shift_sign_fill=issue_src1_value_i[31] &&
         (issue_op_i==`RV32IM_OP_SRAI || issue_op_i==`RV32IM_OP_SRA);
-    generate if(SHIFT_IMPL==0) begin:g_parallel_barrel
+    // Only one operation is accepted per ALU edge. Immediate and register
+    // shifts share the barrel; the existing five-bit amount selects its input.
+    // The original parallel implementation remains available by default.
+    generate if(SHIFT_IMPL==0 && SHIFT_SHARED_BARREL!=0) begin:g_shared_barrel
+        wire [31:0] shared_left,shared_right;
+        rv32_frequency_barrel32 shared_barrel (
+            .value_i(issue_src1_value_i),.amount_i(issue_shift_amount),.fill_i(shift_sign_fill),
+            .left_o(shared_left),.right_o(shared_right));
+        assign immediate_shift_left=shared_left;
+        assign immediate_shift_right=shared_right;
+        assign register_shift_left=shared_left;
+        assign register_shift_right=shared_right;
+    end else if(SHIFT_IMPL==0) begin:g_parallel_barrel
         rv32_frequency_barrel32 immediate_barrel (
             .value_i(issue_src1_value_i),.amount_i(issue_imm_i[4:0]),.fill_i(shift_sign_fill),
             .left_o(immediate_shift_left),.right_o(immediate_shift_right));

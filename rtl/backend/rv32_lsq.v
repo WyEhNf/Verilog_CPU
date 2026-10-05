@@ -16,6 +16,7 @@ module rv32_lsq #(
     parameter integer STORE_ADMISSION_BYPASS = 0,
     parameter integer STORE_ADDRESS_PROBE = 0,
     parameter integer REQUEST_PIPELINE = 0,
+    parameter integer LOAD_ADDRESS_LOOKTHROUGH = 0,
     // Decode each saved byte offset before late response-row selection and
     // route query payload from the original complete response match events.
     parameter integer RESPONSE_QUERY_PREDECODE = 0,
@@ -457,6 +458,42 @@ module rv32_lsq #(
             .views_o(hazard_wrap_views[wrap_row*HAZARD_WRAP_GROUPS +: HAZARD_WRAP_GROUPS]));
         assign pick_wrap[LSQ_ENTRIES+wrap_row]=circular_wrap_views[wrap_row*8];
     end endgenerate
+
+    // Only an already allocated load can use its current full-tag-matched
+    // AGU update in request selection. Older store hazards continue to use
+    // their saved address/data/mask, so unknown stores remain blocking.
+    // Selection is still registered: this folds address ownership and
+    // selection capture into one edge without a bypass to the D-cache.
+    wire [31:0] request_addr [0:LSQ_ENTRIES-1];
+    wire request_addr_ready [0:LSQ_ENTRIES-1];
+    genvar address_row,address_lane,address_word;
+    generate for(address_row=0;address_row<LSQ_ENTRIES;address_row=address_row+1) begin:g_load_address_lookthrough
+        if(LOAD_ADDRESS_LOOKTHROUGH!=0 && REQUEST_PIPELINE!=0) begin:g_enabled
+            wire [BE_WIDTH-1:0] matches;
+            for(address_lane=0;address_lane<BE_WIDTH;address_lane=address_lane+1) begin:g_match
+                assign matches[address_lane]=!reset_i && !flush_i && !recovery_valid_i &&
+                    load_mem[address_row] && !store_mem[address_row] && !addr_ready_mem[address_row] &&
+                    addr_update_valid_i[address_lane] &&
+                    tag_matches_slot(addr_update_tag_i[address_lane*TAG_WIDTH +: TAG_WIDTH],address_row);
+            end
+            wire update_present;
+            wire [31:0] updated_address;
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH)) update_select (
+                .events_i(matches),.values_i(addr_update_i),.write_o(update_present),.value_o(updated_address));
+            wire [1:0] update_views;
+            rv32_frequency_control_tree #(.LEAVES(2)) update_tree (
+                .signal_i(update_present),.views_o(update_views));
+            for(address_word=0;address_word<2;address_word=address_word+1) begin:g_word
+                assign request_addr[address_row][address_word*16 +: 16]=update_views[address_word]?
+                    updated_address[address_word*16 +: 16]:addr_mem[address_row][address_word*16 +: 16];
+            end
+            assign request_addr_ready[address_row]=addr_ready_mem[address_row] || update_present;
+        end else begin:g_saved_address
+            assign request_addr[address_row]=addr_mem[address_row];
+            assign request_addr_ready[address_row]=addr_ready_mem[address_row];
+        end
+    end endgenerate
+
     wire [LSQ_ENTRIES-1:0] request_eligible;
     wire [15:0] load_line_mask [0:LSQ_ENTRIES-1];
     wire [15:0] store_line_mask [0:LSQ_ENTRIES-1];
@@ -608,13 +645,13 @@ module rv32_lsq #(
             assign store_addr_lsq_tag_o[age_slot*TAG_WIDTH +: TAG_WIDTH] =
                 make_lsq_tag(age_slot, generation_mem[age_slot]);
             assign load_line_mask[age_slot] =
-                {12'b0, access_mask(size_mem[age_slot])} << addr_mem[age_slot][3:0];
+                {12'b0, access_mask(size_mem[age_slot])} << request_addr[age_slot][3:0];
             assign store_line_mask[age_slot] =
                 {12'b0, mask_mem[age_slot]} << addr_mem[age_slot][3:0];
             assign pick_valid[LSQ_ENTRIES+age_slot] = request_eligible[age_slot];
             assign pick_slot[LSQ_ENTRIES+age_slot] = age_slot;
             assign pick_age[LSQ_ENTRIES+age_slot] = entry_age[age_slot];
-            assign pick_addr[LSQ_ENTRIES+age_slot] = addr_mem[age_slot];
+            assign pick_addr[LSQ_ENTRIES+age_slot] = request_addr[age_slot];
             wire [SLOT_WIDTH-1:0] local_selected_slot;
             wire local_selected_wrap;
             assign {local_selected_wrap,local_selected_slot}=
@@ -665,7 +702,7 @@ module rv32_lsq #(
                     valid_mem[older_slot] && store_mem[older_slot] &&
                     (!addr_ready_mem[older_slot] ||
                      ((addr_mem[older_slot][31:4] ==
-                       addr_mem[request_slot][31:4]) &&
+                       request_addr[request_slot][31:4]) &&
                       !data_ready_mem[older_slot] &&
                        (|(store_line_mask[older_slot] &
                           load_line_mask[request_slot]))));
@@ -674,7 +711,7 @@ module rv32_lsq #(
                 (entry_age[request_slot] < occupancy_reg) &&
                 valid_mem[request_slot] &&
                 !(REQUEST_PIPELINE!=0 && selection_valid && selection_slot==request_slot) &&
-                ((load_mem[request_slot] && addr_ready_mem[request_slot] &&
+                ((load_mem[request_slot] && request_addr_ready[request_slot] &&
                   !request_sent_mem[request_slot] &&
                   !complete_mem[request_slot] && !(|older_hazard)) ||
                  (store_mem[request_slot] && addr_ready_mem[request_slot] &&

@@ -13,6 +13,11 @@ module rv32_completion_network #(
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
     parameter integer BYPASS = 0,
+    // These optional direct-mode fields may be omitted only by a caller
+    // which does not consume the corresponding CDB outputs. Legacy FIFO
+    // paths and the standalone defaults retain their complete payload.
+    parameter integer DIRECT_BRANCH_PAYLOAD = 1,
+    parameter integer DIRECT_STORE_PAYLOAD = 1,
     parameter integer SLOT_WIDTH = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH),
     parameter integer COUNT_WIDTH = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH + 1)
 ) (
@@ -213,18 +218,65 @@ module rv32_completion_network #(
         wire [63:0] memory_tree [1:2*RANK_LEAVES-1];
         for(payload_source=0;payload_source<RANK_LEAVES;payload_source=payload_source+1) begin:g_source
             if(payload_source<SOURCES) begin:g_live
-                localparam integer DATA_WIDTH=DIRECT_META_WIDTH+128;
+                localparam integer DATA_WIDTH=TAG_WIDTH+PHYS_ADDR_WIDTH+4+64+
+                    ((DIRECT_BRANCH_PAYLOAD!=0)?35:0)+((DIRECT_STORE_PAYLOAD!=0)?32:0);
                 localparam integer WORDS=(DATA_WIDTH+15)/16;
                 wire [WORDS-1:0] selected_views;
-                wire [DATA_WIDTH-1:0] data={
-                    producer_tag_i[payload_source*TAG_WIDTH +: TAG_WIDTH],
-                    producer_phys_rd_i[payload_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
-                    producer_rd_we_i[payload_source] && !producer_is_store_i[payload_source],
-                    producer_is_store_i[payload_source],producer_is_branch_i[payload_source],
-                    producer_branch_taken_i[payload_source],producer_redirect_valid_i[payload_source],
-                    producer_is_memory_i[payload_source],producer_is_load_i[payload_source],
-                    producer_value_i[payload_source*32 +: 32],producer_addr_i[payload_source*32 +: 32],
-                    producer_store_data_i[payload_source*32 +: 32],producer_branch_target_i[payload_source*32 +: 32]};
+                wire [DATA_WIDTH-1:0] data;
+                if(DIRECT_BRANCH_PAYLOAD!=0) begin:g_branch_1
+                    if(DIRECT_STORE_PAYLOAD!=0) begin:g_store_1
+                        assign data={producer_tag_i[payload_source*TAG_WIDTH +: TAG_WIDTH],
+                        producer_phys_rd_i[payload_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
+                        producer_rd_we_i[payload_source] && !producer_is_store_i[payload_source],
+                        producer_is_store_i[payload_source],
+                        producer_is_branch_i[payload_source],
+                        producer_branch_taken_i[payload_source],
+                        producer_redirect_valid_i[payload_source],
+                        producer_is_memory_i[payload_source],
+                        producer_is_load_i[payload_source],
+                        producer_value_i[payload_source*32 +: 32],
+                        producer_addr_i[payload_source*32 +: 32],
+                        producer_store_data_i[payload_source*32 +: 32],
+                        producer_branch_target_i[payload_source*32 +: 32]};
+                    end
+                    else begin:g_store_0
+                        assign data={producer_tag_i[payload_source*TAG_WIDTH +: TAG_WIDTH],
+                        producer_phys_rd_i[payload_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
+                        producer_rd_we_i[payload_source] && !producer_is_store_i[payload_source],
+                        producer_is_store_i[payload_source],
+                        producer_is_branch_i[payload_source],
+                        producer_branch_taken_i[payload_source],
+                        producer_redirect_valid_i[payload_source],
+                        producer_is_memory_i[payload_source],
+                        producer_is_load_i[payload_source],
+                        producer_value_i[payload_source*32 +: 32],
+                        producer_addr_i[payload_source*32 +: 32],
+                        producer_branch_target_i[payload_source*32 +: 32]};
+                    end
+                end
+                else begin:g_branch_0
+                    if(DIRECT_STORE_PAYLOAD!=0) begin:g_store_1
+                        assign data={producer_tag_i[payload_source*TAG_WIDTH +: TAG_WIDTH],
+                        producer_phys_rd_i[payload_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
+                        producer_rd_we_i[payload_source] && !producer_is_store_i[payload_source],
+                        producer_is_store_i[payload_source],
+                        producer_is_memory_i[payload_source],
+                        producer_is_load_i[payload_source],
+                        producer_value_i[payload_source*32 +: 32],
+                        producer_addr_i[payload_source*32 +: 32],
+                        producer_store_data_i[payload_source*32 +: 32]};
+                    end
+                    else begin:g_store_0
+                        assign data={producer_tag_i[payload_source*TAG_WIDTH +: TAG_WIDTH],
+                        producer_phys_rd_i[payload_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
+                        producer_rd_we_i[payload_source] && !producer_is_store_i[payload_source],
+                        producer_is_store_i[payload_source],
+                        producer_is_memory_i[payload_source],
+                        producer_is_load_i[payload_source],
+                        producer_value_i[payload_source*32 +: 32],
+                        producer_addr_i[payload_source*32 +: 32]};
+                    end
+                end
                 wire [DATA_WIDTH-1:0] selected_data;
                 rv32_frequency_control_tree #(.LEAVES(WORDS)) select_tree (
                     .signal_i(selected_mask[payload_lane][payload_source] && !reset_i && !flush_i),
@@ -234,10 +286,29 @@ module rv32_completion_network #(
                     localparam integer BITS=DATA_WIDTH-LOW>=16?16:DATA_WIDTH-LOW;
                     assign selected_data[LOW +: BITS]={BITS{selected_views[payload_word]}} & data[LOW +: BITS];
                 end
-                assign meta_tree[RANK_LEAVES+payload_source]=selected_data[128 +: DIRECT_META_WIDTH];
-                assign value_tree[RANK_LEAVES+payload_source]=selected_data[96 +: 32];
-                assign memory_tree[RANK_LEAVES+payload_source]=selected_data[32 +: 64];
-                assign target_tree[RANK_LEAVES+payload_source]=selected_data[0 +: 32];
+                if(DIRECT_BRANCH_PAYLOAD!=0) begin:g_selected_branch_1
+                    if(DIRECT_STORE_PAYLOAD!=0) begin:g_selected_store_1
+                        assign {meta_tree[RANK_LEAVES+payload_source],value_tree[RANK_LEAVES+payload_source],memory_tree[RANK_LEAVES+payload_source],target_tree[RANK_LEAVES+payload_source]}=selected_data;
+                    end
+                    else begin:g_selected_store_0
+                        assign {meta_tree[RANK_LEAVES+payload_source],value_tree[RANK_LEAVES+payload_source],memory_tree[RANK_LEAVES+payload_source][63:32],target_tree[RANK_LEAVES+payload_source]}=selected_data;
+                        assign memory_tree[RANK_LEAVES+payload_source][31:0]=0;
+                    end
+                end
+                else begin:g_selected_branch_0
+                    wire [TAG_WIDTH-1:0] selected_tag;
+                    wire [PHYS_ADDR_WIDTH-1:0] selected_phys;
+                    wire selected_rd_we,selected_store,selected_memory,selected_load;
+                    assign meta_tree[RANK_LEAVES+payload_source]={selected_tag,selected_phys,selected_rd_we,selected_store,3'b0,selected_memory,selected_load};
+                    assign target_tree[RANK_LEAVES+payload_source]=0;
+                    if(DIRECT_STORE_PAYLOAD!=0) begin:g_selected_store_1
+                        assign {selected_tag,selected_phys,selected_rd_we,selected_store,selected_memory,selected_load,value_tree[RANK_LEAVES+payload_source],memory_tree[RANK_LEAVES+payload_source]}=selected_data;
+                    end
+                    else begin:g_selected_store_0
+                        assign {selected_tag,selected_phys,selected_rd_we,selected_store,selected_memory,selected_load,value_tree[RANK_LEAVES+payload_source],memory_tree[RANK_LEAVES+payload_source][63:32]}=selected_data;
+                        assign memory_tree[RANK_LEAVES+payload_source][31:0]=0;
+                    end
+                end
             end else begin:g_zero
                 assign meta_tree[RANK_LEAVES+payload_source]=0;
                 assign value_tree[RANK_LEAVES+payload_source]=0;

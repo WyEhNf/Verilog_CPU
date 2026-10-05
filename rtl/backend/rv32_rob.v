@@ -20,6 +20,9 @@ module rv32_rob #(
     // Set to zero only when the caller cannot allocate a legacy HALT.
     // MMIO terminal data remains in store_data_mem in every mode.
     parameter integer LEGACY_HALT_PAYLOAD = 1,
+    // In light mode the caller may omit this unconnected diagnostic value.
+    // LSQ store payload and the MMIO side effect do not use this owner.
+    parameter integer RETURN_VALUE_ENABLE = 1,
     parameter integer CHECKPOINT_IMPL = 0,
     // Preview captures a recovery transaction; apply is a later clock edge.
     // Default 0 preserves the standalone legacy interface behavior.
@@ -335,7 +338,8 @@ module rv32_rob #(
     // Match the enabled field owners instead of routing constant trace words.
     localparam integer COMMIT_READ_WIDTH = 8 + GENERATION_WIDTH + 5 +
         2*PHYS_ADDR_WIDTH + ((LIGHT_RETIRE_PAYLOAD==0) ? 5*32+4 :
-        (((MMIO_PREDECODE==0) ? 2*32+4 : 32) + ((LEGACY_HALT_PAYLOAD!=0)?32:0)));
+        (((MMIO_PREDECODE==0) ? 32+4 : 0) + ((RETURN_VALUE_ENABLE!=0)?32:0) +
+         ((LEGACY_HALT_PAYLOAD!=0)?32:0)));
     wire [ROB_ENTRIES-1:0] head_row_select;
     localparam integer READ_GROUPS = 4;
     localparam integer READ_GROUP_WIDTH = (COMMIT_READ_WIDTH + READ_GROUPS - 1) / READ_GROUPS;
@@ -377,17 +381,42 @@ module rv32_rob #(
     generate for(genvar packet_row=0;packet_row<ROB_ENTRIES;packet_row=packet_row+1) begin:g_commit_packet
         if(LIGHT_RETIRE_PAYLOAD==0) begin:g_full
             assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], pc_mem[packet_row], inst_mem[packet_row], value_mem[packet_row], store_addr_mem[packet_row], store_mask_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
-        end else if(MMIO_PREDECODE==0) begin:g_mmio_fallback
-            if(LEGACY_HALT_PAYLOAD!=0) begin:g_with_halt
-                assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], value_mem[packet_row], store_addr_mem[packet_row], store_mask_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
-            end else begin:g_without_halt
-                assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], store_addr_mem[packet_row], store_mask_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
-            end
         end else begin:g_light
-            if(LEGACY_HALT_PAYLOAD!=0) begin:g_with_halt
-                assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], value_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
-            end else begin:g_without_halt
-                assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+            if(MMIO_PREDECODE==0) begin:g_mmio_0
+                if(LEGACY_HALT_PAYLOAD!=0) begin:g_halt_1
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], value_mem[packet_row], store_addr_mem[packet_row], store_mask_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+                    end
+                    else begin:g_return_0
+                        assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], value_mem[packet_row], store_addr_mem[packet_row], store_mask_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+                    end
+                end
+                else begin:g_halt_0
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], store_addr_mem[packet_row], store_mask_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+                    end
+                    else begin:g_return_0
+                        assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], store_addr_mem[packet_row], store_mask_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+                    end
+                end
+            end
+            else begin:g_mmio_1
+                if(LEGACY_HALT_PAYLOAD!=0) begin:g_halt_1
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], value_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+                    end
+                    else begin:g_return_0
+                        assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], value_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+                    end
+                end
+                else begin:g_halt_0
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+                    end
+                    else begin:g_return_0
+                        assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+                    end
+                end
             end
         end
     end endgenerate
@@ -482,21 +511,48 @@ module rv32_rob #(
             end else begin:g_light_packet
                 assign head_pc[read_lane]=32'b0;
                 assign head_inst[read_lane]=32'b0;
-                if(MMIO_PREDECODE==0) begin:g_mmio_fallback
-                    if(LEGACY_HALT_PAYLOAD!=0) begin:g_with_halt
-                        assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_value[read_lane], head_store_addr[read_lane], head_store_mask[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
-                    end else begin:g_without_halt
-                        assign head_value[read_lane]=32'b0;
-                        assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_store_addr[read_lane], head_store_mask[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                if(MMIO_PREDECODE==0) begin:g_mmio_0
+                    if(LEGACY_HALT_PAYLOAD!=0) begin:g_halt_1
+                        if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                            assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_value[read_lane], head_store_addr[read_lane], head_store_mask[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                        end
+                        else begin:g_return_0
+                            assign head_store_data[read_lane]=32'b0;
+                            assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_value[read_lane], head_store_addr[read_lane], head_store_mask[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                        end
                     end
-                end else begin:g_mmio_predecoded
+                    else begin:g_halt_0
+                        assign head_value[read_lane]=32'b0;
+                        if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                            assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_store_addr[read_lane], head_store_mask[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                        end
+                        else begin:g_return_0
+                            assign head_store_data[read_lane]=32'b0;
+                            assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_store_addr[read_lane], head_store_mask[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                        end
+                    end
+                end
+                else begin:g_mmio_1
                     assign head_store_addr[read_lane]=32'b0;
                     assign head_store_mask[read_lane]=4'b0;
-                    if(LEGACY_HALT_PAYLOAD!=0) begin:g_with_halt
-                        assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_value[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
-                    end else begin:g_without_halt
+                    if(LEGACY_HALT_PAYLOAD!=0) begin:g_halt_1
+                        if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                            assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_value[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                        end
+                        else begin:g_return_0
+                            assign head_store_data[read_lane]=32'b0;
+                            assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_value[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                        end
+                    end
+                    else begin:g_halt_0
                         assign head_value[read_lane]=32'b0;
-                        assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                        if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                            assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                        end
+                        else begin:g_return_0
+                            assign head_store_data[read_lane]=32'b0;
+                            assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                        end
                     end
                 end
             end
@@ -946,7 +1002,12 @@ module rv32_rob #(
     // Broadcast small metadata and data through bounded domains. Every row
     // qualifies its own updates before the final payload selection drivers.
     localparam integer WRITE_DOMAINS=4;
-    localparam integer LOCAL_COMPLETION_DATA_WIDTH=101;
+    // Removed field owners must also leave their broadcast/mux lanes.
+    localparam integer COMPLETION_KEEP_VALUE=(LIGHT_RETIRE_PAYLOAD==0) || (LEGACY_HALT_PAYLOAD!=0);
+    localparam integer COMPLETION_KEEP_ADDRESS=(LIGHT_RETIRE_PAYLOAD==0) || (MMIO_PREDECODE==0);
+    localparam integer COMPLETION_KEEP_DATA=(LIGHT_RETIRE_PAYLOAD==0) || (RETURN_VALUE_ENABLE!=0);
+    localparam integer LOCAL_COMPLETION_DATA_WIDTH=1+
+        (COMPLETION_KEEP_VALUE?32:0)+(COMPLETION_KEEP_ADDRESS?36:0)+(COMPLETION_KEEP_DATA?32:0);
     localparam integer LOCAL_COMPLETION_WIDTH=3+TAG_WIDTH+LOCAL_COMPLETION_DATA_WIDTH;
     localparam integer LOCAL_COMPLETION_LEAVES=1<<$clog2(BE_WIDTH);
     wire [BE_WIDTH*LOCAL_COMPLETION_WIDTH-1:0] local_completion_input;
@@ -962,13 +1023,50 @@ module rv32_rob #(
         for(command_lane=0;command_lane<BE_WIDTH;command_lane=command_lane+1) begin:g_input
             wire mmio=(completion_store_addr_i[command_lane*32 +: 32]==32'h80000000) &&
                 (completion_store_mask_i[command_lane*4 +: 4]==4'hf);
+            wire [LOCAL_COMPLETION_DATA_WIDTH-1:0] compact_data;
+            if(LIGHT_RETIRE_PAYLOAD==0) begin:g_full_completion
+                assign compact_data={completion_value_i[command_lane*32 +: 32],completion_store_addr_i[command_lane*32 +: 32],completion_store_data_i[command_lane*32 +: 32],completion_store_mask_i[command_lane*4 +: 4],mmio};
+            end else begin:g_light_completion
+            if(MMIO_PREDECODE==0) begin:g_mmio_0
+                if(LEGACY_HALT_PAYLOAD!=0) begin:g_halt_1
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign compact_data={completion_value_i[command_lane*32 +: 32],completion_store_addr_i[command_lane*32 +: 32],completion_store_data_i[command_lane*32 +: 32],completion_store_mask_i[command_lane*4 +: 4],mmio};
+                    end
+                    else begin:g_return_0
+                        assign compact_data={completion_value_i[command_lane*32 +: 32],completion_store_addr_i[command_lane*32 +: 32],completion_store_mask_i[command_lane*4 +: 4],mmio};
+                    end
+                end
+                else begin:g_halt_0
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign compact_data={completion_store_addr_i[command_lane*32 +: 32],completion_store_data_i[command_lane*32 +: 32],completion_store_mask_i[command_lane*4 +: 4],mmio};
+                    end
+                    else begin:g_return_0
+                        assign compact_data={completion_store_addr_i[command_lane*32 +: 32],completion_store_mask_i[command_lane*4 +: 4],mmio};
+                    end
+                end
+            end
+            else begin:g_mmio_1
+                if(LEGACY_HALT_PAYLOAD!=0) begin:g_halt_1
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign compact_data={completion_value_i[command_lane*32 +: 32],completion_store_data_i[command_lane*32 +: 32],mmio};
+                    end
+                    else begin:g_return_0
+                        assign compact_data={completion_value_i[command_lane*32 +: 32],mmio};
+                    end
+                end
+                else begin:g_halt_0
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign compact_data={completion_store_data_i[command_lane*32 +: 32],mmio};
+                    end
+                    else begin:g_return_0
+                        assign compact_data={mmio};
+                    end
+                end
+            end
+            end
             assign local_completion_input[command_lane*LOCAL_COMPLETION_WIDTH +: LOCAL_COMPLETION_WIDTH]={
                 completion_valid_i[command_lane],completion_done_i[command_lane],
-                completion_error_i[command_lane],completion_tag_i[command_lane*TAG_WIDTH +: TAG_WIDTH],
-                completion_value_i[command_lane*32 +: 32],
-                completion_store_addr_i[command_lane*32 +: 32],
-                completion_store_data_i[command_lane*32 +: 32],
-                completion_store_mask_i[command_lane*4 +: 4],mmio};
+                completion_error_i[command_lane],completion_tag_i[command_lane*TAG_WIDTH +: TAG_WIDTH],compact_data};
         end
         rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*LOCAL_COMPLETION_WIDTH),.LEAVES(WRITE_DOMAINS)) completion_tree (
             .signal_i(local_completion_input),.views_o(local_completion_domains));
@@ -1053,7 +1151,62 @@ module rv32_rob #(
             wire [31:0] completed_value,completed_addr,completed_data;
             wire [3:0] completed_mask;
             wire completed_mmio;
-            assign {completed_value,completed_addr,completed_data,completed_mask,completed_mmio}=completion_mux[1];
+            if(LIGHT_RETIRE_PAYLOAD==0) begin:g_full_completed_fields
+                assign {completed_value,completed_addr,completed_data,completed_mask,completed_mmio}=completion_mux[1];
+            end else begin:g_light_completed_fields
+            if(MMIO_PREDECODE==0) begin:g_mmio_0
+                if(LEGACY_HALT_PAYLOAD!=0) begin:g_halt_1
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign {completed_value,completed_addr,completed_data,completed_mask,completed_mmio}=completion_mux[1];
+                    end
+                    else begin:g_return_0
+                        assign {completed_value,completed_addr,completed_mask,completed_mmio}=completion_mux[1];
+                        assign completed_data=32'b0;
+                    end
+                end
+                else begin:g_halt_0
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign {completed_addr,completed_data,completed_mask,completed_mmio}=completion_mux[1];
+                        assign completed_value=32'b0;
+                    end
+                    else begin:g_return_0
+                        assign {completed_addr,completed_mask,completed_mmio}=completion_mux[1];
+                        assign completed_value=32'b0;
+                        assign completed_data=32'b0;
+                    end
+                end
+            end
+            else begin:g_mmio_1
+                if(LEGACY_HALT_PAYLOAD!=0) begin:g_halt_1
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign {completed_value,completed_data,completed_mmio}=completion_mux[1];
+                        assign completed_addr=32'b0;
+                        assign completed_mask=4'b0;
+                    end
+                    else begin:g_return_0
+                        assign {completed_value,completed_mmio}=completion_mux[1];
+                        assign completed_addr=32'b0;
+                        assign completed_data=32'b0;
+                        assign completed_mask=4'b0;
+                    end
+                end
+                else begin:g_halt_0
+                    if(RETURN_VALUE_ENABLE!=0) begin:g_return_1
+                        assign {completed_data,completed_mmio}=completion_mux[1];
+                        assign completed_value=32'b0;
+                        assign completed_addr=32'b0;
+                        assign completed_mask=4'b0;
+                    end
+                    else begin:g_return_0
+                        assign {completed_mmio}=completion_mux[1];
+                        assign completed_value=32'b0;
+                        assign completed_addr=32'b0;
+                        assign completed_data=32'b0;
+                        assign completed_mask=4'b0;
+                    end
+                end
+            end
+            end
             assign allocation_error=raw_allocation[ALLOC_PACKET_WIDTH-CHECKPOINT_WIDTH-4];
             always @* begin:g_commands
                 // Wide D inputs have no global mode mux. Only local WE and
@@ -1565,9 +1718,13 @@ module rv32_rob #(
         end else begin:g_unobserved_store_mask
             assign store_mask_mem[storage_row]=4'b0;
         end
+        if(LIGHT_RETIRE_PAYLOAD==0 || RETURN_VALUE_ENABLE!=0) begin:g_full_store_data
         rv32_rob_owned_field #(.WIDTH(31+1)) store_data_mem_owner (
             .clk_i(clk_i),.write_i(store_data_mem_write_enable[storage_row]),
             .data_i(store_data_mem_write_data[storage_row]),.data_o(store_data_mem[storage_row]));
+        end else begin:g_unobserved_store_data
+            assign store_data_mem[storage_row]=32'b0;
+        end
         if(CHECKPOINT_IMPL==0) begin:g_array_checkpoint
         rv32_rob_owned_field #(.WIDTH(CHECKPOINT_WIDTH-1+1)) checkpoint_mem_owner (
             .clk_i(clk_i),.write_i(checkpoint_mem_write_enable[storage_row]),
