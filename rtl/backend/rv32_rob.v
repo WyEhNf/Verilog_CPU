@@ -13,6 +13,13 @@ module rv32_rob #(
     parameter integer TAG_WIDTH = 1 + 2 + SLOT_WIDTH + GENERATION_WIDTH,
     parameter integer CHECKPOINT_WIDTH = 1024,
     parameter integer MMIO_PREDECODE = 0,
+    // Enable only when commit PC/instruction and store payload outputs are
+    // unconnected. Authority, error, terminal data and full tags stay intact.
+    // MMIO_PREDECODE=0 retains address/mask storage for terminal detection.
+    parameter integer LIGHT_RETIRE_PAYLOAD = 0,
+    // Set to zero only when the caller cannot allocate a legacy HALT.
+    // MMIO terminal data remains in store_data_mem in every mode.
+    parameter integer LEGACY_HALT_PAYLOAD = 1,
     parameter integer CHECKPOINT_IMPL = 0,
     // Preview captures a recovery transaction; apply is a later clock edge.
     // Default 0 preserves the standalone legacy interface behavior.
@@ -325,8 +332,10 @@ module rv32_rob #(
     // its row is head+lane, not a mux address dependent on pop_count. Decode
     // the head once and read each full, access-relative packet in parallel.
     // The ordered prefix below still controls which packets are observable.
+    // Match the enabled field owners instead of routing constant trace words.
     localparam integer COMMIT_READ_WIDTH = 8 + GENERATION_WIDTH + 5 +
-        5*32 + 4 + 2*PHYS_ADDR_WIDTH;
+        2*PHYS_ADDR_WIDTH + ((LIGHT_RETIRE_PAYLOAD==0) ? 5*32+4 :
+        (((MMIO_PREDECODE==0) ? 2*32+4 : 32) + ((LEGACY_HALT_PAYLOAD!=0)?32:0)));
     wire [ROB_ENTRIES-1:0] head_row_select;
     localparam integer READ_GROUPS = 4;
     localparam integer READ_GROUP_WIDTH = (COMMIT_READ_WIDTH + READ_GROUPS - 1) / READ_GROUPS;
@@ -364,6 +373,25 @@ module rv32_rob #(
              (head_store_mask[mmio_lane] == 4'hf));
     end endgenerate
 
+    wire [COMMIT_READ_WIDTH-1:0] commit_row_packet [0:ROB_ENTRIES-1];
+    generate for(genvar packet_row=0;packet_row<ROB_ENTRIES;packet_row=packet_row+1) begin:g_commit_packet
+        if(LIGHT_RETIRE_PAYLOAD==0) begin:g_full
+            assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], pc_mem[packet_row], inst_mem[packet_row], value_mem[packet_row], store_addr_mem[packet_row], store_mask_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+        end else if(MMIO_PREDECODE==0) begin:g_mmio_fallback
+            if(LEGACY_HALT_PAYLOAD!=0) begin:g_with_halt
+                assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], value_mem[packet_row], store_addr_mem[packet_row], store_mask_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+            end else begin:g_without_halt
+                assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], store_addr_mem[packet_row], store_mask_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+            end
+        end else begin:g_light
+            if(LEGACY_HALT_PAYLOAD!=0) begin:g_with_halt
+                assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], value_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+            end else begin:g_without_halt
+                assign commit_row_packet[packet_row]={valid_mem[packet_row], ready_mem[packet_row], store_mem[packet_row], halt_mem[packet_row], error_mem[packet_row], store_wait_mem[packet_row], store_sent_mem[packet_row], generation_mem[packet_row], rd_we_mem[packet_row], rd_mem[packet_row], store_data_mem[packet_row], old_phys_mem[packet_row], new_phys_mem[packet_row]};
+            end
+        end
+    end endgenerate
+
     wire [COMMIT_READ_WIDTH-1:0] bank_packet [0:BE_WIDTH-1];
     localparam integer BANK_ROWS = (ROB_ENTRIES >= BE_WIDTH) ? ROB_ENTRIES / BE_WIDTH : 1;
     genvar commit_bank, bank_row, bank_offset;
@@ -382,16 +410,8 @@ module rv32_rob #(
                             (bank_row*BE_WIDTH+commit_bank+ROB_ENTRIES-bank_offset)%ROB_ENTRIES];
                     end
                     assign row_select[bank_row] = |possible_heads;
-                    assign row_packets[bank_row*COMMIT_READ_WIDTH +: COMMIT_READ_WIDTH]={
-                        valid_mem[bank_row*BE_WIDTH+commit_bank], ready_mem[bank_row*BE_WIDTH+commit_bank],
-                        store_mem[bank_row*BE_WIDTH+commit_bank], halt_mem[bank_row*BE_WIDTH+commit_bank],
-                        error_mem[bank_row*BE_WIDTH+commit_bank], store_wait_mem[bank_row*BE_WIDTH+commit_bank],
-                        store_sent_mem[bank_row*BE_WIDTH+commit_bank], generation_mem[bank_row*BE_WIDTH+commit_bank],
-                        rd_we_mem[bank_row*BE_WIDTH+commit_bank], rd_mem[bank_row*BE_WIDTH+commit_bank],
-                        pc_mem[bank_row*BE_WIDTH+commit_bank], inst_mem[bank_row*BE_WIDTH+commit_bank],
-                        value_mem[bank_row*BE_WIDTH+commit_bank], store_addr_mem[bank_row*BE_WIDTH+commit_bank],
-                        store_mask_mem[bank_row*BE_WIDTH+commit_bank], store_data_mem[bank_row*BE_WIDTH+commit_bank],
-                        old_phys_mem[bank_row*BE_WIDTH+commit_bank], new_phys_mem[bank_row*BE_WIDTH+commit_bank]};
+                    assign row_packets[bank_row*COMMIT_READ_WIDTH +: COMMIT_READ_WIDTH]=
+                        commit_row_packet[bank_row*BE_WIDTH+commit_bank];
                 end
                 // PRIORITY=0 is the same bitwise OR of masked row packets
                 // as the old loop, even for multiple asserted row_select bits.
@@ -446,12 +466,7 @@ module rv32_rob #(
                     for (row = 0; row < ROB_ENTRIES; row = row + 1) begin
                         packet = packet | (read_mask(head_read_select[
                             (((row+ROB_ENTRIES-read_lane)%ROB_ENTRIES)*BE_WIDTH+read_lane)*READ_GROUPS +: READ_GROUPS]) &
-                            {valid_mem[row], ready_mem[row], store_mem[row], halt_mem[row],
-                             error_mem[row], store_wait_mem[row], store_sent_mem[row],
-                             generation_mem[row], rd_we_mem[row], rd_mem[row], pc_mem[row],
-                             inst_mem[row], value_mem[row], store_addr_mem[row],
-                             store_mask_mem[row], store_data_mem[row], old_phys_mem[row],
-                             new_phys_mem[row]});
+                            commit_row_packet[row]);
                     end
                 end
                 assign head_packet[read_lane] = packet;
@@ -460,20 +475,31 @@ module rv32_rob #(
                 // the exceptional configuration with more lanes than rows.
                 wire [31:0] offset = head_read_index + read_lane;
                 wire [31:0] row_index = (offset >= ROB_ENTRIES) ? offset-ROB_ENTRIES : offset;
-                assign head_packet[read_lane] =
-                    {valid_mem[row_index], ready_mem[row_index], store_mem[row_index],
-                     halt_mem[row_index], error_mem[row_index], store_wait_mem[row_index],
-                     store_sent_mem[row_index], generation_mem[row_index], rd_we_mem[row_index],
-                     rd_mem[row_index], pc_mem[row_index], inst_mem[row_index], value_mem[row_index],
-                     store_addr_mem[row_index], store_mask_mem[row_index], store_data_mem[row_index],
-                     old_phys_mem[row_index], new_phys_mem[row_index]};
+                assign head_packet[read_lane] = commit_row_packet[row_index];
             end
-            assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane],
-                    head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane],
-                    head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane],
-                    head_rd[read_lane], head_pc[read_lane], head_inst[read_lane], head_value[read_lane],
-                    head_store_addr[read_lane], head_store_mask[read_lane], head_store_data[read_lane],
-                    head_old_phys[read_lane], head_new_phys[read_lane]} = head_packet[read_lane];
+            if(LIGHT_RETIRE_PAYLOAD==0) begin:g_full_packet
+                assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_pc[read_lane], head_inst[read_lane], head_value[read_lane], head_store_addr[read_lane], head_store_mask[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+            end else begin:g_light_packet
+                assign head_pc[read_lane]=32'b0;
+                assign head_inst[read_lane]=32'b0;
+                if(MMIO_PREDECODE==0) begin:g_mmio_fallback
+                    if(LEGACY_HALT_PAYLOAD!=0) begin:g_with_halt
+                        assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_value[read_lane], head_store_addr[read_lane], head_store_mask[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                    end else begin:g_without_halt
+                        assign head_value[read_lane]=32'b0;
+                        assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_store_addr[read_lane], head_store_mask[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                    end
+                end else begin:g_mmio_predecoded
+                    assign head_store_addr[read_lane]=32'b0;
+                    assign head_store_mask[read_lane]=4'b0;
+                    if(LEGACY_HALT_PAYLOAD!=0) begin:g_with_halt
+                        assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_value[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                    end else begin:g_without_halt
+                        assign head_value[read_lane]=32'b0;
+                        assign {head_valid[read_lane], head_ready[read_lane], head_store[read_lane], head_halt[read_lane], head_error[read_lane], head_store_wait[read_lane], head_store_sent[read_lane], head_generation[read_lane], head_rd_we[read_lane], head_rd[read_lane], head_store_data[read_lane], head_old_phys[read_lane], head_new_phys[read_lane]}=head_packet[read_lane];
+                    end
+                end
+            end
         end
     endgenerate
 
@@ -485,7 +511,7 @@ module rv32_rob #(
 
     genvar alloc_bank,alloc_source,alloc_word,alloc_node;
     localparam integer ALLOC_DATA_WIDTH=ALLOC_PACKET_WIDTH-CHECKPOINT_WIDTH+
-        ((CHECKPOINT_IMPL==0)?CHECKPOINT_WIDTH:0);
+        ((CHECKPOINT_IMPL==0)?CHECKPOINT_WIDTH:0)-((LIGHT_RETIRE_PAYLOAD!=0)?64:0);
     localparam integer ALLOC_DATA_WORDS=(ALLOC_DATA_WIDTH+15)/16;
     localparam integer ALLOC_DATA_LEAVES=1<<$clog2(BE_WIDTH);
     generate
@@ -500,14 +526,23 @@ module rv32_rob #(
                         wire [ALLOC_PACKET_WIDTH-1:0] full_payload={
                             alloc_is_store_i[alloc_source],alloc_is_branch_i[alloc_source],
                             alloc_is_halt_i[alloc_source],alloc_is_error_i[alloc_source],
-                            alloc_pc_i[alloc_source*32 +: 32],alloc_inst_i[alloc_source*32 +: 32],
+                            ((LIGHT_RETIRE_PAYLOAD==0)?alloc_pc_i[alloc_source*32 +: 32]:32'b0),
+                            ((LIGHT_RETIRE_PAYLOAD==0)?alloc_inst_i[alloc_source*32 +: 32]:32'b0),
                             alloc_rd_i[alloc_source*5 +: 5],alloc_rd_we_i[alloc_source],
                             alloc_old_phys_i[alloc_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
                             alloc_new_phys_i[alloc_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
                             alloc_checkpoint_i[alloc_source*CHECKPOINT_WIDTH +: CHECKPOINT_WIDTH]};
                         wire [ALLOC_DATA_WIDTH-1:0] active_payload;
                         wire [ALLOC_DATA_WORDS-1:0] selected_words;
-                        if(CHECKPOINT_IMPL==0) begin:g_with_checkpoint
+                        if(LIGHT_RETIRE_PAYLOAD!=0) begin:g_light_payload
+                            if(CHECKPOINT_IMPL==0) begin:g_with_checkpoint
+                                assign active_payload={full_payload[ALLOC_PACKET_WIDTH-1 -: 4],
+                                    full_payload[0 +: CHECKPOINT_WIDTH+6+2*PHYS_ADDR_WIDTH]};
+                            end else begin:g_without_checkpoint
+                                assign active_payload={full_payload[ALLOC_PACKET_WIDTH-1 -: 4],
+                                    full_payload[CHECKPOINT_WIDTH +: 6+2*PHYS_ADDR_WIDTH]};
+                            end
+                        end else if(CHECKPOINT_IMPL==0) begin:g_with_checkpoint
                             assign active_payload=full_payload;
                         end else begin:g_without_checkpoint
                             assign active_payload=full_payload[CHECKPOINT_WIDTH +: ALLOC_PACKET_WIDTH-CHECKPOINT_WIDTH];
@@ -540,7 +575,17 @@ module rv32_rob #(
                 end
                 assign bank_alloc_fire[alloc_bank]=|row_match_mask;
                 assign bank_alloc_slot[alloc_bank]=slots[1];
-                if(CHECKPOINT_IMPL==0) begin:g_full_result
+                if(LIGHT_RETIRE_PAYLOAD!=0) begin:g_light_result
+                    // Reinsert constant trace slots at the original offsets. All
+                    // allocation writes and priority still see the same full packet.
+                    if(CHECKPOINT_IMPL==0) begin:g_full_result
+                        assign bank_alloc_packet[alloc_bank]={packets[1][ALLOC_DATA_WIDTH-1 -: 4],
+                            64'b0,packets[1][0 +: ALLOC_DATA_WIDTH-4]};
+                    end else begin:g_compact_result
+                        assign bank_alloc_packet[alloc_bank]={packets[1][ALLOC_DATA_WIDTH-1 -: 4],
+                            64'b0,packets[1][0 +: ALLOC_DATA_WIDTH-4],{CHECKPOINT_WIDTH{1'b0}}};
+                    end
+                end else if(CHECKPOINT_IMPL==0) begin:g_full_result
                     assign bank_alloc_packet[alloc_bank]=packets[1];
                 end else begin:g_compact_result
                     assign bank_alloc_packet[alloc_bank]={packets[1],{CHECKPOINT_WIDTH{1'b0}}};
@@ -1470,12 +1515,20 @@ module rv32_rob #(
         rv32_rob_owned_field #(.WIDTH(GENERATION_WIDTH-1+1)) generation_next_mem_owner (
             .clk_i(clk_i),.write_i(generation_next_mem_write_enable[storage_row]),
             .data_i(generation_next_mem_write_data[storage_row]),.data_o(generation_next_mem[storage_row]));
+        if(LIGHT_RETIRE_PAYLOAD==0) begin:g_full_pc
         rv32_rob_owned_field #(.WIDTH(31+1)) pc_mem_owner (
             .clk_i(clk_i),.write_i(pc_mem_write_enable[storage_row]),
             .data_i(pc_mem_write_data[storage_row]),.data_o(pc_mem[storage_row]));
+        end else begin:g_unobserved_pc
+            assign pc_mem[storage_row]=32'b0;
+        end
+        if(LIGHT_RETIRE_PAYLOAD==0) begin:g_full_inst
         rv32_rob_owned_field #(.WIDTH(31+1)) inst_mem_owner (
             .clk_i(clk_i),.write_i(inst_mem_write_enable[storage_row]),
             .data_i(inst_mem_write_data[storage_row]),.data_o(inst_mem[storage_row]));
+        end else begin:g_unobserved_inst
+            assign inst_mem[storage_row]=32'b0;
+        end
         rv32_rob_owned_field #(.WIDTH(4+1)) rd_mem_owner (
             .clk_i(clk_i),.write_i(rd_mem_write_enable[storage_row]),
             .data_i(rd_mem_write_data[storage_row]),.data_o(rd_mem[storage_row]));
@@ -1488,18 +1541,30 @@ module rv32_rob #(
         rv32_rob_owned_field #(.WIDTH(PHYS_ADDR_WIDTH-1+1)) new_phys_mem_owner (
             .clk_i(clk_i),.write_i(new_phys_mem_write_enable[storage_row]),
             .data_i(new_phys_mem_write_data[storage_row]),.data_o(new_phys_mem[storage_row]));
+        if(LIGHT_RETIRE_PAYLOAD==0 || LEGACY_HALT_PAYLOAD!=0) begin:g_full_value
         rv32_rob_owned_field #(.WIDTH(31+1)) value_mem_owner (
             .clk_i(clk_i),.write_i(value_mem_write_enable[storage_row]),
             .data_i(value_mem_write_data[storage_row]),.data_o(value_mem[storage_row]));
+        end else begin:g_unobserved_value
+            assign value_mem[storage_row]=32'b0;
+        end
+        if((LIGHT_RETIRE_PAYLOAD==0) || (MMIO_PREDECODE==0)) begin:g_full_store_addr
         rv32_rob_owned_field #(.WIDTH(31+1)) store_addr_mem_owner (
             .clk_i(clk_i),.write_i(store_addr_mem_write_enable[storage_row]),
             .data_i(store_addr_mem_write_data[storage_row]),.data_o(store_addr_mem[storage_row]));
+        end else begin:g_unobserved_store_addr
+            assign store_addr_mem[storage_row]=32'b0;
+        end
         rv32_rob_owned_field #(.WIDTH(1)) mmio_word_mem_owner (
             .clk_i(clk_i),.write_i(mmio_word_mem_write_enable[storage_row]),
             .data_i(mmio_word_mem_write_data[storage_row]),.data_o(mmio_word_mem[storage_row]));
+        if((LIGHT_RETIRE_PAYLOAD==0) || (MMIO_PREDECODE==0)) begin:g_full_store_mask
         rv32_rob_owned_field #(.WIDTH(3+1)) store_mask_mem_owner (
             .clk_i(clk_i),.write_i(store_mask_mem_write_enable[storage_row]),
             .data_i(store_mask_mem_write_data[storage_row]),.data_o(store_mask_mem[storage_row]));
+        end else begin:g_unobserved_store_mask
+            assign store_mask_mem[storage_row]=4'b0;
+        end
         rv32_rob_owned_field #(.WIDTH(31+1)) store_data_mem_owner (
             .clk_i(clk_i),.write_i(store_data_mem_write_enable[storage_row]),
             .data_i(store_data_mem_write_data[storage_row]),.data_o(store_data_mem[storage_row]));

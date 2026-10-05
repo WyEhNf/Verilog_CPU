@@ -7,6 +7,9 @@
 // connected by their frozen valid/ready/tag contracts.
 module rv32_backend_joint #(
     parameter integer ISSUE_PIPELINE = 0,
+    // Execution registers need selective cancellation even when RS issues
+    // directly. Default retains the standalone configuration relation.
+    parameter integer LOCAL_EXEC_RECOVERY = (ISSUE_PIPELINE!=0),
     parameter integer DISPATCH_PIPELINE = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
@@ -14,6 +17,8 @@ module rv32_backend_joint #(
     parameter integer RS_ENTRIES = 8,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer LSQ_STORE_ADMISSION_BYPASS = 0,
+    // 0: ordinary AGU; 1: allocate ready address and retain AGU;
+    // 2 or above: skip redundant RS/AGU work only for a qualified ready load.
     parameter integer EARLY_LOAD_ADDRESS = 0,
     parameter integer EARLY_STORE_ADDRESS = 0,
     parameter integer RS_ISSUE_METADATA = 0,
@@ -25,6 +30,8 @@ module rv32_backend_joint #(
     parameter integer ASAP7_FANOUT_BUFFERS = 0,
     parameter integer ROB_CONTROL_REGISTER_BANKS = 0,
     parameter integer ROB_COMMIT_BANKED_READ = 0,
+    parameter integer LIGHT_RETIRE_PAYLOAD = 0,
+    parameter integer ROB_LEGACY_HALT_PAYLOAD = 1,
     parameter integer ROB_MMIO_PREDECODE = 0,
     parameter integer ROB_ALLOC_BANKED_WRITE = 0,
     parameter integer PREDICTOR_META = 0,
@@ -659,8 +666,8 @@ module rv32_backend_joint #(
     wire [8*TAG_WIDTH-1:0] recovery_tag_views;
     rv32_frequency_control_tree #(.WIDTH(TAG_WIDTH),.LEAVES(8)) recovery_tag_tree (
         .signal_i(branch_pending_tag),.views_o(recovery_tag_views));
-    // Local ownership is used only with the recovery-aware issue FIFO.
-    localparam integer LOCAL_EXEC_RECOVERY=(ISSUE_PIPELINE!=0);
+    // Recovery guards are independent from the optional issue queue.
+    // Core callers retain them for held ALU/MDU/LSQ results in direct mode.
     localparam integer EXEC_RECOVERY_WIDTH=1+2*ROB_SLOT_WIDTH+ROB_COUNT_WIDTH;
     wire [ROB_SLOT_WIDTH-1:0] execution_branch_age=
         branch_pending_tag[3 +: ROB_SLOT_WIDTH]-recovery_descriptor_head;
@@ -1033,7 +1040,12 @@ module rv32_backend_joint #(
             assign d_reserved_rs=0;assign d_reserved_lsq=0;
         end
     endgenerate
-    assign rs_alloc_valid = d_valid;
+    // The same predicate that writes an authoritative LSQ address
+    // proves this load needs no later AGU. LSQ remains its sole completion
+    // producer. Keep conservative rename/dispatch RS reservations unchanged.
+    wire [BE_WIDTH-1:0] load_without_agu = (EARLY_LOAD_ADDRESS>=2) ?
+        (d_is_load & ~d_is_store & lsq_alloc_addr_valid) : {BE_WIDTH{1'b0}};
+    assign rs_alloc_valid = d_valid & ~load_without_agu;
     assign lsq_alloc_valid = d_valid & (d_is_load | d_is_store);
     assign commit_valid_o = rob_commit_valid;
     assign perf_rob_occupancy_o = {{(16-ROB_COUNT_WIDTH){1'b0}}, rob_occupancy};
@@ -1395,7 +1407,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STAGED_RECOVERY(1), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
+    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STAGED_RECOVERY(1), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .LEGACY_HALT_PAYLOAD(ROB_LEGACY_HALT_PAYLOAD), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rob_alloc_valid), .alloc_pc_i(rob_alloc_pc), .alloc_inst_i(rob_alloc_inst), .alloc_rd_i(rob_alloc_rd),
         .alloc_rd_we_i(rename_rd_we), .alloc_old_phys_i(rob_alloc_old_phys), .alloc_new_phys_i(rob_alloc_new_phys), .alloc_is_store_i(rob_alloc_is_store),
         .alloc_is_branch_i(rob_alloc_is_branch), .alloc_is_halt_i(rob_alloc_is_halt), .alloc_is_error_i(rob_alloc_is_error), .alloc_checkpoint_i(rob_alloc_checkpoint),
