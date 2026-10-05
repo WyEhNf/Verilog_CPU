@@ -14,6 +14,7 @@ module rv32_backend_joint #(
     parameter integer RS_ENTRIES = 8,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer LSQ_STORE_ADMISSION_BYPASS = 0,
+    parameter integer EARLY_LOAD_ADDRESS = 0,
     parameter integer EARLY_STORE_ADDRESS = 0,
     parameter integer RS_ISSUE_METADATA = 0,
     parameter integer RS_WAKE_MUX_IMPL = 0,
@@ -851,12 +852,13 @@ module rv32_backend_joint #(
             // so an unused PRF -> adder -> LSQ write cone can be removed.
             if(STORE_ALLOC_EARLY_ADDRESS!=0) begin:g_alloc_address_enabled
                 assign lsq_alloc_addr_valid[io_lane] = (EARLY_STORE_ADDRESS != 0) &&
-                    d_valid[io_lane] && d_is_store[io_lane] && rs_src1_ready[io_lane];
+                    d_valid[io_lane] && (d_is_store[io_lane] ||
+                        ((EARLY_LOAD_ADDRESS != 0) && d_is_load[io_lane])) && rs_src1_ready[io_lane];
                 if(STORE_ALLOC_EARLY_ADDRESS==2 && STORE_ALLOC_IMM12!=0 && PRF_READ_MUX_IMPL!=0) begin:g_parallel_prf_address
                     assign lsq_alloc_addr[io_lane*32 +: 32]=prf_store_address[io_lane*32 +: 32];
                 end else if(STORE_ALLOC_IMM12!=0) begin:g_store_alloc_simm12
-                    // Only stores with alloc_addr_valid observe this payload.
-                    // Loads leave addr_ready clear until their ordinary AGU update.
+                    // Ready loads may use the same allocation address when enabled.
+                    // Ordinary AGU issue and full-tag LSQ updates remain active.
                     rv32_frequency_add_simm12 address_adder (
                         .base_i(rs_src1_value[io_lane*32 +: 32]),
                         .immediate_i(d_imm[io_lane*32 +: 12]),
