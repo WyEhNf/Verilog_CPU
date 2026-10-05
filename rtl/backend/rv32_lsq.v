@@ -17,12 +17,20 @@ module rv32_lsq #(
     parameter integer STORE_ADDRESS_PROBE = 0,
     parameter integer REQUEST_PIPELINE = 0,
     parameter integer LOAD_ADDRESS_LOOKTHROUGH = 0,
+    // 0: saved publication; 1: original arbitrary-row response bypass;
+    // 2: only the queue-head response can publish/reclaim on its return edge.
     parameter integer LOAD_COMPLETION_BYPASS = 0,
     parameter integer LOAD_WAKE_BYPASS = 0,
     parameter integer ALLOC_LOAD_SELECTION_BYPASS = 0,
     // 0: registered selection; 1: empty fallthrough with AGU lookthrough;
     // 2: empty fallthrough from registered addresses only (shorter timing path).
     parameter integer EMPTY_SELECTION_BYPASS = 0,
+    // Carry the exact current-row direct-bypass predicate with the selected
+    // packet, avoiding selected slot -> second row read -> qualification.
+    parameter integer PICK_LOCAL_VALIDITY = 0,
+    // Exact youngest-byte selection for the circular power-of-two queue.
+    // The original tournament remains the default/other-geometry fallback.
+    parameter integer FORWARD_ONEHOT = 0,
     parameter integer RECLAIM_WIDTH = 1,
     // Allow the original single completion handshake to retire the second
     // completed load on an edge that already releases the first prefix row.
@@ -543,7 +551,7 @@ module rv32_lsq #(
     wire [3:0] forwarding_hold_mask;
     wire [31:0] forwarding_hold_data;
     localparam integer SELECT_STATE_WIDTH=GENERATION_WIDTH+8;
-    localparam integer PICK_PAYLOAD_WIDTH=GENERATION_WIDTH+ROB_TAG_WIDTH+40;
+    localparam integer PICK_PAYLOAD_WIDTH=GENERATION_WIDTH+ROB_TAG_WIDTH+40+((PICK_LOCAL_VALIDITY!=0)?1:0);
     localparam integer PICK_SELECT_WIDTH=2*SLOT_WIDTH+33+PICK_PAYLOAD_WIDTH;
     localparam integer PICK_SELECT_WORDS=(PICK_SELECT_WIDTH+15)/16;
     wire [PICK_PAYLOAD_WIDTH-1:0] pick_payload [1:2*LSQ_ENTRIES-1];
@@ -565,8 +573,15 @@ module rv32_lsq #(
                   selection_row_store,selection_row_commit,selection_row_load,selection_row_retired}));
     // The original tournament carries the complete row packet alongside
     // its winning slot. Avoid encode slot -> decode -> second payload read.
-    assign {pick_generation,pick_rob_tag,pick_store_data,pick_store_mask,pick_load,pick_size,pick_unsigned}=
-        pick_payload[1];
+    wire pick_direct_allowed;
+    generate if(PICK_LOCAL_VALIDITY!=0) begin:g_pick_local_payload
+        assign {pick_direct_allowed,pick_generation,pick_rob_tag,pick_store_data,
+                pick_store_mask,pick_load,pick_size,pick_unsigned}=pick_payload[1];
+    end else begin:g_pick_original_payload
+        assign pick_direct_allowed=1'b0;
+        assign {pick_generation,pick_rob_tag,pick_store_data,pick_store_mask,pick_load,pick_size,pick_unsigned}=
+            pick_payload[1];
+    end endgenerate
     rv32_frequency_array_read #(.WIDTH(4),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) candidate_state_read (
         .rows_i(candidate_state_rows),.index_i(candidate[SLOT_WIDTH-1:0]),
         .value_o({candidate_wait,candidate_load,candidate_sent,candidate_complete}));
@@ -574,9 +589,22 @@ module rv32_lsq #(
         assign selection_state_rows[query_row*SELECT_STATE_WIDTH +: SELECT_STATE_WIDTH]={
             generation_mem[query_row],valid_mem[query_row],request_sent_mem[query_row],complete_mem[query_row],response_wait_mem[query_row],
             store_mem[query_row],store_commit_mem[query_row],load_mem[query_row],retired_mem[query_row]};
-        assign pick_payload_rows[query_row*PICK_PAYLOAD_WIDTH +: PICK_PAYLOAD_WIDTH]={
-            generation_mem[query_row],rob_tag_mem[query_row],data_mem[query_row],mask_mem[query_row],
-            load_mem[query_row],size_mem[query_row],unsigned_mem[query_row]};
+        if(PICK_LOCAL_VALIDITY!=0) begin:g_local_direct_predicate
+            // This row predicate travels through the SAME PAYLOAD_SLOT alias
+            // and SAME choose_left muxes as generation and the load packet.
+            // Its selected generation therefore equals the old second read
+            // by construction, including explicit SLOT_WIDTH overrides.
+            wire direct_allowed=valid_mem[query_row] && load_mem[query_row] &&
+                !store_mem[query_row] && !request_sent_mem[query_row] &&
+                !complete_mem[query_row] && !response_wait_mem[query_row];
+            assign pick_payload_rows[query_row*PICK_PAYLOAD_WIDTH +: PICK_PAYLOAD_WIDTH]={
+                direct_allowed,generation_mem[query_row],rob_tag_mem[query_row],data_mem[query_row],mask_mem[query_row],
+                load_mem[query_row],size_mem[query_row],unsigned_mem[query_row]};
+        end else begin:g_original_direct_predicate
+            assign pick_payload_rows[query_row*PICK_PAYLOAD_WIDTH +: PICK_PAYLOAD_WIDTH]={
+                generation_mem[query_row],rob_tag_mem[query_row],data_mem[query_row],mask_mem[query_row],
+                load_mem[query_row],size_mem[query_row],unsigned_mem[query_row]};
+        end
         // Match the original leaf slot assignment, including explicit
         // SLOT_WIDTH overrides, before replacing its indexed payload read.
         localparam [SLOT_WIDTH-1:0] PAYLOAD_SLOT=query_row;
@@ -596,22 +624,28 @@ module rv32_lsq #(
     wire [SELECTION_PAYLOAD_WIDTH-1:0] held_selection_packet={
         selection_slot,selection_lsq_tag,selection_rob_tag,selection_addr,
         selection_load,selection_size,selection_unsigned,selection_store_mask,selection_store_data};
-    wire [GENERATION_WIDTH-1:0] direct_row_generation;
-    wire direct_row_valid,direct_row_sent,direct_row_complete,direct_row_wait,
-        direct_row_store,direct_row_commit,direct_row_load,direct_row_retired;
-    rv32_frequency_array_read #(.WIDTH(SELECT_STATE_WIDTH),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) direct_selection_state_read (
-        .rows_i(selection_state_rows),.index_i(pick_slot[1]),
-        .value_o({direct_row_generation,direct_row_valid,direct_row_sent,direct_row_complete,direct_row_wait,
-                  direct_row_store,direct_row_commit,direct_row_load,direct_row_retired}));
+    wire direct_selection_qualified;
+    generate if(PICK_LOCAL_VALIDITY!=0) begin:g_pick_local_direct_state
+        assign direct_selection_qualified=pick_direct_allowed;
+    end else begin:g_original_direct_state
+        wire [GENERATION_WIDTH-1:0] direct_row_generation;
+        wire direct_row_valid,direct_row_sent,direct_row_complete,direct_row_wait,
+             direct_row_store,direct_row_commit,direct_row_load,direct_row_retired;
+        rv32_frequency_array_read #(.WIDTH(SELECT_STATE_WIDTH),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) direct_selection_state_read (
+            .rows_i(selection_state_rows),.index_i(pick_slot[1]),
+            .value_o({direct_row_generation,direct_row_valid,direct_row_sent,direct_row_complete,direct_row_wait,
+                      direct_row_store,direct_row_commit,direct_row_load,direct_row_retired}));
+        assign direct_selection_qualified=direct_row_valid && direct_row_load && !direct_row_store &&
+            !direct_row_sent && !direct_row_complete && !direct_row_wait &&
+            pick_generation==direct_row_generation;
+    end endgenerate
     // Offer only a live, already allocated LOAD from the original oldest
     // eligible tournament. Unknown-store and byte-overlap guards are unchanged.
     // A held ticket retains priority; stores and newly allocated rows still
     // cross their original selection edge. This decision never uses ready.
     wire selection_direct_bypass=(EMPTY_SELECTION_BYPASS!=0) && (REQUEST_PIPELINE!=0) &&
         !reset_i && !flush_i && !recovery_valid_i && !selection_valid && pick_valid[1] && pick_load &&
-        direct_row_valid && direct_row_load && !direct_row_store &&
-        !direct_row_sent && !direct_row_complete && !direct_row_wait &&
-        pick_generation==direct_row_generation;
+        direct_selection_qualified;
     generate if(REQUEST_PIPELINE!=0) begin:g_visible_selection
         wire [VISIBLE_SELECTION_WORDS-1:0] direct_views;
         rv32_frequency_control_tree #(.LEAVES(VISIBLE_SELECTION_WORDS)) direct_tree (
@@ -861,6 +895,41 @@ module rv32_lsq #(
             assign {pick_slot[pick_node],pick_age[pick_node],pick_wrap[pick_node],
                     pick_addr[pick_node],pick_payload[pick_node]}=chosen_packet;
         end
+        if(FORWARD_ONEHOT!=0 && CIRCULAR_ORDER_POWER2) begin:g_onehot_forward
+            // Ascending physical leaves in the old tournament select the
+            // highest row of the wrapped class, or highest ordinary row if
+            // no wrapped byte overlaps. Grants express that same order.
+            for(forward_byte=0;forward_byte<4;forward_byte=forward_byte+1) begin:g_byte
+                wire [LSQ_ENTRIES-1:0] eligible,wrapped_eligible,grants;
+                wire [LSQ_ENTRIES*8-1:0] values;
+                localparam integer GRANT_DOMAINS=(LSQ_ENTRIES+3)/4;
+                wire [GRANT_DOMAINS-1:0] no_wrapped_views;
+                rv32_frequency_control_tree #(.LEAVES(GRANT_DOMAINS)) class_tree (
+                    .signal_i(!(|wrapped_eligible)),.views_o(no_wrapped_views));
+                for(forward_slot=0;forward_slot<LSQ_ENTRIES;forward_slot=forward_slot+1) begin:g_row
+                    assign eligible[forward_slot]=store_overlap[forward_slot][forward_byte];
+                    assign wrapped_eligible[forward_slot]=eligible[forward_slot] &&
+                        circular_wrap_views[forward_slot*8+1+forward_byte];
+                    wire last_ordinary,last_wrapped;
+                    if(forward_slot==LSQ_ENTRIES-1) begin:g_last
+                        assign last_ordinary=eligible[forward_slot];
+                        assign last_wrapped=wrapped_eligible[forward_slot];
+                    end else begin:g_earlier
+                        assign last_ordinary=eligible[forward_slot] &&
+                            !(|eligible[LSQ_ENTRIES-1:forward_slot+1]);
+                        assign last_wrapped=wrapped_eligible[forward_slot] &&
+                            !(|wrapped_eligible[LSQ_ENTRIES-1:forward_slot+1]);
+                    end
+                    assign grants[forward_slot]=last_wrapped ||
+                        (no_wrapped_views[forward_slot/4] && last_ordinary);
+                    assign values[forward_slot*8 +: 8]=store_forward_data[forward_slot][forward_byte*8 +: 8];
+                end
+                assign tree_forward_mask[forward_byte]=|eligible;
+                rv32_frequency_event_select #(.WIDTH(8),.EVENTS(LSQ_ENTRIES),.PRIORITY(0)) byte_selector (
+                    .events_i(grants),.values_i(values),.write_o(),
+                    .value_o(tree_forward_data[forward_byte*8 +: 8]));
+            end
+        end else begin:g_original_forward
         // Each byte independently selects the youngest overlapping older
         // store. Static reads replace repeated head-relative array muxes.
         for (forward_byte = 0; forward_byte < 4; forward_byte = forward_byte + 1) begin : g_forward
@@ -886,6 +955,7 @@ module rv32_lsq #(
             end
             assign tree_forward_mask[forward_byte] = byte_valid[1];
             assign tree_forward_data[forward_byte*8 +: 8] = byte_valid[1] ? byte_data[1] : 8'b0;
+        end
         end
     endgenerate
 
@@ -1072,6 +1142,11 @@ module rv32_lsq #(
     // wide report routing no longer waits for its encode/decode chain.
     localparam integer REPORT_GRANT_DOMAINS=(LSQ_ENTRIES+3)/4;
     wire [LSQ_ENTRIES-1:0] report_eligible,report_upper,report_first;
+    wire [LSQ_ENTRIES-1:0] fast_head_reports;
+    wire fast_head_present=|fast_head_reports;
+    wire [REPORT_GRANT_DOMAINS-1:0] fast_head_priority_views;
+    rv32_frequency_control_tree #(.LEAVES(REPORT_GRANT_DOMAINS)) fast_head_priority_tree (
+        .signal_i(fast_head_present),.views_o(fast_head_priority_views));
     wire [REPORT_GRANT_DOMAINS-1:0] report_wrap_enable_views;
     rv32_frequency_control_tree #(.LEAVES(REPORT_GRANT_DOMAINS)) report_wrap_enable_tree (
         .signal_i(!(|report_upper)),.views_o(report_wrap_enable_views));
@@ -1156,6 +1231,8 @@ module rv32_lsq #(
                 // response_match_rows already checks LSQ valid/generation
                 // and response_wait; only ordinary live loads may bypass.
                 wire row_fast_response=(LOAD_COMPLETION_BYPASS!=0) &&
+                    ((LOAD_COMPLETION_BYPASS!=2) ||
+                     head_query_views[report_row*SLOT_WIDTH +: SLOT_WIDTH]==report_row) &&
                     !reset_i && !flush_i && !recovery_valid_i &&
                     response_match_rows[report_row] && load_mem[report_row] &&
                     !store_mem[report_row] && request_sent_mem[report_row] &&
@@ -1207,6 +1284,11 @@ module rv32_lsq #(
                 assign report_slot_tree[REPORT_ROWS+report_row]=report_row;
                 assign report_wrap_tree[REPORT_ROWS+report_row]=circular_wrap_views[report_row*8+5];
                 assign report_eligible[report_row]=report_valid_tree[REPORT_ROWS+report_row];
+                // A qualified head response is the oldest eligible row.
+                // Held report ownership still wins; otherwise the head's
+                // one-hot match need not wait for general age arbitration.
+                assign fast_head_reports[report_row]=(LOAD_COMPLETION_BYPASS==2) &&
+                    row_fast_response && row_in_report_range;
                 assign report_upper[report_row]=report_eligible[report_row] &&
                     !report_wrap_tree[REPORT_ROWS+report_row];
                 // A held packet is already saved; keep new-return validity
@@ -1217,7 +1299,8 @@ module rv32_lsq #(
                     tag_matches_slot(report_hold_tag_views[(report_row/4)*TAG_WIDTH +: TAG_WIDTH],report_row);
                 wire report_priority;
                 assign report_first[report_row]=report_hold_live_views[report_row/4]?
-                    report_hold_matches[report_row]:report_priority;
+                    report_hold_matches[report_row]:
+                    (fast_head_priority_views[report_row/4]?fast_head_reports[report_row]:report_priority);
                 if(report_row==0) begin:g_first_direct_report
                     assign report_priority=report_upper[report_row] ||
                         (report_wrap_enable_views[report_row/4] && report_eligible[report_row]);
@@ -1527,9 +1610,11 @@ module rv32_lsq #(
     // leaves cannot collapse into one reset/recovery driver across all rows.
     localparam integer META_LSQ_AGE_WIDTH=((LSQ_ENTRIES & (LSQ_ENTRIES-1))==0)?SLOT_WIDTH:SLOT_WIDTH+1;
     wire [7*LSQ_ENTRIES-1:0] metadata_events;
+    wire head_report_accepted=load_complete_valid_o && load_complete_ready_i && complete_slot_select==head_reg;
     wire metadata_pop=(occupancy_reg!=0) && head_valid &&
-        ((head_load && head_complete &&
-          (head_reported || (load_complete_valid_o && load_complete_ready_i && complete_slot_select==head_reg))) ||
+        ((head_load &&
+          ((head_complete && (head_reported || head_report_accepted)) ||
+           ((LOAD_COMPLETION_BYPASS==2) && fast_head_present && head_report_accepted))) ||
          (head_store && head_ack && store_ack_ready_i));
     wire metadata_second_pop;
     wire [LSQ_ENTRIES-1:0] second_pop_views;
