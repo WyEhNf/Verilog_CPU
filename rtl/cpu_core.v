@@ -8,6 +8,7 @@ module cpu_core #(
     parameter integer ICACHE_MSHR_STATIC_WRITES = 0,
     parameter integer ICACHE_MSHR_STATE_BANKS = 0,
     parameter integer FRONTEND_QUEUE_PAYLOAD_BANKS = 0,
+    parameter integer FRONTEND_RESPONSE_BYPASS = 0,
     parameter integer DCACHE_LOCAL_SRAM_COMMANDS = 0,
     parameter integer FE_WIDTH = `RV32IM_FE_WIDTH_DEFAULT,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
@@ -24,6 +25,7 @@ module cpu_core #(
     parameter integer DISPATCH_ELASTIC = 0,
     parameter integer DISPATCH_FULL_REPLACE = 0,
     parameter integer EARLY_STORE_ADDRESS = 0,
+    parameter integer STORE_ALLOC_EARLY_DATA = 0,
     parameter integer RS_ISSUE_METADATA = 0,
     parameter integer RS_WAKE_MUX_IMPL = 0,
     parameter integer RS_AGE_WIDTH = 32,
@@ -47,11 +49,13 @@ module cpu_core #(
     parameter integer ICACHE_PREFETCH = 1,
     parameter integer ICACHE_LOCAL_RESPONSE_READY = 0,
     parameter integer ICACHE_TAG_MATCH_PARALLEL = 0,
+    parameter integer ICACHE_TAG_REGION_BITS = 0,
     parameter integer ICACHE_MSHRS = 8,
     parameter integer ICACHE_LINES = 64,
     parameter integer ICACHE_WAYS = 2,
     parameter integer DCACHE_MSHRS = 4,
     parameter integer DCACHE_LINES = 256,
+    parameter integer DCACHE_WORD_RESPONSE = 0,
     parameter integer DCACHE_WAYS = 1,
     parameter integer DCACHE_INDEX_HASH = 0,
     parameter integer DCACHE_REQUEST_PIPELINE = 0,
@@ -71,6 +75,7 @@ module cpu_core #(
     parameter integer PREDICTOR_HISTORY_BITS = 6,
     parameter integer PREDICTOR_COMPACT_TARGET = 0,
     parameter integer PREDICTOR_COMPACT_BTB = 0,
+    parameter integer PREDICTOR_MULTI_FEEDBACK = 0,
     parameter integer FRONTEND_NARROW_OCCUPANCY = 0,
     parameter integer FETCH_QUEUE_DEPTH = 16,
     parameter integer MUL_IMPL = 0,
@@ -180,6 +185,8 @@ module cpu_core #(
     wire branch_feedback_valid, branch_feedback_taken, branch_feedback_pred_taken;
     wire [31:0] branch_feedback_pc, branch_feedback_target, branch_feedback_pred_target;
     wire [15:0] branch_feedback_metadata;
+    wire [BE_WIDTH-1:0] branch_feedback_lane_valid;
+    wire [BE_WIDTH*100-1:0] branch_feedback_lane_packets;
     wire [7:0] branch_recovery_history;
     wire [FE_WIDTH*16-1:0] pred_metadata_bus, fetch_pred_metadata;
     wire [BE_WIDTH*16-1:0] trace_pred_metadata;
@@ -229,7 +236,7 @@ module cpu_core #(
     generate
         if (ENABLE_PREDICTOR != 0) begin : g_banked_predictor
             rv32_banked_predictor #(.FE_WIDTH(FE_WIDTH), .DIRECT_BRANCH_TARGET(PREDICTOR_DIRECT_BRANCH_TARGET),
-                .COMPACT_INDIRECT_BTB(PREDICTOR_COMPACT_BTB), .HISTORY_BITS(PREDICTOR_HISTORY_BITS), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) predictor (
+                .FEEDBACK_LANES(BE_WIDTH), .MULTI_FEEDBACK(PREDICTOR_MULTI_FEEDBACK && !SERIAL_BACKEND), .COMPACT_INDIRECT_BTB(PREDICTOR_COMPACT_BTB), .HISTORY_BITS(PREDICTOR_HISTORY_BITS), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) predictor (
                 .clk_i(clk), .reset_i(reset), .query_valid_i(if_resp_valid),
                 .query_pc_i(if_resp_pc), .query_line_i(if_resp_line_data),
                 .query_accept_i(if_resp_valid && if_resp_ready && !if_resp_error &&
@@ -246,6 +253,8 @@ module cpu_core #(
                 .feedback_pred_taken_i(branch_feedback_pred_taken),
                 .feedback_pred_target_i(branch_feedback_pred_target),
                 .feedback_metadata_i(branch_feedback_metadata),
+                .feedback_lane_valid_i(branch_feedback_lane_valid),
+                .feedback_lane_packets_i(branch_feedback_lane_packets),
                 .prediction_count_o(pred_count), .correct_count_o(pred_correct)
             );
         end else begin : g_no_predictor
@@ -358,7 +367,7 @@ module cpu_core #(
     end
 
     rv32_fetch_frontend #(.QUEUE_PAYLOAD_BANKS(FRONTEND_QUEUE_PAYLOAD_BANKS), .FE_WIDTH(FE_WIDTH), .FQ_DEPTH(FETCH_QUEUE_DEPTH), .NARROW_OCCUPANCY(FRONTEND_NARROW_OCCUPANCY),
-        .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) frontend (
+        .RESPONSE_BYPASS(FRONTEND_RESPONSE_BYPASS && (DECODE_PIPELINE!=0) && !SERIAL_BACKEND), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) frontend (
         .clk_i(clk), .reset_i(reset), .redirect_valid_i(redirect_domains[0]),
         .redirect_pc_i(redirect_pc), .redirect_epoch_i(redirect_epoch),
         .stop_i(halted), .error_i(error), .if_req_valid_o(if_req_valid),
@@ -512,7 +521,7 @@ module cpu_core #(
     if (ENABLE_CACHES != 0) begin : g_cached_memory
     if (ICACHE_MSHRS > 1) begin : g_nonblocking_icache
     rv32_icache_nonblocking #(.MSHR_STATIC_WRITES(ICACHE_MSHR_STATIC_WRITES), .MSHR_STATE_BANKS(ICACHE_MSHR_STATE_BANKS), 
-        .MSHR_ENTRIES(ICACHE_MSHRS), .TAG_MATCH_PARALLEL(ICACHE_TAG_MATCH_PARALLEL), .LOCAL_RESPONSE_READY(ICACHE_LOCAL_RESPONSE_READY), .REQUEST_PIPELINE(1),
+        .MSHR_ENTRIES(ICACHE_MSHRS), .TAG_REGION_BITS(ICACHE_TAG_REGION_BITS), .TAG_MATCH_PARALLEL(ICACHE_TAG_MATCH_PARALLEL), .LOCAL_RESPONSE_READY(ICACHE_LOCAL_RESPONSE_READY), .REQUEST_PIPELINE(1),
         .LOOP_BUFFER_LINES(ICACHE_LOOP_LINES), .LOOP_BUFFER_SRAM(ICACHE_LOOP_SRAM),
         .CACHE_LINES(ICACHE_LINES), .CACHE_WAYS(ICACHE_WAYS),
         .NEXT_LINE_PREFETCH(ICACHE_PREFETCH),
@@ -558,7 +567,7 @@ module cpu_core #(
     end
 
     if (DCACHE_MSHRS > 1) begin : g_nonblocking_dcache
-    rv32_dcache_nonblocking #(.HIT_BYPASS(1), .LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), 
+    rv32_dcache_nonblocking #(.WORD_RESPONSE((DCACHE_WORD_RESPONSE!=0) && (SERIAL_BACKEND==0)), .HIT_BYPASS(1), .LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), 
         .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS),
         .CACHE_LINES(DCACHE_LINES), .CACHE_WAYS(DCACHE_WAYS),
         .INDEX_HASH(DCACHE_INDEX_HASH), .STORE_MERGE_DELAY(DCACHE_STORE_MERGE_DELAY),
@@ -871,6 +880,8 @@ module cpu_core #(
     assign commit_ready = 1'b1;
     generate if (SERIAL_BACKEND != 0) begin : g_serial_backend
     assign branch_feedback_metadata = 16'b0;
+    assign branch_feedback_lane_valid=0;
+    assign branch_feedback_lane_packets=0;
     assign branch_recovery_history = 8'b0;
     rv32_serial_backend #(.BE_WIDTH(BE_WIDTH), .SHIFT_IMPL(SHIFT_IMPL),
         .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
@@ -913,7 +924,7 @@ module cpu_core #(
     assign perf_branch_pending = 1'b0;
     assign perf_mdu_busy = 1'b0;
     end else begin : g_ooo_backend
-    rv32_backend_joint #(.LSQ_RESPONSE_QUERY_PREDECODE(1), .STORE_ALLOC_EARLY_ADDRESS(2), .LSQ_ROB_QUERY_PREDECODE(1), .STORE_ALLOC_IMM12(1), .RS_PHYSICAL_WAKEUP(1), .DISPATCH_PIPELINE(1), .DISPATCH_ELASTIC(DISPATCH_ELASTIC), .DISPATCH_FULL_REPLACE(DISPATCH_FULL_REPLACE), .ISSUE_PIPELINE(ISSUE_PIPELINE), .LOCAL_EXEC_RECOVERY(1), .BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_LOAD_ADDRESS(EARLY_LOAD_ADDRESS), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(LOAD_WAKE_BYPASS), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .EARLY_FRONT_REDIRECT(EARLY_FRONT_REDIRECT), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .RS_ISSUE_METADATA(RS_ISSUE_METADATA), .RS_WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .RS_ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .RS_AGE_WIDTH(RS_AGE_WIDTH), .PRF_READ_MUX_IMPL(PRF_READ_MUX_IMPL), .RAT_READ_BYPASS(RAT_READ_BYPASS), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .ROB_COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ROB_ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .ROB_MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .ROB_LEGACY_HALT_PAYLOAD(LEGACY_SENTINEL_HALT), .ROB_RETURN_VALUE_ENABLE(RETURN_VALUE_ENABLE), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
+    rv32_backend_joint #(.LSQ_RESPONSE_QUERY_PREDECODE(1), .STORE_ALLOC_EARLY_ADDRESS(2), .LSQ_ROB_QUERY_PREDECODE(1), .STORE_ALLOC_IMM12(1), .RS_PHYSICAL_WAKEUP(1), .DISPATCH_PIPELINE(1), .DISPATCH_ELASTIC(DISPATCH_ELASTIC), .DISPATCH_FULL_REPLACE(DISPATCH_FULL_REPLACE), .ISSUE_PIPELINE(ISSUE_PIPELINE), .LOCAL_EXEC_RECOVERY(1), .BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_LOAD_ADDRESS(EARLY_LOAD_ADDRESS), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(LOAD_WAKE_BYPASS), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .EARLY_FRONT_REDIRECT(EARLY_FRONT_REDIRECT), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .STORE_ALLOC_EARLY_DATA(STORE_ALLOC_EARLY_DATA), .RS_ISSUE_METADATA(RS_ISSUE_METADATA), .RS_WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .RS_ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .RS_AGE_WIDTH(RS_AGE_WIDTH), .PRF_READ_MUX_IMPL(PRF_READ_MUX_IMPL), .RAT_READ_BYPASS(RAT_READ_BYPASS), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .ROB_COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ROB_ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .ROB_MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .ROB_LEGACY_HALT_PAYLOAD(LEGACY_SENTINEL_HALT), .ROB_RETURN_VALUE_ENABLE(RETURN_VALUE_ENABLE), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),
@@ -945,6 +956,8 @@ module cpu_core #(
          .branch_feedback_pc_o(branch_feedback_pc), .branch_feedback_kind_o(branch_feedback_kind),
          .branch_feedback_taken_o(branch_feedback_taken), .branch_feedback_target_o(branch_feedback_target),
          .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target),
+         .branch_feedback_lane_valid_o(branch_feedback_lane_valid),
+         .branch_feedback_lane_packets_o(branch_feedback_lane_packets),
          .trace_pred_metadata_i(trace_pred_metadata), .branch_feedback_metadata_o(branch_feedback_metadata),
          .branch_recovery_history_o(branch_recovery_history),
          .perf_rob_occupancy_o(perf_rob_occupancy), .perf_rs_occupancy_o(perf_rs_occupancy),

@@ -10,6 +10,7 @@ module rv32_icache_nonblocking #(
     parameter integer MSHR_STATE_BANKS = 0,
     parameter integer MSHR_STATIC_WRITES = 0,
     parameter integer TAG_MATCH_PARALLEL = 0,
+    parameter integer TAG_REGION_BITS = 0,
     parameter integer LOCAL_RESPONSE_READY = 0,
     parameter integer REQUEST_PIPELINE = 0,
     parameter integer LOOP_BUFFER_LINES = 0,
@@ -125,6 +126,32 @@ module rv32_icache_nonblocking #(
 
     wire [CACHE_LINES-1:0] valid_bits;
     wire [CACHE_TAG_WIDTH-1:0] tag_mem [0:CACHE_LINES-1];
+    localparam integer TAG_STORED_WIDTH=CACHE_TAG_WIDTH-TAG_REGION_BITS;
+    localparam integer REGION_STORAGE_WIDTH=(TAG_REGION_BITS>0)?TAG_REGION_BITS:1;
+    wire [CACHE_WAYS*REGION_STORAGE_WIDTH-1:0] tag_regions;
+    wire [CACHE_LINES-1:0] region_invalidate;
+    wire [CACHE_LINES*3-1:0] region_match_views;
+    genvar region_way;
+    generate if(TAG_REGION_BITS!=0) begin:g_region_owners
+        for(region_way=0;region_way<CACHE_WAYS;region_way=region_way+1) begin:g_way
+            wire region_write=refill_array_write && ((refill_entry%CACHE_WAYS)==region_way);
+            wire [REGION_STORAGE_WIDTH-1:0] prefix;
+            wire region_change=region_write && prefix!=mem_resp_line_addr_i[31 -: REGION_STORAGE_WIDTH];
+            wire [CACHE_SETS-1:0] invalidations;
+            rv32_frequency_word_bank #(.WIDTH(REGION_STORAGE_WIDTH)) region_owner (
+                .clk_i(clk_i),.write_i(region_write),
+                .data_i(mem_resp_line_addr_i[31 -: REGION_STORAGE_WIDTH]),.data_o(prefix));
+            assign tag_regions[region_way*REGION_STORAGE_WIDTH +: REGION_STORAGE_WIDTH]=prefix;
+            rv32_frequency_control_tree #(.LEAVES(CACHE_SETS)) invalidate_tree (
+                .signal_i(region_change),.views_o(invalidations));
+            for(genvar region_set=0;region_set<CACHE_SETS;region_set=region_set+1) begin:g_set
+                assign region_invalidate[region_set*CACHE_WAYS+region_way]=invalidations[region_set];
+            end
+        end
+    end else begin:g_no_regions
+        assign tag_regions=0;
+        assign region_invalidate=0;
+    end endgenerate
     wire lru_mem [0:CACHE_SETS-1];
 
     function [CACHE_ENTRY_WIDTH-1:0] cache_entry;
@@ -376,6 +403,32 @@ module rv32_icache_nonblocking #(
         .signal_i(prefetch_next_line),.views_o(prefetch_pc_views));
     rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(4)) control_query_tree (
         .signal_i(control_target),.views_o(control_pc_views));
+    generate if(TAG_REGION_BITS!=0 && TAG_MATCH_PARALLEL!=0) begin:g_region_queries
+        localparam integer DOMAIN_SETS=CACHE_SETS/4;
+        for(genvar query_way=0;query_way<CACHE_WAYS;query_way=query_way+1) begin:g_way
+            wire [4*REGION_STORAGE_WIDTH-1:0] prefixes;
+            rv32_frequency_control_tree #(.WIDTH(REGION_STORAGE_WIDTH),.LEAVES(4)) prefix_tree (
+                .signal_i(tag_regions[query_way*REGION_STORAGE_WIDTH +: REGION_STORAGE_WIDTH]),
+                .views_o(prefixes));
+            for(genvar query_domain=0;query_domain<4;query_domain=query_domain+1) begin:g_domain
+                wire [REGION_STORAGE_WIDTH-1:0] prefix=prefixes[query_domain*REGION_STORAGE_WIDTH +: REGION_STORAGE_WIDTH];
+                wire [31:0] demand=demand_pc_views[query_domain*32 +: 32];
+                wire [31:0] prefetch=prefetch_pc_views[query_domain*32 +: 32];
+                wire [31:0] control=control_pc_views[query_domain*32 +: 32];
+                wire [DOMAIN_SETS*3-1:0] region_query_matches;
+                rv32_frequency_control_tree #(.WIDTH(3),.LEAVES(DOMAIN_SETS)) match_tree (
+                    .signal_i({prefix==control[31 -: REGION_STORAGE_WIDTH],
+                        prefix==prefetch[31 -: REGION_STORAGE_WIDTH],
+                        prefix==demand[31 -: REGION_STORAGE_WIDTH]}),.views_o(region_query_matches));
+                for(genvar query_row=0;query_row<DOMAIN_SETS;query_row=query_row+1) begin:g_row
+                    localparam integer ROW=(query_domain*DOMAIN_SETS+query_row)*CACHE_WAYS+query_way;
+                    assign region_match_views[ROW*3 +: 3]=region_query_matches[query_row*3 +: 3];
+                end
+            end
+        end
+    end else begin:g_no_region_queries
+        assign region_match_views={CACHE_LINES*3{1'b1}};
+    end endgenerate
     genvar match_row;
     generate for (match_row=0; match_row<CACHE_LINES; match_row=match_row+1) begin:g_match_row
         if (TAG_MATCH_PARALLEL != 0) begin:g_parallel
@@ -385,15 +438,18 @@ module rv32_icache_nonblocking #(
             wire [31:0] control_pc=control_pc_views[DOMAIN*32 +: 32];
             wire demand_hit=valid_bits[match_row] &&
                 demand_pc[CACHE_SET_WIDTH+3:4]==(match_row/CACHE_WAYS) &&
-                tag_mem[match_row]==demand_pc[31:CACHE_SET_WIDTH+4];
+                region_match_views[match_row*3] &&
+                 tag_mem[match_row][TAG_STORED_WIDTH-1:0]==demand_pc[31-TAG_REGION_BITS:CACHE_SET_WIDTH+4];
             assign demand_match_way0[match_row]=(match_row%CACHE_WAYS==0) && demand_hit;
             assign demand_match_way1[match_row]=(match_row%CACHE_WAYS==1) && demand_hit;
             assign prefetch_match_rows[match_row]=valid_bits[match_row] &&
                 prefetch_pc[CACHE_SET_WIDTH+3:4]==(match_row/CACHE_WAYS) &&
-                tag_mem[match_row]==prefetch_pc[31:CACHE_SET_WIDTH+4];
+                region_match_views[match_row*3+1] &&
+                 tag_mem[match_row][TAG_STORED_WIDTH-1:0]==prefetch_pc[31-TAG_REGION_BITS:CACHE_SET_WIDTH+4];
             assign control_match_rows[match_row]=valid_bits[match_row] &&
                 control_pc[CACHE_SET_WIDTH+3:4]==(match_row/CACHE_WAYS) &&
-                tag_mem[match_row]==control_pc[31:CACHE_SET_WIDTH+4];
+                region_match_views[match_row*3+2] &&
+                 tag_mem[match_row][TAG_STORED_WIDTH-1:0]==control_pc[31-TAG_REGION_BITS:CACHE_SET_WIDTH+4];
         end else begin:g_disabled
             assign demand_match_way0[match_row] = 1'b0;
             assign demand_match_way1[match_row] = 1'b0;
@@ -511,10 +567,10 @@ module rv32_icache_nonblocking #(
     // Final qualified write leaves alone did not bound the raw shared
     // entry/way inputs. Each query packet feeds only four existing rows.
     localparam integer TAG_WRITE_DOMAINS=(CACHE_LINES+3)/4;
-    localparam integer TAG_WRITE_WIDTH=CACHE_ENTRY_WIDTH+CACHE_TAG_WIDTH;
+    localparam integer TAG_WRITE_WIDTH=CACHE_ENTRY_WIDTH+TAG_STORED_WIDTH;
     wire [TAG_WRITE_DOMAINS*TAG_WRITE_WIDTH-1:0] tag_write_views;
     rv32_frequency_control_tree #(.WIDTH(TAG_WRITE_WIDTH),.LEAVES(TAG_WRITE_DOMAINS)) tag_write_tree (
-        .signal_i({refill_entry,mem_resp_line_addr_i[31:CACHE_SET_WIDTH+4]}),
+        .signal_i({refill_entry,mem_resp_line_addr_i[31-TAG_REGION_BITS:CACHE_SET_WIDTH+4]}),
         .views_o(tag_write_views));
     localparam integer LRU_QUERY_DOMAINS=(CACHE_SETS+3)/4;
     localparam integer LRU_QUERY_WIDTH=2*CACHE_SET_WIDTH+2;
@@ -527,7 +583,7 @@ module rv32_icache_nonblocking #(
         for(metadata_entry=0;metadata_entry<CACHE_LINES;metadata_entry=metadata_entry+1) begin:g_valid_owner
             reg valid_q;
             wire [CACHE_ENTRY_WIDTH-1:0] local_refill_entry;
-            wire [CACHE_TAG_WIDTH-1:0] local_refill_tag;
+            wire [TAG_STORED_WIDTH-1:0] local_refill_tag;
             wire tag_write;
             assign {local_refill_entry,local_refill_tag}=tag_write_views[(metadata_entry/4)*TAG_WRITE_WIDTH +: TAG_WRITE_WIDTH];
             assign tag_write=metadata_refill[metadata_entry] && local_refill_entry==metadata_entry;
@@ -535,11 +591,21 @@ module rv32_icache_nonblocking #(
             always @(posedge clk_i) begin
                 if(metadata_reset[metadata_entry]) valid_q<=1'b0;
                 else if(tag_write) valid_q<=1'b1;
+                // New fill remains valid; all other rows in the changed way
+                // lose validity on the same edge as its new exact prefix.
+                else if(region_invalidate[metadata_entry]) valid_q<=1'b0;
             end
             // Allocation writes all tag bits before valid exposes them.
             // The old unreset dynamic write has the same qualified edge.
-            rv32_frequency_word_bank #(.WIDTH(CACHE_TAG_WIDTH)) tag_owner (
-                .clk_i(clk_i),.write_i(tag_write),.data_i(local_refill_tag),.data_o(tag_mem[metadata_entry]));
+            wire [TAG_STORED_WIDTH-1:0] stored_tag;
+            rv32_frequency_word_bank #(.WIDTH(TAG_STORED_WIDTH)) tag_owner (
+                .clk_i(clk_i),.write_i(tag_write),.data_i(local_refill_tag),.data_o(stored_tag));
+            if(TAG_REGION_BITS!=0) begin:g_exact_region_tag
+                assign tag_mem[metadata_entry]={
+                    tag_regions[(metadata_entry%CACHE_WAYS)*REGION_STORAGE_WIDTH +: REGION_STORAGE_WIDTH],stored_tag};
+            end else begin:g_full_tag
+                assign tag_mem[metadata_entry]=stored_tag;
+            end
         end
         for(metadata_set=0;metadata_set<CACHE_SETS;metadata_set=metadata_set+1) begin:g_lru_owner
             reg lru_q;
@@ -924,6 +990,8 @@ module rv32_icache_nonblocking #(
     end endgenerate
 
     initial begin
+        if(TAG_REGION_BITS<0 || TAG_REGION_BITS>=CACHE_TAG_WIDTH)
+            $fatal(1,"Instruction cache region bits must be0..CACHE_TAG_WIDTH-1");
         if ((MSHR_STATE_BANKS != 0) && (MSHR_STATIC_WRITES == 0))
             $fatal(1, "MSHR_STATE_BANKS requires fixed-slot writes");
         if (CACHE_LINES < 16 || CACHE_LINES > 4096 ||

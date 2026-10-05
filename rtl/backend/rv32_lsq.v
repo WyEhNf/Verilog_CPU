@@ -607,32 +607,35 @@ module rv32_lsq #(
         (selection_load && candidate_found && ((fwd_mask & target_mask)==target_mask)));
     // The existing candidate retains priority. A newly allocated ready
     // load may fill an otherwise unused selection on its allocation edge.
-    // This conservative shortcut never passes an existing store or a store
-    // in an earlier lane of the same allocated bundle.
+    // Unresolved stores still block this shortcut. Fully resolved stores,
+    // including earlier accepted lanes, use the existing next-cycle youngest
+    // byte forwarding/hazard machinery after full LSQ row ownership exists.
     localparam integer SELECTION_PAYLOAD_WIDTH=SLOT_WIDTH+TAG_WIDTH+ROB_TAG_WIDTH+72;
-    wire [LSQ_ENTRIES-1:0] allocation_older_stores;
-    wire [BE_WIDTH-1:0] allocation_prior_store,allocation_load_match,allocation_load_grant;
+    wire [LSQ_ENTRIES-1:0] allocation_unresolved_stores;
+    wire [BE_WIDTH-1:0] allocation_prior_unresolved_store,allocation_load_match,allocation_load_grant;
     wire [BE_WIDTH*SELECTION_PAYLOAD_WIDTH-1:0] allocation_load_values;
     wire allocation_load_found;
     wire [SELECTION_PAYLOAD_WIDTH-1:0] allocation_load_packet;
     genvar early_row,early_lane;
     generate
         for(early_row=0;early_row<LSQ_ENTRIES;early_row=early_row+1) begin:g_allocation_store_guard
-            assign allocation_older_stores[early_row]=valid_mem[early_row] && store_mem[early_row];
+            assign allocation_unresolved_stores[early_row]=valid_mem[early_row] && store_mem[early_row] &&
+                (!addr_ready_mem[early_row] || !data_ready_mem[early_row]);
         end
         for(early_lane=0;early_lane<BE_WIDTH;early_lane=early_lane+1) begin:g_allocation_load_selection
             if(early_lane==0) begin:g_first
-                assign allocation_prior_store[early_lane]=1'b0;
+                assign allocation_prior_unresolved_store[early_lane]=1'b0;
                 assign allocation_load_grant[early_lane]=allocation_load_match[early_lane];
             end else begin:g_later
-                assign allocation_prior_store[early_lane]=allocation_prior_store[early_lane-1] ||
-                    (alloc_fire_o[early_lane-1] && alloc_is_store_i[early_lane-1]);
+                assign allocation_prior_unresolved_store[early_lane]=allocation_prior_unresolved_store[early_lane-1] ||
+                    (alloc_fire_o[early_lane-1] && alloc_is_store_i[early_lane-1] &&
+                     (!alloc_addr_valid_i[early_lane-1] || !alloc_data_valid_i[early_lane-1]));
                 assign allocation_load_grant[early_lane]=allocation_load_match[early_lane] &&
                     !(|allocation_load_match[early_lane-1:0]);
             end
             assign allocation_load_match[early_lane]=(ALLOC_LOAD_SELECTION_BYPASS!=0) &&
-                (REQUEST_PIPELINE!=0) && !(|allocation_older_stores) &&
-                !allocation_prior_store[early_lane] && alloc_fire_o[early_lane] &&
+                (REQUEST_PIPELINE!=0) && !(|allocation_unresolved_stores) &&
+                !allocation_prior_unresolved_store[early_lane] && alloc_fire_o[early_lane] &&
                 alloc_is_load_i[early_lane] && !alloc_is_store_i[early_lane] && alloc_addr_valid_i[early_lane];
             assign allocation_load_values[early_lane*SELECTION_PAYLOAD_WIDTH +: SELECTION_PAYLOAD_WIDTH]={
                 alloc_lsq_tag_o[early_lane*TAG_WIDTH+3 +: SLOT_WIDTH],

@@ -10,6 +10,7 @@ module rv32_banked_predictor #(
     parameter integer LEGACY_SENTINEL_HALT = 0,
     parameter integer DIRECT_BRANCH_TARGET = 0,
     parameter integer COMPACT_INDIRECT_BTB = 0,
+    parameter integer FEEDBACK_LANES = 1, MULTI_FEEDBACK = 0,
     parameter integer HISTORY_BITS = 6
 ) (
     input wire clk_i, reset_i,
@@ -34,6 +35,8 @@ module rv32_banked_predictor #(
     input wire feedback_pred_taken_i,
     input wire [31:0] feedback_pred_target_i,
     input wire [15:0] feedback_metadata_i,
+    input wire [FEEDBACK_LANES-1:0] feedback_lane_valid_i,
+    input wire [FEEDBACK_LANES*100-1:0] feedback_lane_packets_i,
     output reg [31:0] prediction_count_o, correct_count_o
 );
     localparam integer BANK_BITS = $clog2(FE_WIDTH);
@@ -41,6 +44,8 @@ module rv32_banked_predictor #(
                                ((FE_WIDTH == 2) ? 2'b01 : 2'b11);
     wire [1:0] base_bank = query_pc_i[3:2] & BANK_MASK;
     wire [1:0] feedback_bank = feedback_pc_i[3:2] & BANK_MASK;
+    localparam integer MULTI_ACTIVE=(MULTI_FEEDBACK!=0) && (DIRECT_BRANCH_TARGET==1);
+    wire [FE_WIDTH-1:0] bank_feedback_valid,bank_feedback_correct;
     wire [FE_WIDTH-1:0] bank_taken, bank_hit;
     wire [FE_WIDTH*32-1:0] bank_target;
     wire [FE_WIDTH*2-1:0] bank_kind, bank_counter;
@@ -64,6 +69,10 @@ module rv32_banked_predictor #(
             $finish;
         end
     end
+    initial begin
+        if(FEEDBACK_LANES!=1 && FEEDBACK_LANES!=2 && FEEDBACK_LANES!=4)
+            $fatal(1,"Predictor feedback lane count must be1/2/4");
+    end
     generate
         for (bank = 0; bank < FE_WIDTH; bank = bank + 1) begin : g_bank
             localparam [1:0] BANK_NUMBER = bank;
@@ -71,6 +80,45 @@ module rv32_banked_predictor #(
             wire [2:0] word_index = {1'b0, query_pc_i[3:2]} + {1'b0, offset};
             wire [31:0] pc = query_pc_i + {28'd0, offset, 2'b00};
             wire [31:0] inst;
+            wire update_valid,update_taken,update_pred_taken;
+            wire [31:0] update_pc,update_target,update_pred_target;
+            wire [1:0] update_kind;
+            wire [7:0] update_training_index;
+            if(MULTI_ACTIVE) begin:g_parallel_feedback
+                wire [FEEDBACK_LANES-1:0] candidates,grants;
+                wire [99:0] packet;
+                for(genvar feedback_lane=0;feedback_lane<FEEDBACK_LANES;feedback_lane=feedback_lane+1) begin:g_lane
+                    wire [31:0] lane_pc=feedback_lane_packets_i[feedback_lane*100+68 +: 32];
+                    assign candidates[feedback_lane]=feedback_lane_valid_i[feedback_lane] &&
+                        ((lane_pc[3:2] & BANK_MASK)==BANK_NUMBER);
+                    if(feedback_lane==0) begin:g_first
+                        assign grants[feedback_lane]=candidates[feedback_lane];
+                    end else begin:g_later
+                        assign grants[feedback_lane]=candidates[feedback_lane] &&
+                            !(|candidates[feedback_lane-1:0]);
+                    end
+                end
+                // Each existing table bank still has exactly one update.
+                // Different banks accept different resolved lanes together.
+                rv32_frequency_event_select #(.WIDTH(100),.EVENTS(FEEDBACK_LANES),.PRIORITY(0)) feedback_selector (
+                    .events_i(grants),.values_i(feedback_lane_packets_i),
+                    .write_o(update_valid),.value_o(packet));
+                assign {update_pc,update_kind,update_taken,update_target,
+                    update_pred_taken,update_pred_target}=packet;
+                assign update_training_index=8'b0;
+            end else begin:g_single_feedback
+                assign update_valid=feedback_valid_i && feedback_bank==BANK_NUMBER;
+                assign update_pc=feedback_pc_i;
+                assign update_kind=feedback_kind_i;
+                assign update_taken=feedback_taken_i;
+                assign update_target=feedback_target_i;
+                assign update_pred_taken=feedback_pred_taken_i;
+                assign update_pred_target=feedback_pred_target_i;
+                assign update_training_index=feedback_metadata_i[7:0];
+            end
+            assign bank_feedback_valid[bank]=update_valid;
+            assign bank_feedback_correct[bank]=update_valid && update_pred_taken==update_taken &&
+                (!update_taken || update_pred_target==update_target);
             rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_query (
                 .rows_i(query_line_i),.index_i(word_index),.value_o(inst));
             assign bank_query_packets[bank*38 +: 38]={bank_taken[bank],bank_hit[bank],
@@ -87,12 +135,12 @@ module rv32_banked_predictor #(
                 .pred_kind_o(bank_kind[bank*2 +: 2]),
                 .pred_counter_o(bank_counter[bank*2 +: 2]),
                 .pred_bht_index_o(), .pred_btb_index_o(),
-                .feedback_valid_i(feedback_valid_i && feedback_bank == BANK_NUMBER),
-                .feedback_pc_i(feedback_pc_i), .feedback_kind_i(feedback_kind_i),
-                .feedback_taken_i(feedback_taken_i), .feedback_target_i(feedback_target_i),
-                .feedback_pred_taken_i(feedback_pred_taken_i),
-                .feedback_pred_target_i(feedback_pred_target_i),
-                .feedback_training_index_i(feedback_metadata_i[7:0]),
+                .feedback_valid_i(update_valid),
+                .feedback_pc_i(update_pc), .feedback_kind_i(update_kind),
+                .feedback_taken_i(update_taken), .feedback_target_i(update_target),
+                .feedback_pred_taken_i(update_pred_taken),
+                .feedback_pred_target_i(update_pred_target),
+                .feedback_training_index_i(update_training_index),
                 .prediction_count_o(), .correct_count_o()
             );
         end
@@ -145,11 +193,24 @@ module rv32_banked_predictor #(
                 global_history <= history_after_bundle;
         end
     end
-    // Count accepted resolution feedback once, including non-allocating kinds.
+    // Count table-bank accepted resolutions, including non-allocating JAL.
+    // Same-bank conflicts retain lowest-lane priority and are counted once.
+    integer count_bank;
+    reg [2:0] feedback_count,feedback_correct_count;
+    always @* begin
+        feedback_count=0;feedback_correct_count=0;
+        for(count_bank=0;count_bank<FE_WIDTH;count_bank=count_bank+1) begin
+            feedback_count=feedback_count+{2'b0,bank_feedback_valid[count_bank]};
+            feedback_correct_count=feedback_correct_count+{2'b0,bank_feedback_correct[count_bank]};
+        end
+    end
     always @(posedge clk_i) begin
         if (reset_i) begin
             prediction_count_o <= 0;
             correct_count_o <= 0;
+        end else if(MULTI_ACTIVE) begin
+            prediction_count_o<=prediction_count_o+{29'b0,feedback_count};
+            correct_count_o<=correct_count_o+{29'b0,feedback_correct_count};
         end else if (feedback_valid_i) begin
             prediction_count_o <= prediction_count_o + 1;
             if (feedback_pred_taken_i == feedback_taken_i &&

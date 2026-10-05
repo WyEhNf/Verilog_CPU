@@ -15,6 +15,7 @@ module rv32_fetch_frontend #(
     parameter integer NARROW_OCCUPANCY = 0, LEGACY_SENTINEL_HALT = 0,
     parameter integer QUEUE_PAYLOAD_BANKS = 0,
     parameter integer COMPACT_PRED_TARGET = 0,
+    parameter integer RESPONSE_BYPASS = 0,
     parameter integer PREDICTOR_META = 0
 ) (
     input  wire                         clk_i,
@@ -111,6 +112,13 @@ module rv32_fetch_frontend #(
     wire queue_space = (count_reg + bundle_count <= FQ_DEPTH);
     wire response_live = (if_resp_epoch_i == epoch_reg) &&
                          (if_resp_line_addr_i == {if_resp_pc_i[31:4], 4'b0000});
+    // Legal FQ_DEPTH>=FE_WIDTH and bundle_count<=FE_WIDTH guarantee space
+    // when empty. Do not put the full bundle count/space adder on the bypass
+    // valid path; this predicate still implies original response acceptance.
+    wire response_bypass=(RESPONSE_BYPASS!=0) && count_reg==0 &&
+        !reset_i && !redirect_valid_i && response_live &&
+        if_resp_valid_i && !if_resp_error_i && !frozen_reg && !stop_i && !error_i;
+    wire [FE_WIDTH-1:0] bypass_prefix,bypass_lane_valid;
 
     // Decode the queue head once, before selecting any packet bits. Four
     // dynamic array reads otherwise map to binary mux trees whose head bits
@@ -206,8 +214,21 @@ module rv32_fetch_frontend #(
     wire [FE_WIDTH*32-1:0] next_pc_values;
     wire [FE_WIDTH*32-1:0] response_words;
     wire [31:0] default_next_pc=if_resp_pc_i+32'd4;
-    genvar response_lane,response_half,public_lane;
+    genvar response_lane,response_half,public_lane,bypass_lane;
     generate
+        for(bypass_lane=0;bypass_lane<FE_WIDTH;bypass_lane=bypass_lane+1) begin:g_bypass_prefix
+            if(bypass_lane==0) begin:g_first
+                assign bypass_prefix[bypass_lane]=1'b1;
+            end else begin:g_later
+                assign bypass_prefix[bypass_lane]=bypass_prefix[bypass_lane-1] &&
+                    !if_resp_pred_taken_i[bypass_lane-1] &&
+                    !((LEGACY_SENTINEL_HALT!=0) &&
+                      response_words[(bypass_lane-1)*32 +: 32]==32'h0ff00513);
+            end
+            wire [2:0] word_number={1'b0,if_resp_pc_i[3:2]}+3'(bypass_lane);
+            assign bypass_lane_valid[bypass_lane]=response_bypass && bypass_prefix[bypass_lane] &&
+                word_number<3'd4;
+        end
         for(response_lane=0;response_lane<FE_WIDTH;response_lane=response_lane+1) begin:g_response_lane
             wire [2:0] index={1'b0,if_resp_pc_i[3:2]}+response_lane;
             wire [1:0] predicted_views;
@@ -243,12 +264,30 @@ module rv32_fetch_frontend #(
             assign next_pc_classes[response_lane]=bundle_count==response_lane+1;
         end
         for(public_lane=0;public_lane<FE_WIDTH;public_lane=public_lane+1) begin:g_public_packet
-            rv32_frequency_event_select #(.WIDTH(READ_DATA_WIDTH),.EVENTS(1)) packet_selector (
-                .events_i(public_lane<count_reg),
-                .values_i({queue_read_packets[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
-                           queue_read_metadata[public_lane*16 +: 16]}),.write_o(),
-                .value_o({fetch_packet_o[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
-                          fetch_pred_metadata_o[public_lane*16 +: 16]}));
+            if(RESPONSE_BYPASS!=0) begin:g_empty_bypass
+                wire [PACKET_WIDTH-1:0] response_packet=
+                    `RV32IM_FETCH_PACKET_PACK(bundle_pc[public_lane*32 +: 32],
+                        bundle_inst[public_lane*32 +: 32],bundle_pred_taken[public_lane],
+                        bundle_pred_target[public_lane*32 +: 32],bundle_pred_kind[public_lane*2 +: 2],
+                        bundle_pred_btb_hit[public_lane],bundle_epoch);
+                wire [15:0] response_metadata=(PREDICTOR_META!=0)?
+                    if_resp_pred_metadata_i[public_lane*16 +: 16]:16'b0;
+                rv32_frequency_event_select #(.WIDTH(READ_DATA_WIDTH),.EVENTS(2),.PRIORITY(0)) packet_selector (
+                    .events_i({bypass_lane_valid[public_lane],
+                        !response_bypass && public_lane<count_reg}),
+                    .values_i({response_packet,response_metadata,
+                        queue_read_packets[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
+                        queue_read_metadata[public_lane*16 +: 16]}),.write_o(),
+                    .value_o({fetch_packet_o[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
+                        fetch_pred_metadata_o[public_lane*16 +: 16]}));
+            end else begin:g_queued
+                rv32_frequency_event_select #(.WIDTH(READ_DATA_WIDTH),.EVENTS(1)) packet_selector (
+                    .events_i(public_lane<count_reg),
+                    .values_i({queue_read_packets[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
+                               queue_read_metadata[public_lane*16 +: 16]}),.write_o(),
+                    .value_o({fetch_packet_o[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
+                              fetch_pred_metadata_o[public_lane*16 +: 16]}));
+            end
         end
     endgenerate
     rv32_frequency_event_select #(.WIDTH(32),.EVENTS(FE_WIDTH+1),.PRIORITY(0)) next_pc_selector (
@@ -321,10 +360,9 @@ module rv32_fetch_frontend #(
         fetch_valid_o = {FE_WIDTH{1'b0}};
         deq_count = 0;
         for (j = 0; j < FE_WIDTH; j = j + 1) begin
-            if (j < count_reg) begin
-                fetch_valid_o[j] = 1'b1;
-            end
-            if ((j < count_reg) && (deq_count == j) && fetch_ready_i[j])
+            if(response_bypass) fetch_valid_o[j]=bypass_lane_valid[j];
+            else if(j<count_reg) fetch_valid_o[j]=1'b1;
+            if(fetch_valid_o[j] && (deq_count == j) && fetch_ready_i[j])
                 deq_count = deq_count + 1;
         end
     end

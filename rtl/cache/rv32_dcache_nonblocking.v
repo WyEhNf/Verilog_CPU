@@ -28,6 +28,7 @@ module rv32_dcache_nonblocking #(
     // Default retains the fast hit reply. Zero uses existing held response
     // metadata/data owners, adding no state and cutting late arbitration.
     parameter integer HIT_BYPASS = 1,
+    parameter integer WORD_RESPONSE = 0,
     parameter integer CACHE_SETS = CACHE_LINES / CACHE_WAYS,
     parameter integer CACHE_INDEX_WIDTH = $clog2(CACHE_SETS),
     parameter integer CACHE_TAG_WIDTH = 32 - 4 - CACHE_INDEX_WIDTH
@@ -127,7 +128,8 @@ module rv32_dcache_nonblocking #(
     wire [1:0] waiter_size [0:WAITER_ENTRIES-1];
     wire waiter_unsigned [0:WAITER_ENTRIES-1];
     wire [TAG_WIDTH-1:0] waiter_lsq [0:WAITER_ENTRIES-1];
-    wire [127:0] waiter_line [0:WAITER_ENTRIES-1];
+    localparam integer WAITER_DATA_WIDTH=(WORD_RESPONSE!=0)?32:128;
+    wire [WAITER_DATA_WIDTH-1:0] waiter_line [0:WAITER_ENTRIES-1];
     wire waiter_error [0:WAITER_ENTRIES-1];
 
     reg resp_valid_reg;
@@ -787,10 +789,10 @@ module rv32_dcache_nonblocking #(
     wire [31:0] response_hit_word,response_deferred_word;
     rv32_frequency_line_extract32 hit_extract (
         .line_i(data_rdata),.offset_i(core_req_addr[3:0]),
-        .size_i(core_req_size),.unsigned_i(core_req_unsigned),.value_o(response_hit_word));
+        .size_i((WORD_RESPONSE!=0)?2'd2:core_req_size),.unsigned_i((WORD_RESPONSE!=0)?1'b1:core_req_unsigned),.value_o(response_hit_word));
     rv32_frequency_line_extract32 deferred_extract (
         .line_i(data_rdata),.offset_i(resp_addr_reg[3:0]),
-        .size_i(resp_size_reg),.unsigned_i(resp_unsigned_reg),.value_o(response_deferred_word));
+        .size_i((WORD_RESPONSE!=0)?2'd2:resp_size_reg),.unsigned_i((WORD_RESPONSE!=0)?1'b1:resp_unsigned_reg),.value_o(response_deferred_word));
     genvar response_word;
     generate
         for(response_word=0;response_word<RESPONSE_TAG_WORDS;response_word=response_word+1) begin:g_response_tag_word
@@ -806,8 +808,8 @@ module rv32_dcache_nonblocking #(
         for(response_word=0;response_word<8;response_word=response_word+1) begin:g_response_line_word
             wire bypass=response_output_views[2*(RESPONSE_TAG_WORDS+2+response_word)];
             wire deferred=response_output_views[2*(RESPONSE_TAG_WORDS+2+response_word)+1];
-            assign dcache_resp_line_data_o[response_word*16 +: 16]=(bypass || deferred)?
-                data_rdata[response_word*16 +: 16]:resp_line_reg[response_word*16 +: 16];
+            assign dcache_resp_line_data_o[response_word*16 +: 16]=(WORD_RESPONSE!=0)?16'b0:
+                ((bypass || deferred)?data_rdata[response_word*16 +: 16]:resp_line_reg[response_word*16 +: 16]);
         end
         for(response_word=0;response_word<2;response_word=response_word+1) begin:g_response_value_word
             wire bypass=response_output_views[2*(RESPONSE_TAG_WORDS+10+response_word)];
@@ -817,7 +819,7 @@ module rv32_dcache_nonblocking #(
                     response_deferred_word[response_word*16 +: 16]:resp_word_reg[response_word*16 +: 16]);
         end
     endgenerate
-    assign dcache_resp_line_valid_o=response_output_views[2*(RESPONSE_OUTPUT_WORDS-1)] || resp_line_valid_reg;
+    assign dcache_resp_line_valid_o=(WORD_RESPONSE==0) && (response_output_views[2*(RESPONSE_OUTPUT_WORDS-1)] || resp_line_valid_reg);
     assign dcache_resp_error_o=!response_output_views[2*(RESPONSE_OUTPUT_WORDS-1)] && resp_error_reg;
     // The synchronous tag query already holds an accepted committed store.
     // Acknowledge at the SAME edge that writes its hit bytes or transfers
@@ -948,13 +950,13 @@ module rv32_dcache_nonblocking #(
     wire query_response_mshr_store;
     rv32_frequency_array_read #(.WIDTH(MSHR_READ_WIDTH),.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(8)) response_read (
         .rows_i(mshr_read_rows),.index_i(mem_resp_id_i),.value_o({query_response_mshr_victim_data,query_response_mshr_victim_entry,query_response_mshr_victim_addr,query_response_mshr_lsq,query_response_mshr_wdata,query_response_mshr_mask,query_response_mshr_unsigned,query_response_mshr_size,query_response_mshr_addr,query_response_mshr_writeback,query_response_mshr_prefetch,query_response_mshr_store}));
-    localparam integer WAITER_READ_WIDTH=TAG_WIDTH+167;
+    localparam integer WAITER_READ_WIDTH=TAG_WIDTH+39+WAITER_DATA_WIDTH;
     wire [WAITER_ENTRIES*WAITER_READ_WIDTH-1:0] waiter_read_rows;
     genvar waiter_read_row;
     generate for(waiter_read_row=0;waiter_read_row<WAITER_ENTRIES;waiter_read_row=waiter_read_row+1) begin:g_waiter_read_rows
         assign waiter_read_rows[waiter_read_row*WAITER_READ_WIDTH +: WAITER_READ_WIDTH]={waiter_line[waiter_read_row],waiter_lsq[waiter_read_row],waiter_unsigned[waiter_read_row],waiter_size[waiter_read_row],waiter_addr[waiter_read_row],waiter_mshr[waiter_read_row],waiter_error[waiter_read_row]};
     end endgenerate
-    wire [127:0] query_waiter_load_waiter_line;
+    wire [WAITER_DATA_WIDTH-1:0] query_waiter_load_waiter_line;
     wire [TAG_WIDTH-1:0] query_waiter_load_waiter_lsq;
     wire query_waiter_load_waiter_unsigned;
     wire [1:0] query_waiter_load_waiter_size;
@@ -963,7 +965,7 @@ module rv32_dcache_nonblocking #(
     wire query_waiter_load_waiter_error;
     rv32_frequency_array_read #(.WIDTH(WAITER_READ_WIDTH),.ENTRIES(WAITER_ENTRIES),.INDEX_WIDTH(WAITER_SLOT_WIDTH)) waiter_load_read (
         .rows_i(waiter_read_rows),.index_i(waiter_load_ready_index),.value_o({query_waiter_load_waiter_line,query_waiter_load_waiter_lsq,query_waiter_load_waiter_unsigned,query_waiter_load_waiter_size,query_waiter_load_waiter_addr,query_waiter_load_waiter_mshr,query_waiter_load_waiter_error}));
-    wire [127:0] query_waiter_store_waiter_line;
+    wire [WAITER_DATA_WIDTH-1:0] query_waiter_store_waiter_line;
     wire [TAG_WIDTH-1:0] query_waiter_store_waiter_lsq;
     wire query_waiter_store_waiter_unsigned;
     wire [1:0] query_waiter_store_waiter_size;
@@ -1360,12 +1362,32 @@ module rv32_dcache_nonblocking #(
             assign response_line[line_word*16 +: 16]=store_data_views[line_word]?
                 waiter_store_fill[line_word*16 +: 16]:mem_resp_data_i[line_word*16 +: 16];
         end
-        rv32_frequency_event_select #(.WIDTH(128),.EVENTS(2)) line_selector (
-            .events_i({response_fill && !waiter_store[waiter_row],local_fill && !waiter_store[waiter_row]}),
-            .values_i({response_line,query_local_mshr_wdata}),
-            .write_o(line_write),.value_o(line_next));
-        rv32_frequency_word_bank #(.WIDTH(128)) line_owner (
-            .clk_i(clk_i),.write_i(line_write),.data_i(line_next),.data_o(waiter_line[waiter_row]));
+        if(WORD_RESPONSE!=0) begin:g_word_waiter
+            // Natural LB/LH/LW alignment never crosses an aligned word.
+            // Choose that word before capture, and shift its low byte index
+            // only after the original waiter selection. This avoids a full
+            // four-bit line shifter for each waiter.
+            wire [31:0] response_word_data,local_word_data,word_next;
+            rv32_frequency_line_extract32 response_word_extract (
+                .line_i(response_line),.offset_i({waiter_addr[waiter_row][3:2],2'b0}),
+                .size_i(2'd2),.unsigned_i(1'b1),.value_o(response_word_data));
+            rv32_frequency_line_extract32 local_word_extract (
+                .line_i(query_local_mshr_wdata),.offset_i({waiter_addr[waiter_row][3:2],2'b0}),
+                .size_i(2'd2),.unsigned_i(1'b1),.value_o(local_word_data));
+            rv32_frequency_event_select #(.WIDTH(32),.EVENTS(2)) word_selector (
+                .events_i({response_fill && !waiter_store[waiter_row],local_fill && !waiter_store[waiter_row]}),
+                .values_i({response_word_data,local_word_data}),.write_o(line_write),.value_o(word_next));
+            rv32_frequency_word_bank #(.WIDTH(32)) word_owner (
+                .clk_i(clk_i),.write_i(line_write),.data_i(word_next),.data_o(waiter_line[waiter_row]));
+            assign line_next=0;
+        end else begin:g_line_waiter
+            rv32_frequency_event_select #(.WIDTH(128),.EVENTS(2)) line_selector (
+                .events_i({response_fill && !waiter_store[waiter_row],local_fill && !waiter_store[waiter_row]}),
+                .values_i({response_line,query_local_mshr_wdata}),
+                .write_o(line_write),.value_o(line_next));
+            rv32_frequency_word_bank #(.WIDTH(128)) line_owner (
+                .clk_i(clk_i),.write_i(line_write),.data_i(line_next),.data_o(waiter_line[waiter_row]));
+        end
         wire error_write,error_next;
         rv32_frequency_event_select #(.WIDTH(1),.EVENTS(3)) error_selector (
             .events_i({response_fill,local_fill,allocate}),
@@ -1493,16 +1515,34 @@ module rv32_dcache_nonblocking #(
     wire [31:0] response_memory_word,response_waiter_word,response_forward_word;
     rv32_frequency_line_extract32 memory_extract (
         .line_i(mem_resp_data_i),.offset_i(query_response_mshr_addr[3:0]),
-        .size_i(query_response_mshr_size),.unsigned_i(query_response_mshr_unsigned),.value_o(response_memory_word));
-    rv32_frequency_line_extract32 waiter_extract (
-        .line_i(query_waiter_load_waiter_line),.offset_i(query_waiter_load_waiter_addr[3:0]),
-        .size_i(query_waiter_load_waiter_size),.unsigned_i(query_waiter_load_waiter_unsigned),.value_o(response_waiter_word));
+        .size_i((WORD_RESPONSE!=0)?2'd2:query_response_mshr_size),.unsigned_i((WORD_RESPONSE!=0)?1'b1:query_response_mshr_unsigned),.value_o(response_memory_word));
+    generate if(WORD_RESPONSE!=0) begin:g_word_waiter_extract
+        rv32_frequency_line_extract32 waiter_extract (
+            .line_i({96'b0,query_waiter_load_waiter_line}),.offset_i({2'b0,query_waiter_load_waiter_addr[1:0]}),
+            .size_i(2'd2),.unsigned_i(1'b1),.value_o(response_waiter_word));
+    end else begin:g_line_waiter_extract
+        rv32_frequency_line_extract32 waiter_extract (
+            .line_i(query_waiter_load_waiter_line),.offset_i(query_waiter_load_waiter_addr[3:0]),
+            .size_i(query_waiter_load_waiter_size),.unsigned_i(query_waiter_load_waiter_unsigned),.value_o(response_waiter_word));
+    end endgenerate
     rv32_frequency_line_extract32 forward_extract (
         .line_i(query_matching_mshr_wdata),.offset_i(core_req_addr[3:0]),
-        .size_i(core_req_size),.unsigned_i(core_req_unsigned),.value_o(response_forward_word));
+        .size_i((WORD_RESPONSE!=0)?2'd2:core_req_size),.unsigned_i((WORD_RESPONSE!=0)?1'b1:core_req_unsigned),.value_o(response_forward_word));
     wire response_data_write;
-    wire [159:0] response_data_next,response_data_saved;
     wire response_sram_capture=!reset_i && resp_from_sram && resp_valid_reg;
+    generate if(WORD_RESPONSE!=0) begin:g_word_response_owner
+        wire [31:0] response_word_next;
+        rv32_frequency_event_select #(.WIDTH(32),.EVENTS(6)) response_word_selector (
+            .events_i({response_demand_capture,response_failed_load,response_waiter_capture,response_forward_capture,
+                       response_hit_capture && TAG_SRAM!=0,response_sram_capture}),
+            .values_i({response_memory_word,32'b0,response_waiter_word,response_forward_word,
+                       response_hit_word,response_deferred_word}),
+            .write_o(response_data_write),.value_o(response_word_next));
+        rv32_frequency_word_bank #(.WIDTH(32)) response_word_owner (
+            .clk_i(clk_i),.write_i(response_data_write),.data_i(response_word_next),.data_o(resp_word_reg));
+        assign resp_line_reg=128'b0;
+    end else begin:g_line_response_owner
+    wire [159:0] response_data_next,response_data_saved;
     rv32_frequency_event_select #(.WIDTH(160),.EVENTS(6)) response_data_selector (
         .events_i({response_demand_capture,response_failed_load,response_waiter_capture,response_forward_capture,
                    response_hit_capture && TAG_SRAM!=0,response_sram_capture}),
@@ -1517,6 +1557,7 @@ module rv32_dcache_nonblocking #(
     rv32_frequency_word_bank #(.WIDTH(160)) response_data_owner (
         .clk_i(clk_i),.write_i(response_data_write),.data_i(response_data_next),.data_o(response_data_saved));
     assign {resp_line_reg,resp_word_reg}=response_data_saved;
+    end endgenerate
     // This metadata is read only while the deferred synchronous hit is live;
     // the accepting hit initializes it before resp_from_sram exposes it.
     wire [2:0] response_size_saved;
