@@ -46,6 +46,7 @@ module rv32_rob #(
     // Publish at most one following ordinary store when every older lane
     // actually retires on this edge; its own retirement still uses saved sent.
     parameter integer STORE_PREFIX_ADMISSION = 0,
+    parameter integer RECOVERY_ROW_LIVE_QUALIFY = 0,
     // 1 retires a store after admission into the committed LSQ/store buffer;
     // 0 preserves the precise legacy behavior of waiting for cache ack.
     parameter integer STORE_BUFFERED_RETIRE = 1
@@ -875,11 +876,41 @@ module rv32_rob #(
         end
         for(genvar recovery_query_lane=0;recovery_query_lane<BE_WIDTH;recovery_query_lane=recovery_query_lane+1) begin:g_recovery_lane_query
             wire [TAG_WIDTH-1:0] tag=recovery_tag_i[recovery_query_lane*TAG_WIDTH +: TAG_WIDTH];
+            if(RECOVERY_ROW_LIVE_QUALIFY!=0) begin:g_row_live
+                localparam integer QUERY_WIDTH=SLOT_WIDTH+GENERATION_WIDTH;
+                localparam integer DOMAINS=(ROB_ENTRIES+3)/4;
+                localparam integer LEAVES=1<<$clog2(ROB_ENTRIES);
+                wire [DOMAINS*QUERY_WIDTH-1:0] query_views;
+                wire live_tree [1:2*LEAVES-1];
+                // Compare every saved row's complete GEN before selecting it.
+                // No selected GEN bus followed by a late equality comparison.
+                rv32_frequency_control_tree #(.WIDTH(QUERY_WIDTH),.LEAVES(DOMAINS)) query_tree (
+                    .signal_i({tag[GEN_LSB +: GENERATION_WIDTH],tag[SLOT_LSB +: SLOT_WIDTH]}),
+                    .views_o(query_views));
+                for(genvar live_row=0;live_row<LEAVES;live_row=live_row+1) begin:g_row
+                    if(live_row<ROB_ENTRIES) begin:g_present
+                        wire [QUERY_WIDTH-1:0] query=query_views[(live_row/4)*QUERY_WIDTH +: QUERY_WIDTH];
+                        wire [RECOVERY_LIVE_WIDTH-1:0] state=recovery_live_rows[live_row*RECOVERY_LIVE_WIDTH +: RECOVERY_LIVE_WIDTH];
+                        wire generation_matches=query[SLOT_WIDTH +: GENERATION_WIDTH]==state[0 +: GENERATION_WIDTH];
+                        wire slot_matches=query[0 +: SLOT_WIDTH]==live_row;
+                        assign live_tree[LEAVES+live_row]=slot_matches && state[GENERATION_WIDTH] && generation_matches;
+                    end else begin:g_padding
+                        assign live_tree[LEAVES+live_row]=1'b0;
+                    end
+                end
+                for(genvar live_node=1;live_node<LEAVES;live_node=live_node+1) begin:g_reduce
+                    rv32_rob_recovery_live_or pair (
+                        .left_i(live_tree[2*live_node]),.right_i(live_tree[2*live_node+1]),
+                        .value_o(live_tree[live_node]));
+                end
+                assign recovery_lane_live[recovery_query_lane]=tag[VALID_LSB] && live_tree[1];
+            end else begin:g_original_live_read
             wire [RECOVERY_LIVE_WIDTH-1:0] live_state;
             rv32_frequency_array_read #(.WIDTH(RECOVERY_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) live_reader (
                 .rows_i(recovery_live_rows),.index_i(tag[SLOT_LSB +: SLOT_WIDTH]),.value_o(live_state));
             assign recovery_lane_live[recovery_query_lane]=tag[VALID_LSB] && live_state[GENERATION_WIDTH] &&
                 tag[GEN_LSB +: GENERATION_WIDTH]==live_state[0 +: GENERATION_WIDTH];
+            end
         end
     endgenerate
     rv32_frequency_array_read #(.WIDTH(RECOVERY_DEST_WIDTH),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) recovery_dest_reader (
@@ -1863,4 +1894,15 @@ module rv32_rob_owned_field #(parameter integer WIDTH=32) (
 );
     rv32_frequency_word_bank #(.WIDTH(WIDTH)) payload_owner (
         .clk_i(clk_i),.write_i(write_i),.data_i(data_i),.data_o(data_o));
+endmodule
+
+
+// Pure single-bit OR. Keep binary reduction levels separate from GEN/slot
+// predicates; all functional cells remain priced by the original course flow.
+(* keep_hierarchy = 1 *)
+module rv32_rob_recovery_live_or (
+    input wire left_i,right_i,
+    output wire value_o
+);
+    assign value_o=left_i | right_i;
 endmodule

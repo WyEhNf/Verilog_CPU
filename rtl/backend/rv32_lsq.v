@@ -33,6 +33,7 @@ module rv32_lsq #(
     // Optional atomic caller supplies its raw sparse memory-lane plan.
     // Whenever any actual allocation fires, its plan must equal fire_o.
     parameter integer ALLOC_SLOT_PRESELECT = 0,
+    parameter integer ALLOC_FIRE_DISTRIBUTE = 0,
     // 0: registered selection; 1: empty fallthrough with AGU lookthrough;
     // 2: empty fallthrough from registered addresses only (shorter timing path).
     parameter integer EMPTY_SELECTION_BYPASS = 0,
@@ -506,6 +507,18 @@ module rv32_lsq #(
     assign head_o = head_reg;
     assign tail_o = tail_reg;
     assign alloc_ready_o = !flush_i && (free_count_calc != 0);
+
+    localparam integer ALLOCATION_FIRE_DOMAINS=(LSQ_ENTRIES+3)/4;
+    wire [BE_WIDTH*ALLOCATION_FIRE_DOMAINS-1:0] allocation_fire_views;
+    generate if(ALLOC_FIRE_DISTRIBUTE!=0) begin:g_allocation_fire_distribution
+        // Actual sparse allocation/count/capacity logic stays authoritative.
+        // Each at-most-four-row domain drives its metadata and payload owners,
+        // preventing one late admission bit from driving every row comparator.
+        rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(ALLOCATION_FIRE_DOMAINS)) fire_tree (
+            .signal_i(alloc_fire_o),.views_o(allocation_fire_views));
+    end else begin:g_original_allocation_fire
+        assign allocation_fire_views={ALLOCATION_FIRE_DOMAINS{alloc_fire_o}};
+    end endgenerate
 
     // Physical-slot age is a narrow modulo subtraction (LSQ_ENTRIES is a
     // power of two). Hazard detection is an unordered OR, so inspect each
@@ -1896,7 +1909,7 @@ module rv32_lsq #(
             assign forward_events[0]=normal && request_fire && candidate==payload_row && load_mem[payload_row];
             assign forward_values[0 +: 32]=fwd_data;
             for(payload_lane=0;payload_lane<BE_WIDTH;payload_lane=payload_lane+1) begin:g_lane
-                assign allocations[payload_lane]=normal && alloc_fire_o[payload_lane] &&
+                assign allocations[payload_lane]=normal && allocation_fire_views[(payload_row/4)*BE_WIDTH+payload_lane] &&
                     payload_alloc_slot[payload_lane]==payload_row;
                 assign address_events[1+payload_lane]=enabled && addr_update_valid_i[payload_lane] &&
                     tag_matches_slot(addr_update_tag_i[payload_lane*TAG_WIDTH +: TAG_WIDTH],payload_row);
@@ -2004,7 +2017,7 @@ module rv32_lsq #(
         wire allocated;
         wire [10:0] allocation;
         for(metadata_lane=0;metadata_lane<BE_WIDTH;metadata_lane=metadata_lane+1) begin:g_match
-            assign alloc_matches[metadata_lane]=alloc_fire_o[metadata_lane] &&
+            assign alloc_matches[metadata_lane]=allocation_fire_views[(metadata_row/4)*BE_WIDTH+metadata_lane] &&
                 payload_alloc_slot[metadata_lane]==metadata_row;
             assign alloc_values[metadata_lane*11 +: 11]={
                 alloc_store_mask_i[metadata_lane*4 +: 4],
