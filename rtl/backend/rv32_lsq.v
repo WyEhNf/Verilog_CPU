@@ -25,6 +25,8 @@ module rv32_lsq #(
     parameter integer SAVED_REPORT_PRIORITY = 0,
     parameter integer HEAD_LOAD_IDENTITY_QUERY = 0,
     parameter integer HEAD_LOAD_PACKET_PRESELECT = 0,
+    parameter integer SAVED_IDENTITY_WORD_MASK = 0,
+    parameter integer SAVED_IDENTITY_BALANCED_MERGE = 0,
     parameter integer LOAD_WAKE_BYPASS = 0,
     parameter integer ALLOC_LOAD_SELECTION_BYPASS = 0,
     // Optional atomic caller supplies its raw sparse memory-lane plan.
@@ -1222,6 +1224,7 @@ module rv32_lsq #(
     localparam integer REPORT_IDENTITY_WIDTH=(HEAD_LOAD_PACKET_ACTIVE!=0) ?
         REPORT_WIDTH : ROB_TAG_WIDTH+REPORT_ROB_QUERY_WIDTH;
     localparam integer SAVED_IDENTITY_QUERY_LSB=(HEAD_LOAD_PACKET_ACTIVE!=0) ? REPORT_BASE_WIDTH : ROB_TAG_WIDTH;
+    localparam integer REPORT_IDENTITY_WORDS=(REPORT_IDENTITY_WIDTH+15)/16;
     wire [REPORT_IDENTITY_WIDTH-1:0] saved_identity_tree [1:2*REPORT_ROWS-1];
     wire [ACK_WIDTH-1:0] ack_payload_tree [1:2*REPORT_ROWS-1];
     wire ack_valid_tree [1:2*REPORT_ROWS-1];
@@ -1494,6 +1497,23 @@ module rv32_lsq #(
                     // current response-valid. Preselect this full candidate.
                     wire saved_grant=report_hold_live_views[report_row/4] ?
                         report_hold_matches[report_row] : report_priority;
+                    if(SAVED_IDENTITY_WORD_MASK!=0) begin:g_saved_identity_words
+                        wire [REPORT_IDENTITY_WIDTH-1:0] identity;
+                        wire [REPORT_IDENTITY_WORDS-1:0] grant_views;
+                        if(HEAD_LOAD_PACKET_ACTIVE!=0) begin:g_full_packet
+                            assign identity={report_payload[REPORT_BASE_WIDTH +: REPORT_ROB_QUERY_WIDTH],saved_report_payload};
+                        end else begin:g_identity_only
+                            assign identity={report_payload[REPORT_BASE_WIDTH +: REPORT_ROB_QUERY_WIDTH],rob_tag_mem[report_row]};
+                        end
+                        rv32_frequency_control_tree #(.LEAVES(REPORT_IDENTITY_WORDS)) mask_tree (
+                            .signal_i(saved_grant),.views_o(grant_views));
+                        for(genvar identity_word=0;identity_word<REPORT_IDENTITY_WORDS;identity_word=identity_word+1) begin:g_word
+                            localparam integer LOW=identity_word*16;
+                            localparam integer BITS=(REPORT_IDENTITY_WIDTH-LOW>=16)?16:REPORT_IDENTITY_WIDTH-LOW;
+                            assign saved_identity_tree[REPORT_ROWS+report_row][LOW +: BITS]=
+                                {BITS{grant_views[identity_word]}} & identity[LOW +: BITS];
+                        end
+                    end else begin:g_original_saved_identity_mask
                     if(HEAD_LOAD_PACKET_ACTIVE!=0) begin:g_full_saved_packet
                         assign saved_identity_tree[REPORT_ROWS+report_row]=
                             {REPORT_IDENTITY_WIDTH{saved_grant}} &
@@ -1502,6 +1522,7 @@ module rv32_lsq #(
                         assign saved_identity_tree[REPORT_ROWS+report_row]=
                             {REPORT_IDENTITY_WIDTH{saved_grant}} &
                             {report_payload[REPORT_BASE_WIDTH +: REPORT_ROB_QUERY_WIDTH],rob_tag_mem[report_row]};
+                    end
                     end
                 end else begin:g_no_saved_identity_candidate
                     assign saved_identity_tree[REPORT_ROWS+report_row]=0;
@@ -1552,7 +1573,17 @@ module rv32_lsq #(
             assign commit_slot_tree[report_node]=commit_valid_tree[2*report_node]?
                 commit_slot_tree[2*report_node]:commit_slot_tree[2*report_node+1];
             assign report_payload_tree[report_node]=report_payload_tree[2*report_node] | report_payload_tree[2*report_node+1];
-            assign saved_identity_tree[report_node]=saved_identity_tree[2*report_node] | saved_identity_tree[2*report_node+1];
+            if((SAVED_IDENTITY_BALANCED_MERGE!=0) && HEAD_LOAD_IDENTITY_ACTIVE) begin:g_saved_identity_pair
+                // Preserve each binary OR level as an independent combinational
+                // cone, so mapping cannot fuse the whole arbitration/data tree
+                // into a long alternating priority-like AOI/OAI chain.
+                rv32_lsq_identity_pair_or #(.WIDTH(REPORT_IDENTITY_WIDTH)) pair (
+                    .left_i(saved_identity_tree[2*report_node]),
+                    .right_i(saved_identity_tree[2*report_node+1]),
+                    .value_o(saved_identity_tree[report_node]));
+            end else begin:g_original_saved_identity_merge
+                assign saved_identity_tree[report_node]=saved_identity_tree[2*report_node] | saved_identity_tree[2*report_node+1];
+            end
             assign ack_payload_tree[report_node]=ack_payload_tree[2*report_node] | ack_payload_tree[2*report_node+1];
             assign ack_valid_tree[report_node]=ack_valid_tree[2*report_node] || ack_valid_tree[2*report_node+1];
         end
@@ -2588,4 +2619,14 @@ module rv32_lsq_request_owner #(
     endgenerate
     rv32_frequency_line_insert32 insertion (
         .value_i(relative_data),.offset_i(address_i[3:0]),.line_o(inserted_data));
+endmodule
+
+
+// Pure two-input bitwise OR; no priority, assumptions, state or clock.
+(* keep_hierarchy = 1 *)
+module rv32_lsq_identity_pair_or #(parameter integer WIDTH=85) (
+    input wire [WIDTH-1:0] left_i,right_i,
+    output wire [WIDTH-1:0] value_o
+);
+    assign value_o=left_i | right_i;
 endmodule
