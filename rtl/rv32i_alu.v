@@ -15,6 +15,7 @@ module rv32i_alu #(
     parameter integer COMPACT_PRED_TARGET = 0,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
+    parameter integer RECOVERY_OLDER_ISSUE = 0,
     parameter integer RECOVERY_WIDTH = 1+2*((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))+$clog2(ROB_ENTRIES+1)
 ) (
     input  wire                         clk_i,
@@ -255,9 +256,14 @@ module rv32i_alu #(
     wire result_visible = result_valid_reg && !result_cancel &&
         (!live_tag_valid_i || (result_rob_tag_reg == live_tag_i));
     assign exec_valid_o = result_visible;
-    assign issue_ready_o = !flush_i && !result_cancel && !issue_cancel && !shift_busy &&
-        (!result_valid_reg || exec_ready_i ||
-         (live_tag_valid_i && (result_rob_tag_reg != live_tag_i)));
+    // The canceled result is invisible before the clock. A qualified
+    // retained older instruction may replace that result on this same edge.
+    // Surviving older results still require the original output handshake.
+    wire recovery_replace=(RECOVERY_OLDER_ISSUE!=0) && result_cancel;
+    assign issue_ready_o = !flush_i && !issue_cancel &&
+        (recovery_replace || (!result_cancel && !shift_busy &&
+         (!result_valid_reg || exec_ready_i ||
+          (live_tag_valid_i && (result_rob_tag_reg != live_tag_i)))));
 
     assign exec_value_o = result_value_reg;
     assign exec_phys_rd_o = result_phys_rd_reg;
@@ -283,7 +289,8 @@ module rv32i_alu #(
     // a complete payload write on its original acceptance edge.
     wire payload_stale=live_tag_valid_i && result_rob_tag_reg!=live_tag_i;
     wire payload_cancel=result_valid_reg && payload_stale && !exec_ready_i;
-    wire payload_accept=!reset_i && !flush_i && !shift_busy && !payload_cancel &&
+    wire payload_accept=!reset_i && !flush_i &&
+        (recovery_replace || (!shift_busy && !payload_cancel)) &&
         issue_ready_o && issue_valid_i;
     wire payload_shift=!reset_i && !flush_i && !result_cancel && shift_busy && !payload_stale;
     wire [31:0] shifted_payload=shift_right ?
@@ -418,7 +425,7 @@ module rv32i_alu #(
         .data_i({issue_phys_rd_i,issue_rob_tag_i,issue_epoch_i,calc_rd_we,calc_is_branch,calc_branch_taken,calc_branch_target,calc_redirect_valid,calc_redirect_pc,calc_is_memory,calc_is_load,calc_is_store,calc_mem_addr,calc_mem_size,calc_mem_unsigned,calc_store_data}),.data_o({result_phys_rd_reg,result_rob_tag_reg,result_epoch_reg,result_rd_we_reg,result_is_branch_reg,result_branch_taken_reg,result_branch_target_reg,result_redirect_valid_reg,result_redirect_pc_reg,result_is_memory_reg,result_is_load_reg,result_is_store_reg,result_mem_addr_reg,result_mem_size_reg,result_mem_unsigned_reg,result_store_data_reg}));
 
     always @(posedge clk_i) begin
-        if (reset_i || flush_i || result_cancel) begin
+        if (reset_i || flush_i || (result_cancel && !payload_accept)) begin
             result_valid_reg <= 1'b0;
             shift_busy <= 1'b0;
             ;
@@ -438,7 +445,7 @@ module rv32i_alu #(
             ;
             ;
             ;
-        end else if (shift_busy) begin
+        end else if (shift_busy && !recovery_replace) begin
             if (live_tag_valid_i && (result_rob_tag_reg != live_tag_i)) begin
                 shift_busy <= 1'b0;
             end else begin
@@ -456,7 +463,7 @@ module rv32i_alu #(
                     result_valid_reg <= 1'b1;
                 end
             end
-        end else if (result_valid_reg && live_tag_valid_i && (result_rob_tag_reg != live_tag_i) && !exec_ready_i) begin
+        end else if (result_valid_reg && live_tag_valid_i && (result_rob_tag_reg != live_tag_i) && !exec_ready_i && !recovery_replace) begin
             // A stale completion cannot remain buffered when the live-tag
             // authority has already moved on, even under output backpressure.
             result_valid_reg <= 1'b0;

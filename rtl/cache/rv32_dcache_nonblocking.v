@@ -7,6 +7,8 @@
 // in place so the returned line completes the original LSQ entry.
 module rv32_dcache_nonblocking #(
     parameter integer LOCAL_SRAM_COMMANDS = 0,
+    parameter integer WAY_PARALLEL_QUERY = 0,
+    parameter integer HIT_RESPONSE_COISSUE = 0,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer MSHR_ENTRIES = 4,
     parameter integer WAITER_ENTRIES = 8,
@@ -253,7 +255,8 @@ module rv32_dcache_nonblocking #(
         // Read every data way alongside its tags. Post-edge way selection
         // permits a one-cycle load hit without a second data-port access.
         reg query_valid, query_from_sram;
-        reg query_data_valid, query_data_from_sram;
+        reg [CACHE_WAYS-1:0] query_data_valid, query_data_from_sram;
+        wire [CACHE_WAYS-1:0] input_way_reads;
         wire query_load, query_store, query_unsigned;
         wire [31:0] query_addr;
         wire [CACHE_INDEX_WIDTH-1:0] query_request_index, query_prefetch_index;
@@ -270,9 +273,18 @@ module rv32_dcache_nonblocking #(
         // share the preceding store's DATA write edge, while tag SRAM reads.
         // If this query instead evicts dirty data, read all ways later before
         // transferring ownership; never capture undefined write/idle rdata.
-        wire input_data_read = input_fire && !data_we;
-        wire deferred_data_read = query_valid && !query_data_valid &&
-            request_dirty_victim && !data_we && !tag_array_write;
+        // Data writes own one physical way. The remaining ways can read
+        // the incoming tag query on that edge; never treat the written way's
+        // undefined SRAM Q as a read result or as valid held data.
+        wire input_data_read = input_fire && ((WAY_PARALLEL_QUERY!=0) || !data_we);
+        wire deferred_data_read = query_valid && !request_data_ready &&
+            (request_dirty_victim ||
+             ((WAY_PARALLEL_QUERY!=0) && query_load && request_hit)) &&
+            !data_we && !tag_array_write;
+        for(genvar read_way=0;read_way<CACHE_WAYS;read_way=read_way+1) begin:g_input_way_read
+            assign input_way_reads[read_way]=input_data_read &&
+                !(data_we && ((data_addr%CACHE_WAYS)==read_way));
+        end
         wire [31:0] input_prefetch_line = {dcache_req_addr_i[31:4],4'b0} + 32'd16;
         localparam integer INPUT_PAYLOAD_WIDTH=181+2*TAG_WIDTH;
         wire [INPUT_PAYLOAD_WIDTH-1:0] input_payload_saved;
@@ -294,7 +306,7 @@ module rv32_dcache_nonblocking #(
             assign query_prefetch_index=0;
         end
         assign dcache_req_ready_o = !reset_i && !flush_i && !tag_array_write &&
-                                   (!data_we || dcache_req_is_store_i) &&
+                                   ((WAY_PARALLEL_QUERY!=0) || !data_we || dcache_req_is_store_i) &&
                                    (!query_valid || core_req_ready);
         assign core_req_valid = query_valid;
         assign core_req_is_load = query_load;
@@ -313,24 +325,26 @@ module rv32_dcache_nonblocking #(
         localparam integer LOOKUP_TAG_WORDS=(CACHE_WAYS*CACHE_TAG_WIDTH+15)/16;
         localparam integer LOOKUP_DATA_WORDS=8*CACHE_WAYS;
         localparam integer LOOKUP_WORDS=2*LOOKUP_TAG_WORDS+LOOKUP_DATA_WORDS;
-        wire [2*LOOKUP_WORDS-1:0] lookup_read_views;
-        rv32_frequency_control_tree #(.WIDTH(2),.LEAVES(LOOKUP_WORDS)) lookup_read_tree (
+        localparam integer LOOKUP_SELECT_WIDTH=CACHE_WAYS+1;
+        wire [LOOKUP_SELECT_WIDTH*LOOKUP_WORDS-1:0] lookup_read_views;
+        rv32_frequency_control_tree #(.WIDTH(LOOKUP_SELECT_WIDTH),.LEAVES(LOOKUP_WORDS)) lookup_read_tree (
             .signal_i({query_data_from_sram,query_from_sram}),.views_o(lookup_read_views));
         genvar lookup_word;
         for(lookup_word=0;lookup_word<LOOKUP_TAG_WORDS;lookup_word=lookup_word+1) begin:g_lookup_tag_word
             localparam integer LOW=lookup_word*16;
             localparam integer BITS=(CACHE_WAYS*CACHE_TAG_WIDTH-LOW>=16)?16:CACHE_WAYS*CACHE_TAG_WIDTH-LOW;
-            assign request_tags[LOW +: BITS]=lookup_read_views[2*lookup_word]?
+            assign request_tags[LOW +: BITS]=lookup_read_views[LOOKUP_SELECT_WIDTH*lookup_word]?
                 demand_rdata[LOW +: BITS]:demand_hold[LOW +: BITS];
-            assign prefetch_tags[LOW +: BITS]=lookup_read_views[2*(LOOKUP_TAG_WORDS+lookup_word)]?
+            assign prefetch_tags[LOW +: BITS]=lookup_read_views[LOOKUP_SELECT_WIDTH*(LOOKUP_TAG_WORDS+lookup_word)]?
                 prefetch_rdata[LOW +: BITS]:prefetch_hold[LOW +: BITS];
         end
         for(lookup_word=0;lookup_word<LOOKUP_DATA_WORDS;lookup_word=lookup_word+1) begin:g_lookup_data_word
-            assign request_data_ways[lookup_word*16 +: 16]=lookup_read_views[2*(2*LOOKUP_TAG_WORDS+lookup_word)+1]?
+            assign request_data_ways[lookup_word*16 +: 16]=lookup_read_views[LOOKUP_SELECT_WIDTH*(2*LOOKUP_TAG_WORDS+lookup_word)+1+(lookup_word/8)]?
                 bank_rdata[lookup_word*16 +: 16]:bank_hold[lookup_word*16 +: 16];
         end
-        wire [3*CACHE_WAYS-1:0] hold_event_views;
-        rv32_frequency_control_tree #(.WIDTH(3),.LEAVES(CACHE_WAYS)) hold_event_tree (
+        localparam integer HOLD_SELECT_WIDTH=CACHE_WAYS+2;
+        wire [HOLD_SELECT_WIDTH*CACHE_WAYS-1:0] hold_event_views;
+        rv32_frequency_control_tree #(.WIDTH(HOLD_SELECT_WIDTH),.LEAVES(CACHE_WAYS)) hold_event_tree (
             .signal_i({reset_i,query_data_from_sram,query_from_sram}),.views_o(hold_event_views));
         localparam integer TAG_FORWARD_WIDTH=1+CACHE_WAYS+CACHE_INDEX_WIDTH+CACHE_TAG_WIDTH;
         wire [CACHE_WAYS*TAG_FORWARD_WIDTH-1:0] tag_forward_views;
@@ -340,7 +354,9 @@ module rv32_dcache_nonblocking #(
         genvar hold_way;
         for(hold_way=0;hold_way<CACHE_WAYS;hold_way=hold_way+1) begin:g_lookup_hold_owner
             wire local_reset,data_copy,tag_copy;
-            assign {local_reset,data_copy,tag_copy}=hold_event_views[hold_way*3 +: 3];
+            assign local_reset=hold_event_views[hold_way*HOLD_SELECT_WIDTH+CACHE_WAYS+1];
+            assign data_copy=hold_event_views[hold_way*HOLD_SELECT_WIDTH+1+hold_way];
+            assign tag_copy=hold_event_views[hold_way*HOLD_SELECT_WIDTH];
             wire bank_forward=!local_reset && data_we && query_valid &&
                 data_addr/CACHE_WAYS==core_request_index && data_addr%CACHE_WAYS==hold_way;
             wire local_tag_write;
@@ -374,7 +390,8 @@ module rv32_dcache_nonblocking #(
             rv32_frequency_word_bank #(.WIDTH(128)) data_owner (
                 .clk_i(clk_i),.write_i(data_write),.data_i(data_next),.data_o(bank_hold[hold_way*128 +: 128]));
         end
-        assign request_data_ready = query_data_valid;
+        // Only the selected hit/victim way supplies load/victim data.
+        assign request_data_ready = query_data_valid[request_data_entry%CACHE_WAYS];
         // Each way owns one command decode. The final controls and address
         // reach individual byte macros only through bounded distributions.
         localparam integer DATA_COMMAND_WIDTH=7;
@@ -464,12 +481,12 @@ module rv32_dcache_nonblocking #(
             if (reset_i) begin
                 query_valid <= 1'b0;
                 query_from_sram <= 1'b0;
-                query_data_valid <= 1'b0;
-                query_data_from_sram <= 1'b0;
+                query_data_valid <= 0;
+                query_data_from_sram <= 0;
             end else begin
                 query_from_sram <= input_fire;
-                query_data_from_sram <= input_data_read || deferred_data_read;
-                if (deferred_data_read) query_data_valid <= 1'b1;
+                query_data_from_sram <= input_way_reads | {CACHE_WAYS{deferred_data_read}};
+                if (deferred_data_read) query_data_valid <= {CACHE_WAYS{1'b1}};
                 // Payload owners preserve copy<forward ordering independently
                 // of the scalar query-valid and deferred-read state below.
                 if (core_req_valid && core_req_ready)
@@ -478,7 +495,7 @@ module rv32_dcache_nonblocking #(
                 // ownership was accepted earlier (especially a committed SW).
                 if (input_fire) begin
                     query_valid <= 1'b1;
-                    query_data_valid <= !data_we;
+                    query_data_valid <= input_way_reads;
                 end
             end
         end
@@ -680,9 +697,19 @@ module rv32_dcache_nonblocking #(
         query_matching_mshr_store &&
         ((query_matching_mshr_mask & core_req_mask) ==
          core_req_mask);
+    // A query hit can leave through the existing combinational bypass while
+    // a waiter/refill takes the existing held reply slot at the same edge.
+    // The offer never depends on ready. A blocked hit is captured once and
+    // the competing reply remains at its original owner until a later edge.
+    // Exclude local-fill candidates before response-ready arbitration, so
+    // neither this offer nor request acceptance depends on refill priority.
+    wire hit_coissue_offer=(HIT_RESPONSE_COISSUE!=0) && (HIT_BYPASS!=0) &&
+        (TAG_SRAM!=0) && !reset_i && core_req_valid && request_is_load &&
+        request_hit && request_data_ready && !resp_valid_reg && !local_fill_found;
+    wire hit_coissue_holds_slot=hit_coissue_offer && !dcache_resp_ready_i;
     wire load_can_accept = (request_hit ?
-                            (resp_slot_free && !waiter_load_ready_found &&
-                             !response_emits_load) :
+                            (resp_slot_free && (hit_coissue_offer ||
+                             (!waiter_load_ready_found && !response_emits_load))) :
                             (matching_found ?
                              ((matching_prefetch ||
                                (query_matching_mshr_store ?
@@ -768,15 +795,18 @@ module rv32_dcache_nonblocking #(
     end endgenerate
 
     assign core_req_ready = !reset_i && ((TAG_SRAM != 0) || !flush_i) &&
-                                (!request_dirty_victim || request_data_ready) &&
+                                (!(request_dirty_victim ||
+                                    ((WAY_PARALLEL_QUERY!=0) && (TAG_SRAM!=0) &&
+                                     request_is_load && request_hit)) || request_data_ready) &&
                                 !((refill_array_write || local_array_write) && request_needs_array) &&
                                 !(local_array_write && matching_found &&
                                   matching_index == local_fill_index) &&
                                 ((request_is_load && load_can_accept) ||
                                  (request_is_store && store_can_accept));
-    wire bypass_load_hit = (HIT_BYPASS != 0) && (TAG_SRAM != 0) && !reset_i && core_req_valid &&
-        request_is_load && request_hit && !resp_valid_reg &&
-        !waiter_load_ready_found && !response_emits_load;
+    wire bypass_load_hit = hit_coissue_offer ||
+        ((HIT_BYPASS != 0) && (TAG_SRAM != 0) && !reset_i && core_req_valid &&
+         request_is_load && request_hit && request_data_ready && !resp_valid_reg &&
+         !waiter_load_ready_found && !response_emits_load);
     assign dcache_resp_valid_o = resp_valid_reg || bypass_load_hit;
 
     localparam integer RESPONSE_TAG_WORDS=(TAG_WIDTH+15)/16;
@@ -869,7 +899,11 @@ module rv32_dcache_nonblocking #(
     assign mem_req_wmask_o = send_found && query_send_mshr_writeback ?
                              16'hffff : 16'd0;
     assign mem_req_id_o = send_found ? send_index : 8'd0;
-    assign mem_resp_ready_o = response_found && !response_needs_output;
+    assign mem_resp_ready_o = response_found && !response_needs_output &&
+        !(hit_coissue_holds_slot && response_emits_load);
+    // Demand refills and failed victim writebacks both own a load reply.
+    // A waiter must retain its ready row whenever either producer captures.
+    wire load_response_capture=mem_resp_valid_i && mem_resp_ready_o && response_emits_load;
 
 
 
@@ -1317,7 +1351,9 @@ module rv32_dcache_nonblocking #(
     localparam integer WAITER_META_WIDTH=TAG_WIDTH+38;
     localparam integer WAITER_EVENT_WIDTH=13+3*WAITER_SLOT_WIDTH;
     wire waiter_allocate_event=static_request_action==4'd5;
-    wire waiter_load_consume=resp_slot_free && waiter_load_ready_found && !demand_response_fire;
+    wire waiter_load_consume=resp_slot_free && waiter_load_ready_found &&
+        !((HIT_RESPONSE_COISSUE!=0)?load_response_capture:demand_response_fire) &&
+        !hit_coissue_holds_slot;
     wire waiter_store_consume=ack_slot_free && waiter_store_ready_found && !store_response_fire;
     wire [WAITER_EVENT_WIDTH*WAITER_DOMAINS-1:0] waiter_event_views;
     rv32_frequency_control_tree #(.WIDTH(WAITER_EVENT_WIDTH),.LEAVES(WAITER_DOMAINS)) waiter_event_tree (

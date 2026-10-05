@@ -9,7 +9,11 @@ module cpu_core #(
     parameter integer ICACHE_MSHR_STATE_BANKS = 0,
     parameter integer FRONTEND_QUEUE_PAYLOAD_BANKS = 0,
     parameter integer FRONTEND_RESPONSE_BYPASS = 0,
+    parameter integer FRONTEND_RESPONSE_LOCAL_PC = 0,
+    parameter integer FRONTEND_PARALLEL_BUNDLE_CONTROL = 0,
     parameter integer DCACHE_LOCAL_SRAM_COMMANDS = 0,
+    parameter integer DCACHE_WAY_PARALLEL_QUERY = 0,
+    parameter integer DCACHE_HIT_RESPONSE_COISSUE = 0,
     parameter integer FE_WIDTH = `RV32IM_FE_WIDTH_DEFAULT,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
@@ -22,8 +26,10 @@ module cpu_core #(
     parameter integer LOAD_WAKE_BYPASS = 0,
     parameter integer ALLOC_LOAD_SELECTION_BYPASS = 0,
     parameter integer LSQ_RECLAIM_WIDTH = 1,
+    parameter integer LSQ_EMPTY_SELECTION_BYPASS = 0,
     parameter integer EARLY_FRONT_REDIRECT = 0,
     parameter integer RECOVERY_PREVIEW_OLDER_ISSUE = 0,
+    parameter integer RECOVERY_APPLY_OLDER_ISSUE = 0,
     parameter integer DISPATCH_ELASTIC = 0,
     parameter integer DISPATCH_FULL_REPLACE = 0,
     parameter integer EARLY_STORE_ADDRESS = 0,
@@ -75,6 +81,7 @@ module cpu_core #(
     parameter integer ENABLE_PREDICTOR = 1,
     parameter integer PREDICTOR_DIRECT_BRANCH_TARGET = 0,
     parameter integer PREDICTOR_HISTORY_BITS = 6,
+    parameter integer PREDICTOR_HYBRID_DIRECTION = 0,
     parameter integer PREDICTOR_COMPACT_TARGET = 0,
     parameter integer PREDICTOR_COMPACT_BTB = 0,
     parameter integer PREDICTOR_COMPACT_BTB_ENTRIES = 64,
@@ -171,6 +178,7 @@ module cpu_core #(
     wire [EPOCH_WIDTH-1:0] if_req_epoch;
     wire if_resp_valid, if_resp_ready, if_resp_error;
     wire [31:0] if_resp_pc, if_resp_line_addr;
+    wire [31:0] response_base_pc;
     wire [127:0] if_resp_line_data;
     wire [EPOCH_WIDTH-1:0] if_resp_epoch;
     wire [FE_WIDTH-1:0] fetch_valid, fetch_ready;
@@ -240,9 +248,9 @@ module cpu_core #(
     generate
         if (ENABLE_PREDICTOR != 0) begin : g_banked_predictor
             rv32_banked_predictor #(.FE_WIDTH(FE_WIDTH), .DIRECT_BRANCH_TARGET(PREDICTOR_DIRECT_BRANCH_TARGET),
-                .FEEDBACK_LANES(BE_WIDTH), .MULTI_FEEDBACK(PREDICTOR_MULTI_FEEDBACK && !SERIAL_BACKEND), .COMPACT_INDIRECT_BTB(PREDICTOR_COMPACT_BTB), .COMPACT_BTB_ENTRIES(PREDICTOR_COMPACT_BTB_ENTRIES), .HISTORY_BITS(PREDICTOR_HISTORY_BITS), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) predictor (
+                .FEEDBACK_LANES(BE_WIDTH), .MULTI_FEEDBACK(PREDICTOR_MULTI_FEEDBACK && !SERIAL_BACKEND), .COMPACT_INDIRECT_BTB(PREDICTOR_COMPACT_BTB), .COMPACT_BTB_ENTRIES(PREDICTOR_COMPACT_BTB_ENTRIES), .HISTORY_BITS(PREDICTOR_HISTORY_BITS), .HYBRID_DIRECTION(PREDICTOR_HYBRID_DIRECTION && !SERIAL_BACKEND), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) predictor (
                 .clk_i(clk), .reset_i(reset), .query_valid_i(if_resp_valid),
-                .query_pc_i(if_resp_pc), .query_line_i(if_resp_line_data),
+                .query_pc_i(response_base_pc), .query_line_i(if_resp_line_data),
                 .query_accept_i(if_resp_valid && if_resp_ready && !if_resp_error &&
                     !redirect_domains[1] && !halted && !error),
                 .effective_pred_taken_i(pred_taken_bus),
@@ -277,14 +285,14 @@ module cpu_core #(
         for (predictor_lane = 0; predictor_lane < FE_WIDTH;
              predictor_lane = predictor_lane + 1) begin : g_predictor
             wire [2:0] query_word_index =
-                {1'b0, if_resp_pc[3:2]} + predictor_lane;
+                {1'b0, response_base_pc[3:2]} + predictor_lane;
             wire query_valid = if_resp_valid && (query_word_index < 3'd4);
             wire [31:0] query_inst;
             rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_query (
                 .rows_i(if_resp_line_data),.index_i(query_word_index),.value_o(query_inst));
             assign ras_query_words[predictor_lane*32 +: 32]=query_inst;
             // Independent constant add replaces selected PC then PC+4.
-            assign ras_return_addresses[predictor_lane*32 +: 32]=if_resp_pc+((predictor_lane+1)*32'd4);
+            assign ras_return_addresses[predictor_lane*32 +: 32]=response_base_pc+((predictor_lane+1)*32'd4);
             wire query_is_return = (query_inst[6:0] == 7'b1100111) &&
                                    (query_inst[14:12] == 3'b000) &&
                                    (query_inst[11:7] == 5'd0) &&
@@ -316,7 +324,7 @@ module cpu_core #(
         ras_inst = 32'd0;
         if ((ENABLE_PREDICTOR != 0) && if_resp_valid && if_resp_ready) begin
             for (ras_lane = 0; ras_lane < FE_WIDTH; ras_lane = ras_lane + 1) begin
-                ras_word_index = if_resp_pc[3:2] + ras_lane;
+                ras_word_index = response_base_pc[3:2] + ras_lane;
                 if (!ras_event_found && (ras_word_index < 4)) begin
                     ras_inst = ras_query_words[ras_lane*32 +: 32];
                     if (((ras_inst[6:0] == 7'b1101111) ||
@@ -372,13 +380,16 @@ module cpu_core #(
     end
 
     rv32_fetch_frontend #(.QUEUE_PAYLOAD_BANKS(FRONTEND_QUEUE_PAYLOAD_BANKS), .FE_WIDTH(FE_WIDTH), .FQ_DEPTH(FETCH_QUEUE_DEPTH), .NARROW_OCCUPANCY(FRONTEND_NARROW_OCCUPANCY),
-        .RESPONSE_BYPASS(FRONTEND_RESPONSE_BYPASS && (DECODE_PIPELINE!=0) && !SERIAL_BACKEND), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) frontend (
+        .RESPONSE_BYPASS(FRONTEND_RESPONSE_BYPASS && (DECODE_PIPELINE!=0) && !SERIAL_BACKEND),
+        .PARALLEL_BUNDLE_CONTROL(FRONTEND_PARALLEL_BUNDLE_CONTROL),
+        .RESPONSE_LOCAL_PC(FRONTEND_RESPONSE_LOCAL_PC && (ENABLE_CACHES!=0) &&
+            (ICACHE_MSHRS>1) && (ICACHE_COMBINATIONAL_HIT==0) && !SERIAL_BACKEND), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) frontend (
         .clk_i(clk), .reset_i(reset), .redirect_valid_i(redirect_domains[0]),
         .redirect_pc_i(redirect_pc), .redirect_epoch_i(redirect_epoch),
         .stop_i(halted), .error_i(error), .if_req_valid_o(if_req_valid),
         .if_req_ready_i(if_req_ready), .if_req_pc_o(if_req_pc),
         .if_req_epoch_o(if_req_epoch), .if_resp_valid_i(if_resp_valid),
-        .if_resp_ready_o(if_resp_ready), .if_resp_pc_i(if_resp_pc),
+        .if_resp_ready_o(if_resp_ready), .if_resp_pc_i(if_resp_pc), .response_base_pc_o(response_base_pc),
         .if_resp_line_addr_i(if_resp_line_addr), .if_resp_line_data_i(if_resp_line_data),
         .if_resp_epoch_i(if_resp_epoch), .if_resp_error_i(if_resp_error),
         .if_resp_pred_taken_i(pred_taken_bus), .if_resp_pred_target_i(pred_target_bus),
@@ -572,7 +583,7 @@ module cpu_core #(
     end
 
     if (DCACHE_MSHRS > 1) begin : g_nonblocking_dcache
-    rv32_dcache_nonblocking #(.WORD_RESPONSE((DCACHE_WORD_RESPONSE!=0) && (SERIAL_BACKEND==0)), .HIT_BYPASS(1), .LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), 
+    rv32_dcache_nonblocking #(.WORD_RESPONSE((DCACHE_WORD_RESPONSE!=0) && (SERIAL_BACKEND==0)), .HIT_BYPASS(1), .LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), .WAY_PARALLEL_QUERY(DCACHE_WAY_PARALLEL_QUERY), .HIT_RESPONSE_COISSUE(DCACHE_HIT_RESPONSE_COISSUE), 
         .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS),
         .CACHE_LINES(DCACHE_LINES), .CACHE_WAYS(DCACHE_WAYS),
         .INDEX_HASH(DCACHE_INDEX_HASH), .STORE_MERGE_DELAY(DCACHE_STORE_MERGE_DELAY),
@@ -930,7 +941,7 @@ module cpu_core #(
     assign perf_branch_pending = 1'b0;
     assign perf_mdu_busy = 1'b0;
     end else begin : g_ooo_backend
-    rv32_backend_joint #(.LSQ_RESPONSE_QUERY_PREDECODE(1), .STORE_ALLOC_EARLY_ADDRESS(2), .LSQ_ROB_QUERY_PREDECODE(1), .STORE_ALLOC_IMM12(1), .RS_PHYSICAL_WAKEUP(1), .DISPATCH_PIPELINE(1), .DISPATCH_ELASTIC(DISPATCH_ELASTIC), .DISPATCH_FULL_REPLACE(DISPATCH_FULL_REPLACE), .ISSUE_PIPELINE(ISSUE_PIPELINE), .LOCAL_EXEC_RECOVERY(1), .BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_LOAD_ADDRESS(EARLY_LOAD_ADDRESS), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(LOAD_WAKE_BYPASS), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .LSQ_RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .EARLY_FRONT_REDIRECT(EARLY_FRONT_REDIRECT), .RECOVERY_PREVIEW_OLDER_ISSUE(RECOVERY_PREVIEW_OLDER_ISSUE), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .STORE_ALLOC_EARLY_DATA(STORE_ALLOC_EARLY_DATA), .RS_ISSUE_METADATA(RS_ISSUE_METADATA), .RS_WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .RS_ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .RS_AGE_WIDTH(RS_AGE_WIDTH), .PRF_READ_MUX_IMPL(PRF_READ_MUX_IMPL), .RAT_READ_BYPASS(RAT_READ_BYPASS), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .ROB_COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ROB_ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .ROB_MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .ROB_LEGACY_HALT_PAYLOAD(LEGACY_SENTINEL_HALT), .ROB_RETURN_VALUE_ENABLE(RETURN_VALUE_ENABLE), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
+    rv32_backend_joint #(.LSQ_RESPONSE_QUERY_PREDECODE(1), .STORE_ALLOC_EARLY_ADDRESS(2), .LSQ_ROB_QUERY_PREDECODE(1), .STORE_ALLOC_IMM12(1), .RS_PHYSICAL_WAKEUP(1), .DISPATCH_PIPELINE(1), .DISPATCH_ELASTIC(DISPATCH_ELASTIC), .DISPATCH_FULL_REPLACE(DISPATCH_FULL_REPLACE), .ISSUE_PIPELINE(ISSUE_PIPELINE), .LOCAL_EXEC_RECOVERY(1), .BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_LOAD_ADDRESS(EARLY_LOAD_ADDRESS), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(LOAD_WAKE_BYPASS), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .LSQ_RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .LSQ_EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .EARLY_FRONT_REDIRECT(EARLY_FRONT_REDIRECT), .RECOVERY_PREVIEW_OLDER_ISSUE(RECOVERY_PREVIEW_OLDER_ISSUE), .RECOVERY_APPLY_OLDER_ISSUE(RECOVERY_APPLY_OLDER_ISSUE), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .STORE_ALLOC_EARLY_DATA(STORE_ALLOC_EARLY_DATA), .RS_ISSUE_METADATA(RS_ISSUE_METADATA), .RS_WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .RS_ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .RS_AGE_WIDTH(RS_AGE_WIDTH), .PRF_READ_MUX_IMPL(PRF_READ_MUX_IMPL), .RAT_READ_BYPASS(RAT_READ_BYPASS), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .ROB_COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ROB_ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .ROB_MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .ROB_LEGACY_HALT_PAYLOAD(LEGACY_SENTINEL_HALT), .ROB_RETURN_VALUE_ENABLE(RETURN_VALUE_ENABLE), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),

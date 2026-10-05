@@ -20,6 +20,9 @@ module rv32_lsq #(
     parameter integer LOAD_COMPLETION_BYPASS = 0,
     parameter integer LOAD_WAKE_BYPASS = 0,
     parameter integer ALLOC_LOAD_SELECTION_BYPASS = 0,
+    // 0: registered selection; 1: empty fallthrough with AGU lookthrough;
+    // 2: empty fallthrough from registered addresses only (shorter timing path).
+    parameter integer EMPTY_SELECTION_BYPASS = 0,
     parameter integer RECLAIM_WIDTH = 1,
     // Decode each saved byte offset before late response-row selection and
     // route query payload from the original complete response match events.
@@ -472,13 +475,15 @@ module rv32_lsq #(
     // Only an already allocated load can use its current full-tag-matched
     // AGU update in request selection. Older store hazards continue to use
     // their saved address/data/mask, so unknown stores remain blocking.
-    // Selection is still registered: this folds address ownership and
-    // selection capture into one edge without a bypass to the D-cache.
+    // Modes0/1 retain the live AGU address view. Mode2 deliberately uses
+    // only saved addresses: an unknown-address load waits for its original
+    // address owner, then can fall through an empty selection slot. This cuts
+    // AGU data out of request eligibility, oldest selection and SRAM address.
     wire [31:0] request_addr [0:LSQ_ENTRIES-1];
     wire request_addr_ready [0:LSQ_ENTRIES-1];
     genvar address_row,address_lane,address_word;
     generate for(address_row=0;address_row<LSQ_ENTRIES;address_row=address_row+1) begin:g_load_address_lookthrough
-        if(LOAD_ADDRESS_LOOKTHROUGH!=0 && REQUEST_PIPELINE!=0) begin:g_enabled
+        if(LOAD_ADDRESS_LOOKTHROUGH!=0 && REQUEST_PIPELINE!=0 && EMPTY_SELECTION_BYPASS!=2) begin:g_enabled
             wire [BE_WIDTH-1:0] load_address_matches;
             for(address_lane=0;address_lane<BE_WIDTH;address_lane=address_lane+1) begin:g_match
                 assign load_address_matches[address_lane]=!reset_i && !flush_i && !recovery_valid_i &&
@@ -582,36 +587,71 @@ module rv32_lsq #(
         selection_lsq_tag[3+SLOT_WIDTH +: GENERATION_WIDTH]==selection_row_generation &&
         !selection_row_sent && !selection_row_complete && !selection_row_wait;
     wire selection_discard=selection_valid && !selection_live;
-    wire [SLOT_WIDTH-1:0] selected_slot=(REQUEST_PIPELINE!=0)?selection_slot:pick_slot[1];
-    wire [31:0] selected_addr=(REQUEST_PIPELINE!=0)?selection_addr:pick_addr[1];
+    localparam integer SELECTION_PAYLOAD_WIDTH=SLOT_WIDTH+TAG_WIDTH+ROB_TAG_WIDTH+72;
+    localparam integer VISIBLE_SELECTION_WORDS=(SELECTION_PAYLOAD_WIDTH+15)/16;
+    wire [SELECTION_PAYLOAD_WIDTH-1:0] visible_selection_packet;
+    wire [SELECTION_PAYLOAD_WIDTH-1:0] held_selection_packet={
+        selection_slot,selection_lsq_tag,selection_rob_tag,selection_addr,
+        selection_load,selection_size,selection_unsigned,selection_store_mask,selection_store_data};
+    wire [GENERATION_WIDTH-1:0] direct_row_generation;
+    wire direct_row_valid,direct_row_sent,direct_row_complete,direct_row_wait,
+        direct_row_store,direct_row_commit,direct_row_load,direct_row_retired;
+    rv32_frequency_array_read #(.WIDTH(SELECT_STATE_WIDTH),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) direct_selection_state_read (
+        .rows_i(selection_state_rows),.index_i(pick_slot[1]),
+        .value_o({direct_row_generation,direct_row_valid,direct_row_sent,direct_row_complete,direct_row_wait,
+                  direct_row_store,direct_row_commit,direct_row_load,direct_row_retired}));
+    // Offer only a live, already allocated LOAD from the original oldest
+    // eligible tournament. Unknown-store and byte-overlap guards are unchanged.
+    // A held ticket retains priority; stores and newly allocated rows still
+    // cross their original selection edge. This decision never uses ready.
+    wire selection_direct_bypass=(EMPTY_SELECTION_BYPASS!=0) && (REQUEST_PIPELINE!=0) &&
+        !reset_i && !flush_i && !recovery_valid_i && !selection_valid && pick_valid[1] && pick_load &&
+        direct_row_valid && direct_row_load && !direct_row_store &&
+        !direct_row_sent && !direct_row_complete && !direct_row_wait &&
+        pick_generation==direct_row_generation;
+    generate if(REQUEST_PIPELINE!=0) begin:g_visible_selection
+        wire [VISIBLE_SELECTION_WORDS-1:0] direct_views;
+        rv32_frequency_control_tree #(.LEAVES(VISIBLE_SELECTION_WORDS)) direct_tree (
+            .signal_i(selection_direct_bypass),.views_o(direct_views));
+        for(genvar selection_word=0;selection_word<VISIBLE_SELECTION_WORDS;selection_word=selection_word+1) begin:g_word
+            localparam integer LOW=selection_word*16;
+            localparam integer BITS=(SELECTION_PAYLOAD_WIDTH-LOW>=16)?16:SELECTION_PAYLOAD_WIDTH-LOW;
+            assign visible_selection_packet[LOW +: BITS]=direct_views[selection_word]?
+                normal_selection_packet[LOW +: BITS]:held_selection_packet[LOW +: BITS];
+        end
+    end else begin:g_unregistered_selection
+        assign visible_selection_packet=normal_selection_packet;
+    end endgenerate
+    wire [SLOT_WIDTH-1:0] selected_slot;
+    wire [31:0] selected_addr;
+    wire [1:0] selected_size;
+    wire selected_unsigned,selected_load;
+    wire [3:0] selected_store_mask;
+    wire [31:0] selected_store_data;
+    wire [ROB_TAG_WIDTH-1:0] selected_rob_tag;
+    wire [TAG_WIDTH-1:0] selected_lsq_tag;
+    assign {selected_slot,selected_lsq_tag,selected_rob_tag,selected_addr,
+            selected_load,selected_size,selected_unsigned,selected_store_mask,selected_store_data}=visible_selection_packet;
     wire [SLOT_WIDTH-1:0] selected_age=selected_slot-head_query_views[LSQ_ENTRIES*SLOT_WIDTH +: SLOT_WIDTH];
     localparam integer FORWARD_ORDER_WIDTH=SLOT_WIDTH+1;
     wire [LSQ_ENTRIES*FORWARD_ORDER_WIDTH-1:0] selected_order_views;
     wire selected_wrap=selected_slot<head_query_views[LSQ_ENTRIES*SLOT_WIDTH +: SLOT_WIDTH];
     rv32_frequency_control_tree #(.WIDTH(FORWARD_ORDER_WIDTH),.LEAVES(LSQ_ENTRIES)) selected_order_tree (
         .signal_i({selected_wrap,selected_slot}),.views_o(selected_order_views));
-    wire [1:0] selected_size=(REQUEST_PIPELINE!=0)?selection_size:pick_size;
     // A forwarding row consumes its own address + decoded byte-mask view.
     // Raw selection FFs no longer drive every row's overlap/data formatter.
     localparam integer FORWARD_QUERY_WIDTH=36;
     wire [LSQ_ENTRIES*FORWARD_QUERY_WIDTH-1:0] forward_query_views;
     rv32_frequency_control_tree #(.WIDTH(FORWARD_QUERY_WIDTH),.LEAVES(LSQ_ENTRIES)) forward_query_tree (
         .signal_i({selected_addr,access_mask(selected_size)}),.views_o(forward_query_views));
-    wire selected_unsigned=(REQUEST_PIPELINE!=0)?selection_unsigned:pick_unsigned;
-    wire selected_load=(REQUEST_PIPELINE!=0)?selection_load:pick_load;
-    wire [3:0] selected_store_mask=(REQUEST_PIPELINE!=0)?selection_store_mask:pick_store_mask;
-    wire [31:0] selected_store_data=(REQUEST_PIPELINE!=0)?selection_store_data:pick_store_data;
-    wire [ROB_TAG_WIDTH-1:0] selected_rob_tag=(REQUEST_PIPELINE!=0)?selection_rob_tag:pick_rob_tag;
-    wire [TAG_WIDTH-1:0] selected_lsq_tag=(REQUEST_PIPELINE!=0)?selection_lsq_tag:
-        make_lsq_tag(pick_slot[1],pick_generation);
-    wire selection_done=selection_live && (request_fire ||
-        (selection_load && candidate_found && ((fwd_mask & target_mask)==target_mask)));
+    wire selection_done=(selection_live || selection_direct_bypass) && (request_fire ||
+        (selected_load && candidate_found && ((fwd_mask & target_mask)==target_mask)));
+    wire direct_selection_done=selection_direct_bypass && selection_done;
     // The existing candidate retains priority. A newly allocated ready
     // load may fill an otherwise unused selection on its allocation edge.
     // Unresolved stores still block this shortcut. Fully resolved stores,
     // including earlier accepted lanes, use the existing next-cycle youngest
     // byte forwarding/hazard machinery after full LSQ row ownership exists.
-    localparam integer SELECTION_PAYLOAD_WIDTH=SLOT_WIDTH+TAG_WIDTH+ROB_TAG_WIDTH+72;
     wire [LSQ_ENTRIES-1:0] allocation_unresolved_stores;
     wire [BE_WIDTH-1:0] allocation_prior_unresolved_store,allocation_load_match,allocation_load_grant;
     wire [BE_WIDTH*SELECTION_PAYLOAD_WIDTH-1:0] allocation_load_values;
@@ -651,7 +691,7 @@ module rv32_lsq #(
         .write_o(allocation_load_found),.value_o(allocation_load_packet));
     wire selection_input_fire=(REQUEST_PIPELINE!=0) && !reset_i && !flush_i && !recovery_valid_i &&
         (!selection_valid || selection_discard || selection_done) &&
-        (pick_valid[1] || allocation_load_found);
+        (pick_valid[1] || allocation_load_found) && !direct_selection_done;
     wire [SELECTION_PAYLOAD_WIDTH-1:0] normal_selection_packet={
         pick_slot[1],make_lsq_tag(pick_slot[1],pick_generation),pick_rob_tag,
         pick_addr[1],pick_load,pick_size,pick_unsigned,pick_store_mask,pick_store_data};
@@ -685,8 +725,12 @@ module rv32_lsq #(
         end else begin
             if(selection_input_fire) selection_valid<=1;
             else if(selection_done || selection_discard) selection_valid<=0;
-            if(selection_input_fire || selection_done || selection_discard) forwarding_hold_valid<=0;
+            // A first bypass offer that stalls captures the ticket AND its
+            // exact forwarded bytes on this edge. They then own the held offer.
+            // Consumed/discarded tickets still clear any obsolete byte snapshot.
+            if(selection_done || selection_discard) forwarding_hold_valid<=0;
             else if(forwarding_hold_write) forwarding_hold_valid<=1;
+            else if(selection_input_fire) forwarding_hold_valid<=0;
         end
     end
 
@@ -888,7 +932,7 @@ module rv32_lsq #(
         commit_slot_select=commit_slot_found?commit_slot_tree[1]:0;
 
         // The eligibility bits above feed the balanced oldest-first tree.
-        candidate_found = (REQUEST_PIPELINE!=0)?selection_live:pick_valid[1];
+        candidate_found = (REQUEST_PIPELINE!=0)?(selection_live || selection_direct_bypass):pick_valid[1];
         candidate = candidate_found ? selected_slot : 0;
         candidate_age = candidate_found ? selected_age : LSQ_ENTRIES + 1;
 

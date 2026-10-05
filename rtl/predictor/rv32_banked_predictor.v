@@ -12,6 +12,7 @@ module rv32_banked_predictor #(
     parameter integer COMPACT_INDIRECT_BTB = 0,
     parameter integer COMPACT_BTB_ENTRIES = 64,
     parameter integer FEEDBACK_LANES = 1, MULTI_FEEDBACK = 0,
+    parameter integer HYBRID_DIRECTION = 0,
     parameter integer HISTORY_BITS = 6
 ) (
     input wire clk_i, reset_i,
@@ -47,12 +48,15 @@ module rv32_banked_predictor #(
     wire [1:0] base_bank = query_pc_i[3:2] & BANK_MASK;
     wire [1:0] feedback_bank = feedback_pc_i[3:2] & BANK_MASK;
     localparam integer MULTI_ACTIVE=(MULTI_FEEDBACK!=0) && (DIRECT_BRANCH_TARGET!=0);
+    localparam integer HYBRID_ACTIVE=(HYBRID_DIRECTION!=0) &&
+        (DIRECT_BRANCH_TARGET==2) && (HISTORY_BITS<=6);
     wire [FE_WIDTH-1:0] bank_feedback_valid,bank_feedback_correct;
     wire [FE_WIDTH-1:0] bank_taken, bank_hit;
     wire [FE_WIDTH*32-1:0] bank_target;
     wire [FE_WIDTH*2-1:0] bank_kind, bank_counter;
     wire [FE_WIDTH*8-1:0] bank_training_index;
-    wire [FE_WIDTH*38-1:0] bank_query_packets;
+    wire [FE_WIDTH*40-1:0] bank_query_packets;
+    wire [FE_WIDTH*2-1:0] bank_component_directions,lane_component_directions;
     reg [7:0] global_history;
     reg [7:0] history_after_bundle;
     reg history_prefix_live;
@@ -86,16 +90,18 @@ module rv32_banked_predictor #(
             wire [31:0] update_pc,update_target,update_pred_target;
             wire [1:0] update_kind;
             wire [7:0] update_training_index;
+            wire [1:0] update_component_directions;
             if(MULTI_ACTIVE) begin:g_parallel_feedback
                 wire [FEEDBACK_LANES-1:0] candidates,grants;
-                wire [107:0] packet;
-                wire [FEEDBACK_LANES*108-1:0] packets;
+                wire [109:0] packet;
+                wire [FEEDBACK_LANES*110-1:0] packets;
                 for(genvar feedback_lane=0;feedback_lane<FEEDBACK_LANES;feedback_lane=feedback_lane+1) begin:g_lane
                     wire [31:0] lane_pc=feedback_lane_packets_i[feedback_lane*100+68 +: 32];
                     // This exact prediction-time index belongs to this lane,
                     // including when two branches resolve in distinct banks.
                     // Mode1 never consumes it and retains PC-indexed training.
-                    assign packets[feedback_lane*108 +: 108]={
+                    assign packets[feedback_lane*110 +: 110]={
+                        ((HYBRID_ACTIVE!=0)?feedback_lane_metadata_i[feedback_lane*16+14 +: 2]:2'b00),
                         feedback_lane_metadata_i[feedback_lane*16 +: 8],
                         feedback_lane_packets_i[feedback_lane*100 +: 100]};
                     assign candidates[feedback_lane]=feedback_lane_valid_i[feedback_lane] &&
@@ -109,10 +115,10 @@ module rv32_banked_predictor #(
                 end
                 // Each existing table bank still has exactly one update.
                 // Different banks accept different resolved lanes together.
-                rv32_frequency_event_select #(.WIDTH(108),.EVENTS(FEEDBACK_LANES),.PRIORITY(0)) feedback_selector (
+                rv32_frequency_event_select #(.WIDTH(110),.EVENTS(FEEDBACK_LANES),.PRIORITY(0)) feedback_selector (
                     .events_i(grants),.values_i(packets),
                     .write_o(update_valid),.value_o(packet));
-                assign {update_training_index,update_pc,update_kind,update_taken,update_target,
+                assign {update_component_directions,update_training_index,update_pc,update_kind,update_taken,update_target,
                     update_pred_taken,update_pred_target}=packet;
             end else begin:g_single_feedback
                 assign update_valid=feedback_valid_i && feedback_bank==BANK_NUMBER;
@@ -123,16 +129,17 @@ module rv32_banked_predictor #(
                 assign update_pred_taken=feedback_pred_taken_i;
                 assign update_pred_target=feedback_pred_target_i;
                 assign update_training_index=feedback_metadata_i[7:0];
+                assign update_component_directions=(HYBRID_ACTIVE!=0)?feedback_metadata_i[15:14]:2'b00;
             end
             assign bank_feedback_valid[bank]=update_valid;
             assign bank_feedback_correct[bank]=update_valid && update_pred_taken==update_taken &&
                 (!update_taken || update_pred_target==update_target);
             rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_query (
                 .rows_i(query_line_i),.index_i(word_index),.value_o(inst));
-            assign bank_query_packets[bank*38 +: 38]={bank_taken[bank],bank_hit[bank],
+            assign bank_query_packets[bank*40 +: 40]={bank_component_directions[bank*2 +: 2],bank_taken[bank],bank_hit[bank],
                 bank_target[bank*32 +: 32],bank_kind[bank*2 +: 2],bank_counter[bank*2 +: 2]};
             rv32_branch_predictor #(.BANK_BITS(BANK_BITS), .DIRECT_BRANCH_TARGET(DIRECT_BRANCH_TARGET),
-                .HISTORY_BITS(HISTORY_BITS), .COMPACT_INDIRECT_BTB(COMPACT_INDIRECT_BTB), .COMPACT_BTB_ENTRIES(COMPACT_BTB_ENTRIES)) predictor (
+                .HISTORY_BITS(HISTORY_BITS), .HYBRID_DIRECTION(HYBRID_DIRECTION), .COMPACT_INDIRECT_BTB(COMPACT_INDIRECT_BTB), .COMPACT_BTB_ENTRIES(COMPACT_BTB_ENTRIES)) predictor (
                 .clk_i(clk_i), .reset_i(reset_i),
                 .query_valid_i(query_valid_i && word_index < 3'd4),
                 .query_pc_i(pc), .query_inst_i(inst),
@@ -142,6 +149,7 @@ module rv32_banked_predictor #(
                 .pred_target_o(bank_target[bank*32 +: 32]),
                 .pred_kind_o(bank_kind[bank*2 +: 2]),
                 .pred_counter_o(bank_counter[bank*2 +: 2]),
+                .pred_component_directions_o(bank_component_directions[bank*2 +: 2]),
                 .pred_bht_index_o(), .pred_btb_index_o(),
                 .feedback_valid_i(update_valid),
                 .feedback_pc_i(update_pc), .feedback_kind_i(update_kind),
@@ -149,6 +157,7 @@ module rv32_banked_predictor #(
                 .feedback_pred_taken_i(update_pred_taken),
                 .feedback_pred_target_i(update_pred_target),
                 .feedback_training_index_i(update_training_index),
+                .feedback_component_directions_i(update_component_directions),
                 .prediction_count_o(), .correct_count_o()
             );
         end
@@ -156,10 +165,10 @@ module rv32_banked_predictor #(
             localparam [1:0] LANE_OFFSET = lane;
             wire [1:0] select_bank = (base_bank + LANE_OFFSET) & BANK_MASK;
             wire [31:0] pc = query_pc_i + (lane * 32'd4);
-            wire [37:0] selected_prediction;
-            rv32_frequency_array_read #(.WIDTH(38),.ENTRIES(FE_WIDTH),.INDEX_WIDTH(2)) bank_query (
+            wire [39:0] selected_prediction;
+            rv32_frequency_array_read #(.WIDTH(40),.ENTRIES(FE_WIDTH),.INDEX_WIDTH(2)) bank_query (
                 .rows_i(bank_query_packets),.index_i(select_bank),.value_o(selected_prediction));
-            assign {pred_taken_o[lane],pred_btb_hit_o[lane],pred_target_o[lane*32 +: 32],
+            assign {lane_component_directions[lane*2 +: 2],pred_taken_o[lane],pred_btb_hit_o[lane],pred_target_o[lane*32 +: 32],
                 pred_kind_o[lane*2 +: 2],pred_counter_o[lane*2 +: 2]}=selected_prediction;
             assign pred_bht_index_o[lane*6 +: 6] = pc[7:2];
             assign pred_btb_index_o[lane*4 +: 4] = pc[5:2];
@@ -179,6 +188,12 @@ module rv32_banked_predictor #(
                     pred_metadata_o[history_lane*16 +: 16] = {
                         history_after_bundle,
                         bank_training_index[((base_bank+history_lane)&BANK_MASK)*8 +: 8]};
+                // Keep the exact low history checkpoint and global-table
+                // query index. The two spare high bits carry both raw fetch
+                // directions for resolution-time preference training.
+                if (HYBRID_ACTIVE)
+                    pred_metadata_o[history_lane*16+14 +: 2]=
+                        lane_component_directions[history_lane*2 +: 2];
                 if (pred_kind_o[history_lane*2 +: 2] == `RV32IM_PRED_BRANCH)
                     history_after_bundle = ((history_after_bundle << 1) |
                         {7'b0, pred_taken_o[history_lane]}) & HISTORY_MASK;

@@ -16,6 +16,8 @@ module rv32_fetch_frontend #(
     parameter integer QUEUE_PAYLOAD_BANKS = 0,
     parameter integer COMPACT_PRED_TARGET = 0,
     parameter integer RESPONSE_BYPASS = 0,
+    parameter integer RESPONSE_LOCAL_PC = 0,
+    parameter integer PARALLEL_BUNDLE_CONTROL = 0,
     parameter integer PREDICTOR_META = 0
 ) (
     input  wire                         clk_i,
@@ -34,6 +36,7 @@ module rv32_fetch_frontend #(
     input  wire                         if_resp_valid_i,
     output wire                         if_resp_ready_o,
     input  wire [31:0]                  if_resp_pc_i,
+    output wire [31:0]                  response_base_pc_o,
     input  wire [31:0]                  if_resp_line_addr_i,
     input  wire [127:0]                 if_resp_line_data_i,
     input  wire [EPOCH_WIDTH-1:0]       if_resp_epoch_i,
@@ -58,6 +61,11 @@ module rv32_fetch_frontend #(
     localparam integer PTR_WIDTH = (FQ_DEPTH <= 2) ? 1 : $clog2(FQ_DEPTH);
 
     wire [31:0] pc_reg;
+    // One pending request: pc_reg stays at its offered/accepted PC until its
+    // response is consumed. On a chained edge, the same next_pc writes this
+    // owner and is offered to the next request. No extra pending-PC state.
+    wire [31:0] response_base_pc=(RESPONSE_LOCAL_PC!=0)?pc_reg:if_resp_pc_i;
+    assign response_base_pc_o=response_base_pc;
     wire [EPOCH_WIDTH-1:0] epoch_reg;
     reg req_pending_reg;
     reg frozen_reg;
@@ -109,9 +117,14 @@ module rv32_fetch_frontend #(
     // Payload may be written on an invalidating edge: occupancy discards
     // those rows. Architectural response acceptance remains redirect-qualified.
     wire payload_response_write = if_resp_valid_i && response_live && queue_space;
-    wire queue_space = (count_reg + bundle_count <= FQ_DEPTH);
+    wire parallel_queue_space;
+    wire queue_space = (PARALLEL_BUNDLE_CONTROL!=0) ? parallel_queue_space :
+        (count_reg + bundle_count <= FQ_DEPTH);
+    wire response_identity_live=(RESPONSE_LOCAL_PC==0) ||
+        (req_pending_reg && if_resp_pc_i==pc_reg);
     wire response_live = (if_resp_epoch_i == epoch_reg) &&
-                         (if_resp_line_addr_i == {if_resp_pc_i[31:4], 4'b0000});
+                         (if_resp_line_addr_i == {if_resp_pc_i[31:4], 4'b0000}) &&
+                         response_identity_live;
     // Legal FQ_DEPTH>=FE_WIDTH and bundle_count<=FE_WIDTH guarantee space
     // when empty. Do not put the full bundle count/space adder on the bypass
     // valid path; this predicate still implies original response acceptance.
@@ -213,7 +226,7 @@ module rv32_fetch_frontend #(
     wire [FE_WIDTH-1:0] next_pc_classes;
     wire [FE_WIDTH*32-1:0] next_pc_values;
     wire [FE_WIDTH*32-1:0] response_words;
-    wire [31:0] default_next_pc=if_resp_pc_i+32'd4;
+    wire [31:0] default_next_pc=response_base_pc+32'd4;
     genvar response_lane,response_half,public_lane,bypass_lane;
     generate
         for(bypass_lane=0;bypass_lane<FE_WIDTH;bypass_lane=bypass_lane+1) begin:g_bypass_prefix
@@ -225,15 +238,13 @@ module rv32_fetch_frontend #(
                     !((LEGACY_SENTINEL_HALT!=0) &&
                       response_words[(bypass_lane-1)*32 +: 32]==32'h0ff00513);
             end
-            wire [2:0] word_number={1'b0,if_resp_pc_i[3:2]}+3'(bypass_lane);
+            wire [2:0] word_number={1'b0,response_base_pc[3:2]}+3'(bypass_lane);
             assign bypass_lane_valid[bypass_lane]=response_bypass && bypass_prefix[bypass_lane] &&
                 word_number<3'd4;
         end
         for(response_lane=0;response_lane<FE_WIDTH;response_lane=response_lane+1) begin:g_response_lane
-            wire [2:0] index={1'b0,if_resp_pc_i[3:2]}+response_lane;
-            wire [1:0] predicted_views;
-            wire [31:0] sequential_pc=if_resp_pc_i+((response_lane+1)*32'd4);
-            assign bundle_pc[response_lane*32 +: 32]=if_resp_pc_i+(response_lane*32'd4);
+            wire [2:0] index={1'b0,response_base_pc[3:2]}+response_lane;
+            assign bundle_pc[response_lane*32 +: 32]=response_base_pc+(response_lane*32'd4);
             assign bundle_inst[response_lane*32 +: 32]=response_words[response_lane*32 +: 32];
             // Raw full-target prediction still controls fetch and bundle
             // boundaries. This flag is only the saved resolution metadata.
@@ -255,13 +266,20 @@ module rv32_fetch_frontend #(
             assign bundle_pred_kind[response_lane*2 +: 2]=if_resp_pred_kind_i[response_lane*2 +: 2];
             rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(4),.INDEX_WIDTH(3)) instruction_word_reader (
                 .rows_i(if_resp_line_data_i),.index_i(index),.value_o(response_words[response_lane*32 +: 32]));
-            rv32_frequency_control_tree #(.LEAVES(2)) predicted_tree (
-                .signal_i(if_resp_pred_taken_i[response_lane]),.views_o(predicted_views));
-            for(response_half=0;response_half<2;response_half=response_half+1) begin:g_half
-                assign next_pc_values[response_lane*32+response_half*16 +: 16]=predicted_views[response_half]?
-                    if_resp_pred_target_i[response_lane*32+response_half*16 +: 16]:sequential_pc[response_half*16 +: 16];
+            if(PARALLEL_BUNDLE_CONTROL==0) begin:g_legacy_next_pc
+                wire [1:0] predicted_views;
+                wire [31:0] sequential_pc=response_base_pc+((response_lane+1)*32'd4);
+                rv32_frequency_control_tree #(.LEAVES(2)) predicted_tree (
+                    .signal_i(if_resp_pred_taken_i[response_lane]),.views_o(predicted_views));
+                for(response_half=0;response_half<2;response_half=response_half+1) begin:g_half
+                    assign next_pc_values[response_lane*32+response_half*16 +: 16]=predicted_views[response_half]?
+                        if_resp_pred_target_i[response_lane*32+response_half*16 +: 16]:sequential_pc[response_half*16 +: 16];
+                end
+                assign next_pc_classes[response_lane]=bundle_count==response_lane+1;
+            end else begin:g_parallel_next_pc_unused
+                assign next_pc_values[response_lane*32 +: 32]=32'b0;
+                assign next_pc_classes[response_lane]=1'b0;
             end
-            assign next_pc_classes[response_lane]=bundle_count==response_lane+1;
         end
         for(public_lane=0;public_lane<FE_WIDTH;public_lane=public_lane+1) begin:g_public_packet
             if(RESPONSE_BYPASS!=0) begin:g_empty_bypass
@@ -290,9 +308,19 @@ module rv32_fetch_frontend #(
             end
         end
     endgenerate
-    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(FE_WIDTH+1),.PRIORITY(0)) next_pc_selector (
-        .events_i({(bundle_count==0),next_pc_classes}),
-        .values_i({default_next_pc,next_pc_values}),.write_o(),.value_o(next_pc_comb));
+    generate if(PARALLEL_BUNDLE_CONTROL!=0) begin:g_parallel_bundle_control
+        rv32_frontend_parallel_bundle_control #(.FE_WIDTH(FE_WIDTH),.FQ_DEPTH(FQ_DEPTH),
+            .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) control (
+            .base_pc_i(response_base_pc),.words_i(response_words),
+            .taken_i(if_resp_pred_taken_i),.targets_i(if_resp_pred_target_i),
+            .queue_count_i(count_reg),.response_error_i(if_resp_error_i),
+            .queue_space_o(parallel_queue_space),.next_pc_o(next_pc_comb));
+    end else begin:g_legacy_bundle_control
+        assign parallel_queue_space=1'b0;
+        rv32_frequency_event_select #(.WIDTH(32),.EVENTS(FE_WIDTH+1),.PRIORITY(0)) next_pc_selector (
+            .events_i({(bundle_count==0),next_pc_classes}),
+            .values_i({default_next_pc,next_pc_values}),.write_o(),.value_o(next_pc_comb));
+    end endgenerate
 
     assign current_epoch_o = epoch_reg;
     assign frozen_o = frozen_reg;
@@ -337,7 +365,7 @@ module rv32_fetch_frontend #(
         bundle_count = 0;
         bundle_freeze = if_resp_error_i;
         freeze_after_response = if_resp_error_i;
-        word_index = if_resp_pc_i[3:2];
+        word_index = response_base_pc[3:2];
         for (b = 0; b < FE_WIDTH; b = b + 1) begin
             if ((word_index + b) < 4 && !bundle_freeze) begin
                 bundle_count = bundle_count + 1;
@@ -489,4 +517,53 @@ module rv32_frontend_queue_payload_bank #(
     // a complete payload write, matching the existing frontend contract.
     rv32_frequency_word_bank #(.WIDTH(WIDTH)) state_owner (
         .clk_i(clk_i),.write_i(write_qualified),.data_i(payload),.data_o(data_o));
+endmodule
+
+
+// Same accepted prefix as bundle_count, without count encoding/decoding on
+// next-PC or response-capacity paths. No new state or acceptance boundary.
+module rv32_frontend_parallel_bundle_control #(
+    parameter integer FE_WIDTH=4,FQ_DEPTH=16,LEGACY_SENTINEL_HALT=0
+) (
+    input wire [31:0] base_pc_i,
+    input wire [FE_WIDTH*32-1:0] words_i,targets_i,
+    input wire [FE_WIDTH-1:0] taken_i,
+    input wire signed [31:0] queue_count_i,
+    input wire response_error_i,
+    output wire queue_space_o,
+    output wire [31:0] next_pc_o
+);
+    wire [FE_WIDTH-1:0] stops,lane_live,capacity_violation;
+    wire [2*FE_WIDTH:0] events;
+    wire [(2*FE_WIDTH+1)*32-1:0] values;
+    genvar lane;
+    generate for(lane=0;lane<FE_WIDTH;lane=lane+1) begin:g_lane
+        wire [2:0] word_number={1'b0,base_pc_i[3:2]}+3'(lane);
+        wire prior_prefix_live;
+        assign stops[lane]=taken_i[lane] || ((LEGACY_SENTINEL_HALT!=0) &&
+            words_i[lane*32 +: 32]==32'h0ff00513);
+        if(lane==0) begin:g_first
+            assign prior_prefix_live=1'b1;
+        end else begin:g_later
+            assign prior_prefix_live=!(|stops[lane-1:0]);
+        end
+        assign lane_live[lane]=!response_error_i && prior_prefix_live && word_number<3'd4;
+        wire ends_bundle=lane_live[lane] &&
+            (stops[lane] || (lane==FE_WIDTH-1) || word_number==3'd3);
+        // An error has no bundle. Otherwise exactly one live lane ends it.
+        // Target/sequential events are disjoint and directly select data.
+        assign events[2*lane]=ends_bundle && taken_i[lane];
+        assign events[2*lane+1]=ends_bundle && !taken_i[lane];
+        assign values[2*lane*32 +: 32]=targets_i[lane*32 +: 32];
+        assign values[(2*lane+1)*32 +: 32]=base_pc_i+((lane+1)*32'd4);
+        // Every live lane must fit. Parallel constant comparisons avoid the
+        // bundle_count + occupancy adder, and preserve no dequeue credit.
+        assign capacity_violation[lane]=lane_live[lane] &&
+            queue_count_i>(FQ_DEPTH-(lane+1));
+    end endgenerate
+    assign events[2*FE_WIDTH]=response_error_i;
+    assign values[2*FE_WIDTH*32 +: 32]=base_pc_i+32'd4;
+    assign queue_space_o=(queue_count_i<=FQ_DEPTH) && !(|capacity_violation);
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(2*FE_WIDTH+1),.PRIORITY(0)) next_pc_selector (
+        .events_i(events),.values_i(values),.write_o(),.value_o(next_pc_o));
 endmodule

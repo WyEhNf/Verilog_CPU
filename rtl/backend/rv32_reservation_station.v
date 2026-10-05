@@ -25,6 +25,9 @@ module rv32_reservation_station #(
     // 2: relative allocation-order matrix (requires static allocation).
     parameter integer AGE_ORDER_MATRIX = 0,
     parameter integer LOCAL_PAYLOAD_ROWS = 0,
+    // Caller filters recovery-edge issue to retained, live older rows.
+    // Allocation stays blocked; accepted retained rows must leave exactly once.
+    parameter integer RECOVERY_ISSUE_RELEASE = 0,
     parameter integer SLOT_WIDTH = (ENTRIES <= 1) ? 1 : $clog2(ENTRIES),
     parameter integer AGE_WIDTH = 32
 ) (
@@ -302,6 +305,7 @@ module rv32_reservation_station #(
     wire [ALLOC_PAYLOAD_WIDTH-1:0] alloc_row_payload [0:ENTRIES-1];
     wire [ENTRIES-1:0] alloc_row_write;
     wire [BE_WIDTH-1:0] alloc_row_grants [0:ENTRIES-1];
+    wire [ENTRIES-1:0] issue_release_mask;
     genvar export_lane,export_row;
     generate
         for(export_lane=0;export_lane<BE_WIDTH;export_lane=export_lane+1) begin:g_allocation_identity
@@ -315,9 +319,13 @@ module rv32_reservation_station #(
                 assign issued_here[export_lane]=issue_valid_o[export_lane] && issue_ready_i[export_lane] &&
                     issue_slot_o[export_lane*SLOT_WIDTH +: SLOT_WIDTH]==export_row;
             end
-            // Mirrors valid_mem's reset / flush / ordinary issue priorities.
+            assign issue_release_mask[export_row]=|issued_here;
+            // Mirrors valid/occupancy ownership, including retained issue on
+            // a selective flush. Kill and accepted issue clear a row only once.
             assign entry_release_o[export_row]=reset_i ||
-                (flush_valid_i ? flush_kill_mask_i[export_row] : (|issued_here));
+                (flush_valid_i ? (flush_kill_mask_i[export_row] ||
+                 ((RECOVERY_ISSUE_RELEASE!=0) && issue_release_mask[export_row])) :
+                 issue_release_mask[export_row]);
         end
     endgenerate
     integer pick_lane, pick_search, pick_cursor, pick_slot;
@@ -538,7 +546,9 @@ module rv32_reservation_station #(
                 .METADATA_WIDTH(METADATA_WIDTH),.AGE_WIDTH(AGE_WIDTH),
                 .PAYLOAD_WIDTH(ALLOC_PAYLOAD_WIDTH)) row (
                 .clk_i(clk_i),.reset_i(reset_i),.flush_i(flush_valid_i),
-                .kill_i(flush_kill_mask_i[owner_row]),.valid_i(valid_mem[owner_row]),.issue_i(|issued_here),
+                .kill_i(flush_kill_mask_i[owner_row] ||
+                    ((RECOVERY_ISSUE_RELEASE!=0) && issue_release_mask[owner_row])),
+                .valid_i(valid_mem[owner_row]),.issue_i(|issued_here),
                 .alloc_i(alloc_row_write[owner_row]),.payload_i(alloc_row_payload[owner_row]),
                 .wake1_i(|match1),.wake2_i(|match2),.wake1_value_i(last1),.wake2_value_i(last2),
                 .target_live_o(target_live_mem[owner_row]),.op_o(op_mem[owner_row]),.pc_o(pc_mem[owner_row]),
@@ -702,7 +712,8 @@ module rv32_reservation_station #(
             flush_count = 0;
             remaining_count = 0;
             for (reset_slot = 0; reset_slot < ENTRIES; reset_slot = reset_slot + 1) begin
-                if (flush_kill_mask_i[reset_slot]) begin
+                if (flush_kill_mask_i[reset_slot] ||
+                    ((RECOVERY_ISSUE_RELEASE!=0) && issue_release_mask[reset_slot])) begin
                     valid_mem[reset_slot] <= 1'b0;
                     target_live_mem_legacy[reset_slot] <= 1'b0;
                     flush_count = flush_count + 1;

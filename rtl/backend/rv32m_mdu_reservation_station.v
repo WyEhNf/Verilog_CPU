@@ -10,6 +10,7 @@ module rv32m_mdu_reservation_station #(
     parameter integer MUL_IMPL = 0,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
+    parameter integer RECOVERY_OLDER_ISSUE = 0,
     parameter integer RECOVERY_WIDTH = 1+2*((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))+$clog2(ROB_ENTRIES+1)
 ) (
     input  wire                         clk_i,
@@ -73,9 +74,16 @@ module rv32m_mdu_reservation_station #(
     // Refill the one-entry launch buffer on the same edge that the current
     // request enters its execution unit.  The pipelined Wallace multiplier
     // can therefore sustain one request per cycle instead of one every two.
+    wire issue_cancel;
+    rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
+        .ENABLED(SELECTIVE_RECOVERY),.KILL_BRANCH(1)) issue_cancel_guard (
+        .packet_i(recovery_views[0 +: RECOVERY_WIDTH]),
+        .active_i(issue_valid_i),.tag_i(issue_rob_tag_i),.cancel_o(issue_cancel));
     assign issue_ready_o = !flush_i &&
-                           (!SELECTIVE_RECOVERY || !recovery_packet_i[RECOVERY_WIDTH-1]) &&
-                           (!pending_valid || unit_req_fire) &&
+                           (!SELECTIVE_RECOVERY || !recovery_packet_i[RECOVERY_WIDTH-1] ||
+                            ((RECOVERY_OLDER_ISSUE!=0) && !issue_cancel)) &&
+                           (!pending_valid || unit_req_fire ||
+                            ((RECOVERY_OLDER_ISSUE!=0) && pending_cancel)) &&
                            (issue_is_mul || issue_is_div);
     assign completion_valid_o = mul_resp_valid || div_resp_valid;
     localparam integer COMPLETION_PAYLOAD_WIDTH=33+TAG_WIDTH+PHYS_ADDR_WIDTH;

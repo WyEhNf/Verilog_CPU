@@ -11,6 +11,7 @@ module rv32_branch_predictor #(
     parameter integer DIRECT_BRANCH_TARGET = 0,
     parameter integer COMPACT_INDIRECT_BTB = 0,
     parameter integer COMPACT_BTB_ENTRIES = 64,
+    parameter integer HYBRID_DIRECTION = 0,
     parameter integer HISTORY_BITS = 6
 ) (
     input  wire        clk_i,
@@ -28,6 +29,7 @@ module rv32_branch_predictor #(
     output wire [5:0]  pred_bht_index_o,
     output wire [3:0]  pred_btb_index_o,
     output wire [1:0]  pred_counter_o,
+    output wire [1:0]  pred_component_directions_o,
 
     input  wire        feedback_valid_i,
     input  wire [31:0] feedback_pc_i,
@@ -37,11 +39,16 @@ module rv32_branch_predictor #(
     input  wire        feedback_pred_taken_i,
     input  wire [31:0] feedback_pred_target_i,
     input  wire [7:0]  feedback_training_index_i,
+    input  wire [1:0]  feedback_component_directions_i,
 
     output wire [31:0] prediction_count_o,
     output wire [31:0] correct_count_o
 );
     localparam integer BHT_ENTRIES = 256 >> BANK_BITS;
+    // Two high metadata bits are available only with <=6 history bits.
+    // Other modes retain the original predictor and full history encoding.
+    localparam integer HYBRID_ACTIVE=(HYBRID_DIRECTION!=0) &&
+        (DIRECT_BRANCH_TARGET==2) && (HISTORY_BITS<=6);
     localparam integer BTB_COMPACT_ACTIVE=(COMPACT_INDIRECT_BTB!=0) && (DIRECT_BRANCH_TARGET!=0);
     localparam integer BTB_TOTAL_ENTRIES=BTB_COMPACT_ACTIVE?COMPACT_BTB_ENTRIES:64;
     localparam integer BTB_ENTRIES=BTB_TOTAL_ENTRIES >> BANK_BITS;
@@ -171,7 +178,74 @@ module rv32_branch_predictor #(
 
     assign pred_bht_index_o = query_pc_i[7:2];
     assign pred_btb_index_o = query_pc_i[5:2];
-    assign pred_counter_o = query_bht_word[1:0];
+    wire [2:0] query_bimodal_word;
+    wire [1:0] query_choice;
+    wire global_direction=query_bht_word[2]?query_bht_word[1]:branch_imm[31];
+    wire bimodal_direction=query_bimodal_word[2]?query_bimodal_word[1]:branch_imm[31];
+    wire hybrid_direction=query_choice[1]?global_direction:bimodal_direction;
+    assign pred_component_directions_o=(HYBRID_ACTIVE && query_valid_i &&
+        query_opcode==7'b1100011)?{global_direction,bimodal_direction}:2'b00;
+    assign pred_counter_o=(HYBRID_ACTIVE && !query_choice[1])?
+        query_bimodal_word[1:0]:query_bht_word[1:0];
+    generate if(HYBRID_ACTIVE) begin:g_hybrid_direction
+        localparam integer CHOICE_ENTRIES=64>>BANK_BITS;
+        localparam integer CHOICE_INDEX_WIDTH=6-BANK_BITS;
+        localparam integer CHOICE_DOMAINS=(CHOICE_ENTRIES+3)/4;
+        wire [BHT_ENTRIES*3-1:0] bimodal_rows;
+        wire [CHOICE_ENTRIES*2-1:0] choice_rows;
+        wire [BHT_ENTRIES+CHOICE_ENTRIES-1:0] hybrid_reset_views;
+        wire [BHT_DOMAINS*BHT_INDEX_WIDTH-1:0] bimodal_write_queries;
+        wire [BHT_DOMAINS-1:0] bimodal_write_events,bimodal_directions;
+        wire [CHOICE_DOMAINS*CHOICE_INDEX_WIDTH-1:0] choice_write_queries;
+        wire [CHOICE_DOMAINS-1:0] choice_write_events,choice_global_correct;
+        wire conditional_feedback=feedback_valid_i && feedback_kind_i==`RV32IM_PRED_BRANCH;
+        wire choice_adjust=conditional_feedback &&
+            (feedback_component_directions_i[1]!=feedback_component_directions_i[0]);
+        wire global_correct=feedback_taken_i==feedback_component_directions_i[1];
+        rv32_frequency_control_tree #(.LEAVES(BHT_ENTRIES+CHOICE_ENTRIES)) hybrid_reset_tree (
+            .signal_i(reset_i),.views_o(hybrid_reset_views));
+        rv32_frequency_control_tree #(.WIDTH(BHT_INDEX_WIDTH),.LEAVES(BHT_DOMAINS)) bimodal_address_tree (
+            .signal_i(feedback_pc_i[9:2+BANK_BITS]),.views_o(bimodal_write_queries));
+        rv32_frequency_control_tree #(.LEAVES(BHT_DOMAINS)) bimodal_event_tree (
+            .signal_i(conditional_feedback),.views_o(bimodal_write_events));
+        rv32_frequency_control_tree #(.LEAVES(BHT_DOMAINS)) bimodal_direction_tree (
+            .signal_i(feedback_taken_i),.views_o(bimodal_directions));
+        rv32_frequency_control_tree #(.WIDTH(CHOICE_INDEX_WIDTH),.LEAVES(CHOICE_DOMAINS)) choice_address_tree (
+            .signal_i(feedback_pc_i[7:2+BANK_BITS]),.views_o(choice_write_queries));
+        rv32_frequency_control_tree #(.LEAVES(CHOICE_DOMAINS)) choice_event_tree (
+            .signal_i(choice_adjust),.views_o(choice_write_events));
+        rv32_frequency_control_tree #(.LEAVES(CHOICE_DOMAINS)) choice_direction_tree (
+            .signal_i(global_correct),.views_o(choice_global_correct));
+        for(genvar bimodal_row=0;bimodal_row<BHT_ENTRIES;bimodal_row=bimodal_row+1) begin:g_bimodal_owner
+            localparam integer DOMAIN=bimodal_row/4;
+            wire [1:0] counter;
+            wire trained;
+            wire update=bimodal_write_events[DOMAIN] &&
+                bimodal_write_queries[DOMAIN*BHT_INDEX_WIDTH +: BHT_INDEX_WIDTH]==bimodal_row;
+            rv32_predictor_bht_row row (
+                .clk_i(clk_i),.reset_i(hybrid_reset_views[bimodal_row]),.update_i(update),
+                .taken_i(bimodal_directions[DOMAIN]),.counter_o(counter),.trained_o(trained));
+            assign bimodal_rows[bimodal_row*3 +: 3]={trained,counter};
+        end
+        for(genvar choice_row=0;choice_row<CHOICE_ENTRIES;choice_row=choice_row+1) begin:g_choice_owner
+            localparam integer DOMAIN=choice_row/4;
+            wire update=choice_write_events[DOMAIN] &&
+                choice_write_queries[DOMAIN*CHOICE_INDEX_WIDTH +: CHOICE_INDEX_WIDTH]==choice_row;
+            rv32_predictor_choice_row row (
+                .clk_i(clk_i),.reset_i(hybrid_reset_views[BHT_ENTRIES+choice_row]),
+                .update_i(update),.global_correct_i(choice_global_correct[DOMAIN]),
+                .counter_o(choice_rows[choice_row*2 +: 2]));
+        end
+        // All three tables query in parallel. Choice is a final direction mux,
+        // never an extra serialized index lookup before either direction table.
+        rv32_frequency_array_read #(.WIDTH(3),.ENTRIES(BHT_ENTRIES),.INDEX_WIDTH(BHT_INDEX_WIDTH)) bimodal_query (
+            .rows_i(bimodal_rows),.index_i(query_pc_i[9:2+BANK_BITS]),.value_o(query_bimodal_word));
+        rv32_frequency_array_read #(.WIDTH(2),.ENTRIES(CHOICE_ENTRIES),.INDEX_WIDTH(CHOICE_INDEX_WIDTH)) choice_query (
+            .rows_i(choice_rows),.index_i(query_pc_i[7:2+BANK_BITS]),.value_o(query_choice));
+    end else begin:g_no_hybrid_direction
+        assign query_bimodal_word=3'b000;
+        assign query_choice=2'b10;
+    end endgenerate
 
     always @* begin
         pred_taken_o = 1'b0;
@@ -189,7 +263,7 @@ module rv32_branch_predictor #(
                         // a BTB miss/alias must not discard a trained direction.
                         // Keep BTFNT on a cold BHT row, but after training use
                         // its counter regardless of indirect-target residency.
-                        if (query_bht_word[2] ? query_bht_word[1] : branch_imm[31]) begin
+                        if (HYBRID_ACTIVE ? hybrid_direction : global_direction) begin
                             pred_taken_o = 1'b1;
                         end
                     end else if (query_bht_word[1] && pred_btb_hit_o) begin
@@ -317,5 +391,22 @@ module rv32_predictor_indirect_btb_row (
     always @(posedge clk_i) begin
         if(reset_i) valid_o<=0;
         else if(update_i) valid_o<=1;
+    end
+endmodule
+
+// Preference saturates toward the predictor that was actually right at fetch.
+// With equal predictions, the parent never updates this row. Cold preference
+// is weakly bimodal; both direction tables still learn every accepted branch.
+module rv32_predictor_choice_row (
+    input wire clk_i,reset_i,update_i,global_correct_i,
+    output reg [1:0] counter_o
+);
+    always @(posedge clk_i) begin
+        if(reset_i) counter_o<=2'b01;
+        else if(update_i) begin
+            if(global_correct_i) begin
+                if(counter_o!=2'b11) counter_o<=counter_o+2'b01;
+            end else if(counter_o!=2'b00) counter_o<=counter_o-2'b01;
+        end
     end
 endmodule
