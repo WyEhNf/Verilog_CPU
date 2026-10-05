@@ -24,6 +24,7 @@ module rv32_lsq #(
     parameter integer LOAD_COMPLETION_BYPASS = 0,
     parameter integer SAVED_REPORT_PRIORITY = 0,
     parameter integer HEAD_LOAD_IDENTITY_QUERY = 0,
+    parameter integer HELD_LOAD_IDENTITY_QUERY = 0,
     parameter integer HEAD_LOAD_PACKET_PRESELECT = 0,
     parameter integer SAVED_IDENTITY_WORD_MASK = 0,
     parameter integer SAVED_IDENTITY_BALANCED_MERGE = 0,
@@ -179,11 +180,15 @@ module rv32_lsq #(
     output reg                          load_complete_cancel_o,
     // {high-index bank one-hot,low-index bank one-hot}; default disabled.
     output wire [(1<<REPORT_ROB_LOW_BITS)+(1<<REPORT_ROB_HIGH_BITS)-1:0] load_complete_rob_query_o,
-    // Candidate0 is saved/held report, candidate1 is saved queue-head identity.
+    // Candidate0 is saved/held, or ordinary saved when independent held is
+    // enabled; candidate1 is saved queue-head. Held has its own optional port.
     // The choice is meaningful only with an actual public completion event.
     output wire [2*ROB_TAG_WIDTH-1:0] load_report_identity_tags_o,
     output wire [2*((1<<REPORT_ROB_LOW_BITS)+(1<<REPORT_ROB_HIGH_BITS))-1:0] load_report_identity_queries_o,
-    output wire load_report_identity_head_o
+    output wire load_report_identity_head_o,
+    output wire [ROB_TAG_WIDTH-1:0] load_report_held_identity_tag_o,
+    output wire [(1<<REPORT_ROB_LOW_BITS)+(1<<REPORT_ROB_HIGH_BITS)-1:0] load_report_held_identity_query_o,
+    output wire load_report_identity_held_o
 );
     localparam integer TAG_SLOT_LSB = 3;
     localparam integer TAG_GEN_LSB = TAG_SLOT_LSB + SLOT_WIDTH;
@@ -1221,6 +1226,10 @@ module rv32_lsq #(
         (SAVED_REPORT_PRIORITY!=0) && (LOAD_COMPLETION_BYPASS==2) &&
         (REPORT_ROB_PREDECODE!=0) && HEAD_STORE_ACK_ACTIVE;
     localparam integer HEAD_LOAD_PACKET_ACTIVE=(HEAD_LOAD_PACKET_PRESELECT!=0) && HEAD_LOAD_IDENTITY_ACTIVE;
+    localparam integer HELD_LOAD_IDENTITY_ACTIVE=(HELD_LOAD_IDENTITY_QUERY!=0) && HEAD_LOAD_IDENTITY_ACTIVE;
+    localparam integer NORMAL_IDENTITY_WIDTH=ROB_TAG_WIDTH+REPORT_ROB_QUERY_WIDTH;
+    localparam integer NORMAL_IDENTITY_WORDS=(NORMAL_IDENTITY_WIDTH+15)/16;
+    wire [NORMAL_IDENTITY_WIDTH-1:0] normal_identity_tree [1:2*REPORT_ROWS-1];
     localparam integer REPORT_IDENTITY_WIDTH=(HEAD_LOAD_PACKET_ACTIVE!=0) ?
         REPORT_WIDTH : ROB_TAG_WIDTH+REPORT_ROB_QUERY_WIDTH;
     localparam integer SAVED_IDENTITY_QUERY_LSB=(HEAD_LOAD_PACKET_ACTIVE!=0) ? REPORT_BASE_WIDTH : ROB_TAG_WIDTH;
@@ -1492,6 +1501,23 @@ module rv32_lsq #(
                         (report_wrap_enable_views[report_row/4] && report_eligible[report_row] &&
                          !(|report_eligible[report_row-1:0]));
                 end
+                if(HELD_LOAD_IDENTITY_ACTIVE!=0) begin:g_normal_identity_candidate
+                    // Read ordinary priority independently of held-live. The
+                    // full public packet still uses the original saved grant.
+                    wire [NORMAL_IDENTITY_WIDTH-1:0] identity={
+                        report_payload[REPORT_BASE_WIDTH +: REPORT_ROB_QUERY_WIDTH],rob_tag_mem[report_row]};
+                    wire [NORMAL_IDENTITY_WORDS-1:0] grant_views;
+                    rv32_frequency_control_tree #(.LEAVES(NORMAL_IDENTITY_WORDS)) mask_tree (
+                        .signal_i(report_priority),.views_o(grant_views));
+                    for(genvar normal_word=0;normal_word<NORMAL_IDENTITY_WORDS;normal_word=normal_word+1) begin:g_word
+                        localparam integer LOW=normal_word*16;
+                        localparam integer BITS=(NORMAL_IDENTITY_WIDTH-LOW>=16)?16:NORMAL_IDENTITY_WIDTH-LOW;
+                        assign normal_identity_tree[REPORT_ROWS+report_row][LOW +: BITS]=
+                            {BITS{grant_views[normal_word]}} & identity[LOW +: BITS];
+                    end
+                end else begin:g_no_normal_identity
+                    assign normal_identity_tree[REPORT_ROWS+report_row]=0;
+                end
                 if(HEAD_LOAD_IDENTITY_ACTIVE!=0) begin:g_saved_identity_candidate
                     // Neither saved priority nor held identity depends on
                     // current response-valid. Preselect this full candidate.
@@ -1558,11 +1584,20 @@ module rv32_lsq #(
                 assign commit_slot_tree[REPORT_ROWS+report_row]=0;
                 assign report_payload_tree[REPORT_ROWS+report_row]=0;
                 assign saved_identity_tree[REPORT_ROWS+report_row]=0;
+                assign normal_identity_tree[REPORT_ROWS+report_row]=0;
                 assign ack_payload_tree[REPORT_ROWS+report_row]=0;
                 assign ack_valid_tree[REPORT_ROWS+report_row]=0;
             end
         end
         for(report_node=1;report_node<REPORT_ROWS;report_node=report_node+1) begin:g_report_merge
+            if(HELD_LOAD_IDENTITY_ACTIVE!=0) begin:g_normal_identity_pair
+                rv32_lsq_identity_pair_or #(.WIDTH(NORMAL_IDENTITY_WIDTH)) pair (
+                    .left_i(normal_identity_tree[2*report_node]),
+                    .right_i(normal_identity_tree[2*report_node+1]),
+                    .value_o(normal_identity_tree[report_node]));
+            end else begin:g_no_normal_identity_pair
+                assign normal_identity_tree[report_node]=0;
+            end
             wire choose_left=report_valid_tree[2*report_node] &&
                 (!report_valid_tree[2*report_node+1] ||
                  !report_wrap_tree[2*report_node] || report_wrap_tree[2*report_node+1]);
@@ -1603,14 +1638,54 @@ module rv32_lsq #(
                 assign head_query[REPORT_ROB_LOW_ROWS+head_high]=1'b1;
             end
         end
-        assign load_report_identity_tags_o={head_tag,saved_identity_tree[1][0 +: ROB_TAG_WIDTH]};
-        assign load_report_identity_queries_o={head_query,
-            saved_identity_tree[1][SAVED_IDENTITY_QUERY_LSB +: REPORT_ROB_QUERY_WIDTH]};
+        if(HELD_LOAD_IDENTITY_ACTIVE!=0) begin:g_independent_held_identity
+            wire [LSQ_ENTRIES*NORMAL_IDENTITY_WIDTH-1:0] held_rows;
+            wire [NORMAL_IDENTITY_WIDTH-1:0] held_identity;
+            for(genvar held_row=0;held_row<LSQ_ENTRIES;held_row=held_row+1) begin:g_row
+                wire [ROB_TAG_WIDTH-1:0] tag=rob_tag_mem[held_row];
+                wire [REPORT_ROB_QUERY_WIDTH-1:0] query;
+                for(genvar held_low=0;held_low<REPORT_ROB_LOW_ROWS;held_low=held_low+1) begin:g_low
+                    assign query[held_low]=tag[3 +: REPORT_ROB_LOW_BITS]==held_low;
+                end
+                for(genvar held_high=0;held_high<REPORT_ROB_HIGH_ROWS;held_high=held_high+1) begin:g_high
+                    if(REPORT_ROB_HIGH_BITS>0) begin:g_bits
+                        assign query[REPORT_ROB_LOW_ROWS+held_high]=
+                            tag[3+REPORT_ROB_LOW_BITS +: REPORT_ROB_HIGH_BITS]==held_high;
+                    end else begin:g_single_bank
+                        assign query[REPORT_ROB_LOW_ROWS+held_high]=1'b1;
+                    end
+                end
+                assign held_rows[held_row*NORMAL_IDENTITY_WIDTH +: NORMAL_IDENTITY_WIDTH]={query,tag};
+            end
+            // Decode saved ROB banks before selecting the held LSQ row. Late
+            // held-slot selection routes the original full tag and prepared
+            // query together, avoiding tag mux -> bank decode -> ROB lookup.
+            // Original full LSQ range/valid/complete/GEN still qualifies H.
+            rv32_frequency_array_read #(.WIDTH(NORMAL_IDENTITY_WIDTH),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) held_reader (
+                .rows_i(held_rows),.index_i(report_hold_tag[TAG_SLOT_LSB +: SLOT_WIDTH]),
+                .value_o(held_identity));
+            assign load_report_held_identity_tag_o=held_identity[0 +: ROB_TAG_WIDTH];
+            assign load_report_held_identity_query_o=held_identity[ROB_TAG_WIDTH +: REPORT_ROB_QUERY_WIDTH];
+            assign load_report_identity_tags_o={head_tag,normal_identity_tree[1][0 +: ROB_TAG_WIDTH]};
+            assign load_report_identity_queries_o={head_query,
+                normal_identity_tree[1][ROB_TAG_WIDTH +: REPORT_ROB_QUERY_WIDTH]};
+            assign load_report_identity_held_o=report_hold_live;
+        end else begin:g_original_saved_held_identity
+            assign load_report_identity_tags_o={head_tag,saved_identity_tree[1][0 +: ROB_TAG_WIDTH]};
+            assign load_report_identity_queries_o={head_query,
+                saved_identity_tree[1][SAVED_IDENTITY_QUERY_LSB +: REPORT_ROB_QUERY_WIDTH]};
+            assign load_report_held_identity_tag_o=0;
+            assign load_report_held_identity_query_o=0;
+            assign load_report_identity_held_o=1'b0;
+        end
         assign load_report_identity_head_o=fast_head_present && !report_hold_live;
     end else begin:g_original_load_report_identity
         assign load_report_identity_tags_o=0;
         assign load_report_identity_queries_o=0;
         assign load_report_identity_head_o=1'b0;
+        assign load_report_held_identity_tag_o=0;
+        assign load_report_held_identity_query_o=0;
+        assign load_report_identity_held_o=1'b0;
     end endgenerate
 
     generate if(REPORT_ROB_PREDECODE!=0) begin:g_report_rob_query
