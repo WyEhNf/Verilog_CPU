@@ -23,7 +23,9 @@ module rv32_backend_joint #(
     parameter integer LOAD_COMPLETION_BYPASS = 0,
     parameter integer LOAD_WAKE_BYPASS = 0,
     parameter integer ALLOC_LOAD_SELECTION_BYPASS = 0,
+    parameter integer LSQ_RECLAIM_WIDTH = 1,
     parameter integer EARLY_FRONT_REDIRECT = 0,
+    parameter integer RECOVERY_PREVIEW_OLDER_ISSUE = 0,
     parameter integer DISPATCH_ELASTIC = 0,
     parameter integer DISPATCH_FULL_REPLACE = 0,
     parameter integer EARLY_STORE_ADDRESS = 0,
@@ -152,6 +154,7 @@ module rv32_backend_joint #(
     // Per-lane accepted resolution: {pc,kind,taken,target,pred_taken,pred_target}.
     output wire [BE_WIDTH-1:0]          branch_feedback_lane_valid_o,
     output wire [BE_WIDTH*100-1:0]      branch_feedback_lane_packets_o,
+    output wire [BE_WIDTH*16-1:0]       branch_feedback_lane_metadata_o,
     output wire [7:0]                   branch_recovery_history_o,
     output wire [15:0]                  perf_rob_occupancy_o,
     output wire [15:0]                  perf_rs_occupancy_o,
@@ -307,6 +310,7 @@ module rv32_backend_joint #(
     wire [((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES + 1))-1:0] rs_occupancy;
     wire [15:0] rs_free_count = (rs_occupancy < RS_ENTRIES) ? RS_ENTRIES - rs_occupancy : 16'd0;
     wire [BE_WIDTH-1:0] rs_issue_ready;
+    wire [BE_WIDTH-1:0] rs_issue_allowed;
     // In direct completion modes every CDB packet is a view of a
     // still-valid held producer. That producer already broadcasts to RS.
     localparam integer RS_DIRECT_WAKE=(RS_PHYSICAL_WAKEUP!=0) &&
@@ -954,13 +958,23 @@ module rv32_backend_joint #(
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_DIVU) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REM) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REMU);
-            // Do not launch a new operation on the edge that accepts branch
-            // recovery.  The RS is flushed on that edge, so a simultaneously
-            // accepted younger operation would otherwise survive in an empty
-            // ALU/MDU output slot after its ROB generation had been killed.
-            // Existing strict-older execution results remain independently
-            // drainable through alu_exec_ready/producers below.
-            assign rs_issue_ready[io_lane] = !branch_busy_domains[0] &&
+            // Preview owns a registered branch tag, and does not flush RS.
+            // A selected valid row strictly before that branch can execute on
+            // this edge. The following descriptor-apply edge still blocks all
+            // launches: RS flush has priority over its issue-release update.
+            // This also prevents duplicate issue of a retained older row.
+            wire [ROB_SLOT_WIDTH-1:0] issue_age=
+                rs_issue_tag[io_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]-rob_head;
+            wire [ROB_SLOT_WIDTH-1:0] pending_age=
+                recovery_tag_views[3 +: ROB_SLOT_WIDTH]-rob_head;
+            wire older_preview=(RECOVERY_PREVIEW_OLDER_ISSUE!=0) &&
+                (LOCAL_EXEC_RECOVERY!=0) && (ISSUE_PIPELINE==0) &&
+                branch_pending && rob_recovery_preview && !recovery_descriptor_valid &&
+                !reset_i && !flush_i && rs_issue_valid[io_lane] &&
+                rs_issue_tag[io_lane*TAG_WIDTH] && issue_age<pending_age &&
+                issue_age<rob_occupancy;
+            assign rs_issue_allowed[io_lane]=!branch_busy_domains[0] || older_preview;
+            assign rs_issue_ready[io_lane] = rs_issue_allowed[io_lane] &&
                 (rs_issue_is_mdu[io_lane] ?
                  (mdu_select[io_lane] && mdu_issue_ready) :
                  ((io_lane < INT_ISSUE_WIDTH) ? alu_issue_ready[io_lane] : 1'b0));
@@ -1157,7 +1171,7 @@ module rv32_backend_joint #(
     assign commit_store_mask_o = rob_commit_store_mask;
     assign commit_store_data_o = rob_commit_store_data;
     assign commit_tag_o = rob_commit_tag;
-    generate if(EARLY_FRONT_REDIRECT!=0 && PREDICTOR_META==0) begin:g_early_front_redirect
+    generate if(EARLY_FRONT_REDIRECT!=0) begin:g_early_front_redirect
         // Same first-lane grant and full ROB-generation authority used to
         // acquire branch_pending. The pending queue blocks a second redirect
         // until recovery applies. Do not redirect again on the preview edge.
@@ -1245,6 +1259,17 @@ module rv32_backend_joint #(
             assign branch_feedback_lane_packets_o[feedback_source*100 +: 100]={
                 pc,kind,alu_exec_branch_taken[feedback_source],
                 alu_exec_branch_target[feedback_source*32 +: 32],pred_taken,full_pred_target};
+            if(PREDICTOR_META!=0) begin:g_indexed_training
+                wire [ROB_ENTRIES*16-1:0] rows;
+                for(genvar history_row=0;history_row<ROB_ENTRIES;history_row=history_row+1) begin:g_row
+                    assign rows[history_row*16 +: 16]=rob_pred_metadata_mem[history_row];
+                end
+                rv32_frequency_array_read #(.WIDTH(16),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(ROB_SLOT_WIDTH)) history_read (
+                    .rows_i(rows),.index_i(slot),
+                    .value_o(branch_feedback_lane_metadata_o[feedback_source*16 +: 16]));
+            end else begin:g_pc_indexed_training
+                assign branch_feedback_lane_metadata_o[feedback_source*16 +: 16]=0;
+            end
         end
         if(PREDICTOR_META!=0) begin:g_feedback_history
             wire [ROB_ENTRIES*16-1:0] history_rows;
@@ -1266,7 +1291,7 @@ module rv32_backend_joint #(
 
     localparam integer MDU_ISSUE_PAYLOAD_WIDTH=`RV32IM_OP_WIDTH+64+TAG_WIDTH+PAW;
     localparam integer MDU_LANE_WIDTH=(BE_WIDTH<=1)?1:$clog2(BE_WIDTH);
-    wire [BE_WIDTH-1:0] mdu_candidates=rs_issue_valid & rs_issue_is_mdu;
+    wire [BE_WIDTH-1:0] mdu_candidates=rs_issue_valid & rs_issue_is_mdu & rs_issue_allowed;
     wire mdu_found;
     wire [MDU_LANE_WIDTH-1:0] mdu_lane;
     wire [BE_WIDTH*MDU_ISSUE_PAYLOAD_WIDTH-1:0] mdu_values;
@@ -1284,7 +1309,7 @@ module rv32_backend_joint #(
     rv32_frequency_event_select #(.WIDTH(MDU_ISSUE_PAYLOAD_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) mdu_payload_selector (
         .events_i(mdu_select),.values_i(mdu_values),.write_o(),
         .value_o({mdu_issue_op,mdu_issue_src1,mdu_issue_src2,mdu_issue_tag,mdu_issue_phys}));
-    assign mdu_issue_valid = (|mdu_select) && !branch_busy_domains[0];
+    assign mdu_issue_valid = (|mdu_select);
     // Issue acceptance is independent from completion/CDB backpressure.  The
     // previous wiring reused alu_exec_ready for both directions, creating a
     // combinational loop through the reservation station's issue_valid path.
@@ -1603,7 +1628,7 @@ module rv32_backend_joint #(
                 .exec_pred_kind_o(alu_exec_pred_kind[alu_lane*2 +: 2]),
                 .clk_i(clk_i), .reset_i(reset_i), .flush_i(alu_flush_r[alu_lane]),
                 .recovery_packet_i(execution_recovery_views[alu_lane*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]),
-                .issue_valid_i(!branch_busy_domains[2] &&
+                .issue_valid_i(rs_issue_allowed[alu_lane] &&
                                (alu_lane < INT_ISSUE_WIDTH) &&
                                rs_issue_valid[alu_lane] &&
                                !rs_issue_is_mdu[alu_lane]),
@@ -1649,7 +1674,7 @@ module rv32_backend_joint #(
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(execution_recovery_views[BE_WIDTH*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .issue_valid_i(mdu_issue_valid), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
-    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
+    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
         .early_addr_valid_i(shared_store_addr_valid), .early_addr_tag_i(shared_store_addr_tag),
         .early_addr_i(shared_store_addr), .store_addr_pending_o(lsq_store_addr_pending),
         .store_addr_rob_tag_o(lsq_store_addr_rob_tag), .store_addr_lsq_tag_o(lsq_store_addr_lsq_tag),
@@ -2102,7 +2127,7 @@ module rv32_backend_joint #(
     generate if(PREDICTOR_META!=0) begin:g_branch_history_capture
         wire [BE_WIDTH*8-1:0] histories;
         wire history_write;
-        wire [7:0] history_next;
+        wire [7:0] history_next,history_saved;
         for(capture_lane=0;capture_lane<BE_WIDTH;capture_lane=capture_lane+1) begin:g_lane
             wire [ROB_SLOT_WIDTH-1:0] slot=alu_exec_tag[capture_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH];
             wire [1:0] kind=(RS_ISSUE_METADATA!=0)?
@@ -2114,7 +2139,12 @@ module rv32_backend_joint #(
         rv32_frequency_event_select #(.WIDTH(8),.EVENTS(BE_WIDTH),.PRIORITY(0)) history_selector (
             .events_i(branch_capture_grant),.values_i(histories),.write_o(history_write),.value_o(history_next));
         rv32_frequency_word_bank #(.WIDTH(8)) history_owner (
-            .clk_i(clk_i),.write_i(history_write),.data_i(history_next),.data_o(branch_recovery_history_o));
+            .clk_i(clk_i),.write_i(history_write),.data_i(history_next),.data_o(history_saved));
+        // Early redirect and GHR repair must use the same accepted branch on
+        // the same edge. Waiting for history_saved adds a fetch bubble or
+        // restores a previous branch's checkpoint. Preview mode uses saved.
+        assign branch_recovery_history_o=(EARLY_FRONT_REDIRECT!=0 && branch_capture_write)?
+            history_next:history_saved;
     end else begin:g_no_branch_history
         assign branch_recovery_history_o=8'b0;
     end endgenerate

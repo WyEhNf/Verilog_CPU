@@ -20,6 +20,7 @@ module rv32_lsq #(
     parameter integer LOAD_COMPLETION_BYPASS = 0,
     parameter integer LOAD_WAKE_BYPASS = 0,
     parameter integer ALLOC_LOAD_SELECTION_BYPASS = 0,
+    parameter integer RECLAIM_WIDTH = 1,
     // Decode each saved byte offset before late response-row selection and
     // route query payload from the original complete response match events.
     parameter integer RESPONSE_QUERY_PREDECODE = 0,
@@ -1483,6 +1484,35 @@ module rv32_lsq #(
         ((head_load && head_complete &&
           (head_reported || (load_complete_valid_o && load_complete_ready_i && complete_slot_select==head_reg))) ||
          (head_store && head_ack && store_ack_ready_i));
+    wire metadata_second_pop;
+    wire [LSQ_ENTRIES-1:0] second_pop_views;
+    wire [1:0] metadata_pop_count=metadata_pop?
+        (metadata_second_pop?2'd2:2'd1):2'd0;
+    generate if(RECLAIM_WIDTH==2 && LSQ_ENTRIES>1) begin:g_two_prefix_reclaim
+        wire [SLOT_WIDTH-1:0] next_head=head_reg+1'b1;
+        wire [LSQ_ENTRIES*4-1:0] rows;
+        wire [3:0] next_state;
+        for(genvar reclaim_row=0;reclaim_row<LSQ_ENTRIES;reclaim_row=reclaim_row+1) begin:g_row
+            assign rows[reclaim_row*4 +: 4]={valid_mem[reclaim_row],load_mem[reclaim_row],
+                complete_mem[reclaim_row],load_reported_mem[reclaim_row]};
+        end
+        rv32_frequency_array_read #(.WIDTH(4),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) next_read (
+            .rows_i(rows),.index_i(next_head),.value_o(next_state));
+        // No second completion/acknowledgement port: this next load has
+        // already published its full-tag completion on an earlier edge.
+        // Stores remain queued until their original head-only ack handshake.
+        assign metadata_second_pop=metadata_pop && occupancy_reg>=2 &&
+            !reset_i && !flush_i && !recovery_valid_i && (&next_state);
+        rv32_frequency_control_tree #(.LEAVES(LSQ_ENTRIES)) pop_tree (
+            .signal_i(metadata_second_pop),.views_o(second_pop_views));
+    end else begin:g_single_prefix_reclaim
+        assign metadata_second_pop=1'b0;
+        assign second_pop_views=0;
+    end endgenerate
+    initial begin
+        if(RECLAIM_WIDTH!=1 && RECLAIM_WIDTH!=2)
+            $fatal(1,"LSQ reclaim width must be1/2");
+    end
     wire metadata_forward=candidate_found && candidate_load &&
         !candidate_sent && !candidate_complete && ((fwd_mask & target_mask)==target_mask);
     rv32_frequency_control_tree #(.WIDTH(7),.LEAVES(LSQ_ENTRIES)) metadata_event_tree (
@@ -1548,7 +1578,13 @@ module rv32_lsq #(
         wire response_event=metadata_events[metadata_row*7+3] && response_slot_views[metadata_row*SLOT_WIDTH +: SLOT_WIDTH]==metadata_row;
         wire request_event=metadata_events[metadata_row*7+4] && candidate==metadata_row;
         wire forward_event=metadata_events[metadata_row*7+5] && candidate==metadata_row;
-        wire pop_event=metadata_events[metadata_row*7+6] && head_query_views[metadata_row*SLOT_WIDTH +: SLOT_WIDTH]==metadata_row;
+        // Compare against the predecessor constant before the late pop
+        // event. Both cleared rows and the scalar head/count share one count.
+        localparam integer PREVIOUS_ROW=(metadata_row+LSQ_ENTRIES-1)%LSQ_ENTRIES;
+        wire pop_event=metadata_events[metadata_row*7+6] &&
+            (head_query_views[metadata_row*SLOT_WIDTH +: SLOT_WIDTH]==metadata_row ||
+             (second_pop_views[metadata_row] &&
+              head_query_views[metadata_row*SLOT_WIDTH +: SLOT_WIDTH]==PREVIOUS_ROW));
         wire early_event=(STORE_ADDRESS_PROBE!=0) && early_addr_valid_i &&
             tag_matches_slot(early_addr_tag_i,metadata_row) && store_mem[metadata_row] &&
             !addr_ready_mem[metadata_row] && !request_sent_mem[metadata_row] && !complete_mem[metadata_row];
@@ -1933,12 +1969,7 @@ module rv32_lsq #(
             end
 
             alloc_count_calc = alloc_count_o;
-            pop_count_calc = ((occupancy_reg != 0) && head_valid &&
-                              ((head_load && head_complete &&
-                                (head_reported ||
-                                 (load_complete_valid_o && load_complete_ready_i &&
-                                  (complete_slot_select == head_reg)))) ||
-                               (head_store && head_ack && store_ack_ready_i))) ? 1 : 0;
+            pop_count_calc = metadata_pop_count;
             head_reg <= advance_slot(head_reg, pop_count_calc);
             tail_reg <= advance_slot(tail_reg, alloc_count_calc);
             occupancy_reg <= occupancy_reg - pop_count_calc + alloc_count_calc;

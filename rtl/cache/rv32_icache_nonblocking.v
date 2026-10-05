@@ -1284,15 +1284,33 @@ module rv32_instruction_line_filter #(
             // A live primary fill requires ready, so cannot overwrite a
             // backpressured fast response.
             wire bank_hold=fast_live && !fast_slot_free && fast_pc[4 +: SRAM_BANK_WIDTH]==BANK;
-            wire [INDEX_WIDTH-1:0] read_index=bank_hit?
-                if_req_pc_i[4 +: INDEX_WIDTH]:fast_pc[4 +: INDEX_WIDTH];
+            // Hold chooses the saved PC; otherwise an offered request PC is
+            // safe before its tag/hit acceptance. Extra speculative reads do
+            // not publish a response: fast_identity/valid still use accept_hit.
+            wire hold_read=fast_live && !fast_slot_free;
+            wire offered_read=if_req_valid_i && fast_slot_free &&
+                if_req_pc_i[4 +: SRAM_BANK_WIDTH]==BANK;
+            wire [INDEX_WIDTH-1:0] read_index=hold_read?
+                fast_pc[4 +: INDEX_WIDTH]:if_req_pc_i[4 +: INDEX_WIDTH];
             wire [SRAM_ADDR_WIDTH-1:0] address=bank_fill?
                 SRAM_ADDR_WIDTH'(primary_resp_line_addr_i[4 +: INDEX_WIDTH] >> SRAM_BANK_WIDTH):
                 SRAM_ADDR_WIDTH'(read_index >> SRAM_BANK_WIDTH);
-            sram_fakeram #(.DEPTH(SRAM_DEPTH),.WIDTH(128),.WRITE_GRANULARITY(16)) data (
-                .clk(clk_i),.en(!reset_i && (bank_fill || bank_hit || bank_hold)),
-                .we(bank_fill),.wmask(8'hff),.addr(address),
-                .wdata(primary_resp_line_data_i),.rdata(bank_data[bank*128 +: 128]));
+            localparam integer COMMAND_WIDTH=SRAM_ADDR_WIDTH+2;
+            wire [8*COMMAND_WIDTH-1:0] commands;
+            rv32_frequency_control_tree #(.WIDTH(COMMAND_WIDTH),.LEAVES(8)) command_tree (
+                .signal_i({!reset_i && (bank_fill || offered_read || bank_hold),bank_fill,address}),
+                .views_o(commands));
+            // Same eight physical4x16 macros per bank as the former128-bit
+            // wrapper expansion; each priced command leaf drives one macro.
+            for(genvar data_lane=0;data_lane<8;data_lane=data_lane+1) begin:g_data_lane
+                wire enable,write;
+                wire [SRAM_ADDR_WIDTH-1:0] lane_address;
+                assign {enable,write,lane_address}=commands[data_lane*COMMAND_WIDTH +: COMMAND_WIDTH];
+                sram_fakeram #(.DEPTH(SRAM_DEPTH),.WIDTH(16),.WRITE_GRANULARITY(16)) data (
+                    .clk(clk_i),.en(enable),.we(write),.wmask(1'b1),.addr(lane_address),
+                    .wdata(primary_resp_line_data_i[data_lane*16 +: 16]),
+                    .rdata(bank_data[bank*128+data_lane*16 +: 16]));
+            end
             assign response_banks[bank]=fast_live && fast_pc[4 +: SRAM_BANK_WIDTH]==BANK;
         end
         rv32_frequency_event_select #(.WIDTH(128),.EVENTS(SRAM_BANKS),.PRIORITY(0)) response_read (

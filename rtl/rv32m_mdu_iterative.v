@@ -56,27 +56,27 @@ module rv32m_mdu_iterative #(
     // One extra completion edge separates iteration from sign correction.
     // No request may replace operation/tag state while this phase is valid.
     reg finishing;
-    reg [31:0] finishing_magnitude;
-    reg finishing_negate,finishing_increment;
-    reg mode_mul;
+    wire [31:0] finishing_magnitude;
+    wire finishing_negate,finishing_increment;
+    wire mode_mul;
     reg [5:0] step;
-    reg [64:0] shift_state;
-    reg [31:0] operand;
-    reg [OP_WIDTH-1:0] operation;
-    reg result_negative;
-    reg remainder_negative;
-    reg divide_zero;
-    reg signed_overflow;
-    reg [31:0] original_a;
-    reg [TAG_WIDTH-1:0] operation_tag;
-    reg [PHYS_ADDR_WIDTH-1:0] operation_phys;
-    reg operation_live;
+    wire [64:0] shift_state;
+    wire [31:0] operand;
+    wire [OP_WIDTH-1:0] operation;
+    wire result_negative;
+    wire remainder_negative;
+    wire divide_zero;
+    wire signed_overflow;
+    wire [31:0] original_a;
+    wire [TAG_WIDTH-1:0] operation_tag;
+    wire [PHYS_ADDR_WIDTH-1:0] operation_phys;
+    wire operation_live;
 
     reg out_valid;
-    reg [31:0] out_value;
-    reg [TAG_WIDTH-1:0] out_tag;
-    reg [PHYS_ADDR_WIDTH-1:0] out_phys;
-    reg out_live;
+    wire [31:0] out_value;
+    wire [TAG_WIDTH-1:0] out_tag;
+    wire [PHYS_ADDR_WIDTH-1:0] out_phys;
+    wire out_live;
 
     reg [64:0] next_state;
     reg [32:0] upper_sum;
@@ -243,6 +243,57 @@ module rv32m_mdu_iterative #(
     assign resp_phys_rd_o = out_phys;
     assign resp_rd_we_o = 1'b1;
 
+    // Preserve the original capture edges and unreset payload lifetime.
+    // A late launch enable formerly drove every operation/shift operand
+    // state mux. Named word owners distribute write control per16 data bits.
+    wire payload_normal=!reset_i && !flush_i;
+    wire payload_launch=payload_normal && req_valid_i && req_ready_o;
+    wire payload_iterate=payload_normal && busy && !operation_cancel;
+    wire payload_finish_capture=payload_iterate && step==6'd31;
+    wire payload_publish=payload_normal && finishing && !operation_cancel && out_slot_ready;
+    wire [3:0] launch_views,launch_mode_views;
+    rv32_frequency_control_tree #(.LEAVES(4)) launch_tree (
+        .signal_i(payload_launch),.views_o(launch_views));
+    rv32_frequency_control_tree #(.LEAVES(4)) launch_mode_tree (
+        .signal_i(req_is_mul),.views_o(launch_mode_views));
+    wire [31:0] initial_low,initial_operand;
+    generate for(genvar initial_word=0;initial_word<2;initial_word=initial_word+1) begin:g_initial_word
+        assign initial_low[initial_word*16 +: 16]=launch_mode_views[initial_word]?
+            req_abs_b[initial_word*16 +: 16]:req_abs_a[initial_word*16 +: 16];
+        assign initial_operand[initial_word*16 +: 16]=launch_mode_views[2+initial_word]?
+            req_abs_a[initial_word*16 +: 16]:req_abs_b[initial_word*16 +: 16];
+    end endgenerate
+    wire shift_write;
+    wire [64:0] shift_next;
+    rv32_frequency_event_select #(.WIDTH(65),.EVENTS(2),.PRIORITY(0)) shift_selector (
+        .events_i({payload_iterate,launch_views[0]}),
+        .values_i({next_state,33'b0,initial_low}),.write_o(shift_write),.value_o(shift_next));
+    rv32_frequency_word_bank #(.WIDTH(65)) shift_state_owner (
+        .clk_i(clk_i),.write_i(shift_write),.data_i(shift_next),.data_o(shift_state));
+    rv32_frequency_word_bank #(.WIDTH(32)) operand_owner (
+        .clk_i(clk_i),.write_i(launch_views[1]),.data_i(initial_operand),.data_o(operand));
+    rv32_frequency_word_bank #(.WIDTH(32)) original_owner (
+        .clk_i(clk_i),.write_i(launch_views[2]),.data_i(req_src1_i),.data_o(original_a));
+    localparam integer OPERATION_PAYLOAD_WIDTH=OP_WIDTH+TAG_WIDTH+PHYS_ADDR_WIDTH+6;
+    wire [OPERATION_PAYLOAD_WIDTH-1:0] operation_payload;
+    assign {mode_mul,operation,result_negative,remainder_negative,divide_zero,signed_overflow,
+        operation_tag,operation_phys,operation_live}=operation_payload;
+    rv32_frequency_word_bank #(.WIDTH(OPERATION_PAYLOAD_WIDTH)) operation_owner (
+        .clk_i(clk_i),.write_i(launch_views[3]),
+        .data_i({req_is_mul,req_op_i,req_a_negative^req_b_negative,req_a_negative,
+            !req_is_mul && req_src2_i==32'b0,
+            req_is_signed_div && req_src1_i==32'h80000000 && req_src2_i==32'hffffffff,
+            req_rob_tag_i,req_phys_rd_i,req_target_live_i && req_rob_tag_i[0]}),.data_o(operation_payload));
+    rv32_frequency_word_bank #(.WIDTH(34)) finishing_owner (
+        .clk_i(clk_i),.write_i(payload_finish_capture),
+        .data_i({result_magnitude,result_needs_negate,result_negate_increment}),
+        .data_o({finishing_magnitude,finishing_negate,finishing_increment}));
+    localparam integer OUTPUT_PAYLOAD_WIDTH=33+TAG_WIDTH+PHYS_ADDR_WIDTH;
+    rv32_frequency_word_bank #(.WIDTH(OUTPUT_PAYLOAD_WIDTH)) output_owner (
+        .clk_i(clk_i),.write_i(payload_publish),
+        .data_i({finishing_value,operation_tag,operation_phys,operation_live}),
+        .data_o({out_value,out_tag,out_phys,out_live}));
+
     always @(posedge clk_i) begin
         if (reset_i || flush_i) begin
             busy <= 1'b0;
@@ -254,13 +305,9 @@ module rv32m_mdu_iterative #(
 
             if(operation_cancel) begin busy<=1'b0;finishing<=1'b0;end
             if (busy && !operation_cancel) begin
-                shift_state <= next_state;
                 if (step == 6'd31) begin
                     busy <= 1'b0;
                     finishing <= 1'b1;
-                    finishing_magnitude <= result_magnitude;
-                    finishing_negate <= result_needs_negate;
-                    finishing_increment <= result_negate_increment;
                 end else begin
                     step <= step + 1'b1;
                 end
@@ -269,28 +316,11 @@ module rv32m_mdu_iterative #(
             if(finishing && !operation_cancel && out_slot_ready) begin
                 finishing<=1'b0;
                 out_valid<=1'b1;
-                out_value<=finishing_value;
-                out_tag<=operation_tag;
-                out_phys<=operation_phys;
-                out_live<=operation_live;
             end
 
             if (req_valid_i && req_ready_o) begin
                 busy <= 1'b1;
-                mode_mul <= req_is_mul;
                 step <= 6'b0;
-                shift_state <= req_is_mul ? {33'b0, req_abs_b} : {33'b0, req_abs_a};
-                operand <= req_is_mul ? req_abs_a : req_abs_b;
-                operation <= req_op_i;
-                result_negative <= req_a_negative ^ req_b_negative;
-                remainder_negative <= req_a_negative;
-                divide_zero <= !req_is_mul && (req_src2_i == 0);
-                signed_overflow <= req_is_signed_div &&
-                    (req_src1_i == 32'h80000000) && (req_src2_i == 32'hffffffff);
-                original_a <= req_src1_i;
-                operation_tag <= req_rob_tag_i;
-                operation_phys <= req_phys_rd_i;
-                operation_live <= req_target_live_i && req_rob_tag_i[0];
             end
         end
     end

@@ -10,6 +10,7 @@ module rv32_branch_predictor #(
     parameter integer BANK_BITS = 0,
     parameter integer DIRECT_BRANCH_TARGET = 0,
     parameter integer COMPACT_INDIRECT_BTB = 0,
+    parameter integer COMPACT_BTB_ENTRIES = 64,
     parameter integer HISTORY_BITS = 6
 ) (
     input  wire        clk_i,
@@ -41,15 +42,28 @@ module rv32_branch_predictor #(
     output wire [31:0] correct_count_o
 );
     localparam integer BHT_ENTRIES = 256 >> BANK_BITS;
-    localparam integer BTB_ENTRIES = 64 >> BANK_BITS;
-    localparam integer BTB_COMPACT_ACTIVE=(COMPACT_INDIRECT_BTB!=0) && (DIRECT_BRANCH_TARGET==1);
+    localparam integer BTB_COMPACT_ACTIVE=(COMPACT_INDIRECT_BTB!=0) && (DIRECT_BRANCH_TARGET!=0);
+    localparam integer BTB_TOTAL_ENTRIES=BTB_COMPACT_ACTIVE?COMPACT_BTB_ENTRIES:64;
+    localparam integer BTB_ENTRIES=BTB_TOTAL_ENTRIES >> BANK_BITS;
+    localparam integer BTB_TOTAL_INDEX_WIDTH=$clog2(BTB_TOTAL_ENTRIES);
+    initial begin
+        if(COMPACT_BTB_ENTRIES!=16 && COMPACT_BTB_ENTRIES!=32 && COMPACT_BTB_ENTRIES!=64)
+            $fatal(1,"Compact BTB entries must be16/32/64");
+    end
     localparam integer BTB_PAYLOAD_WIDTH=BTB_COMPACT_ACTIVE?39:58;
     // A predictor tag may alias; execution still compares the full resolved
     // target before retirement. Keep all entries, with an eight-bit folded
     // identity instead of twenty-four exact bits in indirect-only mode.
     function [7:0] folded_btb_tag;
         input [31:0] pc;
-        begin folded_btb_tag=pc[15:8] ^ pc[23:16] ^ pc[31:24];end
+        reg [31:0] identity;
+        begin
+            // Fold every PC bit above the chosen index. At64 entries this
+            // reduces exactly to the original three-byte folded identity.
+            identity=pc >> (BTB_TOTAL_INDEX_WIDTH+2);
+            folded_btb_tag=identity[7:0] ^ identity[15:8] ^
+                identity[23:16] ^ identity[31:24];
+        end
     endfunction
     wire [BTB_PAYLOAD_WIDTH-1:0] btb_update_payload=BTB_COMPACT_ACTIVE?
         {folded_btb_tag(feedback_pc_i),feedback_btb_target[31:1]}:
@@ -66,7 +80,7 @@ module rv32_branch_predictor #(
     localparam integer BHT_DOMAINS=(BHT_ENTRIES+3)/4;
     localparam integer BTB_DOMAINS=(BTB_ENTRIES+3)/4;
     localparam integer BHT_INDEX_WIDTH=8-BANK_BITS;
-    localparam integer BTB_INDEX_WIDTH=6-BANK_BITS;
+    localparam integer BTB_INDEX_WIDTH=BTB_TOTAL_INDEX_WIDTH-BANK_BITS;
     wire [BHT_ENTRIES*3-1:0] bht_rows;
     wire [BTB_ENTRIES*59-1:0] btb_rows;
     wire [2:0] query_bht_word;
@@ -135,7 +149,7 @@ module rv32_branch_predictor #(
         ((DIRECT_BRANCH_TARGET == 2) ? ((query_history_i & HISTORY_MASK) << BANK_BITS) : 8'b0);
     wire [7-BANK_BITS:0] query_bht_index = query_full_index[7:BANK_BITS];
     assign pred_training_index_o = query_full_index;
-    wire [5-BANK_BITS:0] query_btb_index = query_pc_i[7:2+BANK_BITS];
+    wire [BTB_INDEX_WIDTH-1:0] query_btb_index = query_pc_i[2+BANK_BITS +: BTB_INDEX_WIDTH];
     wire query_btb_match = query_btb_word[58] &&
                            (query_btb_word[57:34] == query_btb_identity);
     wire [31:0] jal_imm = {{11{query_inst_i[31]}}, query_inst_i[31],
@@ -146,7 +160,7 @@ module rv32_branch_predictor #(
                               query_inst_i[11:8], 1'b0};
     wire [7-BANK_BITS:0] feedback_bht_index = (DIRECT_BRANCH_TARGET == 2) ?
         feedback_training_index_i[7:BANK_BITS] : feedback_pc_i[9:2+BANK_BITS];
-    wire [5-BANK_BITS:0] feedback_btb_index = feedback_pc_i[7:2+BANK_BITS];
+    wire [BTB_INDEX_WIDTH-1:0] feedback_btb_index = feedback_pc_i[2+BANK_BITS +: BTB_INDEX_WIDTH];
     wire feedback_btb_write = feedback_valid_i && feedback_taken_i &&
                              (((DIRECT_BRANCH_TARGET == 0) &&
                                (feedback_kind_i == `RV32IM_PRED_BRANCH)) ||

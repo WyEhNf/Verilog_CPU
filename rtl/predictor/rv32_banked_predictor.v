@@ -10,6 +10,7 @@ module rv32_banked_predictor #(
     parameter integer LEGACY_SENTINEL_HALT = 0,
     parameter integer DIRECT_BRANCH_TARGET = 0,
     parameter integer COMPACT_INDIRECT_BTB = 0,
+    parameter integer COMPACT_BTB_ENTRIES = 64,
     parameter integer FEEDBACK_LANES = 1, MULTI_FEEDBACK = 0,
     parameter integer HISTORY_BITS = 6
 ) (
@@ -37,6 +38,7 @@ module rv32_banked_predictor #(
     input wire [15:0] feedback_metadata_i,
     input wire [FEEDBACK_LANES-1:0] feedback_lane_valid_i,
     input wire [FEEDBACK_LANES*100-1:0] feedback_lane_packets_i,
+    input wire [FEEDBACK_LANES*16-1:0] feedback_lane_metadata_i,
     output reg [31:0] prediction_count_o, correct_count_o
 );
     localparam integer BANK_BITS = $clog2(FE_WIDTH);
@@ -44,7 +46,7 @@ module rv32_banked_predictor #(
                                ((FE_WIDTH == 2) ? 2'b01 : 2'b11);
     wire [1:0] base_bank = query_pc_i[3:2] & BANK_MASK;
     wire [1:0] feedback_bank = feedback_pc_i[3:2] & BANK_MASK;
-    localparam integer MULTI_ACTIVE=(MULTI_FEEDBACK!=0) && (DIRECT_BRANCH_TARGET==1);
+    localparam integer MULTI_ACTIVE=(MULTI_FEEDBACK!=0) && (DIRECT_BRANCH_TARGET!=0);
     wire [FE_WIDTH-1:0] bank_feedback_valid,bank_feedback_correct;
     wire [FE_WIDTH-1:0] bank_taken, bank_hit;
     wire [FE_WIDTH*32-1:0] bank_target;
@@ -86,9 +88,16 @@ module rv32_banked_predictor #(
             wire [7:0] update_training_index;
             if(MULTI_ACTIVE) begin:g_parallel_feedback
                 wire [FEEDBACK_LANES-1:0] candidates,grants;
-                wire [99:0] packet;
+                wire [107:0] packet;
+                wire [FEEDBACK_LANES*108-1:0] packets;
                 for(genvar feedback_lane=0;feedback_lane<FEEDBACK_LANES;feedback_lane=feedback_lane+1) begin:g_lane
                     wire [31:0] lane_pc=feedback_lane_packets_i[feedback_lane*100+68 +: 32];
+                    // This exact prediction-time index belongs to this lane,
+                    // including when two branches resolve in distinct banks.
+                    // Mode1 never consumes it and retains PC-indexed training.
+                    assign packets[feedback_lane*108 +: 108]={
+                        feedback_lane_metadata_i[feedback_lane*16 +: 8],
+                        feedback_lane_packets_i[feedback_lane*100 +: 100]};
                     assign candidates[feedback_lane]=feedback_lane_valid_i[feedback_lane] &&
                         ((lane_pc[3:2] & BANK_MASK)==BANK_NUMBER);
                     if(feedback_lane==0) begin:g_first
@@ -100,12 +109,11 @@ module rv32_banked_predictor #(
                 end
                 // Each existing table bank still has exactly one update.
                 // Different banks accept different resolved lanes together.
-                rv32_frequency_event_select #(.WIDTH(100),.EVENTS(FEEDBACK_LANES),.PRIORITY(0)) feedback_selector (
-                    .events_i(grants),.values_i(feedback_lane_packets_i),
+                rv32_frequency_event_select #(.WIDTH(108),.EVENTS(FEEDBACK_LANES),.PRIORITY(0)) feedback_selector (
+                    .events_i(grants),.values_i(packets),
                     .write_o(update_valid),.value_o(packet));
-                assign {update_pc,update_kind,update_taken,update_target,
+                assign {update_training_index,update_pc,update_kind,update_taken,update_target,
                     update_pred_taken,update_pred_target}=packet;
-                assign update_training_index=8'b0;
             end else begin:g_single_feedback
                 assign update_valid=feedback_valid_i && feedback_bank==BANK_NUMBER;
                 assign update_pc=feedback_pc_i;
@@ -124,7 +132,7 @@ module rv32_banked_predictor #(
             assign bank_query_packets[bank*38 +: 38]={bank_taken[bank],bank_hit[bank],
                 bank_target[bank*32 +: 32],bank_kind[bank*2 +: 2],bank_counter[bank*2 +: 2]};
             rv32_branch_predictor #(.BANK_BITS(BANK_BITS), .DIRECT_BRANCH_TARGET(DIRECT_BRANCH_TARGET),
-                .HISTORY_BITS(HISTORY_BITS), .COMPACT_INDIRECT_BTB(COMPACT_INDIRECT_BTB)) predictor (
+                .HISTORY_BITS(HISTORY_BITS), .COMPACT_INDIRECT_BTB(COMPACT_INDIRECT_BTB), .COMPACT_BTB_ENTRIES(COMPACT_BTB_ENTRIES)) predictor (
                 .clk_i(clk_i), .reset_i(reset_i),
                 .query_valid_i(query_valid_i && word_index < 3'd4),
                 .query_pc_i(pc), .query_inst_i(inst),
