@@ -1,0 +1,31 @@
+# EU 后台期间的条件架构研究
+
+完整EU已先汇报具体pretest报告，并启动唯一一次Windows原生课程timing-only；当前EU Fmax/面积/IPC均未知。程序构建/仿真仍未启动。所有主源与冻结输入保持EU，不修改测量中的RTL。ER1 371.418208MHz与49,638.890694μm²仍作为历史参考，不是当前EU指标。
+
+## 完整ROB确认提前到LSQ行
+
+原ER1路径经lsq.load_complete_rob_query_o在1.0247ns输出，再到backend LSQ-source live_read/value_o在1.2479ns输出。当前normal rob_live_rows明确包含rob_entry_valid与全部ROB_GENERATION_WIDTH，不是仅valid位；producer_query_tags包含原LSQ full ROB tag。任何进一步优化都必须保留tag valid、slot和全部generation，以及row_cancel/unretired/recovery规则。
+
+一个条件方向是先以各LSQ存储tag查询当前normal ROB行、比较完整generation，再把结果随原report winner选择，避免先报告/选query后再异步读ROB。原则上可交换组合选择与独立查询，不能用旧快照valid替代当前权威。当前16 LSQ行意味着潜在16个ROB查询口；复制generation表读、比较与分发可能超出面积余量。必须处理原无report的默认tag/zero query，并保持未retired和recovery资格，不能仅称“地址已预解码，所以generation不用比较”。
+
+没有创建这个候选，也没有新增查询、寄存器、形式或测试。只有EU结果仍显示该链为主限制且有实际面积余量时，才值得进一步实现。缓存一个live Boolean需要对ROB回收、generation更新和恢复建立失效规则，不能直接使用。
+
+## 只推迟刚被WB唤醒的store分配地址
+
+当前backend lsq_alloc_addr_valid由原d_valid、d_is_store、rs_src1_ready及EARLY_STORE_ADDRESS控制。PRF合法匹配WB通过bypass_write覆盖stored_tree读值；RS在REGISTERED_BASE_PROBE模式下向共享地址探针提供既有src1_ready_mem/src1_value_mem。store_rs_links已跟踪LSQ/RS分配身份与释放，shared selector仍检查原ROB标签/存活许可。
+
+如果EU并行adder/路由导致面积或时序回退，可研究只让不依赖本拍WB覆盖的地址走原stored PRF早期分配路径；依赖本拍WB的store仍在RS捕获正确base，由既有共享探针/普通AGU稍后更新LSQ地址。这样可削掉WB→allocation sum联系并减少源侧adder，代价是某些store地址及其后的相关load可晚一次机会。它不同于此前全部关闭allocation early address：应保留已存储、原ready资格已满足的早期地址。
+
+该方案需保留原rs_src1_ready、合法物理映射和同bundle依赖判断；不能只看PRF stored_ready就新增分配许可。addr_ready为0时payload可能未定义，必须检查原未知地址store hazard仍阻挡相关load，以及后来完整tag/generation匹配的地址更新、commit等待、link释放/recovery，避免deadlock或提前发store。不能宣称原事务周期完全相同；IPC影响未知。
+
+仅完成现有源码所有者/接口阅读，尚未创建或采用该候选；需当前实际时序/面积和后续必要IPC数据支持。默认先保留EU零额外周期的方案，不为这些条件想法开启分项测试。
+
+## 保存与状态
+
+本研究只读取既有ER1路径和当前已冻结EU源码。未新增hardware实现、未改变课程工具/约束/计价/测试集，也未开始第二个时序任务或程序任务。
+
+当前pretest：`E:/Verilog_cpu/reports/frequency_batch_EU_pretest_2026-10-05.md`。
+
+当前run：`F:/CPU2026CourseRuns/architecture_EU_20261005`。
+
+源码依据：backend normal ROB查询、allocation地址及store_rs_links；PRF stored_tree/ready_tree/bypass_match；RS REGISTERED_BASE_PROBE。
