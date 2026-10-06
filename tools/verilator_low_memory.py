@@ -87,6 +87,13 @@ def build_plan(arguments):
         raise ValueError("course build requires --Mdir and --top-module")
     prefix = prefix or "V" + module
     make = executable(os.environ.get("MAKE", "make"))
+    if os.name == "nt":
+        # Official build.py resolves native executables to backslash paths.
+        # Verilator's archive recipe passes AR through sh/xargs, so preserve
+        # absolute tool paths using forward slashes for all four overrides.
+        make_flags = [flag.replace("\\", "/") if flag.partition("=")[0]
+                      in ("CXX", "LINK", "AR", "PYTHON3") else flag
+                      for flag in make_flags]
     # Optimize hot model code for runtime; Word4 was measured with GCC -O3.
     # Keep runtime-library and cold-path flags at their defaults.
     # An explicit make override still wins.
@@ -204,6 +211,17 @@ def group_cpp_units(directory, prefix):
     return result
 
 
+def normalize_native_make_paths(directory):
+    """Native Windows Verilator emits backslashes inside absolute make paths."""
+    if os.name == "nt":
+        for path in Path(directory).glob("*.mk"):
+            content = path.read_text()
+            normalized = re.sub(r"(?<!\w)[A-Za-z]:[\\/][^\s]*",
+                                lambda match: match[0].replace("\\", "/"), content)
+            if normalized != content:
+                path.write_text(normalized, newline="\n")
+
+
 def main(arguments=None):
     arguments = list(sys.argv[1:] if arguments is None else arguments)
     try:
@@ -232,6 +250,7 @@ def main(arguments=None):
               f"status={status}", file=sys.stderr, flush=True)
         if status:
             return status
+        normalize_native_make_paths(compile_command[2])
         if os.environ.get("CPU2026_NATIVE_BITS", "1") == "1":
             from cpu2026_fast_bits import install as install_bits
             bits = install_bits(compile_command[2], Path(compile_command[4]).stem)
