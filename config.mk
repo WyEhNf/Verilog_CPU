@@ -24,6 +24,10 @@ export CPU2026_TRACE_DEPTH
 CPU2026_COMPACT_IDS ?= 1
 export CPU2026_COMPACT_IDS
 # Set CPU2026_COMPACT_IDS=0 to preserve original internal diagnostic names.
+# Combine up to 8 small C++ files per unit, keeping hot/cold flags separate.
+CPU2026_CPP_GROUP_BYTES ?= 524288
+export CPU2026_CPP_GROUP_BYTES
+# Set CPU2026_CPP_GROUP_BYTES=0 to compile every generated file separately.
 # Optional real executable override for the low-memory driver.
 # export CPU2026_REAL_VERILATOR = /path/to/verilator
 YOSYS ?=

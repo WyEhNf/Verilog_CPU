@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Separate course Verilator generation from bounded-concurrency C++ builds."""
 import os
+import json
 from pathlib import Path
+import re
 import shlex
 import shutil
 import subprocess
@@ -96,7 +98,82 @@ def build_plan(arguments):
     # This fixed, public key is for reproducible names, not IP protection.
     id_flags = (["--protect-ids", "--protect-key", "CPU2026-COMPILE-NAMES-V1"]
                 if compact_ids else [])
+    if int(os.environ.get("CPU2026_CPP_GROUP_BYTES", "524288")) < 0:
+        raise ValueError("CPU2026_CPP_GROUP_BYTES must be nonnegative")
     return GENERATION_FLAGS + trace_flags + id_flags + generation, compile_command
+
+
+def group_cpp_units(directory, prefix):
+    """Combine small generated units, retaining fast/slow compiler categories."""
+    limit = int(os.environ.get("CPU2026_CPP_GROUP_BYTES", "524288"))
+    if limit < 0:
+        raise ValueError("CPU2026_CPP_GROUP_BYTES must be nonnegative")
+    if not limit:
+        return {"enabled": False}
+    directory = Path(directory)
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", prefix):
+        raise ValueError("unsupported generated C++ prefix")
+    classes = directory / (prefix + "_classes.mk")
+    manifest = directory / (prefix + "_cpu2026_groups.json")
+    content = classes.read_text()
+    marker = "# CPU2026 bounded C++ groups\n"
+    if content.startswith(marker):
+        return json.loads(manifest.read_text())
+    pattern = re.compile(
+        r"^(VM_(?:CLASSES|SUPPORT)_(?:FAST|SLOW))[ \t]*\+=[ \t]*\\\n"
+        r"((?:[ \t]+[^\s]+[ \t]+\\\n)*)", re.MULTILINE)
+    matches = list(pattern.finditer(content))
+    if len(matches) != 4:
+        raise ValueError("unsupported Verilator generated class-list format")
+    seen = set()
+    sections = []
+    writes = []
+    replacements = {}
+    for match in matches:
+        variable = match[1]
+        names = [line.strip()[:-1].strip() for line in match[2].splitlines()]
+        groups = []
+        pending = []
+        size = 0
+        for name in names:
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) or name in seen:
+                raise ValueError("invalid or duplicate generated C++ class")
+            seen.add(name)
+            source_size = (directory / (name + ".cpp")).stat().st_size
+            if pending and (size + source_size > limit or len(pending) == 8):
+                groups.append(pending)
+                pending = []
+                size = 0
+            pending.append(name)
+            size += source_size
+        if pending:
+            groups.append(pending)
+        outputs = []
+        records = []
+        for index, members in enumerate(groups):
+            if len(members) == 1:
+                output = members[0]
+            else:
+                output = f"{prefix}__cpu2026_{variable.lower()}_{index}"
+                includes = "".join(f'#include "{name}.cpp"\n' for name in members)
+                writes.append((directory / (output + ".cpp"),
+                               "// Bounded group of generated C++ units.\n" + includes))
+            outputs.append(output)
+            records.append({"unit": output, "members": members})
+        replacements[variable] = (variable + " += \\\n"
+                                  + "".join(f"\t{name} \\\n" for name in outputs))
+        sections.append({"category": variable, "original_units": len(names),
+                         "compilation_units": len(outputs), "groups": records})
+    result = {"enabled": True, "byte_limit": limit, "max_members": 8,
+              "original_units": len(seen),
+              "compilation_units": sum(s["compilation_units"] for s in sections),
+              "sections": sections}
+    for path, text in writes:
+        path.write_text(text, newline="\n")
+    classes.write_text(marker + pattern.sub(lambda m: replacements[m[1]], content),
+                       newline="\n")
+    manifest.write_text(json.dumps(result, indent=2) + "\n", newline="\n")
+    return result
 
 
 def main(arguments=None):
@@ -123,6 +200,11 @@ def main(arguments=None):
               f"status={status}", file=sys.stderr, flush=True)
         if status:
             return status
+        grouped = group_cpp_units(compile_command[2], Path(compile_command[4]).stem)
+        if grouped["enabled"]:
+            print(f"[build] C++ units: {grouped['original_units']} -> "
+                  f"{grouped['compilation_units']}; max group bytes="
+                  f"{grouped['byte_limit']}; max files=8", file=sys.stderr, flush=True)
         # The generator has exited and released its memory before g++ starts.
         print("[build] Phase 2: C++ compilation; jobs=1", file=sys.stderr,
               flush=True)
