@@ -1,9 +1,8 @@
 `timescale 1ns/1ps
 
-// Transaction bridge between the caches and the independent line ports.  The
-// instruction side is deliberately transparent so a non-blocking I-cache can
-// keep several tagged reads in flight.  The data side retains its one-entry
-// ordered transaction buffer until the D-cache grows multiple MSHRs.
+// Both cache sides pass tagged line transactions directly to memory.
+// Invalid addresses create a retained local error response; response payload
+// selection is distributed without adding a transaction or pipeline stage.
 module rv32_memory_bridge #(
     parameter integer MEMORY_SIZE = 1048576
 ) (
@@ -67,12 +66,12 @@ module rv32_memory_bridge #(
     localparam [31:0] MEMORY_SIZE_U = MEMORY_SIZE;
 
     reg i_local_error;
-    reg [31:0] i_line_addr;
-    reg [7:0] i_id;
+    wire [31:0] i_line_addr;
+    wire [7:0] i_id;
 
     reg d_local_error;
-    reg [31:0] d_line_addr;
-    reg [7:0] d_id;
+    wire [31:0] d_line_addr;
+    wire [7:0] d_id;
 
     wire i_line_valid = line_address_valid(cache_i_req_line_addr_i);
     wire d_line_valid = line_address_valid(cache_d_req_line_addr_i);
@@ -107,19 +106,39 @@ module rv32_memory_bridge #(
     assign mem_d_req_wmask_o = cache_d_req_wmask_i;
     assign mem_d_req_id_o = cache_d_req_id_i;
 
-    assign cache_i_resp_valid_o = i_local_error || mem_i_resp_valid_i;
-    assign cache_i_resp_line_addr_o = i_local_error ? i_line_addr : mem_i_resp_line_addr_i;
-    assign cache_i_resp_data_o = i_local_error ? 128'd0 : mem_i_resp_data_i;
-    assign cache_i_resp_id_o = i_local_error ? i_id : mem_i_resp_id_i;
-    assign cache_i_resp_error_o = i_local_error || mem_i_resp_error_i;
-    assign mem_i_resp_ready_o = !i_local_error && cache_i_resp_ready_i;
 
-    assign cache_d_resp_valid_o = d_local_error || mem_d_resp_valid_i;
-    assign cache_d_resp_line_addr_o = d_local_error ? d_line_addr : mem_d_resp_line_addr_i;
-    assign cache_d_resp_data_o = d_local_error ? 128'd0 : mem_d_resp_data_i;
-    assign cache_d_resp_id_o = d_local_error ? d_id : mem_d_resp_id_i;
-    assign cache_d_resp_error_o = d_local_error || mem_d_resp_error_i;
-    assign mem_d_resp_ready_o = !d_local_error && cache_d_resp_ready_i;
+    wire [11:0] i_error_views,d_error_views;
+    rv32_frequency_control_tree #(.LEAVES(12)) instruction_error_tree (
+        .signal_i(i_local_error),.views_o(i_error_views));
+    rv32_frequency_control_tree #(.LEAVES(12)) data_error_tree (
+        .signal_i(d_local_error),.views_o(d_error_views));
+    rv32_frequency_word_bank #(.WIDTH(40)) instruction_error_record (
+        .clk_i(clk_i),.write_i(!reset_i && i_cache_req_fire),
+        .data_i({cache_i_req_line_addr_i,cache_i_req_id_i}),.data_o({i_line_addr,i_id}));
+    rv32_frequency_word_bank #(.WIDTH(40)) data_error_record (
+        .clk_i(clk_i),.write_i(!reset_i && d_cache_req_fire),
+        .data_i({cache_d_req_line_addr_i,cache_d_req_id_i}),.data_o({d_line_addr,d_id}));
+    genvar response_word;
+    generate
+        for(response_word=0;response_word<2;response_word=response_word+1) begin:g_response_address
+            assign cache_i_resp_line_addr_o[response_word*16 +: 16]=i_error_views[response_word]?
+                i_line_addr[response_word*16 +: 16]:mem_i_resp_line_addr_i[response_word*16 +: 16];
+            assign cache_d_resp_line_addr_o[response_word*16 +: 16]=d_error_views[response_word]?
+                d_line_addr[response_word*16 +: 16]:mem_d_resp_line_addr_i[response_word*16 +: 16];
+        end
+        for(response_word=0;response_word<8;response_word=response_word+1) begin:g_response_data
+            assign cache_i_resp_data_o[response_word*16 +: 16]={16{!i_error_views[response_word+2]}} & mem_i_resp_data_i[response_word*16 +: 16];
+            assign cache_d_resp_data_o[response_word*16 +: 16]={16{!d_error_views[response_word+2]}} & mem_d_resp_data_i[response_word*16 +: 16];
+        end
+    endgenerate
+    assign cache_i_resp_valid_o=i_error_views[11] || mem_i_resp_valid_i;
+    assign cache_i_resp_id_o=i_error_views[10]?i_id:mem_i_resp_id_i;
+    assign cache_i_resp_error_o=i_error_views[11] || mem_i_resp_error_i;
+    assign mem_i_resp_ready_o=!i_error_views[11] && cache_i_resp_ready_i;
+    assign cache_d_resp_valid_o=d_error_views[11] || mem_d_resp_valid_i;
+    assign cache_d_resp_id_o=d_error_views[10]?d_id:mem_d_resp_id_i;
+    assign cache_d_resp_error_o=d_error_views[11] || mem_d_resp_error_i;
+    assign mem_d_resp_ready_o=!d_error_views[11] && cache_d_resp_ready_i;
 
     assign event_i_mem_request_o = i_mem_req_fire;
     assign event_d_mem_read_o = d_mem_req_fire && !mem_d_req_write_o;
@@ -128,21 +147,13 @@ module rv32_memory_bridge #(
     always @(posedge clk_i) begin
         if (reset_i) begin
             i_local_error <= 1'b0;
-            i_line_addr <= 32'd0;
-            i_id <= 8'd0;
             d_local_error <= 1'b0;
-            d_line_addr <= 32'd0;
-            d_id <= 8'd0;
         end else begin
             if (i_cache_req_fire) begin
-                i_line_addr <= cache_i_req_line_addr_i;
-                i_id <= cache_i_req_id_i;
                 if (!i_line_valid)
                     i_local_error <= 1'b1;
             end
             if (d_cache_req_fire) begin
-                d_line_addr <= cache_d_req_line_addr_i;
-                d_id <= cache_d_req_id_i;
                 if (!d_line_valid)
                     d_local_error <= 1'b1;
             end
