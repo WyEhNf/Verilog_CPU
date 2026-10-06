@@ -1,0 +1,1195 @@
+[
+  {
+    "version": "V001",
+    "name": "V001 rv32m_multiplier",
+    "commits": [
+      ":1",
+      ":8",
+      ":11",
+      ":13"
+    ]
+  },
+  {
+    "version": "V002",
+    "name": "V002 Wallace multiplier",
+    "commits": [
+      ":14"
+    ]
+  },
+  {
+    "version": "V003",
+    "name": "V003 rv32_backend_joint",
+    "commits": [
+      ":15",
+      ":17"
+    ]
+  },
+  {
+    "version": "V004",
+    "name": "V004 rv32_backend_joint",
+    "commits": [
+      ":18"
+    ]
+  },
+  {
+    "version": "V005",
+    "name": "V005 cpu_core",
+    "commits": [
+      ":19",
+      ":21",
+      ":23"
+    ]
+  },
+  {
+    "version": "V006",
+    "name": "V006 LSQ scheduling",
+    "commits": [
+      ":24"
+    ]
+  },
+  {
+    "version": "V007",
+    "name": "V007 sparse LSQ allocation",
+    "commits": [
+      ":25",
+      ":27"
+    ]
+  },
+  {
+    "version": "V008",
+    "name": "V008 Wallace multiplier",
+    "commits": [
+      ":28"
+    ]
+  },
+  {
+    "version": "V009",
+    "name": "V009 ROB recovery",
+    "commits": [
+      ":29",
+      ":33"
+    ]
+  },
+  {
+    "version": "V010",
+    "name": "V010 rv32_completion_network",
+    "commits": [
+      ":34",
+      ":38"
+    ]
+  },
+  {
+    "version": "V011",
+    "name": "V011 rv32_backend_joint",
+    "commits": [
+      ":39",
+      ":42",
+      ":44"
+    ]
+  },
+  {
+    "version": "V012",
+    "name": "V012 LSQ scheduling",
+    "commits": [
+      ":45",
+      ":47",
+      ":52",
+      ":54"
+    ]
+  },
+  {
+    "version": "V013",
+    "name": "V013 rv32_backend_joint",
+    "commits": [
+      ":55"
+    ]
+  },
+  {
+    "version": "V014",
+    "name": "V014 PRF storage",
+    "commits": [
+      ":56"
+    ]
+  },
+  {
+    "version": "V015",
+    "name": "V015 PRF storage",
+    "commits": [
+      ":57",
+      ":59"
+    ]
+  },
+  {
+    "version": "V016",
+    "name": "V016 LSQ scheduling",
+    "commits": [
+      ":60"
+    ]
+  },
+  {
+    "version": "V017",
+    "name": "V017 store forwarding",
+    "commits": [
+      ":61",
+      ":63",
+      ":65"
+    ]
+  },
+  {
+    "version": "V018",
+    "name": "V018 rv32_lsq",
+    "commits": [
+      ":66"
+    ]
+  },
+  {
+    "version": "V019",
+    "name": "V019 P5 narrow store payload",
+    "commits": [
+      ":67",
+      ":73"
+    ]
+  },
+  {
+    "version": "V020",
+    "name": "V020 P5 narrow store payload",
+    "commits": [
+      ":74",
+      ":77"
+    ]
+  },
+  {
+    "version": "V021",
+    "name": "V021 P6 metadata ownership",
+    "commits": [
+      ":78",
+      ":80",
+      ":82"
+    ]
+  },
+  {
+    "version": "V022",
+    "name": "V022 P7 free bitmap",
+    "commits": [
+      ":83",
+      ":87",
+      ":91"
+    ]
+  },
+  {
+    "version": "V023",
+    "name": "V023 rv32_backend_joint",
+    "commits": [
+      ":92",
+      ":94"
+    ]
+  },
+  {
+    "version": "V024",
+    "name": "V024 P8 ROB reclaim metadata",
+    "commits": [
+      ":95",
+      ":98",
+      ":102"
+    ]
+  },
+  {
+    "version": "V025",
+    "name": "V025 P8b ROB PC lookup",
+    "commits": [
+      ":103",
+      ":105"
+    ]
+  },
+  {
+    "version": "V026",
+    "name": "V026 P8b ROB PC lookup",
+    "commits": [
+      ":106",
+      ":109",
+      ":115",
+      ":119"
+    ]
+  },
+  {
+    "version": "V027",
+    "name": "V027 SRAM integration",
+    "commits": [
+      ":120",
+      ":122",
+      ":124",
+      ":127"
+    ]
+  },
+  {
+    "version": "V028",
+    "name": "V028 cpu_core",
+    "commits": [
+      ":128",
+      ":130",
+      ":134"
+    ]
+  },
+  {
+    "version": "V029",
+    "name": "V029 rv32m_multiplier_radix4",
+    "commits": [
+      ":135",
+      ":140",
+      ":145",
+      ":150"
+    ]
+  },
+  {
+    "version": "V030",
+    "name": "V030 ROB recovery",
+    "commits": [
+      ":151"
+    ]
+  },
+  {
+    "version": "V031",
+    "name": "V031 ROB recovery",
+    "commits": [
+      ":152"
+    ]
+  },
+  {
+    "version": "V032",
+    "name": "V032 rv32_rob",
+    "commits": [
+      ":153"
+    ]
+  },
+  {
+    "version": "V033",
+    "name": "V033 ROB recovery",
+    "commits": [
+      ":154"
+    ]
+  },
+  {
+    "version": "V034",
+    "name": "V034 rv32_rob",
+    "commits": [
+      ":155",
+      ":161",
+      ":165"
+    ]
+  },
+  {
+    "version": "V035",
+    "name": "V035 LSQ scheduling",
+    "commits": [
+      ":166"
+    ]
+  },
+  {
+    "version": "V036",
+    "name": "V036 PRF storage",
+    "commits": [
+      ":167",
+      ":169",
+      ":174"
+    ]
+  },
+  {
+    "version": "V037",
+    "name": "V037 branch prediction",
+    "commits": [
+      ":175",
+      ":177",
+      ":182"
+    ]
+  },
+  {
+    "version": "V038",
+    "name": "V038 shared datapath",
+    "commits": [
+      ":183",
+      ":186",
+      ":189"
+    ]
+  },
+  {
+    "version": "V039",
+    "name": "V039 shared datapath",
+    "commits": [
+      ":190",
+      ":192",
+      ":197"
+    ]
+  },
+  {
+    "version": "V040",
+    "name": "V040 rv32m_mdu_iterative",
+    "commits": [
+      ":198"
+    ]
+  },
+  {
+    "version": "V041",
+    "name": "V041 P7 free bitmap",
+    "commits": [
+      ":199"
+    ]
+  },
+  {
+    "version": "V042",
+    "name": "V042 shared datapath",
+    "commits": [
+      ":200",
+      ":203",
+      ":208"
+    ]
+  },
+  {
+    "version": "V043",
+    "name": "V043 P7 free bitmap",
+    "commits": [
+      ":209",
+      ":211"
+    ]
+  },
+  {
+    "version": "V044",
+    "name": "V044 rv32m_mdu_iterative",
+    "commits": [
+      ":212",
+      ":213"
+    ]
+  },
+  {
+    "version": "V045",
+    "name": "V045 ROB recovery",
+    "commits": [
+      ":214",
+      ":216",
+      ":221"
+    ]
+  },
+  {
+    "version": "V046",
+    "name": "V046 LSQ scheduling",
+    "commits": [
+      ":222",
+      ":224",
+      ":229"
+    ]
+  },
+  {
+    "version": "V047",
+    "name": "V047 RAT recovery",
+    "commits": [
+      ":230",
+      ":232"
+    ]
+  },
+  {
+    "version": "V048",
+    "name": "V048 LSQ scheduling",
+    "commits": [
+      ":233",
+      ":235"
+    ]
+  },
+  {
+    "version": "V049",
+    "name": "V049 P7 free bitmap",
+    "commits": [
+      ":236",
+      ":238",
+      ":242"
+    ]
+  },
+  {
+    "version": "V050",
+    "name": "V050 filelist",
+    "commits": [
+      ":243",
+      ":246"
+    ]
+  },
+  {
+    "version": "V051",
+    "name": "V051 rename allocation",
+    "commits": [
+      ":247",
+      ":249",
+      ":254"
+    ]
+  },
+  {
+    "version": "V052",
+    "name": "V052 rv32_serial_backend",
+    "commits": [
+      ":255",
+      ":257",
+      ":260"
+    ]
+  },
+  {
+    "version": "V053",
+    "name": "V053 rv32_dcache",
+    "commits": [
+      ":261",
+      ":263"
+    ]
+  },
+  {
+    "version": "V054",
+    "name": "V054 LSQ scheduling",
+    "commits": [
+      ":264"
+    ]
+  },
+  {
+    "version": "V055",
+    "name": "V055 cpu_core",
+    "commits": [
+      ":265",
+      ":267",
+      ":269"
+    ]
+  },
+  {
+    "version": "V056",
+    "name": "V056 LSQ scheduling",
+    "commits": [
+      ":270"
+    ]
+  },
+  {
+    "version": "V057",
+    "name": "V057 ROB recovery",
+    "commits": [
+      ":271",
+      ":273",
+      ":275"
+    ]
+  },
+  {
+    "version": "V058",
+    "name": "V058 rv32_icache",
+    "commits": [
+      ":276",
+      ":278",
+      ":280"
+    ]
+  },
+  {
+    "version": "V059",
+    "name": "V059 ROB recovery",
+    "commits": [
+      ":281",
+      ":283",
+      ":285"
+    ]
+  },
+  {
+    "version": "V060",
+    "name": "V060 rv32_icache_nonblocking",
+    "commits": [
+      ":286",
+      ":291",
+      ":293"
+    ]
+  },
+  {
+    "version": "V061",
+    "name": "V061 LSQ scheduling",
+    "commits": [
+      ":294",
+      ":297",
+      ":299"
+    ]
+  },
+  {
+    "version": "V062",
+    "name": "V062 nonblocking cache",
+    "commits": [
+      ":300"
+    ]
+  },
+  {
+    "version": "V063",
+    "name": "V063 branch prediction",
+    "commits": [
+      ":301",
+      ":304"
+    ]
+  },
+  {
+    "version": "V064",
+    "name": "V064 branch prediction",
+    "commits": [
+      ":305",
+      ":308",
+      ":312"
+    ]
+  },
+  {
+    "version": "V065",
+    "name": "V065 halfword ISA support",
+    "commits": [
+      ":313",
+      ":315"
+    ]
+  },
+  {
+    "version": "V066",
+    "name": "V066 rv32_dcache_nonblocking",
+    "commits": [
+      ":316"
+    ]
+  },
+  {
+    "version": "V067",
+    "name": "V067 rv32_icache_nonblocking",
+    "commits": [
+      ":317"
+    ]
+  },
+  {
+    "version": "V068",
+    "name": "V068 rv32_icache_nonblocking",
+    "commits": [
+      ":318"
+    ]
+  },
+  {
+    "version": "V069",
+    "name": "V069 LSQ scheduling",
+    "commits": [
+      ":319"
+    ]
+  },
+  {
+    "version": "V070",
+    "name": "V070 LSQ scheduling",
+    "commits": [
+      ":320"
+    ]
+  },
+  {
+    "version": "V071",
+    "name": "V071 rv32_dcache_nonblocking",
+    "commits": [
+      ":321"
+    ]
+  },
+  {
+    "version": "V072",
+    "name": "V072 rv32_dcache_nonblocking",
+    "commits": [
+      ":322"
+    ]
+  },
+  {
+    "version": "V073",
+    "name": "V073 rv32m_mdu_reservation_station",
+    "commits": [
+      ":323",
+      ":325"
+    ]
+  },
+  {
+    "version": "V074",
+    "name": "V074 ROB recovery",
+    "commits": [
+      ":326",
+      ":328"
+    ]
+  },
+  {
+    "version": "V075",
+    "name": "V075 rv32_reservation_station",
+    "commits": [
+      ":329"
+    ]
+  },
+  {
+    "version": "V076",
+    "name": "V076 branch prediction",
+    "commits": [
+      ":330"
+    ]
+  },
+  {
+    "version": "V077",
+    "name": "V077 cpu_core",
+    "commits": [
+      ":331"
+    ]
+  },
+  {
+    "version": "V078",
+    "name": "V078 branch prediction",
+    "commits": [
+      ":332"
+    ]
+  },
+  {
+    "version": "V079",
+    "name": "V079 branch prediction",
+    "commits": [
+      ":333"
+    ]
+  },
+  {
+    "version": "V080",
+    "name": "V080 LSQ scheduling",
+    "commits": [
+      ":334",
+      ":336"
+    ]
+  },
+  {
+    "version": "V081",
+    "name": "V081 ROB recovery",
+    "commits": [
+      ":337",
+      ":339"
+    ]
+  },
+  {
+    "version": "V082",
+    "name": "V082 nonblocking cache",
+    "commits": [
+      ":340",
+      ":342"
+    ]
+  },
+  {
+    "version": "V083",
+    "name": "V083 rv32_icache_nonblocking",
+    "commits": [
+      ":343"
+    ]
+  },
+  {
+    "version": "V084",
+    "name": "V084 cpu_core",
+    "commits": [
+      ":344"
+    ]
+  },
+  {
+    "version": "V085",
+    "name": "V085 cpu_core",
+    "commits": [
+      ":345"
+    ]
+  },
+  {
+    "version": "V086",
+    "name": "V086 rv32_icache_nonblocking",
+    "commits": [
+      ":346"
+    ]
+  },
+  {
+    "version": "V087",
+    "name": "V087 rv32_icache_nonblocking",
+    "commits": [
+      ":347"
+    ]
+  },
+  {
+    "version": "V088",
+    "name": "V088 rv32m_divider",
+    "commits": [
+      ":348"
+    ]
+  },
+  {
+    "version": "V089",
+    "name": "V089 rv32_icache_nonblocking",
+    "commits": [
+      ":349",
+      ":351",
+      ":353"
+    ]
+  },
+  {
+    "version": "V090",
+    "name": "V090 branch prediction",
+    "commits": [
+      ":354"
+    ]
+  },
+  {
+    "version": "V091",
+    "name": "V091 cpu_core",
+    "commits": [
+      ":355"
+    ]
+  },
+  {
+    "version": "V092",
+    "name": "V092 cpu_core",
+    "commits": [
+      ":356"
+    ]
+  },
+  {
+    "version": "V093",
+    "name": "V093 rv32_icache_nonblocking",
+    "commits": [
+      ":357"
+    ]
+  },
+  {
+    "version": "V094",
+    "name": "V094 rv32_icache_nonblocking",
+    "commits": [
+      ":358",
+      ":360",
+      ":362"
+    ]
+  },
+  {
+    "version": "V095",
+    "name": "V095 store forwarding",
+    "commits": [
+      ":363"
+    ]
+  },
+  {
+    "version": "V096",
+    "name": "V096 rv32_lsq",
+    "commits": [
+      ":364",
+      ":366"
+    ]
+  },
+  {
+    "version": "V097",
+    "name": "V097 rv32_dcache_nonblocking",
+    "commits": [
+      ":367"
+    ]
+  },
+  {
+    "version": "V098",
+    "name": "V098 store forwarding",
+    "commits": [
+      ":368"
+    ]
+  },
+  {
+    "version": "V099",
+    "name": "V099 branch prediction",
+    "commits": [
+      ":369"
+    ]
+  },
+  {
+    "version": "V100",
+    "name": "V100 rv32_icache_nonblocking",
+    "commits": [
+      ":370",
+      ":372"
+    ]
+  },
+  {
+    "version": "V101",
+    "name": "V101 rv32_icache_nonblocking",
+    "commits": [
+      ":373"
+    ]
+  },
+  {
+    "version": "V102",
+    "name": "V102 rv32_icache_nonblocking",
+    "commits": [
+      ":374"
+    ]
+  },
+  {
+    "version": "V104",
+    "name": "V104 Wallace multiplier",
+    "commits": [
+      ":375",
+      ":377"
+    ]
+  },
+  {
+    "version": "V105",
+    "name": "V105 nonblocking cache",
+    "commits": [
+      ":378"
+    ]
+  },
+  {
+    "version": "V106",
+    "name": "V106 cpu_core",
+    "commits": [
+      ":380",
+      ":385"
+    ]
+  },
+  {
+    "version": "V107",
+    "name": "V107 ROB recovery",
+    "commits": [
+      ":386",
+      ":388"
+    ]
+  },
+  {
+    "version": "V108",
+    "name": "V108 jump link writeback",
+    "commits": [
+      ":389",
+      ":392"
+    ]
+  },
+  {
+    "version": "V109",
+    "name": "V109 nonblocking cache",
+    "commits": [
+      ":393",
+      ":396"
+    ]
+  },
+  {
+    "version": "V110",
+    "name": "V110 LSQ scheduling",
+    "commits": [
+      ":397",
+      ":399"
+    ]
+  },
+  {
+    "version": "V111",
+    "name": "V111 LSQ scheduling",
+    "commits": [
+      ":400",
+      ":402",
+      ":408"
+    ]
+  },
+  {
+    "version": "V112",
+    "name": "V112 LSQ scheduling",
+    "commits": [
+      ":409"
+    ]
+  },
+  {
+    "version": "V113",
+    "name": "V113 rv32_icache_nonblocking",
+    "commits": [
+      ":410",
+      ":415",
+      ":430"
+    ]
+  },
+  {
+    "version": "V114",
+    "name": "V114 LSQ scheduling",
+    "commits": [
+      ":431",
+      ":433",
+      ":438",
+      ":440"
+    ]
+  },
+  {
+    "version": "V115",
+    "name": "V115 LSQ scheduling",
+    "commits": [
+      ":441",
+      ":443"
+    ]
+  },
+  {
+    "version": "V116",
+    "name": "V116 LSQ scheduling",
+    "commits": [
+      ":444",
+      ":447",
+      ":450"
+    ]
+  },
+  {
+    "version": "V117",
+    "name": "V117 store forwarding",
+    "commits": [
+      ":451",
+      ":454",
+      ":456",
+      ":459"
+    ]
+  },
+  {
+    "version": "V118",
+    "name": "V118 LSQ scheduling",
+    "commits": [
+      ":460",
+      ":462"
+    ]
+  },
+  {
+    "version": "V119",
+    "name": "V119 ROB reclaim",
+    "commits": [
+      ":463",
+      ":465",
+      ":468"
+    ]
+  },
+  {
+    "version": "V120",
+    "name": "V120 ROB recovery",
+    "commits": [
+      ":469",
+      ":472",
+      ":476"
+    ]
+  },
+  {
+    "version": "V121",
+    "name": "V121 rv32_dcache_nonblocking",
+    "commits": [
+      ":477",
+      ":481",
+      ":488",
+      ":493"
+    ]
+  },
+  {
+    "version": "V122",
+    "name": "V122 LSQ scheduling",
+    "commits": [
+      ":494",
+      ":497",
+      ":505",
+      ":507"
+    ]
+  },
+  {
+    "version": "V123",
+    "name": "V123 halfword ISA support",
+    "commits": [
+      ":508",
+      ":511"
+    ]
+  },
+  {
+    "version": "V124",
+    "name": "V124 halfword ISA support",
+    "commits": [
+      ":512",
+      ":515",
+      ":518"
+    ]
+  },
+  {
+    "version": "V125",
+    "name": "V125 MMIO halt protocol",
+    "commits": [
+      ":519",
+      ":523",
+      ":527"
+    ]
+  },
+  {
+    "version": "V126",
+    "name": "V126 rv32_dcache_nonblocking",
+    "commits": [
+      ":528",
+      ":531",
+      ":539"
+    ]
+  },
+  {
+    "version": "V127",
+    "name": "V127 rv32_icache_nonblocking",
+    "commits": [
+      ":540",
+      ":547",
+      ":558",
+      ":562"
+    ]
+  },
+  {
+    "version": "V128",
+    "name": "V128 rename allocation",
+    "commits": [
+      ":563",
+      ":565"
+    ]
+  },
+  {
+    "version": "V129",
+    "name": "V129 rename allocation",
+    "commits": [
+      ":566",
+      ":568"
+    ]
+  },
+  {
+    "version": "V130",
+    "name": "V130 LSQ scheduling",
+    "commits": [
+      ":569",
+      ":571",
+      ":573",
+      ":575"
+    ]
+  },
+  {
+    "version": "V131",
+    "name": "V131 ROB recovery",
+    "commits": [
+      ":576",
+      ":578",
+      ":580"
+    ]
+  },
+  {
+    "version": "V132",
+    "name": "V132 LSQ scheduling",
+    "commits": [
+      ":581",
+      ":583"
+    ]
+  },
+  {
+    "version": "V133",
+    "name": "V133 LSQ scheduling",
+    "commits": [
+      ":584",
+      ":586"
+    ]
+  },
+  {
+    "version": "V134",
+    "name": "V134 rv32_lsq",
+    "commits": [
+      ":587",
+      ":588",
+      ":590",
+      ":592"
+    ]
+  },
+  {
+    "version": "V135",
+    "name": "V135 ROB recovery",
+    "commits": [
+      ":593",
+      ":595"
+    ]
+  },
+  {
+    "version": "V136",
+    "name": "V136 rv32i_alu",
+    "commits": [
+      ":596",
+      ":604",
+      ":613",
+      ":616"
+    ]
+  },
+  {
+    "version": "V137",
+    "name": "V137 rv32_dcache_nonblocking",
+    "commits": [
+      ":617",
+      ":624",
+      ":630",
+      ":633"
+    ]
+  },
+  {
+    "version": "V138",
+    "name": "V138 branch prediction",
+    "commits": [
+      ":634",
+      ":638",
+      ":640",
+      ":643"
+    ]
+  },
+  {
+    "version": "V139",
+    "name": "V139 shared datapath",
+    "commits": [
+      ":644",
+      ":647"
+    ]
+  },
+  {
+    "version": "V140",
+    "name": "V140 branch prediction",
+    "commits": [
+      ":648",
+      ":650",
+      ":653",
+      ":659"
+    ]
+  },
+  {
+    "version": "V141",
+    "name": "V141 SRAM integration",
+    "commits": [
+      ":660",
+      ":674",
+      ":691",
+      ":704"
+    ]
+  },
+  {
+    "version": "V142",
+    "name": "V142 rv32_completion_network",
+    "commits": [
+      ":705",
+      ":753",
+      ":770",
+      ":786"
+    ]
+  },
+  {
+    "version": "V143",
+    "name": "V143 project support",
+    "commits": [
+      ":812",
+      ":856",
+      ":876"
+    ]
+  },
+  {
+    "version": "V144",
+    "name": "V144 project support",
+    "commits": [
+      ":883",
+      ":1004",
+      ":1019"
+    ]
+  },
+  {
+    "version": "V145",
+    "name": "V145 project support",
+    "commits": [
+      ":1149",
+      ":1171"
+    ]
+  },
+  {
+    "version": "V146",
+    "name": "V146 project support",
+    "commits": [
+      ":1397",
+      ":1404"
+    ]
+  },
+  {
+    "version": "V147",
+    "name": "V147 project support",
+    "commits": [
+      ":1412"
+    ]
+  }
+]
