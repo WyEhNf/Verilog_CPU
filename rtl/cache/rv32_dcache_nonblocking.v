@@ -1170,6 +1170,35 @@ module rv32_dcache_nonblocking #(
         localparam integer GROUP_ROWS = 16;
         localparam integer GROUP_SETS = GROUP_ROWS / CACHE_WAYS;
         localparam integer GROUP_COUNT = CACHE_LINES / GROUP_ROWS;
+`ifdef CPU2026_WORD_SIM
+        if (CACHE_LINES == 1024 && CACHE_WAYS == 2 && LOCAL_METADATA_ACTIVE != 0) begin : g_word_metadata
+            // All banks capture the same accepted address on the same edge.
+            // Share that address in simulation and update only touched words.
+            rv32_dcache_metadata_word state_words (
+                .clk_i(clk_i), .reset_i(reset_i),
+                .request_action_i(static_request_action),
+                .refill_valid_i(refill_array_write),
+                .refill_entry_i(query_response_mshr_victim_entry),
+                .refill_dirty_i(query_response_mshr_store),
+                .local_valid_i(local_array_write),
+                .local_entry_i(query_local_mshr_victim_entry),
+                .miss_way_i(request_victim_entry[0]),
+                .prefetch_valid_i(static_prefetch_allocate),
+                .prefetch_way_i(prefetch_victim_entry[0]),
+                .hit_way_i(request_hit_entry[0]),
+                .query_fire_i(dcache_req_valid_i && dcache_req_ready_o),
+                .query_request_set_i(cache_index(dcache_req_addr_i)),
+                .query_prefetch_set_i(cache_index({dcache_req_addr_i[31:4],4'b0}+32'd16)),
+                .query_request_valid_o(request_query_valid),
+                .query_request_dirty_o(request_query_dirty),
+                .query_prefetch_valid_o(prefetch_query_valid),
+                .query_prefetch_dirty_o(prefetch_query_dirty),
+                .query_request_lru_o(request_query_lru),
+                .query_prefetch_lru_o(prefetch_query_lru),
+                .valid_o(valid_bits), .dirty_o(dirty_bits), .lru_o(lru_way_mem)
+            );
+        end else begin : g_original_metadata
+`endif
         wire [GROUP_COUNT*CACHE_WAYS-1:0] group_request_valid, group_request_dirty;
         wire [GROUP_COUNT*CACHE_WAYS-1:0] group_prefetch_valid, group_prefetch_dirty;
         wire [GROUP_COUNT-1:0] group_request_lru, group_prefetch_lru;
@@ -1278,6 +1307,9 @@ module rv32_dcache_nonblocking #(
                 .lru_o(lru_way_mem[update_group*GROUP_SETS +: GROUP_SETS])
             );
         end
+`ifdef CPU2026_WORD_SIM
+        end
+`endif
         for (update_mshr = 0; update_mshr < MSHR_ENTRIES; update_mshr = update_mshr + 1) begin : g_mshr_data
             rv32_dcache_mshr_data_bank #(.MSHR_ID(update_mshr)) state_bank (
                 .clk_i(clk_i), .reset_i(reset_i), .request_action_i(static_request_action),
