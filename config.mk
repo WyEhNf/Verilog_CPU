@@ -41,6 +41,10 @@ export CPU2026_SPLIT_SCHEDULE
 CPU2026_WORD_SIM ?= 1
 export CPU2026_WORD_SIM
 # Set CPU2026_WORD_SIM=0 for the original structural simulation view.
+# Equivalent native scalar bit scans for the word selectors.
+CPU2026_NATIVE_BITS ?= 1
+export CPU2026_NATIVE_BITS
+# Set CPU2026_NATIVE_BITS=0 to retain the course runtime's scalar loops.
 CPU2026_UNROLL_STMTS ?= 4096
 export CPU2026_UNROLL_STMTS
 # Larger experimental configurations may require CPU2026_UNROLL_STMTS=1000000.

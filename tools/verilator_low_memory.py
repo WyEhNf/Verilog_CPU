@@ -222,6 +222,7 @@ def main(arguments=None):
               + "; compact ids=" + os.environ.get("CPU2026_COMPACT_IDS", "1")
               + "; split schedule=" + os.environ.get("CPU2026_SPLIT_SCHEDULE", "1")
               + "; word simulation=" + os.environ.get("CPU2026_WORD_SIM", "1")
+              + "; native bits=" + os.environ.get("CPU2026_NATIVE_BITS", "1")
               + "; stable MDU=" + os.environ.get("CPU2026_STABLE_MDU", "1")
               + "; output split=8000; function split=2000; expression depth=32", file=sys.stderr,
               flush=True)
@@ -231,6 +232,11 @@ def main(arguments=None):
               f"status={status}", file=sys.stderr, flush=True)
         if status:
             return status
+        if os.environ.get("CPU2026_NATIVE_BITS", "1") == "1":
+            from cpu2026_fast_bits import install as install_bits
+            bits = install_bits(compile_command[2], Path(compile_command[4]).stem)
+            print(f"[build] Native scalar bit scans: {bits['calls']} calls",
+                  file=sys.stderr, flush=True)
         if (os.environ.get("CPU2026_STABLE_MDU", "1") == "1"
                 and os.environ.get("CPU2026_WORD_SIM", "1") == "1"):
             from cpu2026_stable_mdu import install

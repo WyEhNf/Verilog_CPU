@@ -170,16 +170,31 @@ module rv32_frequency_event_select #(
 `ifdef CPU2026_WORD_SIM
     reg [WIDTH-1:0] selected;
     integer event_id;
+    localparam integer EVENT_INDEX_WIDTH=(EVENTS<=1)?1:$clog2(EVENTS);
+    reg [EVENT_INDEX_WIDTH-1:0] event_index;
+    wire [WIDTH-1:0] event_values [0:EVENTS-1];
+    genvar word_event;
+    generate for(word_event=0;word_event<EVENTS;word_event=word_event+1) begin:g_sim_values
+        assign event_values[word_event]=values_i[word_event*WIDTH +: WIDTH];
+    end endgenerate
+    wire [EVENTS-1:0] remaining=events_i & (events_i-EVENTS'(1));
     always @* begin
-        selected = 0;
-        for (event_id=0; event_id<EVENTS; event_id=event_id+1)
-            if (events_i[event_id]) begin
-                if (PRIORITY==0) selected = selected | values_i[event_id*WIDTH +: WIDTH];
-                else selected = values_i[event_id*WIDTH +: WIDTH];
+        selected=0;event_id=0;event_index=0;
+        if(|events_i) begin
+            if(PRIORITY!=0 || remaining==0) begin
+                // Ceil(log2((events >> 1)+1)) is the highest set-bit index.
+                // Last-event priority and a single-event OR share this path.
+                event_index=EVENT_INDEX_WIDTH'($clog2((events_i>>1)+EVENTS'(1)));
+                selected=event_values[event_index];
+            end else begin
+                // Preserve arbitrary simultaneous events in the OR mode.
+                for(event_id=0;event_id<EVENTS;event_id=event_id+1)
+                    if(events_i[event_id]) selected=selected | event_values[event_id];
             end
+        end
     end
-    assign write_o = |events_i;
-    assign value_o = selected;
+    assign write_o=|events_i;
+    assign value_o=selected;
 `else
     wire [EVENTS-1:0] grants;
     wire [WIDTH-1:0] mux_tree [1:2*LEAVES-1];
@@ -229,21 +244,13 @@ module rv32_frequency_first_two #(
 // Equivalent two-state word form for the cycle-accurate simulator.
 // Synthesis retains the original fanout/carry/ownership structure.
 `ifdef CPU2026_WORD_SIM
-    reg first_valid,second_valid;
-    reg [INDEX_WIDTH-1:0] first_index,second_index;
-    integer slot;
-    always @* begin
-        first_valid=0; second_valid=0; first_index=0; second_index=0;
-        for (slot=0; slot<ENTRIES; slot=slot+1)
-            if (candidates_i[slot]) begin
-                if (!first_valid) begin first_valid=1; first_index=slot; end
-                else if (!second_valid) begin second_valid=1; second_index=slot; end
-            end
-    end
-    assign first_valid_o=first_valid;
-    assign second_valid_o=second_valid;
-    assign first_index_o=first_index;
-    assign second_index_o=second_index;
+    wire [ENTRIES-1:0] after_first=candidates_i & (candidates_i-ENTRIES'(1));
+    wire [ENTRIES-1:0] first_onehot=candidates_i & (~candidates_i+ENTRIES'(1));
+    wire [ENTRIES-1:0] second_onehot=after_first & (~after_first+ENTRIES'(1));
+    assign first_valid_o=|candidates_i;
+    assign second_valid_o=|after_first;
+    assign first_index_o=INDEX_WIDTH'($clog2(first_onehot));
+    assign second_index_o=INDEX_WIDTH'($clog2(second_onehot));
 `else
     wire first_valid [1:2*LEAVES-1];
     wire second_valid [1:2*LEAVES-1];
@@ -296,7 +303,12 @@ module rv32_frequency_array_read #(
 // Equivalent two-state word form for the cycle-accurate simulator.
 // Synthesis retains the original fanout/carry/ownership structure.
 `ifdef CPU2026_WORD_SIM
-    assign value_o = (index_i < ENTRIES) ? rows_i[index_i*WIDTH +: WIDTH] : {WIDTH{1'b0}};
+    wire [WIDTH-1:0] word_rows [0:ENTRIES-1];
+    genvar sim_row;
+    generate for(sim_row=0;sim_row<ENTRIES;sim_row=sim_row+1) begin:g_sim_rows
+        assign word_rows[sim_row]=rows_i[sim_row*WIDTH +: WIDTH];
+    end endgenerate
+    assign value_o=(index_i<ENTRIES)?word_rows[index_i]:{WIDTH{1'b0}};
 `else
     wire [DOMAINS*INDEX_WIDTH-1:0] query_views;
     wire [WIDTH-1:0] reads [1:2*LEAVES-1];
