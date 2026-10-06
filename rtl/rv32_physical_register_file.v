@@ -81,6 +81,34 @@ module rv32_physical_register_file #(
     end endgenerate
     genvar owner_row,owner_lane;
     generate if(LOCAL_VALUE_ROWS!=0) begin:g_local_storage
+`ifdef CPU2026_WORD_SIM
+        if(PHYS_REGS==56 && PHYS_ADDR_WIDTH==6 &&
+           (BE_WIDTH==1 || BE_WIDTH==2 || BE_WIDTH==4)) begin:g_word_storage
+            reg [31:0] words [0:55];
+            reg [55:0] word_ready;
+            integer lane;
+            for(owner_row=0;owner_row<56;owner_row=owner_row+1) begin:g_view
+                assign value[owner_row]=(owner_row==0)?32'b0:words[owner_row];
+            end
+            assign ready={word_ready[55:1],1'b1};
+            always @(posedge clk_i) begin
+                if(reset_i) word_ready<=56'b1;
+                else begin
+                    for(lane=0;lane<BE_WIDTH;lane=lane+1)
+                        if(alloc_valid_i[lane] && alloc_phys_i[lane*6+:6]!=0 && alloc_phys_i[lane*6+:6]<56)
+                            word_ready[alloc_phys_i[lane*6+:6]]<=1'b0;
+                    // Write-through completion wins over allocation, and
+                    // the highest numbered write lane wins duplicate writes.
+                    for(lane=0;lane<BE_WIDTH;lane=lane+1)
+                        if(write_valid_i[lane] && write_phys_i[lane*6+:6]!=0 && write_phys_i[lane*6+:6]<56) begin
+                            words[write_phys_i[lane*6+:6]]<=write_data_i[lane*32+:32];
+                            word_ready[write_phys_i[lane*6+:6]]<=1'b1;
+                        end
+                end
+            end
+        end else begin:g_original_storage
+`endif
+
         wire [PHYS_REGS-1:0] reset_views;
         rv32_frequency_control_tree #(.LEAVES(PHYS_REGS)) reset_tree (
             .signal_i(reset_i),.views_o(reset_views));
@@ -115,6 +143,9 @@ module rv32_physical_register_file #(
                     .value_o(value[owner_row]),.ready_o(ready[owner_row]));
             end
         end
+`ifdef CPU2026_WORD_SIM
+        end
+`endif
     end else begin:g_legacy_alias
         for(owner_row=0;owner_row<PHYS_REGS;owner_row=owner_row+1) begin:g_row
             assign value[owner_row]=value_legacy[owner_row];
@@ -137,6 +168,12 @@ module rv32_physical_register_file #(
             wire [31:0] bypass_value;
             wire bypass_write;
             wire [1:0] bypass_select;
+`ifdef CPU2026_WORD_SIM
+            if(PHYS_REGS==56 && PHYS_ADDR_WIDTH==6) begin:g_word_read
+                assign stored_tree[1]=legal ? value[address] : 32'b0;
+                assign ready_tree[1]=legal && ready[address];
+            end else begin:g_original_read
+`endif
             for(row=0;row<READ_ROWS;row=row+1) begin:g_word
                 if(row>0 && row<PHYS_REGS) begin:g_present
                     localparam integer DOMAIN=(row*READ_DOMAINS)/PHYS_REGS;
@@ -155,6 +192,9 @@ module rv32_physical_register_file #(
                 assign stored_tree[read_node]=stored_tree[2*read_node] | stored_tree[2*read_node+1];
                 assign ready_tree[read_node]=ready_tree[2*read_node] | ready_tree[2*read_node+1];
             end
+`ifdef CPU2026_WORD_SIM
+            end
+`endif
             for(wl=0;wl<BE_WIDTH;wl=wl+1) begin:g_bypass
                 assign bypass_match[wl]=legal && write_valid_i[wl] &&
                     write_phys_i[wl*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==address;
