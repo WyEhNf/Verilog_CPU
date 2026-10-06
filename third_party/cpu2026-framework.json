@@ -7,7 +7,7 @@
   "customized_files": {
     "config.mk": {
       "upstream_sha256": "073551bf208ca7f7e8607757a88c0d01b0f45eb786d291f30c262e7133fbcda1",
-      "purpose": "Select tools/verilator_low_memory.py and default JOBS=1; export the configured AppImage path, CPU2026_TRACE_DEPTH (default 1) and CPU2026_COMPACT_IDS (default 1). Both switches can be disabled for original internal waveform names."
+      "purpose": "Select tools/verilator_low_memory.py and default JOBS=1; export the configured AppImage path, CPU2026_TRACE_DEPTH (default 1), CPU2026_COMPACT_IDS (default 1), and CPU2026_CPP_GROUP_BYTES (default 524288). Diagnostic names and separate-file compilation remain configurable."
     }
   },
   "vendored_sha256": {

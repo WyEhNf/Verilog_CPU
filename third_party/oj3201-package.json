@@ -1,0 +1,50 @@
+{
+  "archive": "3201.zip",
+  "archive_sha256": "0cdcc3fc558f06175fb8c651b1514734f3542f01a4e4ff661b6540fa8be8721d",
+  "problem_id": 3201,
+  "compile_time_limit_ms": 180000,
+  "compile_memory_limit_bytes": null,
+  "compile_memory_note": "No compile-memory limit field is present in this archive. Testpoint MemoryLimit is not a compile limit.",
+  "testpoint_time_limit_ms": [
+    100000
+  ],
+  "testpoint_memory_limit_bytes": [
+    335544320
+  ],
+  "runner_group": "verilator",
+  "verilog_language_mode": false,
+  "compile_spj": "classic",
+  "max_cycles": 1000000000,
+  "latency": 10,
+  "package_ram_bytes": 262144,
+  "package_framework_revision": "08d82a829232f782f3b8063686d25d46f7272130",
+  "current_framework_revision": "54fc150ffc290f52aa024209ffb9a29d43856f6d",
+  "framework_revision_note": "Archive revision differs; its Framework repository is not publicly accessible at the supplied URL, so exact framework-source equivalence is unverified. Current official scripts are kept at their pinned version.",
+  "testcases_revision": "29f980727f7d99a1842a58f34091c7579ba3fe85",
+  "source_git_blobs_verified": 63,
+  "serialized_input_answer_pairs_verified": 21,
+  "protocol": "CPU2026-OJ 1",
+  "test_cases": [
+    "correctness_add_to_100",
+    "perf_vvadd",
+    "perf_multiply",
+    "correctness_array_test1",
+    "correctness_array_test2",
+    "correctness_basicopt1",
+    "correctness_bulgarian",
+    "correctness_expr",
+    "correctness_gcd",
+    "correctness_hanoi",
+    "correctness_lvalue2",
+    "correctness_magic",
+    "correctness_manyarguments",
+    "correctness_multiarray",
+    "correctness_naive",
+    "correctness_pi",
+    "correctness_qsort",
+    "correctness_queens",
+    "correctness_statement_test",
+    "correctness_superloop",
+    "correctness_tak"
+  ]
+}

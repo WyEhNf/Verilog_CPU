@@ -6,7 +6,7 @@ The current default RTL is A109: an out-of-order RV32IM core with register renam
 
 The root `Makefile` and all files under `scripts/` are unchanged copies of the official course framework at commit `54fc150ffc290f52aa024209ffb9a29d43856f6d`. Their hashes and origin are recorded in [third_party/cpu2026-framework.json](third_party/cpu2026-framework.json). `config.mk` adds a portable host compilation profile to the official template. The official `testcases` submodule is pinned to `29f980727f7d99a1842a58f34091c7579ba3fe85` and uses a public HTTPS URL.
 
-Use the OJ's **Git repository** submission mode with the repository URL. According to [ACMOJ's official submission help](https://acm.sjtu.edu.cn/OnlineJudge/help/view-submit-and-judge-problems), it clones the repository, runs its Makefile, and collects the root `code` executable. The standalone Verilog language entry (`iverilog answer.v -o code`) uses a different compilation flow. The course README does not state a problem ID or compilation memory cap; testcase runtime limits do not establish that cap.
+Use the OJ's **Git repository** submission mode with the repository URL. According to [ACMOJ's official submission help](https://acm.sjtu.edu.cn/OnlineJudge/help/view-submit-and-judge-problems), it clones the repository, runs its Makefile, and collects the root `code` executable. The standalone Verilog language entry (`iverilog answer.v -o code`) uses a different compilation flow. The supplied `3201.zip` identifies correctness problem 3201 with a **180-second compilation limit** and **100 seconds / 320 MiB per testcase**. It selects runner group `verilator` and sets `Verilog=false`. Its configuration has no separate compilation memory limit. The archive hash and exact settings are recorded in [third_party/oj3201-package.json](third_party/oj3201-package.json).
 
 ```sh
 git submodule update --init testcases
@@ -41,6 +41,8 @@ The default `CPU2026_TRACE_DEPTH=1` generates waveforms for top-level signals, i
 
 `CPU2026_COMPACT_IDS=1` shortens private generated C++ identifiers with Verilator's `--protect-ids` option and a fixed public key for reproducible names. It preserves top-level port names and the original RTL remains in the repository. The generated `Vstudent_top__idmap.xml` maps the short names back to their RTL names. To debug full internal waveforms with original names, use `make CPU2026_TRACE_DEPTH=0 CPU2026_COMPACT_IDS=0`. The profile also sets Verilator 5.020's `--comp-limit-parens 32` compiler depth threshold: it materializes subexpressions as temporary values instead of emitting deeply nested packed RAT recovery expressions. The optimization level of the C++ compiler is unchanged. CPU simulation wall time under this profile has not been measured.
 
+After generation, the wrapper combines small C++ files into compilation units with at most eight files and 512 KiB of source per combined unit. Larger files remain separate. Hot, cold, and support categories keep their original flags, and each generated source is included exactly once. This reduces compiler startup and precompiled-header loading without increasing concurrent jobs. `make CPU2026_CPP_GROUP_BYTES=0` restores separate-file compilation. Only generated files under the build directory are rewritten; the official framework and RTL remain unchanged.
+
 The wrapper selects the configured AppImage or the installed Verilator. `CPU2026_REAL_VERILATOR` can explicitly select the real executable; setting `VERILATOR` itself bypasses the wrapper. Command-line and machine configuration overrides remain supported. No newer-version `--output-groups` option is used. The default `JOBS` is 1; the wrapper always compiles with one job, including when the caller requested more.
 
 The `SIM` override only applies to local run/test/perf; `make` and `make code` always build RTL. The resulting `code` executable accepts the course `CPU2026-OJ` stdin protocol and writes the exit result to stdout.
@@ -56,7 +58,9 @@ make perf LATENCY=10
 make synth MODE=opt CLOCK_PERIOD_NS=2.0
 ```
 
-The official defaults remain `LATENCY=10` and `MAX_CYCLES=1000000`. The measured A109 Pi run needed 38,853,527 cycles and passed with a 48,000,000-cycle limit. Setting a local limit does not change an OJ testcase's cycle budget, which is supplied through its input. The OJ grading configuration is maintained separately; its Pi budget has not been verified here.
+The official defaults remain `LATENCY=10` and `MAX_CYCLES=1000000`. The measured A109 Pi run needed 38,853,527 cycles and passed with a 48,000,000-cycle limit. Problem 3201 supplies `MAX_CYCLES=1000000000` and `LATENCY=10` in all 21 inputs, including Pi. The existing serializer reproduces all 21 archived inputs and answers exactly, and all 63 testcase source Git blobs match the archive hashes. The 100-second runtime requirement under the new build profile has not been measured.
+
+The archive records framework revision `08d82a829232f782f3b8063686d25d46f7272130`, whereas the available pinned framework is `54fc150ffc290f52aa024209ffb9a29d43856f6d`. The archive's Framework repository URL currently returns repository-not-found. The protocol and testcase checks above establish compatibility with the supplied inputs; exact framework-source equivalence remains unverified. The existing official scripts have been preserved.
 
 For Windows development, the previous Makefile is preserved as `Makefile.windows`:
 
