@@ -1,0 +1,4 @@
+// Keep the iterative unit separate so unchanged core state can reuse its
+// settled calculation while the original MDU still advances on every clock.
+`verilator_config
+no_inline -module "rv32m_mdu_iterative"

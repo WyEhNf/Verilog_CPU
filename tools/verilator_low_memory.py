@@ -115,6 +115,11 @@ def build_plan(arguments):
     if word_sim not in (0, 1):
         raise ValueError("CPU2026_WORD_SIM must be 0 or 1")
     word_flags = ["+define+CPU2026_WORD_SIM"] if word_sim else []
+    stable_mdu = int(os.environ.get("CPU2026_STABLE_MDU", "1"))
+    if stable_mdu not in (0, 1):
+        raise ValueError("CPU2026_STABLE_MDU must be 0 or 1")
+    mdu_flags = ([str(ROOT / "tools/cpu2026_mdu_schedule.vlt")]
+                 if stable_mdu and word_sim else [])
     unroll_statements = int(os.environ.get("CPU2026_UNROLL_STMTS", "4096"))
     if unroll_statements < 1:
         raise ValueError("CPU2026_UNROLL_STMTS must be positive")
@@ -122,7 +127,7 @@ def build_plan(arguments):
     limits[limits.index("--unroll-stmts") + 1] = str(unroll_statements)
     if int(os.environ.get("CPU2026_CPP_GROUP_BYTES", "2097152")) < 0:
         raise ValueError("CPU2026_CPP_GROUP_BYTES must be nonnegative")
-    return (limits + trace_flags + id_flags + scheduling_flags + word_flags + generation,
+    return (limits + trace_flags + id_flags + scheduling_flags + word_flags + mdu_flags + generation,
             compile_command)
 
 
@@ -217,6 +222,7 @@ def main(arguments=None):
               + "; compact ids=" + os.environ.get("CPU2026_COMPACT_IDS", "1")
               + "; split schedule=" + os.environ.get("CPU2026_SPLIT_SCHEDULE", "1")
               + "; word simulation=" + os.environ.get("CPU2026_WORD_SIM", "1")
+              + "; stable MDU=" + os.environ.get("CPU2026_STABLE_MDU", "1")
               + "; output split=8000; function split=2000; expression depth=32", file=sys.stderr,
               flush=True)
         started = time.monotonic()
@@ -225,6 +231,14 @@ def main(arguments=None):
               f"status={status}", file=sys.stderr, flush=True)
         if status:
             return status
+        if (os.environ.get("CPU2026_STABLE_MDU", "1") == "1"
+                and os.environ.get("CPU2026_WORD_SIM", "1") == "1"):
+            from cpu2026_stable_mdu import install
+            cache = install(compile_command[2], Path(compile_command[4]).stem)
+            print("[build] Stable MDU scheduling: " +
+                  ("enabled" if cache["enabled"] else
+                   "original evaluator (" + cache["reason"] + ")"),
+                  file=sys.stderr, flush=True)
         grouped = group_cpp_units(compile_command[2], Path(compile_command[4]).stem)
         if grouped["enabled"]:
             print(f"[build] C++ units: {grouped['original_units']} -> "

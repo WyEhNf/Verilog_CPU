@@ -44,6 +44,11 @@ export CPU2026_WORD_SIM
 CPU2026_UNROLL_STMTS ?= 4096
 export CPU2026_UNROLL_STMTS
 # Larger experimental configurations may require CPU2026_UNROLL_STMTS=1000000.
+# Reuse settled core calculations while the original iterative MDU advances.
+# Every CPU clock and all performance counters are preserved.
+CPU2026_STABLE_MDU ?= 1
+export CPU2026_STABLE_MDU
+# Set CPU2026_STABLE_MDU=0 to keep the unmodified generated evaluator.
 # Optional real executable override for the low-memory driver.
 # export CPU2026_REAL_VERILATOR = /path/to/verilator
 YOSYS ?=

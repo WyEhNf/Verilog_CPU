@@ -1,0 +1,149 @@
+#pragma once
+// Generated scheduling cache: preserve original MDU transitions and all clocks.
+#include "@ROOT_CLASS@.h"
+#include "@MDU_CLASS@.h"
+#include <array>
+#include <algorithm>
+#include <cstring>
+#include <cstdlib>
+#include <iostream>
+#include <memory>
+#include <vector>
+using Root=@ROOT_CLASS@;
+using Mdu=@MDU_CLASS@;
+void @MDU_FUNC_0@(Mdu*);
+void @MDU_FUNC_1@(Mdu*);
+void @MDU_FUNC_2@(Mdu*);
+void @MDU_FUNC_3@(Mdu*);
+void @MDU_FUNC_4@(Mdu*);
+void @ROOT_EVAL@(Root*);
+namespace cpu2026_stable_mdu {
+struct Inputs {
+ uint32_t rdata;uint8_t reset,arready,rresp,rvalid,awready,wready,bresp,bvalid;
+ bool operator==(const Inputs& b)const {return rdata==b.rdata && reset==b.reset && arready==b.arready && rresp==b.rresp && rvalid==b.rvalid && awready==b.awready && wready==b.wready && bresp==b.bresp && bvalid==b.bvalid;}
+};
+Inputs inputs(const Root& r){return {r.rdata,r.reset,r.arready,r.rresp,r.rvalid,r.awready,r.wready,r.bresp,r.bvalid};}
+struct Cross {uint64_t data;uint8_t ready,valid,out,active;
+ bool operator==(const Cross& b)const{return data==b.data && ready==b.ready && valid==b.valid && out==b.out && active==b.active;}
+};
+Cross crossing(const Mdu& m){return {m.@ID:__Vcellout__output_owner__data_o@,m.@ID:req_ready_o@,m.@ID:resp_valid_o@,m.@ID:__PVT__out_valid@,m.@ID:__Vcellinp__operation_cancel_guard__active_i@};}
+struct Accelerate {
+ Root& r;Mdu& m;
+ std::vector<unsigned char> previous, before_root, proposed;
+ std::array<unsigned char,1024> before_mdu{}, proposed_mdu{};
+ std::array<QData*,10> counters, delayed;
+ std::array<QData,10> delta{};
+ std::vector<std::pair<size_t,size_t>> excluded;
+ size_t mdusize;
+ Inputs in{};Cross cross{};
+ bool prior=false,active=false,skipped_fall=false;
+ bool verify=std::getenv("CPU2026_STABLE_MDU_VERIFY")!=nullptr;
+ bool disabled=std::getenv("CPU2026_STABLE_MDU_DISABLE")!=nullptr;
+ uint64_t full=0,fast=0,wake=0,checked=0,fall=0,stable=0;
+ explicit Accelerate(Root& root,Mdu& unit):r(root),m(unit),previous(sizeof(Root)),before_root(sizeof(Root)),proposed(sizeof(Root)),
+ counters{{&r.@ID:student_top__DOT__core__DOT__perf_frontend_empty_cycles@,&r.@ID:student_top__DOT__core__DOT__perf_backend_stall_cycles@,&r.@ID:student_top__DOT__core__DOT__perf_no_commit_cycles@,&r.@ID:student_top__DOT__core__DOT__perf_commit_active_cycles@,&r.@ID:student_top__DOT__core__DOT__perf_issue_count@,&r.@ID:student_top__DOT__core__DOT__perf_rob_full_cycles@,&r.@ID:student_top__DOT__core__DOT__perf_rs_full_cycles@,&r.@ID:student_top__DOT__core__DOT__perf_lsq_full_cycles@,&r.@ID:student_top__DOT__core__DOT__perf_branch_pending_cycles@,&r.@ID:student_top__DOT__core__DOT__perf_mdu_busy_cycles@}},
+ delayed{{&r.@ID:__Vdly__student_top__DOT__core__DOT__perf_frontend_empty_cycles@,&r.@ID:__Vdly__student_top__DOT__core__DOT__perf_backend_stall_cycles@,&r.@ID:__Vdly__student_top__DOT__core__DOT__perf_no_commit_cycles@,&r.@ID:__Vdly__student_top__DOT__core__DOT__perf_commit_active_cycles@,&r.@ID:__Vdly__student_top__DOT__core__DOT__perf_issue_count@,&r.@ID:__Vdly__student_top__DOT__core__DOT__perf_rob_full_cycles@,&r.@ID:__Vdly__student_top__DOT__core__DOT__perf_rs_full_cycles@,&r.@ID:__Vdly__student_top__DOT__core__DOT__perf_lsq_full_cycles@,&r.@ID:__Vdly__student_top__DOT__core__DOT__perf_branch_pending_cycles@,&r.@ID:__Vdly__student_top__DOT__core__DOT__perf_mdu_busy_cycles@}} {
+  auto exclude=[&](const void* f,size_t size){excluded.push_back({reinterpret_cast<const unsigned char*>(f)-reinterpret_cast<const unsigned char*>(&r),size});};
+  exclude(&r.debug_core_cycles,4);exclude(&r.@ID:__Vdly__debug_core_cycles@,4);
+  for(auto c:counters)exclude(c,8);for(auto c:delayed)exclude(c,8);
+  std::sort(excluded.begin(),excluded.end());
+  mdusize=reinterpret_cast<unsigned char*>(&m.@ID:__Vfunc_prefix_add32__1__Vfuncout@)+sizeof(m.@ID:__Vfunc_prefix_add32__1__Vfuncout@)-reinterpret_cast<unsigned char*>(&m.@ID:clk_i@);
+  if(mdusize>before_mdu.size())std::abort();
+ }
+ ~Accelerate(){if(std::getenv("CPU2026_STABLE_MDU_DIAGNOSTICS"))print();}
+ unsigned char* mdudata(){return reinterpret_cast<unsigned char*>(&m.@ID:clk_i@);}
+ bool same(){
+  // Every other register, combinational result, temporary, and memory byte
+  // must be identical. Counter deltas are preserved separately.
+  const auto* now=reinterpret_cast<const unsigned char*>(&r);size_t from=0;
+  for(const auto& x:excluded){if(std::memcmp(now+from,previous.data()+from,x.first-from))return false;from=x.first+x.second;}
+  return !std::memcmp(now+from,previous.data()+from,sizeof(Root)-from);
+ }
+ void observe(){
+  ++full;const auto c=crossing(m);const auto ii=inputs(r);
+  if(r.reset || !c.active || c.valid || c.out){prior=false;active=false;return;}
+  bool equal=prior && c==cross && ii==in && same();
+  active=equal;
+  if(equal){
+   ++stable;
+   for(size_t j=0;j<10;++j){QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(counters[j])-reinterpret_cast<unsigned char*>(&r)),8);delta[j]=*counters[j]-old;}
+  }
+  std::memcpy(previous.data(),&r,sizeof(Root));in=ii;cross=c;prior=true;
+ }
+ void restore_root(const std::vector<unsigned char>& data){
+  auto* base=reinterpret_cast<unsigned char*>(&r);
+  size_t first=reinterpret_cast<unsigned char*>(&r.clock)-base;
+  size_t last=reinterpret_cast<unsigned char*>(&r.@ID:__VnbaTriggered@)+sizeof(r.@ID:__VnbaTriggered@)-base;
+  std::memcpy(base+first,data.data()+first,last-first);
+ }
+ bool falling(){
+  skipped_fall=false;
+  if(disabled || !active)return false;
+  if(r.reset || !(inputs(r)==in) || !(crossing(m)==cross)){active=false;++wake;return false;}
+  if(verify){std::memcpy(before_root.data(),&r,sizeof(Root));std::memcpy(before_mdu.data(),mdudata(),mdusize);}
+  std::array<unsigned char,1024> saved{};std::memcpy(saved.data(),mdudata(),mdusize);
+  @MDU_FUNC_0@(&m);
+  if(!(crossing(m)==cross)){std::memcpy(mdudata(),saved.data(),mdusize);active=false;++wake;return false;}
+  r.@ID:__Vtrigprevexpr___TOP__clock__0@=0;r.@ID:__VactIterCount@=1;skipped_fall=true;++fall;return true;
+ }
+ bool rising(){
+  if(!skipped_fall)return false;
+  std::array<unsigned char,1024> saved{};std::memcpy(saved.data(),mdudata(),mdusize);
+  auto same_cross=[&](){return crossing(m)==cross;};
+  @MDU_FUNC_0@(&m);
+  // A crossing can change partway through the original NBA sequence. Retry
+  // the normal whole-model edge from the saved MDU state in that case.
+  bool good=same_cross();
+  if(good){@MDU_FUNC_1@(&m);good=same_cross();}
+  if(good){@MDU_FUNC_2@(&m);good=same_cross();}
+  if(good){@MDU_FUNC_3@(&m);good=same_cross();}
+  if(good){@MDU_FUNC_4@(&m);good=same_cross();}
+  if(!good){std::memcpy(mdudata(),saved.data(),mdusize);active=false;++wake;return false;}
+  ++r.debug_core_cycles;r.@ID:__Vdly__debug_core_cycles@=r.debug_core_cycles;
+  for(size_t j=0;j<10;++j){*counters[j]+=delta[j];*delayed[j]=*counters[j];}
+  r.@ID:__Vtrigprevexpr___TOP__clock__0@=1;r.@ID:__VactIterCount@=1;
+  if(verify){
+   std::memcpy(proposed.data(),&r,sizeof(Root));std::memcpy(proposed_mdu.data(),mdudata(),mdusize);
+   restore_root(before_root);std::memcpy(mdudata(),before_mdu.data(),mdusize);
+   r.clock=0;@ROOT_EVAL@(&r);
+   r.clock=1;@ROOT_EVAL@(&r);
+   auto* actual=reinterpret_cast<unsigned char*>(&r);size_t bad=0;
+   while(bad<sizeof(Root) && actual[bad]==proposed[bad])++bad;
+   if(bad<sizeof(Root) || std::memcmp(mdudata(),proposed_mdu.data(),mdusize)){
+    std::cerr<<"VERIFY_FAILURE cycle="<<r.debug_core_cycles<<" root_offset="<<bad<<" actual="<<(bad<sizeof(Root)?unsigned(actual[bad]):0)<<" proposed="<<(bad<sizeof(Root)?unsigned(proposed[bad]):0)<<" mdu_equal="<<(!std::memcmp(mdudata(),proposed_mdu.data(),mdusize))<<"\n";
+    std::abort();
+   }
+   ++checked;
+  }
+  ++fast;return true;
+ }
+ void verify_wake(){
+  if(!verify || !skipped_fall)return;
+  std::memcpy(proposed.data(),&r,sizeof(Root));std::memcpy(proposed_mdu.data(),mdudata(),mdusize);
+  restore_root(before_root);std::memcpy(mdudata(),before_mdu.data(),mdusize);
+  r.clock=0;@ROOT_EVAL@(&r);r.clock=1;@ROOT_EVAL@(&r);
+  if(std::memcmp(&r,proposed.data(),sizeof(Root)) || std::memcmp(mdudata(),proposed_mdu.data(),mdusize)){
+   std::cerr<<"VERIFY_WAKE_FAILURE cycle="<<r.debug_core_cycles<<"\n";std::abort();
+  }
+  ++checked;
+ }
+ void print(){std::cout<<"ACCEL full="<<full<<" fast="<<fast<<" fall="<<fall<<" stable="<<stable<<" wake="<<wake<<" verified="<<checked<<"\n";}
+};
+inline Accelerate& state(Root& r,Mdu& m){
+ static thread_local std::unique_ptr<Accelerate> owner;
+ if(!owner || &owner->r!=&r || &owner->m!=&m)owner.reset(new Accelerate(r,m));
+ return *owner;
+}
+inline void reset(Root& r,Mdu& m){auto& s=state(r,m);s.prior=false;s.active=false;s.skipped_fall=false;}
+inline bool try_eval(Root& r,Mdu& m,bool trace){
+ auto& s=state(r,m);
+ if(trace){s.active=false;s.prior=false;s.skipped_fall=false;return false;}
+ if(r.clock && !r.@ID:__Vtrigprevexpr___TOP__clock__0@)return s.rising();
+ if(!r.clock && r.@ID:__Vtrigprevexpr___TOP__clock__0@)return s.falling();
+ s.active=false;s.skipped_fall=false;return false;
+}
+inline void observe(Root& r,Mdu& m,bool rising){
+ auto& s=state(r,m);
+ if(rising){s.verify_wake();s.observe();s.skipped_fall=false;}
+}
+} // namespace cpu2026_stable_mdu
