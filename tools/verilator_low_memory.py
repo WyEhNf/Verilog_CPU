@@ -245,6 +245,13 @@ def main(arguments=None):
                   ("enabled" if cache["enabled"] else
                    "original evaluator (" + cache["reason"] + ")"),
                   file=sys.stderr, flush=True)
+            if os.environ.get("CPU2026_ICO_PAIR", "1") == "1":
+                from cpu2026_ico_pair import install as install_pair
+                pair = install_pair(compile_command[2], Path(compile_command[4]).stem)
+                print("[build] Unchanged half-cycle input region: " +
+                      ("enabled" if pair["enabled"] else
+                       "original evaluator (" + pair["reason"] + ")"),
+                      file=sys.stderr, flush=True)
         grouped = group_cpp_units(compile_command[2], Path(compile_command[4]).stem)
         if grouped["enabled"]:
             print(f"[build] C++ units: {grouped['original_units']} -> "

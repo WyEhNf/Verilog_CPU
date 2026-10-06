@@ -1,0 +1,109 @@
+#pragma once
+// Reuse a settled input-combinational region across one unchanged half-cycle.
+#include "@ROOT_CLASS@.h"
+#include "@MDU_CLASS@.h"
+#include <array>
+#include <cstring>
+#include <cstdlib>
+#include <iostream>
+#include <memory>
+#include <vector>
+
+void @ROOT_EVAL@(@ROOT_CLASS@*);
+namespace cpu2026_ico_pair {
+inline thread_local bool skip = false;
+
+struct Inputs {
+    uint32_t rdata;
+    uint8_t reset, arready, rresp, rvalid, awready, wready, bresp, bvalid;
+    bool operator==(const Inputs& b) const {
+        return rdata == b.rdata && reset == b.reset && arready == b.arready
+            && rresp == b.rresp && rvalid == b.rvalid && awready == b.awready
+            && wready == b.wready && bresp == b.bresp && bvalid == b.bvalid;
+    }
+};
+inline Inputs inputs(const @ROOT_CLASS@& r) {
+    return {r.rdata, r.reset, r.arready, r.rresp, r.rvalid,
+            r.awready, r.wready, r.bresp, r.bvalid};
+}
+
+struct State {
+    @ROOT_CLASS@& r;
+    @MDU_CLASS@& m;
+    Inputs prior{};
+    bool falling = false;
+    bool disabled = std::getenv("CPU2026_ICO_PAIR_DISABLE") != nullptr;
+    bool verify = std::getenv("CPU2026_ICO_PAIR_VERIFY") != nullptr;
+    std::vector<unsigned char> before, proposed;
+    std::array<unsigned char, 1024> old_mdu{}, new_mdu{};
+    size_t mdusize;
+    uint64_t reused = 0, checked = 0;
+
+    State(@ROOT_CLASS@& root, @MDU_CLASS@& unit)
+        : r(root), m(unit), before(sizeof(r)), proposed(sizeof(r)) {
+        mdusize = reinterpret_cast<unsigned char*>(&m.@MDU_LAST_FIELD@)
+            + sizeof(m.@MDU_LAST_FIELD@) - data();
+        if (mdusize > old_mdu.size()) disabled = true;
+    }
+    ~State() {
+        if (std::getenv("CPU2026_STABLE_MDU_DIAGNOSTICS"))
+            std::cout << "ICO_PAIR reused=" << reused << " verified=" << checked << '\n';
+    }
+    unsigned char* data() {
+        return reinterpret_cast<unsigned char*>(&m.@MDU_FIRST_FIELD@);
+    }
+    void reset() { falling = false; }
+    void restore(const std::vector<unsigned char>& bytes) {
+        auto* base = reinterpret_cast<unsigned char*>(&r);
+        const size_t first = reinterpret_cast<unsigned char*>(&r.clock) - base;
+        const size_t end = reinterpret_cast<unsigned char*>(&r.@NBA_FIELD@)
+            + sizeof(r.@NBA_FIELD@) - base;
+        std::memcpy(base + first, bytes.data() + first, end - first);
+    }
+    void eval(bool trace) {
+        const auto now = inputs(r);
+        // No register edge or input change has occurred since the completed
+        // falling evaluation. Only the clock's generated edge trigger changes.
+        const bool reuse = !disabled && !trace && !r.reset && r.clock
+            && !r.@PREVIOUS_CLOCK@ && falling && now == prior;
+        if (reuse && verify) {
+            std::memcpy(before.data(), &r, sizeof(r));
+            std::memcpy(old_mdu.data(), data(), mdusize);
+        }
+        skip = reuse;
+        @ROOT_EVAL@(&r);
+        skip = false;
+        if (reuse) {
+            ++reused;
+            if (verify) {
+                std::memcpy(proposed.data(), &r, sizeof(r));
+                std::memcpy(new_mdu.data(), data(), mdusize);
+                restore(before);
+                std::memcpy(data(), old_mdu.data(), mdusize);
+                @ROOT_EVAL@(&r);
+                if (std::memcmp(&r, proposed.data(), sizeof(r))
+                    || std::memcmp(data(), new_mdu.data(), mdusize)) {
+                    size_t bad = 0;
+                    const auto* actual = reinterpret_cast<unsigned char*>(&r);
+                    while (bad < sizeof(r) && actual[bad] == proposed[bad]) ++bad;
+                    std::cerr << "ICO_PAIR_FAILURE cycle=" << r.debug_core_cycles
+                              << " root_offset=" << bad << " mdu_equal="
+                              << !std::memcmp(data(), new_mdu.data(), mdusize) << '\n';
+                    std::abort();
+                }
+                ++checked;
+            }
+        }
+        falling = !trace && !r.clock;
+        prior = now;
+    }
+};
+
+inline State& state(@ROOT_CLASS@& r, @MDU_CLASS@& m) {
+    static thread_local std::unique_ptr<State> owner;
+    if (!owner || &owner->r != &r || &owner->m != &m) owner.reset(new State(r, m));
+    return *owner;
+}
+inline void reset(@ROOT_CLASS@& r, @MDU_CLASS@& m) { state(r, m).reset(); }
+inline void eval(@ROOT_CLASS@& r, @MDU_CLASS@& m, bool trace) { state(r, m).eval(trace); }
+}  // namespace cpu2026_ico_pair

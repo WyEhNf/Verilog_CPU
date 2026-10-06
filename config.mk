@@ -53,6 +53,11 @@ export CPU2026_UNROLL_STMTS
 CPU2026_STABLE_MDU ?= 1
 export CPU2026_STABLE_MDU
 # Set CPU2026_STABLE_MDU=0 to keep the unmodified generated evaluator.
+# Reuse the input-combinational calculation between a full falling evaluation
+# and its rising evaluation when every non-clock input is unchanged.
+CPU2026_ICO_PAIR ?= 1
+export CPU2026_ICO_PAIR
+# Set CPU2026_ICO_PAIR=0 to retain the original input-region scheduling.
 # Optional real executable override for the low-memory driver.
 # export CPU2026_REAL_VERILATOR = /path/to/verilator
 YOSYS ?=
