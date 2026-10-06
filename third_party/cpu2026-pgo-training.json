@@ -9,5 +9,9 @@
   "bytes": 1197,
   "training_cycles": 100000,
   "ram_mib": 256,
-  "latency": 10
+  "latency": 10,
+  "vendored_git_blob": "3c0b89d55795653915bea2a41e03cb40dda44971",
+  "source_blob_sha256": "c045bbfa2b961a149ffee068e2e0bc9d2ac49b42562a8fb6f9c0247ac5ab611b",
+  "source_blob_bytes": 1172,
+  "byte_policy": "Preserve the exact measured native checkout image (CRLF). After CRLF-to-LF normalization it equals the pinned source Git blob; both encode identical RAM bytes."
 }

@@ -1,0 +1,270 @@
+{
+  "status": "LOCAL_WINDOWS_NATIVE_PI_UNDER_100_SECONDS",
+  "scope": "Local original OJ stdin inputs; remote OJ not run",
+  "build": {
+    "command": [
+      "F:/c26/msys64/usr/bin/make.exe",
+      "--no-print-directory",
+      "-f",
+      "E:/Verilog_cpu/Makefile",
+      "build",
+      "PYTHON=C:/Users/admin/miniconda3/python.exe",
+      "APPIMAGE=",
+      "CXX=F:/c26/msys64/mingw64/bin/g++.exe",
+      "AR=F:/c26/msys64/mingw64/bin/ar.exe",
+      "BUILD_MAKE=F:/c26/msys64/usr/bin/make.exe",
+      "VERILATOR=F:/CPU2026NativeExperiments/official-pgo-entry-20261007/wrapper.exe",
+      "BUILD=F:/CPU2026NativeExperiments/official-pgo-entry-20261007/build",
+      "FILELIST=E:/Verilog_cpu/verilog/filelist.f"
+    ],
+    "seconds": 104.79871699999785,
+    "exit_code": 0,
+    "windows_native": true,
+    "official_make_build_entry": true,
+    "wrapper_sha256": "21d01f44b7ab2bdcc03abe86549df3f9b306e4bca2d480070a89774915a13134",
+    "pgo_helper_sha256": "4bbcd48bf4ffc1fed1f9022f13851be78f65c3a72d2c65517300868fd8792eb8"
+  },
+  "build_phases": {
+    "compiler": "g++.exe (Rev4, Built by MSYS2 project) 16.2.0",
+    "training_cycles": 100000,
+    "latency": 10,
+    "wave": false,
+    "phases": [
+      {
+        "phase": "GCC profile generation",
+        "seconds": 56.44406159999926,
+        "status": 0,
+        "command": [
+          "F:\\c26\\msys64\\usr\\bin\\make.exe",
+          "-C",
+          "F:\\CPU2026NativeExperiments\\official-pgo-entry-20261007\\build\\obj",
+          "-f",
+          "Vstudent_top.mk",
+          "-j1",
+          "VM_PARALLEL_BUILDS=1",
+          "VM_USER_LDLIBS=F:/CPU2026CourseRuns/A109_readme_interface_no_pi_20261006/windows_time_zero.o",
+          "CXX=F:/c26/msys64/mingw64/bin/g++.exe",
+          "LINK=F:/c26/msys64/mingw64/bin/g++.exe",
+          "AR=F:/c26/msys64/mingw64/bin/ar.exe",
+          "PYTHON3=C:/Users/admin/miniconda3/python.exe",
+          "OPT_FAST=-O3 -fprofile-generate=F:/CPU2026NativeExperiments/official-pgo-entry-20261007/build/obj/cpu2026_profile -fprofile-update=single",
+          "VM_USER_LDFLAGS=-fprofile-generate=F:/CPU2026NativeExperiments/official-pgo-entry-20261007/build/obj/cpu2026_profile -fprofile-update=single"
+        ]
+      },
+      {
+        "phase": "limited Pi profile training",
+        "seconds": 1.2182303000008687,
+        "status": 1,
+        "stdout": "FAIL cycles=100000 (timeout or finish before exit write response)\n",
+        "stderr": ""
+      },
+      {
+        "phase": "GCC profile use and serial LTO",
+        "seconds": 38.35837759999413,
+        "status": 0,
+        "command": [
+          "F:\\c26\\msys64\\usr\\bin\\make.exe",
+          "-C",
+          "F:\\CPU2026NativeExperiments\\official-pgo-entry-20261007\\build\\obj",
+          "-f",
+          "Vstudent_top.mk",
+          "-j1",
+          "VM_PARALLEL_BUILDS=1",
+          "VM_USER_LDLIBS=F:/CPU2026CourseRuns/A109_readme_interface_no_pi_20261006/windows_time_zero.o",
+          "CXX=F:/c26/msys64/mingw64/bin/g++.exe",
+          "LINK=F:/c26/msys64/mingw64/bin/g++.exe",
+          "AR=F:/c26/msys64/mingw64/bin/ar.exe",
+          "PYTHON3=C:/Users/admin/miniconda3/python.exe",
+          "OPT_FAST=-O3 -fprofile-use=F:/CPU2026NativeExperiments/official-pgo-entry-20261007/build/obj/cpu2026_profile -flto=1",
+          "VM_USER_LDFLAGS=-fprofile-use=F:/CPU2026NativeExperiments/official-pgo-entry-20261007/build/obj/cpu2026_profile -flto=1"
+        ]
+      }
+    ],
+    "profile_files": 8,
+    "profile_bytes": 147564
+  },
+  "pi": {
+    "seconds": 96.28885119999904,
+    "exit_code": 0,
+    "stdout": "112\n",
+    "stderr": "CPU2026 cycles=38853527\n",
+    "peak_working_set_bytes": 278671360,
+    "peak_working_set_mib": 265.76171875,
+    "command": [
+      "F:\\CPU2026NativeExperiments\\official-pgo-entry-20261007\\build\\sim.exe"
+    ],
+    "input": "E:\\Verilog_cpu\\3201\\3201\\16.in",
+    "input_sha256": "0d1f369931bc5519050a9f1bfd31e914c5080b0c5478e6684dfcb6162feb4d4b",
+    "binary_sha256": "7cb831f82d9e659bad891661c43b4ec1e331dd1bb46e23b74f46e9ad975073df",
+    "full_pi": true,
+    "official_make_build_entry": true,
+    "stock_course_driver": true,
+    "latency": 10,
+    "ram_mib": 256,
+    "wave": false,
+    "max_cycles": 1000000000
+  },
+  "other_timeouts": [
+    {
+      "case": "qsort",
+      "seconds": 9.843315600002825,
+      "exit_code": 0,
+      "stdout": "81\n",
+      "stderr": "CPU2026 cycles=887183\n",
+      "peak_working_set_mib": 265.8359375,
+      "input": "E:\\Verilog_cpu\\3201\\3201\\17.in",
+      "input_sha256": "4bfe2e690c8cc67d3a1c46726a4af41caffbb9b08f428dc0c4f203b10f693aef",
+      "binary_sha256": "7cb831f82d9e659bad891661c43b4ec1e331dd1bb46e23b74f46e9ad975073df",
+      "latency": 10,
+      "ram_mib": 256,
+      "wave": false,
+      "max_cycles": 1000000000
+    },
+    {
+      "case": "tak",
+      "seconds": 9.491922599998361,
+      "exit_code": 0,
+      "stdout": "186\n",
+      "stderr": "CPU2026 cycles=802145\n",
+      "peak_working_set_mib": 265.76171875,
+      "input": "E:\\Verilog_cpu\\3201\\3201\\21.in",
+      "input_sha256": "24e48764b97ad656ff7da2d8d77b59539836d6908742e7211fadc291afdc93d0",
+      "binary_sha256": "7cb831f82d9e659bad891661c43b4ec1e331dd1bb46e23b74f46e9ad975073df",
+      "latency": 10,
+      "ram_mib": 256,
+      "wave": false,
+      "max_cycles": 1000000000
+    }
+  ],
+  "cache_state_verification": {
+    "exit_code": 1,
+    "stdout": "FAIL cycles=30000 (timeout or finish before exit write response)\nACCEL full=17685 fast=12320 fall=12780 stable=461 wake=460 verified=12780\nICO_PAIR reused=17220 verified=17220\n",
+    "stderr": ""
+  },
+  "hardware_identity": {
+    "baseline_commit": "40bab1a06825cc9a92be9e0a422fdbe2f5817634",
+    "defines": [
+      "SYNTHESIS"
+    ],
+    "CPU2026_WORD_SIM": false,
+    "changed_files": [
+      {
+        "file": "rtl/backend/rv32_backend_joint.v",
+        "macro_off_equal": true,
+        "token_sha256": "893e92f415f32f3e5a1f5636e8957a1505cf37f4de2e90dcef20f3aef66cc741"
+      },
+      {
+        "file": "rtl/backend/rv32_lsq.v",
+        "macro_off_equal": true,
+        "token_sha256": "7e628a9d997876e75f7c369d9f437c5836e0a952eeaf3d9da20f43ebc78e1705"
+      },
+      {
+        "file": "rtl/backend/rv32_rat_recovery.v",
+        "macro_off_equal": true,
+        "token_sha256": "92028d36c4ba47424c7403892bfe353538b296670c422abac4d9a9f9c4598b17"
+      },
+      {
+        "file": "rtl/backend/rv32_rob.v",
+        "macro_off_equal": true,
+        "token_sha256": "03189c7a911c900214e03f8f84dd850e3d2d8c0fedba8c43637ee9178e8747a9"
+      },
+      {
+        "file": "rtl/cache/rv32_dcache_control_banks.v",
+        "macro_off_equal": true,
+        "token_sha256": "971e3b8f7f0b70c42e620d4fe9a71cd409a7a8cfd8a77e5b2da88e42b24b7026"
+      },
+      {
+        "file": "rtl/cache/rv32_dcache_nonblocking.v",
+        "macro_off_equal": true,
+        "token_sha256": "b10cece13055fe2505e999078ea2fe8ab53868ed4ca94c986a7b2f8ade4be94c"
+      },
+      {
+        "file": "rtl/cache/rv32_icache_nonblocking.v",
+        "macro_off_equal": true,
+        "token_sha256": "c42ae999e67a12a914ebecc6fe795bdf3492c5473e15dda4a2bda8dfa6677cea"
+      },
+      {
+        "file": "rtl/common/rv32_asap7_fanout.v",
+        "macro_off_equal": true,
+        "token_sha256": "7d5c9a87636bd12a319984f69135536bc97202bd9cf9e8a9f8b3a6fb2ea4072e"
+      },
+      {
+        "file": "rtl/rv32_physical_register_file.v",
+        "macro_off_equal": true,
+        "token_sha256": "e4c2d0cfcca9c271586b9718fc51824be3c7f386841bd0015ecd443427d74164"
+      },
+      {
+        "file": "rtl/rv32_rename_unit.v",
+        "macro_off_equal": true,
+        "token_sha256": "6213c1bfcb51ddc2958cb384f944953b4853392b485e8aaffdc3c0cacebf2832"
+      }
+    ],
+    "unchanged_other_hdl_and_filelist": true
+  },
+  "frozen_hardware_metrics": {
+    "ipc_geomean": 1.1152626918348099,
+    "area_including_sram_um2": 35891.672317998215,
+    "fmax_mhz": 321.60804020100505,
+    "remeasured_this_turn": false
+  },
+  "post_build_guard_review": {
+    "measured_helper_sha256": "4bbcd48bf4ffc1fed1f9022f13851be78f65c3a72d2c65517300868fd8792eb8",
+    "final_helper_sha256": "c85530937dade3aab52bf6d8b94d95609d4ac885dc8a55178602fa23a8fed6e2",
+    "only_changes": "Additional inherited option/path checks and vendored training-image path; fixture bytes exactly equal the measured course Pi input, default HDL generation and compiler flags unchanged",
+    "default_generation_training_and_final_compiler_flags_unchanged": true,
+    "clean_default_plan_selects_bundled_fixture": true,
+    "hot_objects_in_clean_plan": 8
+  },
+  "evidence_directory": "F:\\CPU2026NativeExperiments\\official-pgo-entry-20261007",
+  "earlier_pgo_experiment_directory": "F:\\CPU2026NativeExperiments\\pgo-word-model-20261007",
+  "earlier_full_pi_without_lto": {
+    "seconds": 101.30442540000513,
+    "exit_code": 0,
+    "output": "PASS cycles=38853527 result=112 expected=112\n",
+    "peak_working_set_bytes": 278908928,
+    "peak_working_set_mib": 265.98828125,
+    "command": [
+      "F:\\CPU2026NativeExperiments\\pgo-word-model-20261007\\sim.exe",
+      "E:/Verilog_cpu/testcases/correctness_pi/program.data",
+      "112",
+      "1000000000",
+      "10"
+    ],
+    "full_pi": true,
+    "stock_course_driver": true,
+    "latency": 10
+  },
+  "paired_lto_million_cycles": [
+    {
+      "mode": "pgo",
+      "seconds": 2.92901449999772,
+      "exit_code": 1,
+      "stdout": "FAIL cycles=1000000 (timeout or finish before exit write response)\nACCEL full=235660 fast=764345 fall=792920 stable=28577 wake=28576 verified=0\nICO_PAIR reused=207080 verified=0\n",
+      "stderr": ""
+    },
+    {
+      "mode": "pgo_lto",
+      "seconds": 2.6741426000007777,
+      "exit_code": 1,
+      "stdout": "FAIL cycles=1000000 (timeout or finish before exit write response)\nACCEL full=235660 fast=764345 fall=792920 stable=28577 wake=28576 verified=0\nICO_PAIR reused=207080 verified=0\n",
+      "stderr": ""
+    }
+  ],
+  "pgo_training_fixture": {
+    "purpose": "Bounded GCC profile training only; original course CPU program; no cached answer or simulator output",
+    "source_repository": "https://github.com/ACMClassCourse-2025/RISC-V-CPU-2026-Testcases",
+    "source_revision": "29f980727f7d99a1842a58f34091c7579ba3fe85",
+    "source_path": "correctness_pi/program.data",
+    "source_git_blob": "ca4d9a2ecfbcbe4d2157ef6733125b047c837b05",
+    "vendored_path": "tools/cpu2026_pgo_pi.txt",
+    "sha256": "7c85967558002c5ac836a7b671c61457b73be5c7f954771fda62c5bbf911662b",
+    "bytes": 1197,
+    "training_cycles": 100000,
+    "ram_mib": 256,
+    "latency": 10,
+    "vendored_git_blob": "3c0b89d55795653915bea2a41e03cb40dda44971",
+    "source_blob_sha256": "c045bbfa2b961a149ffee068e2e0bc9d2ac49b42562a8fb6f9c0247ac5ab611b",
+    "source_blob_bytes": 1172,
+    "byte_policy": "Preserve the exact measured native checkout image (CRLF). After CRLF-to-LF normalization it equals the pinned source Git blob; both encode identical RAM bytes."
+  }
+}
