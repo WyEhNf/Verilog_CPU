@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""Run the course Verilator build in separate, memory-bounded host phases."""
+"""Separate course Verilator generation from bounded-concurrency C++ builds."""
 import os
 from pathlib import Path
 import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
-# Match the previously verified native Verilator 5.020 translation settings.
+# Keep the verified loop/function limits; larger files reduce repeated compiler
+# startup/PCH loading. Bound expression depth as well: file/function splitting
+# cannot divide a single packed RAT recovery expression. Verilator 5.020's
+# compiler depth pass materializes subexpressions in statement temporaries.
 GENERATION_FLAGS = [
     "--unroll-count", "1024", "--unroll-stmts", "1000000",
-    "--output-split", "2000", "--output-split-cfuncs", "2000",
-    "--output-split-ctrace", "2000",
+    "--output-split", "8000", "--output-split-cfuncs", "2000",
+    "--output-split-ctrace", "2000", "--comp-limit-parens", "32",
 ]
 
 
@@ -81,7 +85,18 @@ def build_plan(arguments):
     make = executable(os.environ.get("MAKE", "make"))
     compile_command = [make, "-C", directory, "-f", prefix + ".mk", "-j1",
                        "VM_PARALLEL_BUILDS=1", *make_flags]
-    return GENERATION_FLAGS + generation, compile_command
+    trace_depth = int(os.environ.get("CPU2026_TRACE_DEPTH", "1"))
+    if trace_depth < 0:
+        raise ValueError("CPU2026_TRACE_DEPTH must be nonnegative")
+    trace_flags = ["--trace-depth", str(trace_depth)] if trace_depth else []
+    compact_ids = int(os.environ.get("CPU2026_COMPACT_IDS", "1"))
+    if compact_ids not in (0, 1):
+        raise ValueError("CPU2026_COMPACT_IDS must be 0 or 1")
+    # Shorten private C++ identifiers without changing the public top interface.
+    # This fixed, public key is for reproducible names, not IP protection.
+    id_flags = (["--protect-ids", "--protect-key", "CPU2026-COMPILE-NAMES-V1"]
+                if compact_ids else [])
+    return GENERATION_FLAGS + trace_flags + id_flags + generation, compile_command
 
 
 def main(arguments=None):
@@ -97,13 +112,25 @@ def main(arguments=None):
         # compile_command, copied from the official -MAKEFLAGS argument.
         environment.pop("MAKEFLAGS", None)
         environment.pop("MFLAGS", None)
-        print("[build] Separate Verilator generation; C++ build jobs=1; "
-              "output split=2000", file=sys.stderr)
+        print("[build] Phase 1: Verilator generation; trace depth="
+              + os.environ.get("CPU2026_TRACE_DEPTH", "1")
+              + "; compact ids=" + os.environ.get("CPU2026_COMPACT_IDS", "1")
+              + "; output split=8000; function split=2000; expression depth=32", file=sys.stderr,
+              flush=True)
+        started = time.monotonic()
         status = subprocess.call(backend + generation, env=environment)
+        print(f"[build] Phase 1 finished: {time.monotonic() - started:.1f}s; "
+              f"status={status}", file=sys.stderr, flush=True)
         if status:
             return status
         # The generator has exited and released its memory before g++ starts.
-        return subprocess.call(compile_command, env=environment)
+        print("[build] Phase 2: C++ compilation; jobs=1", file=sys.stderr,
+              flush=True)
+        started = time.monotonic()
+        status = subprocess.call(compile_command, env=environment)
+        print(f"[build] Phase 2 finished: {time.monotonic() - started:.1f}s; "
+              f"status={status}", file=sys.stderr, flush=True)
+        return status
     except (OSError, ValueError) as error:
         print(f"[build] {error}", file=sys.stderr)
         return 2

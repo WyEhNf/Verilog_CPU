@@ -16,6 +16,14 @@ APPIMAGE ?= $(FRAMEWORK_DIR)/cpu2026-tools-x86_64.AppImage
 VERILATOR ?= $(FRAMEWORK_DIR)/tools/verilator_low_memory.py
 JOBS ?= 1
 export CPU2026_BUILD_APPIMAGE = $(APPIMAGE)
+# Keep top-level AXI waveforms; omit internal arrays from the default build.
+CPU2026_TRACE_DEPTH ?= 1
+export CPU2026_TRACE_DEPTH
+# Use CPU2026_TRACE_DEPTH=0 to restore full internal waveform visibility.
+# Short, reproducible private C++ names reduce parser/linker overhead.
+CPU2026_COMPACT_IDS ?= 1
+export CPU2026_COMPACT_IDS
+# Set CPU2026_COMPACT_IDS=0 to preserve original internal diagnostic names.
 # Optional real executable override for the low-memory driver.
 # export CPU2026_REAL_VERILATOR = /path/to/verilator
 YOSYS ?=
