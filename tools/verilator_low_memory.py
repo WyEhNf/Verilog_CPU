@@ -85,6 +85,12 @@ def build_plan(arguments):
         raise ValueError("course build requires --Mdir and --top-module")
     prefix = prefix or "V" + module
     make = executable(os.environ.get("MAKE", "make"))
+    # Verilator recommends this optimized fast-path profile when C++ build
+    # time dominates. Keep runtime-library and cold-path flags at their defaults.
+    # An explicit make override still wins.
+    if not any(flag.startswith("OPT_FAST=") for flag in make_flags):
+        make_flags.append("OPT_FAST=" + os.environ.get(
+            "CPU2026_OPT_FAST", "-O1 -fstrict-aliasing"))
     compile_command = [make, "-C", directory, "-f", prefix + ".mk", "-j1",
                        "VM_PARALLEL_BUILDS=1", *make_flags]
     trace_depth = int(os.environ.get("CPU2026_TRACE_DEPTH", "1"))
@@ -98,14 +104,14 @@ def build_plan(arguments):
     # This fixed, public key is for reproducible names, not IP protection.
     id_flags = (["--protect-ids", "--protect-key", "CPU2026-COMPILE-NAMES-V1"]
                 if compact_ids else [])
-    if int(os.environ.get("CPU2026_CPP_GROUP_BYTES", "524288")) < 0:
+    if int(os.environ.get("CPU2026_CPP_GROUP_BYTES", "2097152")) < 0:
         raise ValueError("CPU2026_CPP_GROUP_BYTES must be nonnegative")
     return GENERATION_FLAGS + trace_flags + id_flags + generation, compile_command
 
 
 def group_cpp_units(directory, prefix):
     """Combine small generated units, retaining fast/slow compiler categories."""
-    limit = int(os.environ.get("CPU2026_CPP_GROUP_BYTES", "524288"))
+    limit = int(os.environ.get("CPU2026_CPP_GROUP_BYTES", "2097152"))
     if limit < 0:
         raise ValueError("CPU2026_CPP_GROUP_BYTES must be nonnegative")
     if not limit:
@@ -140,7 +146,7 @@ def group_cpp_units(directory, prefix):
                 raise ValueError("invalid or duplicate generated C++ class")
             seen.add(name)
             source_size = (directory / (name + ".cpp")).stat().st_size
-            if pending and (size + source_size > limit or len(pending) == 8):
+            if pending and size + source_size > limit:
                 groups.append(pending)
                 pending = []
                 size = 0
@@ -164,7 +170,7 @@ def group_cpp_units(directory, prefix):
                                   + "".join(f"\t{name} \\\n" for name in outputs))
         sections.append({"category": variable, "original_units": len(names),
                          "compilation_units": len(outputs), "groups": records})
-    result = {"enabled": True, "byte_limit": limit, "max_members": 8,
+    result = {"enabled": True, "byte_limit": limit,
               "original_units": len(seen),
               "compilation_units": sum(s["compilation_units"] for s in sections),
               "sections": sections}
@@ -204,9 +210,10 @@ def main(arguments=None):
         if grouped["enabled"]:
             print(f"[build] C++ units: {grouped['original_units']} -> "
                   f"{grouped['compilation_units']}; max group bytes="
-                  f"{grouped['byte_limit']}; max files=8", file=sys.stderr, flush=True)
+                  f"{grouped['byte_limit']}", file=sys.stderr, flush=True)
         # The generator has exited and released its memory before g++ starts.
-        print("[build] Phase 2: C++ compilation; jobs=1", file=sys.stderr,
+        fast_flags = next(flag for flag in compile_command if flag.startswith("OPT_FAST="))
+        print("[build] Phase 2: C++ compilation; jobs=1; " + fast_flags, file=sys.stderr,
               flush=True)
         started = time.monotonic()
         status = subprocess.call(compile_command, env=environment)

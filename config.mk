@@ -24,10 +24,14 @@ export CPU2026_TRACE_DEPTH
 CPU2026_COMPACT_IDS ?= 1
 export CPU2026_COMPACT_IDS
 # Set CPU2026_COMPACT_IDS=0 to preserve original internal diagnostic names.
-# Combine up to 8 small C++ files per unit, keeping hot/cold flags separate.
-CPU2026_CPP_GROUP_BYTES ?= 524288
+# Combine small C++ files by source size, keeping hot/cold flags separate.
+CPU2026_CPP_GROUP_BYTES ?= 2097152
 export CPU2026_CPP_GROUP_BYTES
 # Set CPU2026_CPP_GROUP_BYTES=0 to compile every generated file separately.
+# Verilator's recommended optimized profile for shorter C++ build times.
+CPU2026_OPT_FAST ?= -O1 -fstrict-aliasing
+export CPU2026_OPT_FAST
+# Set CPU2026_OPT_FAST=-Os to restore the original hot-code optimization level.
 # Optional real executable override for the low-memory driver.
 # export CPU2026_REAL_VERILATOR = /path/to/verilator
 YOSYS ?=
