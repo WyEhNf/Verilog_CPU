@@ -1,0 +1,10 @@
+{
+  "root": "F:\\CPU2026Candidates\\frequency_research_20261003",
+  "variants": [
+    "A_payload_acceptance_decoupling",
+    "B_priced_control_domains",
+    "C_split_signed_multiplier"
+  ],
+  "status": "PREPARED_UNTESTED_NOT_ADOPTED",
+  "no_tests_started": true
+}

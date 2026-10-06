@@ -1,0 +1,815 @@
+{
+  "status": "EXISTING_INTERMEDIATE_NETLIST_ANALYSIS",
+  "baseline": {
+    "path": "F:\\CPU2026CourseRuns\\current_adopted_20261003\\result\\synth\\opt\\elaborated.json",
+    "leaf_cells": 231780,
+    "cell_types": {
+      "$add": 2676,
+      "$and": 2005,
+      "$eq": 28568,
+      "$logic_not": 9306,
+      "$pos": 3,
+      "$ge": 318,
+      "$logic_and": 51369,
+      "$logic_or": 2343,
+      "$lt": 901,
+      "$mul": 616,
+      "$reduce_bool": 210,
+      "$neg": 102,
+      "$not": 92,
+      "$or": 2596,
+      "$dff": 13720,
+      "$mux": 106558,
+      "$pmux": 625,
+      "$reduce_or": 3433,
+      "$shift": 102,
+      "$shl": 64,
+      "$shr": 43,
+      "$sub": 721,
+      "$mem_v2": 141,
+      "$dlatch": 8,
+      "$ne": 74,
+      "$le": 306,
+      "$shiftx": 739,
+      "$div": 154,
+      "$mod": 3370,
+      "$xor": 261,
+      "$gt": 316,
+      "$reduce_and": 32,
+      "$sshr": 8
+    },
+    "explicit_ff_bits": 130678,
+    "explicit_ff_bits_by_type": {
+      "$dff": 130678
+    },
+    "priced_BUFx16f_cells": 0,
+    "reachable_implementation_instances": {
+      "student_top": 1,
+      "$paramod$4bf7d08a5da1a590e5a2cac76e9e7c186c58d4d8\\rv32_axi_lite_bridge": 1,
+      "$paramod$a76d184a28bd336089160ba9f7657588dd3b6f05\\rv32_axi_response_fifo": 2,
+      "$paramod$963617de8ab1769ea45626dfac8a59f0cfd4ec37\\cpu_core": 1,
+      "$paramod$2fcb15cdecb49f630a0b8adfec57e3bce0f36c0f\\rv32_fetch_frontend": 1,
+      "$paramod$2883cff146cbc4ffa2efc2bbcd7fa23de7397383\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$93d0c7d348028bea9a483d4dcb208edc3da9029f\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$2bc5603567abab66d57c1f225d4ced91fbf47c77\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$52e985a9427f1d1e8092da05738c3cd58b0c02a9\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$b0afe1c6eb46f9b045554cc63f04bd5a9d3376c2\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$b01f5e6c49ce788375f1e45ed59b2155acb20fec\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$4ade849c7a7d249b7cd36917460f1085a9f27b35\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$d0269296ed3e81cf024e5aa7a3b66443e9e32e95\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$6268e6f9a6e91d8355e0cac48a0602e6234d785a\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$df50adb57141305a87262f1dd30aea87d94a77e2\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$379b45e9cec9acd246efcff2f923e839636df1e4\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$d8886abd6496f0922b5503e6a6bf1df489dcc6cb\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$ba688cc7227368bf3ed3cda33ade02d7ad41a002\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$68da154d42977d589239e6d19aea4b855fa672ee\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$15c9a0f6ac1b7623de3321800a487c6b44f2d562\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$8902c54e74880aac32456b887e3db190c4c67ab0\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$b6a88e7e45704071401e4daaf0856c3471e84a4c\\rv32_banked_predictor": 1,
+      "$paramod$4a56362266edb10532228efc9418567e793e69fc\\rv32_branch_predictor": 4,
+      "$paramod$4145c3a2dbae795e78d47a15f9a041104d90086c\\rv32_dcache_nonblocking": 1,
+      "$paramod$7877f3f66785ac39f3dff1c7ba231b81e00ccf5c\\sram_fakeram": 2,
+      "$paramod$b19da3598546a202a3f78ecd3899d00d796b3213\\rv32_dcache_command_word": 4,
+      "$paramod$25bc86507ef3ca76de27cd81d9eacf6edf9b12d9\\sram_fakeram": 8,
+      "$paramod$3ffdbc2aa6f0478c7304568828dad5b7de3527ef\\rv32_dcache_command_word": 4,
+      "$paramod$b5762073660a0e6614ddbf3717f5b50837274ee1\\rv32_dcache_metadata_bank": 1,
+      "$paramod$fde72afa71d7eeaa10f5f3fd9c524452153bd9fa\\rv32_dcache_metadata_bank": 1,
+      "$paramod$b61e56d99143f500886596364604898ee9937246\\rv32_dcache_metadata_bank": 1,
+      "$paramod$9851ede48f9d697f9b65ad6b62409a0897a95d39\\rv32_dcache_metadata_bank": 1,
+      "$paramod$3c769eb28f3e15676ec58cb34c024aa32899fcd0\\rv32_dcache_metadata_bank": 1,
+      "$paramod$76a5445e30325767cbb27fc56bb3bf542544306c\\rv32_dcache_metadata_bank": 1,
+      "$paramod$6ead5a75bfe750b81fc1a0a8c512e5602d1317a0\\rv32_dcache_metadata_bank": 1,
+      "$paramod$0972337f54266c4d1a868963c8c9232e4263c77a\\rv32_dcache_metadata_bank": 1,
+      "$paramod$71fecdd897eab22befe1340668026a3979be9f25\\rv32_dcache_metadata_bank": 1,
+      "$paramod$0b35853ecb1e2093cf8d83717437bdc13f472671\\rv32_dcache_metadata_bank": 1,
+      "$paramod$a513ce4ed27ad1e499f5caecaafaf0a7c55b1c2c\\rv32_dcache_metadata_bank": 1,
+      "$paramod$cafede755d88c86b1c08577b9cf5bb419fdec2bd\\rv32_dcache_metadata_bank": 1,
+      "$paramod$96f2bf24980d9229f6a788f1a8885c0a379fdf59\\rv32_dcache_metadata_bank": 1,
+      "$paramod$ad3bda07e975ecedfabb43971363be922c47d1df\\rv32_dcache_metadata_bank": 1,
+      "$paramod$5c7c38617e21e7ce2045d19b934311a812319805\\rv32_dcache_metadata_bank": 1,
+      "$paramod$de54e936309037222610de8242fa43a68c01f7fd\\rv32_dcache_metadata_bank": 1,
+      "$paramod$5c98ddab25fbc52cc5a261e31bc13f362135b1d0\\rv32_dcache_metadata_bank": 1,
+      "$paramod$1c7fd4eb563a1c57f6764d6bb8538211a6cada6b\\rv32_dcache_metadata_bank": 1,
+      "$paramod$49cd06563088a2cd906915ab8e90fe3e42dbeb46\\rv32_dcache_metadata_bank": 1,
+      "$paramod$b1d524909e8dcf95d9a4953cb92b0ae1460c2e10\\rv32_dcache_metadata_bank": 1,
+      "$paramod$7ba601ea578d01211cc73a53c468ef6a05129b77\\rv32_dcache_metadata_bank": 1,
+      "$paramod$a1f4cc0e9eb9d7cb345db603ce740e9c683ca022\\rv32_dcache_metadata_bank": 1,
+      "$paramod$fbffdb18da3023071ad08732d0c079dd18a103ea\\rv32_dcache_metadata_bank": 1,
+      "$paramod$8d9e8e857791e56dec72bdb34c556a886b9f0c80\\rv32_dcache_metadata_bank": 1,
+      "$paramod$e8ac9dd2368265595f6d1c6cab7cbb9b97288a47\\rv32_dcache_metadata_bank": 1,
+      "$paramod$8b2767d19ee94682a76e10eb5c7821a7dd4b9547\\rv32_dcache_metadata_bank": 1,
+      "$paramod$548262ab5ffb0fda42899129931d201c27d05670\\rv32_dcache_metadata_bank": 1,
+      "$paramod$08f38ab92131dd33d1e0ca366f363356b6d04ab6\\rv32_dcache_metadata_bank": 1,
+      "$paramod$8e4e2fe777c1f85ddaaf985467b20b9743e82b5f\\rv32_dcache_metadata_bank": 1,
+      "$paramod$aaf1ea4a5aaec799b6a31f7e016b3b95dbbdf67b\\rv32_dcache_metadata_bank": 1,
+      "$paramod$c18c18129674a0cd79c6b00f038466d8f7019fac\\rv32_dcache_metadata_bank": 1,
+      "$paramod$9ae2526bcd5205ce953948dd6dd4248529b7027d\\rv32_dcache_metadata_bank": 1,
+      "$paramod$ca605762c7db504c9bb912a45c7089b3bda04790\\rv32_dcache_metadata_bank": 1,
+      "$paramod$26552445cca18865ea92b10fca3381b377085a99\\rv32_dcache_metadata_bank": 1,
+      "$paramod$d934c53fd7ca0a69520f61a26816bb4917c6dee6\\rv32_dcache_metadata_bank": 1,
+      "$paramod$e2f34977bd5dcbb6a57e8f50b9dcc92f9a7ec4eb\\rv32_dcache_metadata_bank": 1,
+      "$paramod$aefb206f8c5292fbd9169c436d0263dd7e593e4c\\rv32_dcache_metadata_bank": 1,
+      "$paramod$947da8f2065ac1ab83b24567b42738c56057b39c\\rv32_dcache_metadata_bank": 1,
+      "$paramod$24b714cb5b2c8f5e32dc6fab47a2f465b1ad90b7\\rv32_dcache_metadata_bank": 1,
+      "$paramod$991f07c2e4ee8443baf41ff89662fb4103ae885a\\rv32_dcache_metadata_bank": 1,
+      "$paramod$ce29405dfe761f48dc61b053d129080e9d44cf25\\rv32_dcache_metadata_bank": 1,
+      "$paramod$b9c834ab2599465fbed7405515de194c5d315800\\rv32_dcache_metadata_bank": 1,
+      "$paramod$a8c4032cb589b66480bfaad9b9d8ea7f2b6d9fb4\\rv32_dcache_metadata_bank": 1,
+      "$paramod$9f6a79f54161e18ac902bbeb31a5e7a16c2877a6\\rv32_dcache_metadata_bank": 1,
+      "$paramod$103741b7fa4771cf731c808c57c5f842de512523\\rv32_dcache_metadata_bank": 1,
+      "$paramod$800abdda4ae2a85ee7c4a3e8663b34fd18beb15a\\rv32_dcache_metadata_bank": 1,
+      "$paramod$0962b91eae7a8f58c9af878c6171ff90f3f8b952\\rv32_dcache_metadata_bank": 1,
+      "$paramod$bd9069ca26104a23291fb6237e358c2e8caee029\\rv32_dcache_metadata_bank": 1,
+      "$paramod$b59f41031910c8b2a1c44ad2797118f081adfb5d\\rv32_dcache_metadata_bank": 1,
+      "$paramod$1f7ba2b9bedaf493a2249e27d0f0561bdcd1afb0\\rv32_dcache_metadata_bank": 1,
+      "$paramod$16a7511844d2e7810025b0f78bf9ba85e7501478\\rv32_dcache_metadata_bank": 1,
+      "$paramod$a0ad6225af0190f51b3075ebe7fafae0d79c2677\\rv32_dcache_metadata_bank": 1,
+      "$paramod$f2e7105320c5e62522392ef6c94df27fc7ecfef6\\rv32_dcache_metadata_bank": 1,
+      "$paramod$ea77185ab414143103ac89ad8a54183521ac8a26\\rv32_dcache_metadata_bank": 1,
+      "$paramod$4b70158e04472730a6a004e03c7f794ff594be0f\\rv32_dcache_metadata_bank": 1,
+      "$paramod$252b5ea0e516aaa234c219939a53210853210ef6\\rv32_dcache_metadata_bank": 1,
+      "$paramod$f565833ee70108e9b24150ab40fc06c80000e279\\rv32_dcache_metadata_bank": 1,
+      "$paramod$82d5f829092b2c45e726e21a09a20f4c0149e419\\rv32_dcache_metadata_bank": 1,
+      "$paramod$8032aa8c4ad130cec6c52f9a3433c0be87c8b94d\\rv32_dcache_metadata_bank": 1,
+      "$paramod$eee62b6a997302d6fbad972b0ae72f2e3fea459a\\rv32_dcache_metadata_bank": 1,
+      "$paramod$022aadf163fb0e44e906baf59d8c8443ae391eca\\rv32_dcache_metadata_bank": 1,
+      "$paramod$d1831183b19472a16298fd4b021e5b81a0f5fb0e\\rv32_dcache_metadata_bank": 1,
+      "$paramod$2e3e24b2ad7800575008371d4a7f876124e48c6d\\rv32_dcache_metadata_bank": 1,
+      "$paramod$ddd0ef994d473ada75ea7d22015f30c2365647d0\\rv32_dcache_metadata_bank": 1,
+      "$paramod\\rv32_dcache_mshr_data_bank\\MSHR_ID=s32'00000000000000000000000000000000": 1,
+      "$paramod\\rv32_dcache_mshr_data_bank\\MSHR_ID=s32'00000000000000000000000000000001": 1,
+      "$paramod\\rv32_dcache_mshr_data_bank\\MSHR_ID=s32'00000000000000000000000000000010": 1,
+      "$paramod\\rv32_dcache_mshr_data_bank\\MSHR_ID=s32'00000000000000000000000000000011": 1,
+      "$paramod$ac6cd85cd9c7083777a888648cf2c8a23f434765\\rv32_icache_nonblocking": 1,
+      "$paramod$9e6a37a58322f4f681706fd7c031ccb6802c9adc\\sram_fakeram": 1,
+      "$paramod$ffda2c3216ff00cdf4c2886e9f5a755e7f191a47\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$e26ab95bb736c115f00775fa0b0321db40066a15\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$52354566c3fb0ff2a30a780d029eb6296e9fe46c\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$704bd9c9ee4c7123e5934b9c3319eb08eb7db91b\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$8d3bc083802d24064a448f7905c33d7b945e972c\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$e62d56c85a1ba60d4343d80284f33277c217b2a4\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$0b49336dd82dd049d52a250e78691892dde3fda9\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$ae65915962231575beb3542ddd4f8a4e9b17bb85\\rv32_icache_mshr_state_bank": 1,
+      "$paramod\\rv32_memory_bridge\\MEMORY_SIZE=s32'00010000000000000000000000000000": 1,
+      "$paramod\\rv32im_decoder\\LEGACY_SENTINEL_HALT=s32'00000000000000000000000000000000": 4,
+      "$paramod$4694e8aa64be330955170f5da651cc01d295f4ff\\rv32_decode_bundle_register": 1,
+      "$paramod$6068d4cb87848e70468f60d9fade3782d83dfd19\\rv32_decode_field_bank": 6,
+      "$paramod$107a39c166564cc2a2d9dd4f21ee83c76624d145\\rv32_decode_field_bank": 1,
+      "$paramod$4c4bf0ad1cb9f56d2a982a385df32ece7a91dceb\\rv32_decode_field_bank": 6,
+      "$paramod$6c5300211ee6c23c680f9e193618cbfeffe4dbb5\\rv32_decode_field_bank": 1,
+      "$paramod$91ae9674c7cf545b471780b160ad43390db5eb4b\\rv32_decode_field_bank": 6,
+      "$paramod$dae03183ad59e496630aec76818e7d29121f5811\\rv32_decode_field_bank": 1,
+      "$paramod$8c9b2c471eeb9d49c41fd2842b4b1201b3f41831\\rv32_decode_field_bank": 6,
+      "$paramod$04ea2da11c32c14b48d9ad1909a6a357fb92363a\\rv32_decode_field_bank": 1,
+      "$paramod$73135a2818f7ed51674af4289d963c5a2984a1b0\\rv32_backend_joint": 1,
+      "$paramod$76547e0d6258f693db26ac543afb28aa575c50c0\\rv32_completion_network": 1,
+      "$paramod$8570d2f8ac114bd1933bbb8ac537667b00ca431a\\rv32i_alu": 4,
+      "$paramod$b3d8a43ce0fb1deff60ddc299d11a1590e73c893\\rv32_issue_pipeline_slot": 4,
+      "$paramod$c51b7122487f43b94e8e9823133fd9f1f32e650b\\rv32_rat_recovery": 1,
+      "$paramod$9546797d8a223b9290dc8e07a11e6a196d2fe495\\rv32_store_address_select": 1,
+      "$paramod$bc4c5e8dedd3202d56f1278fa2a5cb479cd7c201\\rv32_lsq": 1,
+      "$paramod$ff17b2c81160eb395a8babaa895abf03433679e9\\rv32m_mdu_reservation_station": 1,
+      "$paramod$24839646502ef3de32bf225d585d5ddff8de91fe\\rv32m_divider": 1,
+      "$paramod$24839646502ef3de32bf225d585d5ddff8de91fe\\rv32m_multiplier": 1,
+      "$paramod$1e55c36f1a666ff29a3300d45f281857759cdb5b\\rv32_physical_register_file": 1,
+      "$paramod$57ff82dc6748cc9242a12b3b63087e69fd4db2cc\\rv32_rename_unit": 1,
+      "$paramod$0d5419175db9f9a8abadd975ca6168bf83de73f3\\rv32_rob": 1,
+      "$paramod$04a8f99ffadb9320b2f6901b7eba0f8028780e30\\rv32_reservation_station": 1,
+      "rv32_cache_stats": 1
+    },
+    "high_reference_nets": [
+      {
+        "module": "$paramod$bc4c5e8dedd3202d56f1278fa2a5cb479cd7c201\\rv32_lsq",
+        "bit": 4,
+        "weighted_input_references": 153654,
+        "aliases": [
+          "flush_i"
+        ]
+      },
+      {
+        "module": "$paramod$bc4c5e8dedd3202d56f1278fa2a5cb479cd7c201\\rv32_lsq",
+        "bit": 5,
+        "weighted_input_references": 105318,
+        "aliases": [
+          "recovery_valid_i"
+        ]
+      },
+      {
+        "module": "$paramod$0d5419175db9f9a8abadd975ca6168bf83de73f3\\rv32_rob",
+        "bit": 3327,
+        "weighted_input_references": 55197,
+        "aliases": [
+          "checkpoint_restore_valid_o",
+          "recovery_accept_o",
+          "recovery_found",
+          "redirect_valid_o"
+        ]
+      },
+      {
+        "module": "$paramod$4145c3a2dbae795e78d47a15f9a041104d90086c\\rv32_dcache_nonblocking",
+        "bit": 5117,
+        "weighted_input_references": 27411,
+        "aliases": [
+          "request_fire"
+        ]
+      },
+      {
+        "module": "$paramod$4145c3a2dbae795e78d47a15f9a041104d90086c\\rv32_dcache_nonblocking",
+        "bit": 4920,
+        "weighted_input_references": 23551,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$4145c3a2dbae795e78d47a15f9a041104d90086c\\rv32_dcache_nonblocking",
+        "bit": 4924,
+        "weighted_input_references": 19472,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$04a8f99ffadb9320b2f6901b7eba0f8028780e30\\rv32_reservation_station",
+        "bit": 2504,
+        "weighted_input_references": 14681,
+        "aliases": [
+          "flush_valid_i"
+        ]
+      },
+      {
+        "module": "$paramod$0d5419175db9f9a8abadd975ca6168bf83de73f3\\rv32_rob",
+        "bit": 50220,
+        "weighted_input_references": 11808,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$0d5419175db9f9a8abadd975ca6168bf83de73f3\\rv32_rob",
+        "bit": 50506,
+        "weighted_input_references": 7846,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$bc4c5e8dedd3202d56f1278fa2a5cb479cd7c201\\rv32_lsq",
+        "bit": 78274,
+        "weighted_input_references": 2165,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$57ff82dc6748cc9242a12b3b63087e69fd4db2cc\\rv32_rename_unit",
+        "bit": 600,
+        "weighted_input_references": 1842,
+        "aliases": [
+          "restore_valid_i"
+        ]
+      },
+      {
+        "module": "$paramod$963617de8ab1769ea45626dfac8a59f0cfd4ec37\\cpu_core",
+        "bit": 3043,
+        "weighted_input_references": 1212,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$73135a2818f7ed51674af4289d963c5a2984a1b0\\rv32_backend_joint",
+        "bit": 3079,
+        "weighted_input_references": 1182,
+        "aliases": [
+          "branch_pending",
+          "perf_branch_pending_o"
+        ]
+      },
+      {
+        "module": "$paramod$57ff82dc6748cc9242a12b3b63087e69fd4db2cc\\rv32_rename_unit",
+        "bit": 5618,
+        "weighted_input_references": 1052,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$57ff82dc6748cc9242a12b3b63087e69fd4db2cc\\rv32_rename_unit",
+        "bit": 29,
+        "weighted_input_references": 1043,
+        "aliases": [
+          "decoded_rd_i[0]"
+        ]
+      },
+      {
+        "module": "$paramod$ac6cd85cd9c7083777a888648cf2c8a23f434765\\rv32_icache_nonblocking",
+        "bit": 12805,
+        "weighted_input_references": 921,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$73135a2818f7ed51674af4289d963c5a2984a1b0\\rv32_backend_joint",
+        "bit": 9891,
+        "weighted_input_references": 905,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$73135a2818f7ed51674af4289d963c5a2984a1b0\\rv32_backend_joint",
+        "bit": 9889,
+        "weighted_input_references": 905,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$4bf7d08a5da1a590e5a2cac76e9e7c186c58d4d8\\rv32_axi_lite_bridge",
+        "bit": 1646,
+        "weighted_input_references": 714,
+        "aliases": [
+          "take_d_write"
+        ]
+      },
+      {
+        "module": "$paramod$04a8f99ffadb9320b2f6901b7eba0f8028780e30\\rv32_reservation_station",
+        "bit": 95935,
+        "weighted_input_references": 546,
+        "aliases": [
+          "alloc_row_write[11]"
+        ]
+      },
+      {
+        "module": "$paramod$04a8f99ffadb9320b2f6901b7eba0f8028780e30\\rv32_reservation_station",
+        "bit": 96761,
+        "weighted_input_references": 546,
+        "aliases": [
+          "alloc_row_write[10]"
+        ]
+      },
+      {
+        "module": "$paramod$76547e0d6258f693db26ac543afb28aa575c50c0\\rv32_completion_network",
+        "bit": 4067,
+        "weighted_input_references": 545,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$76547e0d6258f693db26ac543afb28aa575c50c0\\rv32_completion_network",
+        "bit": 4069,
+        "weighted_input_references": 545,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$24839646502ef3de32bf225d585d5ddff8de91fe\\rv32m_divider",
+        "bit": 826,
+        "weighted_input_references": 525,
+        "aliases": [
+          "busy_reg"
+        ]
+      },
+      {
+        "module": "$paramod$24839646502ef3de32bf225d585d5ddff8de91fe\\rv32m_divider",
+        "bit": 867,
+        "weighted_input_references": 521,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$ac6cd85cd9c7083777a888648cf2c8a23f434765\\rv32_icache_nonblocking",
+        "bit": 12811,
+        "weighted_input_references": 436,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$2fcb15cdecb49f630a0b8adfec57e3bce0f36c0f\\rv32_fetch_frontend",
+        "bit": 2337,
+        "weighted_input_references": 416,
+        "aliases": [
+          "head_row_select[0]"
+        ]
+      },
+      {
+        "module": "$paramod$2fcb15cdecb49f630a0b8adfec57e3bce0f36c0f\\rv32_fetch_frontend",
+        "bit": 2546,
+        "weighted_input_references": 416,
+        "aliases": [
+          "head_row_select[1]"
+        ]
+      },
+      {
+        "module": "$paramod$2fcb15cdecb49f630a0b8adfec57e3bce0f36c0f\\rv32_fetch_frontend",
+        "bit": 2755,
+        "weighted_input_references": 416,
+        "aliases": [
+          "head_row_select[2]"
+        ]
+      },
+      {
+        "module": "$paramod$4bf7d08a5da1a590e5a2cac76e9e7c186c58d4d8\\rv32_axi_lite_bridge",
+        "bit": 1681,
+        "weighted_input_references": 383,
+        "aliases": [
+          "fill_read"
+        ]
+      }
+    ],
+    "caveat": "Hierarchical RTL intermediate only; explicit FF excludes un-mapped memories. Local mux select/FF control weighted by bus width, not Liberty capacitance, mapped fanout, timing or area; cross-module load not reconstructed"
+  },
+  "candidate": {
+    "path": "F:\\CPU2026CourseRuns\\architecture_L1_20261004\\result\\synth\\opt\\elaborated.json",
+    "leaf_cells": 239197,
+    "cell_types": {
+      "$add": 2683,
+      "$and": 2078,
+      "$eq": 28549,
+      "$logic_not": 9874,
+      "$pos": 7,
+      "$ge": 310,
+      "$logic_and": 54415,
+      "$logic_or": 2358,
+      "$lt": 800,
+      "$mul": 610,
+      "$reduce_bool": 216,
+      "$neg": 76,
+      "$not": 83,
+      "$or": 4050,
+      "$dff": 14104,
+      "$mux": 106759,
+      "$pmux": 637,
+      "$reduce_or": 3481,
+      "$shift": 76,
+      "$shl": 64,
+      "$shr": 43,
+      "$sub": 783,
+      "$mem_v2": 141,
+      "$dlatch": 8,
+      "$ne": 76,
+      "$le": 372,
+      "BUFx16f_ASAP7_75t_R": 1701,
+      "$shiftx": 694,
+      "$div": 154,
+      "$mod": 3370,
+      "$xor": 268,
+      "$gt": 317,
+      "$reduce_and": 32,
+      "$sshr": 8
+    },
+    "explicit_ff_bits": 136228,
+    "explicit_ff_bits_by_type": {
+      "$dff": 136228
+    },
+    "priced_BUFx16f_cells": 1701,
+    "reachable_implementation_instances": {
+      "student_top": 1,
+      "$paramod$4bf7d08a5da1a590e5a2cac76e9e7c186c58d4d8\\rv32_axi_lite_bridge": 1,
+      "$paramod$a76d184a28bd336089160ba9f7657588dd3b6f05\\rv32_axi_response_fifo": 2,
+      "$paramod$963617de8ab1769ea45626dfac8a59f0cfd4ec37\\cpu_core": 1,
+      "$paramod$2fcb15cdecb49f630a0b8adfec57e3bce0f36c0f\\rv32_fetch_frontend": 1,
+      "$paramod$2883cff146cbc4ffa2efc2bbcd7fa23de7397383\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod\\rv32_frequency_control_tree\\LEAVES=s32'00000000000000000000000000000001": 72,
+      "$paramod$dac8cc916c9691e7979faee2c6521a9f95c059f2\\rv32_frequency_control_tree": 56,
+      "$paramod$93d0c7d348028bea9a483d4dcb208edc3da9029f\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$2bc5603567abab66d57c1f225d4ced91fbf47c77\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$52e985a9427f1d1e8092da05738c3cd58b0c02a9\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$b0afe1c6eb46f9b045554cc63f04bd5a9d3376c2\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$b01f5e6c49ce788375f1e45ed59b2155acb20fec\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$4ade849c7a7d249b7cd36917460f1085a9f27b35\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$d0269296ed3e81cf024e5aa7a3b66443e9e32e95\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$6268e6f9a6e91d8355e0cac48a0602e6234d785a\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$df50adb57141305a87262f1dd30aea87d94a77e2\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$379b45e9cec9acd246efcff2f923e839636df1e4\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$d8886abd6496f0922b5503e6a6bf1df489dcc6cb\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$ba688cc7227368bf3ed3cda33ade02d7ad41a002\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$68da154d42977d589239e6d19aea4b855fa672ee\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$15c9a0f6ac1b7623de3321800a487c6b44f2d562\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$8902c54e74880aac32456b887e3db190c4c67ab0\\rv32_frontend_queue_payload_bank": 1,
+      "$paramod$b6a88e7e45704071401e4daaf0856c3471e84a4c\\rv32_banked_predictor": 1,
+      "$paramod$4a56362266edb10532228efc9418567e793e69fc\\rv32_branch_predictor": 4,
+      "$paramod$4145c3a2dbae795e78d47a15f9a041104d90086c\\rv32_dcache_nonblocking": 1,
+      "$paramod$7877f3f66785ac39f3dff1c7ba231b81e00ccf5c\\sram_fakeram": 2,
+      "$paramod$b19da3598546a202a3f78ecd3899d00d796b3213\\rv32_dcache_command_word": 4,
+      "$paramod$25bc86507ef3ca76de27cd81d9eacf6edf9b12d9\\sram_fakeram": 8,
+      "$paramod$3ffdbc2aa6f0478c7304568828dad5b7de3527ef\\rv32_dcache_command_word": 4,
+      "$paramod\\rv32_frequency_control_tree\\LEAVES=s32'00000000000000000000000000001001": 10,
+      "$paramod$b5762073660a0e6614ddbf3717f5b50837274ee1\\rv32_dcache_metadata_bank": 1,
+      "$paramod$fde72afa71d7eeaa10f5f3fd9c524452153bd9fa\\rv32_dcache_metadata_bank": 1,
+      "$paramod$b61e56d99143f500886596364604898ee9937246\\rv32_dcache_metadata_bank": 1,
+      "$paramod$9851ede48f9d697f9b65ad6b62409a0897a95d39\\rv32_dcache_metadata_bank": 1,
+      "$paramod$3c769eb28f3e15676ec58cb34c024aa32899fcd0\\rv32_dcache_metadata_bank": 1,
+      "$paramod$76a5445e30325767cbb27fc56bb3bf542544306c\\rv32_dcache_metadata_bank": 1,
+      "$paramod$6ead5a75bfe750b81fc1a0a8c512e5602d1317a0\\rv32_dcache_metadata_bank": 1,
+      "$paramod$0972337f54266c4d1a868963c8c9232e4263c77a\\rv32_dcache_metadata_bank": 1,
+      "$paramod$71fecdd897eab22befe1340668026a3979be9f25\\rv32_dcache_metadata_bank": 1,
+      "$paramod$0b35853ecb1e2093cf8d83717437bdc13f472671\\rv32_dcache_metadata_bank": 1,
+      "$paramod$a513ce4ed27ad1e499f5caecaafaf0a7c55b1c2c\\rv32_dcache_metadata_bank": 1,
+      "$paramod$cafede755d88c86b1c08577b9cf5bb419fdec2bd\\rv32_dcache_metadata_bank": 1,
+      "$paramod$96f2bf24980d9229f6a788f1a8885c0a379fdf59\\rv32_dcache_metadata_bank": 1,
+      "$paramod$ad3bda07e975ecedfabb43971363be922c47d1df\\rv32_dcache_metadata_bank": 1,
+      "$paramod$5c7c38617e21e7ce2045d19b934311a812319805\\rv32_dcache_metadata_bank": 1,
+      "$paramod$de54e936309037222610de8242fa43a68c01f7fd\\rv32_dcache_metadata_bank": 1,
+      "$paramod$5c98ddab25fbc52cc5a261e31bc13f362135b1d0\\rv32_dcache_metadata_bank": 1,
+      "$paramod$1c7fd4eb563a1c57f6764d6bb8538211a6cada6b\\rv32_dcache_metadata_bank": 1,
+      "$paramod$49cd06563088a2cd906915ab8e90fe3e42dbeb46\\rv32_dcache_metadata_bank": 1,
+      "$paramod$b1d524909e8dcf95d9a4953cb92b0ae1460c2e10\\rv32_dcache_metadata_bank": 1,
+      "$paramod$7ba601ea578d01211cc73a53c468ef6a05129b77\\rv32_dcache_metadata_bank": 1,
+      "$paramod$a1f4cc0e9eb9d7cb345db603ce740e9c683ca022\\rv32_dcache_metadata_bank": 1,
+      "$paramod$fbffdb18da3023071ad08732d0c079dd18a103ea\\rv32_dcache_metadata_bank": 1,
+      "$paramod$8d9e8e857791e56dec72bdb34c556a886b9f0c80\\rv32_dcache_metadata_bank": 1,
+      "$paramod$e8ac9dd2368265595f6d1c6cab7cbb9b97288a47\\rv32_dcache_metadata_bank": 1,
+      "$paramod$8b2767d19ee94682a76e10eb5c7821a7dd4b9547\\rv32_dcache_metadata_bank": 1,
+      "$paramod$548262ab5ffb0fda42899129931d201c27d05670\\rv32_dcache_metadata_bank": 1,
+      "$paramod$08f38ab92131dd33d1e0ca366f363356b6d04ab6\\rv32_dcache_metadata_bank": 1,
+      "$paramod$8e4e2fe777c1f85ddaaf985467b20b9743e82b5f\\rv32_dcache_metadata_bank": 1,
+      "$paramod$aaf1ea4a5aaec799b6a31f7e016b3b95dbbdf67b\\rv32_dcache_metadata_bank": 1,
+      "$paramod$c18c18129674a0cd79c6b00f038466d8f7019fac\\rv32_dcache_metadata_bank": 1,
+      "$paramod$9ae2526bcd5205ce953948dd6dd4248529b7027d\\rv32_dcache_metadata_bank": 1,
+      "$paramod$ca605762c7db504c9bb912a45c7089b3bda04790\\rv32_dcache_metadata_bank": 1,
+      "$paramod$26552445cca18865ea92b10fca3381b377085a99\\rv32_dcache_metadata_bank": 1,
+      "$paramod$d934c53fd7ca0a69520f61a26816bb4917c6dee6\\rv32_dcache_metadata_bank": 1,
+      "$paramod$e2f34977bd5dcbb6a57e8f50b9dcc92f9a7ec4eb\\rv32_dcache_metadata_bank": 1,
+      "$paramod$aefb206f8c5292fbd9169c436d0263dd7e593e4c\\rv32_dcache_metadata_bank": 1,
+      "$paramod$947da8f2065ac1ab83b24567b42738c56057b39c\\rv32_dcache_metadata_bank": 1,
+      "$paramod$24b714cb5b2c8f5e32dc6fab47a2f465b1ad90b7\\rv32_dcache_metadata_bank": 1,
+      "$paramod$991f07c2e4ee8443baf41ff89662fb4103ae885a\\rv32_dcache_metadata_bank": 1,
+      "$paramod$ce29405dfe761f48dc61b053d129080e9d44cf25\\rv32_dcache_metadata_bank": 1,
+      "$paramod$b9c834ab2599465fbed7405515de194c5d315800\\rv32_dcache_metadata_bank": 1,
+      "$paramod$a8c4032cb589b66480bfaad9b9d8ea7f2b6d9fb4\\rv32_dcache_metadata_bank": 1,
+      "$paramod$9f6a79f54161e18ac902bbeb31a5e7a16c2877a6\\rv32_dcache_metadata_bank": 1,
+      "$paramod$103741b7fa4771cf731c808c57c5f842de512523\\rv32_dcache_metadata_bank": 1,
+      "$paramod$800abdda4ae2a85ee7c4a3e8663b34fd18beb15a\\rv32_dcache_metadata_bank": 1,
+      "$paramod$0962b91eae7a8f58c9af878c6171ff90f3f8b952\\rv32_dcache_metadata_bank": 1,
+      "$paramod$bd9069ca26104a23291fb6237e358c2e8caee029\\rv32_dcache_metadata_bank": 1,
+      "$paramod$b59f41031910c8b2a1c44ad2797118f081adfb5d\\rv32_dcache_metadata_bank": 1,
+      "$paramod$1f7ba2b9bedaf493a2249e27d0f0561bdcd1afb0\\rv32_dcache_metadata_bank": 1,
+      "$paramod$16a7511844d2e7810025b0f78bf9ba85e7501478\\rv32_dcache_metadata_bank": 1,
+      "$paramod$a0ad6225af0190f51b3075ebe7fafae0d79c2677\\rv32_dcache_metadata_bank": 1,
+      "$paramod$f2e7105320c5e62522392ef6c94df27fc7ecfef6\\rv32_dcache_metadata_bank": 1,
+      "$paramod$ea77185ab414143103ac89ad8a54183521ac8a26\\rv32_dcache_metadata_bank": 1,
+      "$paramod$4b70158e04472730a6a004e03c7f794ff594be0f\\rv32_dcache_metadata_bank": 1,
+      "$paramod$252b5ea0e516aaa234c219939a53210853210ef6\\rv32_dcache_metadata_bank": 1,
+      "$paramod$f565833ee70108e9b24150ab40fc06c80000e279\\rv32_dcache_metadata_bank": 1,
+      "$paramod$82d5f829092b2c45e726e21a09a20f4c0149e419\\rv32_dcache_metadata_bank": 1,
+      "$paramod$8032aa8c4ad130cec6c52f9a3433c0be87c8b94d\\rv32_dcache_metadata_bank": 1,
+      "$paramod$eee62b6a997302d6fbad972b0ae72f2e3fea459a\\rv32_dcache_metadata_bank": 1,
+      "$paramod$022aadf163fb0e44e906baf59d8c8443ae391eca\\rv32_dcache_metadata_bank": 1,
+      "$paramod$d1831183b19472a16298fd4b021e5b81a0f5fb0e\\rv32_dcache_metadata_bank": 1,
+      "$paramod$2e3e24b2ad7800575008371d4a7f876124e48c6d\\rv32_dcache_metadata_bank": 1,
+      "$paramod$ddd0ef994d473ada75ea7d22015f30c2365647d0\\rv32_dcache_metadata_bank": 1,
+      "$paramod\\rv32_dcache_mshr_data_bank\\MSHR_ID=s32'00000000000000000000000000000000": 1,
+      "$paramod\\rv32_dcache_mshr_data_bank\\MSHR_ID=s32'00000000000000000000000000000001": 1,
+      "$paramod\\rv32_dcache_mshr_data_bank\\MSHR_ID=s32'00000000000000000000000000000010": 1,
+      "$paramod\\rv32_dcache_mshr_data_bank\\MSHR_ID=s32'00000000000000000000000000000011": 1,
+      "$paramod$9c00ef8bd25b09307f41c87ec3ed4786bbce056e\\rv32_icache_nonblocking": 1,
+      "$paramod$625016c87310fec02ada2f6019537588ea35e200\\rv32_frequency_control_tree": 3,
+      "$paramod$9e6a37a58322f4f681706fd7c031ccb6802c9adc\\sram_fakeram": 1,
+      "$paramod\\rv32_icache_query_queue\\EPOCH_WIDTH=s32'00000000000000000000000000000100": 1,
+      "$paramod$ffda2c3216ff00cdf4c2886e9f5a755e7f191a47\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$e26ab95bb736c115f00775fa0b0321db40066a15\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$52354566c3fb0ff2a30a780d029eb6296e9fe46c\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$704bd9c9ee4c7123e5934b9c3319eb08eb7db91b\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$8d3bc083802d24064a448f7905c33d7b945e972c\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$e62d56c85a1ba60d4343d80284f33277c217b2a4\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$0b49336dd82dd049d52a250e78691892dde3fda9\\rv32_icache_mshr_state_bank": 1,
+      "$paramod$ae65915962231575beb3542ddd4f8a4e9b17bb85\\rv32_icache_mshr_state_bank": 1,
+      "$paramod\\rv32_memory_bridge\\MEMORY_SIZE=s32'00010000000000000000000000000000": 1,
+      "$paramod\\rv32im_decoder\\LEGACY_SENTINEL_HALT=s32'00000000000000000000000000000000": 4,
+      "$paramod$4694e8aa64be330955170f5da651cc01d295f4ff\\rv32_decode_bundle_register": 1,
+      "$paramod$6068d4cb87848e70468f60d9fade3782d83dfd19\\rv32_decode_field_bank": 6,
+      "$paramod$107a39c166564cc2a2d9dd4f21ee83c76624d145\\rv32_decode_field_bank": 1,
+      "$paramod$4c4bf0ad1cb9f56d2a982a385df32ece7a91dceb\\rv32_decode_field_bank": 6,
+      "$paramod$6c5300211ee6c23c680f9e193618cbfeffe4dbb5\\rv32_decode_field_bank": 1,
+      "$paramod$91ae9674c7cf545b471780b160ad43390db5eb4b\\rv32_decode_field_bank": 6,
+      "$paramod$dae03183ad59e496630aec76818e7d29121f5811\\rv32_decode_field_bank": 1,
+      "$paramod$8c9b2c471eeb9d49c41fd2842b4b1201b3f41831\\rv32_decode_field_bank": 6,
+      "$paramod$04ea2da11c32c14b48d9ad1909a6a357fb92363a\\rv32_decode_field_bank": 1,
+      "$paramod\\rv32_frequency_control_tree\\LEAVES=s32'00000000000000000000000000000010": 2,
+      "$paramod$73135a2818f7ed51674af4289d963c5a2984a1b0\\rv32_backend_joint": 1,
+      "$paramod\\rv32_frequency_control_tree\\LEAVES=s32'00000000000000000000000000000100": 20,
+      "$paramod$76547e0d6258f693db26ac543afb28aa575c50c0\\rv32_completion_network": 1,
+      "$paramod$8570d2f8ac114bd1933bbb8ac537667b00ca431a\\rv32i_alu": 4,
+      "$paramod$b3d8a43ce0fb1deff60ddc299d11a1590e73c893\\rv32_issue_pipeline_slot": 4,
+      "$paramod\\rv32_frequency_control_tree\\LEAVES=s32'00000000000000000000000000001000": 5,
+      "$paramod$c51b7122487f43b94e8e9823133fd9f1f32e650b\\rv32_rat_recovery": 1,
+      "$paramod$9546797d8a223b9290dc8e07a11e6a196d2fe495\\rv32_store_address_select": 1,
+      "$paramod$4c00a15dc5c983bcf669b6c4a6d4290d2399f01f\\rv32_frequency_control_tree": 2,
+      "$paramod$c1b90da89ddef9f477f7196594eb726b5b8d10eb\\rv32_lsq": 1,
+      "$paramod\\rv32_frequency_control_tree\\LEAVES=s32'00000000000000000000000000000101": 1,
+      "$paramod$ff17b2c81160eb395a8babaa895abf03433679e9\\rv32m_mdu_reservation_station": 1,
+      "$paramod$24839646502ef3de32bf225d585d5ddff8de91fe\\rv32m_divider": 1,
+      "$paramod$24839646502ef3de32bf225d585d5ddff8de91fe\\rv32m_multiplier": 1,
+      "$paramod$1e55c36f1a666ff29a3300d45f281857759cdb5b\\rv32_physical_register_file": 1,
+      "$paramod$de150d562902a9b058f921ce280388cba9b8a948\\rv32_frequency_control_tree": 1,
+      "$paramod$57ff82dc6748cc9242a12b3b63087e69fd4db2cc\\rv32_rename_unit": 1,
+      "$paramod$d97ce2b9ddb3aa9c01c250733270ffb3abd6af05\\rv32_rob": 1,
+      "$paramod$6c4d96f58783c97034984ccff0bd4d0df4b3fbc5\\rv32_frequency_control_tree": 1,
+      "$paramod\\rv32_frequency_control_tree\\LEAVES=s32'00000000000000000000000000000011": 2,
+      "$paramod\\rv32_frequency_control_tree\\LEAVES=s32'00000000000000000000000000000110": 13,
+      "$paramod$4aea0c3a8890c4fcc41f84315a9b6e405ec3172c\\rv32_reservation_station": 1,
+      "$paramod$1e4151528a8a885fe8fc85ca33301e1bc99686d6\\rv32_rs_payload_row": 12,
+      "rv32_cache_stats": 1
+    },
+    "high_reference_nets": [
+      {
+        "module": "$paramod$c1b90da89ddef9f477f7196594eb726b5b8d10eb\\rv32_lsq",
+        "bit": 4,
+        "weighted_input_references": 151368,
+        "aliases": [
+          "flush_i"
+        ]
+      },
+      {
+        "module": "$paramod$c1b90da89ddef9f477f7196594eb726b5b8d10eb\\rv32_lsq",
+        "bit": 5,
+        "weighted_input_references": 103161,
+        "aliases": [
+          "recovery_valid_i"
+        ]
+      },
+      {
+        "module": "$paramod$d97ce2b9ddb3aa9c01c250733270ffb3abd6af05\\rv32_rob",
+        "bit": 51475,
+        "weighted_input_references": 55041,
+        "aliases": [
+          "recovery_domains[5]"
+        ]
+      },
+      {
+        "module": "$paramod$4145c3a2dbae795e78d47a15f9a041104d90086c\\rv32_dcache_nonblocking",
+        "bit": 5117,
+        "weighted_input_references": 27411,
+        "aliases": [
+          "request_fire"
+        ]
+      },
+      {
+        "module": "$paramod$4145c3a2dbae795e78d47a15f9a041104d90086c\\rv32_dcache_nonblocking",
+        "bit": 4920,
+        "weighted_input_references": 23551,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$4145c3a2dbae795e78d47a15f9a041104d90086c\\rv32_dcache_nonblocking",
+        "bit": 4924,
+        "weighted_input_references": 19472,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$4aea0c3a8890c4fcc41f84315a9b6e405ec3172c\\rv32_reservation_station",
+        "bit": 2504,
+        "weighted_input_references": 14825,
+        "aliases": [
+          "flush_valid_i"
+        ]
+      },
+      {
+        "module": "$paramod$d97ce2b9ddb3aa9c01c250733270ffb3abd6af05\\rv32_rob",
+        "bit": 50523,
+        "weighted_input_references": 11808,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$d97ce2b9ddb3aa9c01c250733270ffb3abd6af05\\rv32_rob",
+        "bit": 50553,
+        "weighted_input_references": 7846,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$c1b90da89ddef9f477f7196594eb726b5b8d10eb\\rv32_lsq",
+        "bit": 76579,
+        "weighted_input_references": 1950,
+        "aliases": [
+          "response_fire"
+        ]
+      },
+      {
+        "module": "$paramod$57ff82dc6748cc9242a12b3b63087e69fd4db2cc\\rv32_rename_unit",
+        "bit": 600,
+        "weighted_input_references": 1842,
+        "aliases": [
+          "restore_valid_i"
+        ]
+      },
+      {
+        "module": "$paramod$963617de8ab1769ea45626dfac8a59f0cfd4ec37\\cpu_core",
+        "bit": 3043,
+        "weighted_input_references": 1212,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$73135a2818f7ed51674af4289d963c5a2984a1b0\\rv32_backend_joint",
+        "bit": 3079,
+        "weighted_input_references": 1185,
+        "aliases": [
+          "branch_pending",
+          "perf_branch_pending_o"
+        ]
+      },
+      {
+        "module": "$paramod$57ff82dc6748cc9242a12b3b63087e69fd4db2cc\\rv32_rename_unit",
+        "bit": 5618,
+        "weighted_input_references": 1052,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$57ff82dc6748cc9242a12b3b63087e69fd4db2cc\\rv32_rename_unit",
+        "bit": 29,
+        "weighted_input_references": 1043,
+        "aliases": [
+          "decoded_rd_i[0]"
+        ]
+      },
+      {
+        "module": "$paramod$9c00ef8bd25b09307f41c87ec3ed4786bbce056e\\rv32_icache_nonblocking",
+        "bit": 13175,
+        "weighted_input_references": 921,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$73135a2818f7ed51674af4289d963c5a2984a1b0\\rv32_backend_joint",
+        "bit": 10254,
+        "weighted_input_references": 905,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$73135a2818f7ed51674af4289d963c5a2984a1b0\\rv32_backend_joint",
+        "bit": 10252,
+        "weighted_input_references": 905,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$4bf7d08a5da1a590e5a2cac76e9e7c186c58d4d8\\rv32_axi_lite_bridge",
+        "bit": 1646,
+        "weighted_input_references": 714,
+        "aliases": [
+          "take_d_write"
+        ]
+      },
+      {
+        "module": "$paramod$4aea0c3a8890c4fcc41f84315a9b6e405ec3172c\\rv32_reservation_station",
+        "bit": 99835,
+        "weighted_input_references": 569,
+        "aliases": [
+          "alloc_row_write[11]"
+        ]
+      },
+      {
+        "module": "$paramod$4aea0c3a8890c4fcc41f84315a9b6e405ec3172c\\rv32_reservation_station",
+        "bit": 99838,
+        "weighted_input_references": 568,
+        "aliases": [
+          "alloc_row_write[10]"
+        ]
+      },
+      {
+        "module": "$paramod$76547e0d6258f693db26ac543afb28aa575c50c0\\rv32_completion_network",
+        "bit": 6083,
+        "weighted_input_references": 545,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$76547e0d6258f693db26ac543afb28aa575c50c0\\rv32_completion_network",
+        "bit": 6085,
+        "weighted_input_references": 545,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$24839646502ef3de32bf225d585d5ddff8de91fe\\rv32m_divider",
+        "bit": 831,
+        "weighted_input_references": 528,
+        "aliases": [
+          "busy_reg"
+        ]
+      },
+      {
+        "module": "$paramod$24839646502ef3de32bf225d585d5ddff8de91fe\\rv32m_divider",
+        "bit": 847,
+        "weighted_input_references": 523,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$9c00ef8bd25b09307f41c87ec3ed4786bbce056e\\rv32_icache_nonblocking",
+        "bit": 13181,
+        "weighted_input_references": 436,
+        "aliases": []
+      },
+      {
+        "module": "$paramod$2fcb15cdecb49f630a0b8adfec57e3bce0f36c0f\\rv32_fetch_frontend",
+        "bit": 2337,
+        "weighted_input_references": 416,
+        "aliases": [
+          "head_row_select[0]"
+        ]
+      },
+      {
+        "module": "$paramod$2fcb15cdecb49f630a0b8adfec57e3bce0f36c0f\\rv32_fetch_frontend",
+        "bit": 2546,
+        "weighted_input_references": 416,
+        "aliases": [
+          "head_row_select[1]"
+        ]
+      },
+      {
+        "module": "$paramod$2fcb15cdecb49f630a0b8adfec57e3bce0f36c0f\\rv32_fetch_frontend",
+        "bit": 2755,
+        "weighted_input_references": 416,
+        "aliases": [
+          "head_row_select[2]"
+        ]
+      },
+      {
+        "module": "$paramod$24839646502ef3de32bf225d585d5ddff8de91fe\\rv32m_divider",
+        "bit": 985,
+        "weighted_input_references": 399,
+        "aliases": [
+          "finish_reg"
+        ]
+      }
+    ],
+    "caveat": "Hierarchical RTL intermediate only; explicit FF excludes un-mapped memories. Local mux select/FF control weighted by bus width, not Liberty capacitance, mapped fanout, timing or area; cross-module load not reconstructed"
+  },
+  "explicit_ff_bit_delta": 5550,
+  "priced_buffer_delta": 1701,
+  "new_tests_started": false
+}

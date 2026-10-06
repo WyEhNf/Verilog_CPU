@@ -1,0 +1,37 @@
+{
+  "BUFx16f_ASAP7_75t_R": {
+    "area": 0.32076,
+    "capacitance": 2.34187,
+    "max_capacitance": 737.28,
+    "source_library": "F:\\CPU2026CourseTools\\win54fc150\\asap7\\lib\\asap7sc7p5t_INVBUF_RVT_TT_nldm_220122.lib",
+    "library_sha256": "a4ceb32e418e1aac8667e28fbd8e9e46baf520180be4db075598a4d7c681a56e"
+  },
+  "BUFx2_ASAP7_75t_R": {
+    "area": 0.0729,
+    "capacitance": 0.534279,
+    "max_capacitance": 92.16,
+    "source_library": "F:\\CPU2026CourseTools\\win54fc150\\asap7\\lib\\asap7sc7p5t_INVBUF_RVT_TT_nldm_220122.lib",
+    "library_sha256": "a4ceb32e418e1aac8667e28fbd8e9e46baf520180be4db075598a4d7c681a56e"
+  },
+  "INVx1_ASAP7_75t_R": {
+    "area": 0.04374,
+    "capacitance": 0.619928,
+    "max_capacitance": 46.08,
+    "source_library": "F:\\CPU2026CourseTools\\win54fc150\\asap7\\lib\\asap7sc7p5t_INVBUF_RVT_TT_nldm_220122.lib",
+    "library_sha256": "a4ceb32e418e1aac8667e28fbd8e9e46baf520180be4db075598a4d7c681a56e"
+  },
+  "NAND3xp33_ASAP7_75t_R": {
+    "area": 0.0729,
+    "capacitance": 0.516831,
+    "max_capacitance": 23.04,
+    "source_library": "F:\\CPU2026CourseTools\\win54fc150\\asap7\\lib\\asap7sc7p5t_SIMPLE_RVT_TT_nldm_211120.lib",
+    "library_sha256": "fa92e6ab1481810602811b1eea54bc016a341f11fb5188d7512c026599adf038"
+  },
+  "NOR3xp33_ASAP7_75t_R": {
+    "area": 0.0729,
+    "capacitance": 0.518188,
+    "max_capacitance": 23.04,
+    "source_library": "F:\\CPU2026CourseTools\\win54fc150\\asap7\\lib\\asap7sc7p5t_SIMPLE_RVT_TT_nldm_211120.lib",
+    "library_sha256": "fa92e6ab1481810602811b1eea54bc016a341f11fb5188d7512c026599adf038"
+  }
+}

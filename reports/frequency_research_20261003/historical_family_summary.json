@@ -1,0 +1,71 @@
+{
+  "historical_only_not_current_course_frequency": true,
+  "families": 368,
+  "systems": [
+    {
+      "subsystem": "LSQ",
+      "old_tool_arrival_ns": 18.64668597306718,
+      "family": "core.g_ooo_backend.backend.lsq.addr_mem[] []"
+    },
+    {
+      "subsystem": "RS",
+      "old_tool_arrival_ns": 18.391958178654022,
+      "family": "core.g_ooo_backend.backend.rs.src2_value_mem[] []"
+    },
+    {
+      "subsystem": "Frontend",
+      "old_tool_arrival_ns": 17.500436655382146,
+      "family": "core.frontend.count_storage_reg []"
+    },
+    {
+      "subsystem": "Decode",
+      "old_tool_arrival_ns": 17.409774955012836,
+      "family": "core.g_decode_pipeline.pipe.count []"
+    },
+    {
+      "subsystem": "Backend",
+      "old_tool_arrival_ns": 16.875167929697454,
+      "family": "core.g_ooo_backend.backend.lsq_phys_mem[] []"
+    },
+    {
+      "subsystem": "ROB",
+      "old_tool_arrival_ns": 16.37711832813693,
+      "family": "core.g_ooo_backend.backend.rob.store_sent_mem[]"
+    },
+    {
+      "subsystem": "Icache",
+      "old_tool_arrival_ns": 16.11224043074344,
+      "family": "core.g_cached_memory.g_nonblocking_icache.icache.if_resp_error_o"
+    },
+    {
+      "subsystem": "PRF",
+      "old_tool_arrival_ns": 15.140914300104669,
+      "family": "core.g_ooo_backend.backend.prf.ready []"
+    },
+    {
+      "subsystem": "Rename",
+      "old_tool_arrival_ns": 15.137516129470896,
+      "family": "core.g_ooo_backend.backend.rename.free_bitmap_state_o []"
+    },
+    {
+      "subsystem": "Top/Other",
+      "old_tool_arrival_ns": 13.389364283966643,
+      "family": "core.instret []"
+    },
+    {
+      "subsystem": "MDU",
+      "old_tool_arrival_ns": 11.154477341790425,
+      "family": "core.g_ooo_backend.backend.mdu.gen_divider.divider.resp_value_o []"
+    },
+    {
+      "subsystem": "Dcache",
+      "old_tool_arrival_ns": 10.663455896064988,
+      "family": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk4.g_banked_updates.g_metadata[].state_bank/dirty_o []"
+    },
+    {
+      "subsystem": "AXI",
+      "old_tool_arrival_ns": 2.768681728326783,
+      "family": "wstrb[]"
+    }
+  ]
+}

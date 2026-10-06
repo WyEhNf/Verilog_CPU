@@ -1,0 +1,40 @@
+{
+  "status": "LIBRARY_TEXT_READ_ONLY_NOT_MAPPED_TIMING",
+  "tests_started": false,
+  "units": {
+    "capacitance": "fF",
+    "time": "ps"
+  },
+  "weak_inverter_max_capacitance_fF": 23.04,
+  "library_sha256": {
+    "asap7sc7p5t_INVBUF_RVT_TT_nldm_220122.lib": "a4ceb32e418e1aac8667e28fbd8e9e46baf520180be4db075598a4d7c681a56e",
+    "asap7sc7p5t_SIMPLE_RVT_TT_nldm_211120.lib": "fa92e6ab1481810602811b1eea54bc016a341f11fb5188d7512c026599adf038"
+  },
+  "NAND2x1_ASAP7_75t_R": {
+    "A": {
+      "input_capacitance_fF": 0.990183,
+      "load_32_fF": 31.685856,
+      "load_16_fF": 15.842928
+    },
+    "B": {
+      "input_capacitance_fF": 0.990331,
+      "load_32_fF": 31.690592,
+      "load_16_fF": 15.845296
+    }
+  },
+  "assumption_limit": "Counts are RTL grouping budgets, not actual mapped pin counts/capacitance/slew or a frequency/area result",
+  "adopted_candidate": "F:\\CPU2026Candidates\\frequency_research_20261003\\CD1_sv_identifier_repair",
+  "new_source_grouping": {
+    "RS_order_peer_rows_per_domain": 4,
+    "barrel_mux_bits_per_amount_leaf": 16,
+    "ALU_result_bits_per_select_leaf": 16,
+    "RS_final_operand_bits_per_select_leaf": 16,
+    "statement": "RTL grouping and comparator inventory only; no mapped fanout/capacitance/slew measurement",
+    "RS_source_tag_bits": 7,
+    "RS_wake_sources": 6,
+    "RS_operand_write_mux_and_hold_bits": 16,
+    "predictor_feedback_rows_per_domain": 4,
+    "prediction_target_mask_bits": 16,
+    "RAS_return_address_mask_bits": 16
+  }
+}

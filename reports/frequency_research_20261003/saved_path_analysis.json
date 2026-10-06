@@ -1,0 +1,6767 @@
+{
+  "input_reports_only": true,
+  "no_tools_or_tests_run": true,
+  "input_sha256": {
+    "critical_paths.json": "de4a7d190c764b8fdfe85dd63dec55b8ca0d478a558b12c8df5c696616441a3b",
+    "mapped.v": "292f553b841f378248cde495ce6dda6798f511c3d6b99ca95d1d15b66712b066"
+  },
+  "reported_paths": 5,
+  "paths": [
+    {
+      "rank": 1,
+      "startpoint": "_610980_/QN",
+      "endpoint": "_637263_/D",
+      "arrival_ns": 30.7973,
+      "segments": [
+        {
+          "instance": "_332882_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296495_",
+          "delay_ns": 0.3806,
+          "arrival_ns": 0.5782,
+          "capacitance_ff": 23.1104,
+          "slew_ns": 0.6188,
+          "fanout": 56
+        },
+        {
+          "instance": "_332912_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_296525_",
+          "delay_ns": 0.4122,
+          "arrival_ns": 0.9904,
+          "capacitance_ff": 19.05,
+          "slew_ns": 0.4684,
+          "fanout": 42,
+          "root_direct_load_pins": 42,
+          "consumer_sample": [
+            {
+              "instance": "_332917_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_332950_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_332991_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_474698_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_475093_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_475128_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_475205_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_475335_",
+              "type": "OAI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_522935_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_523730_",
+              "type": "OA21x2_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525057_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525086_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525231_",
+              "type": "OAI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525670_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525711_",
+              "type": "OA21x2_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_526165_",
+              "type": "AO32x1_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_526249_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_527655_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_527888_",
+              "type": "OAI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_528299_",
+              "type": "AOI31xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_528952_",
+              "type": "AOI311xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_530365_",
+              "type": "OA21x2_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_530966_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_531107_",
+              "type": "OAI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            }
+          ]
+        },
+        {
+          "instance": "_332917_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296530_",
+          "delay_ns": 0.3969,
+          "arrival_ns": 1.3873,
+          "capacitance_ff": 18.077,
+          "slew_ns": 0.5274,
+          "fanout": 43,
+          "root_direct_load_pins": 43,
+          "consumer_sample": [
+            {
+              "instance": "_332918_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_332995_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_474993_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_475075_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_522317_",
+              "type": "OAI221xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_522380_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_522911_",
+              "type": "OAI221xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_522950_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525679_",
+              "type": "OAI221xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525721_",
+              "type": "A2O1A1Ixp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525888_",
+              "type": "AOI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_526881_",
+              "type": "OAI221xp5_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_526920_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_527685_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_527711_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_528300_",
+              "type": "OAI221xp5_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_528340_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_528933_",
+              "type": "OAI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_528967_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_529577_",
+              "type": "OAI221xp5_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_529626_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_530366_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_531541_",
+              "type": "OAI221xp5_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_531560_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            }
+          ]
+        },
+        {
+          "instance": "_332918_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_296531_",
+          "delay_ns": 0.2522,
+          "arrival_ns": 1.6395,
+          "capacitance_ff": 8.2583,
+          "slew_ns": 0.2743,
+          "fanout": 19
+        },
+        {
+          "instance": "_332920_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296533_",
+          "delay_ns": 0.1398,
+          "arrival_ns": 1.7794,
+          "capacitance_ff": 4.0305,
+          "slew_ns": 0.1658,
+          "fanout": 9,
+          "root_direct_load_pins": 9,
+          "consumer_sample": [
+            {
+              "instance": "_332921_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "B1"
+            },
+            {
+              "instance": "_333040_",
+              "type": "OAI222xp33_ASAP7_75t_R",
+              "port": "C1"
+            },
+            {
+              "instance": "_333061_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_333115_",
+              "type": "OAI222xp33_ASAP7_75t_R",
+              "port": "C2"
+            },
+            {
+              "instance": "_333153_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_333318_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "B1"
+            },
+            {
+              "instance": "_333364_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "B1"
+            },
+            {
+              "instance": "_333407_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_474573_",
+              "type": "AND3x1_ASAP7_75t_R",
+              "port": "A"
+            }
+          ]
+        },
+        {
+          "instance": "_333115_",
+          "cell": "OAI222xp33_ASAP7_75t_R",
+          "net": "_296728_",
+          "delay_ns": 0.0379,
+          "arrival_ns": 1.8173,
+          "capacitance_ff": 0.5672,
+          "slew_ns": 0.0434,
+          "fanout": 1
+        },
+        {
+          "instance": "_333116_",
+          "cell": "OR4x1_ASAP7_75t_R",
+          "net": "_296729_",
+          "delay_ns": 0.0427,
+          "arrival_ns": 1.86,
+          "capacitance_ff": 0.5925,
+          "slew_ns": 0.0135,
+          "fanout": 1
+        },
+        {
+          "instance": "_333123_",
+          "cell": "OR4x1_ASAP7_75t_R",
+          "net": "_296736_",
+          "delay_ns": 0.032,
+          "arrival_ns": 1.8919,
+          "capacitance_ff": 0.471,
+          "slew_ns": 0.0133,
+          "fanout": 1
+        },
+        {
+          "instance": "_333140_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "_296753_",
+          "delay_ns": 0.0222,
+          "arrival_ns": 1.9142,
+          "capacitance_ff": 0.8791,
+          "slew_ns": 0.0382,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_333141_",
+              "type": "XNOR2xp5_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_333141_",
+          "cell": "XNOR2xp5_ASAP7_75t_R",
+          "net": "_296754_",
+          "delay_ns": 0.0234,
+          "arrival_ns": 1.9376,
+          "capacitance_ff": 0.4677,
+          "slew_ns": 0.0227,
+          "fanout": 1
+        },
+        {
+          "instance": "_333275_",
+          "cell": "NAND5xp2_ASAP7_75t_R",
+          "net": "_296888_",
+          "delay_ns": 0.0241,
+          "arrival_ns": 1.9616,
+          "capacitance_ff": 0.471,
+          "slew_ns": 0.0358,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_333444_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_333444_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "core.frontend.redirect_valid_i",
+          "delay_ns": 7.4105,
+          "arrival_ns": 9.3721,
+          "capacitance_ff": 640.6143,
+          "slew_ns": 15.8704,
+          "fanout": 1383,
+          "root_direct_load_pins": 235,
+          "consumer_sample": [
+            {
+              "instance": "_333445_",
+              "type": "INVx1_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_333446_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_352098_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_370412_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_370417_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370426_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370428_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370430_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370432_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370434_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370473_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_372861_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_372864_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_372866_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_372872_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_372879_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_372904_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_372906_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_372938_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_372939_",
+              "type": "NAND4xp25_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_372984_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_372985_",
+              "type": "NAND4xp25_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_373016_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_373034_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            }
+          ]
+        },
+        {
+          "instance": "_333445_",
+          "cell": "INVx1_ASAP7_75t_R",
+          "net": "_297057_",
+          "delay_ns": 6.5727,
+          "arrival_ns": 15.9448,
+          "capacitance_ff": 58.0252,
+          "slew_ns": 2.8947,
+          "fanout": 123,
+          "root_direct_load_pins": 123,
+          "consumer_sample": [
+            {
+              "instance": "_333447_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_362280_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_362281_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_370413_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_370414_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370420_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370423_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370436_",
+              "type": "OA22x2_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370438_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370441_",
+              "type": "OA22x2_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370443_",
+              "type": "OA22x2_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370445_",
+              "type": "OA22x2_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370447_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_370450_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370454_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370456_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_370459_",
+              "type": "OA22x2_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370461_",
+              "type": "OA22x2_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370463_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_370466_",
+              "type": "OA22x2_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370468_",
+              "type": "OA22x2_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370472_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_370475_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_370478_",
+              "type": "OA22x2_ASAP7_75t_R",
+              "port": "A2"
+            }
+          ]
+        },
+        {
+          "instance": "_362281_",
+          "cell": "NAND3xp33_ASAP7_75t_R",
+          "net": "core.g_decode_pipeline.pipe.flush_i",
+          "delay_ns": 9.4477,
+          "arrival_ns": 25.3925,
+          "capacitance_ff": 410.6031,
+          "slew_ns": 5.3443,
+          "fanout": 794
+        },
+        {
+          "instance": "_362282_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_066972_",
+          "delay_ns": 0.7431,
+          "arrival_ns": 26.1356,
+          "capacitance_ff": 1.5514,
+          "slew_ns": 0.9164,
+          "fanout": 4
+        },
+        {
+          "instance": "_362501_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_067191_",
+          "delay_ns": 0.207,
+          "arrival_ns": 26.3425,
+          "capacitance_ff": 1.5468,
+          "slew_ns": 0.228,
+          "fanout": 3,
+          "root_direct_load_pins": 3,
+          "consumer_sample": [
+            {
+              "instance": "_362505_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_362506_",
+              "type": "OR3x1_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_607453_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            }
+          ]
+        },
+        {
+          "instance": "_362506_",
+          "cell": "OR3x1_ASAP7_75t_R",
+          "net": "_067196_",
+          "delay_ns": 0.0995,
+          "arrival_ns": 26.4421,
+          "capacitance_ff": 15.79,
+          "slew_ns": 0.1433,
+          "fanout": 39
+        },
+        {
+          "instance": "_417193_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_118074_",
+          "delay_ns": 0.4717,
+          "arrival_ns": 26.9138,
+          "capacitance_ff": 43.1161,
+          "slew_ns": 0.8589,
+          "fanout": 103,
+          "root_direct_load_pins": 103,
+          "consumer_sample": [
+            {
+              "instance": "_417195_",
+              "type": "AOI211xp5_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_417583_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417585_",
+              "type": "NOR4xp25_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417587_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_417591_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_417601_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_417605_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429525_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429534_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429543_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429553_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429562_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429598_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429617_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429636_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429654_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429700_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429758_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429788_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_440433_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_440444_",
+              "type": "AOI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_440460_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_440469_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_440478_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A1"
+            }
+          ]
+        },
+        {
+          "instance": "_417195_",
+          "cell": "AOI211xp5_ASAP7_75t_R",
+          "net": "_118076_",
+          "delay_ns": 0.1679,
+          "arrival_ns": 27.0816,
+          "capacitance_ff": 3.7866,
+          "slew_ns": 0.2243,
+          "fanout": 8
+        },
+        {
+          "instance": "_417196_",
+          "cell": "AND2x2_ASAP7_75t_R",
+          "net": "_118077_",
+          "delay_ns": 0.0526,
+          "arrival_ns": 27.1342,
+          "capacitance_ff": 2.6632,
+          "slew_ns": 0.0224,
+          "fanout": 5,
+          "root_direct_load_pins": 5,
+          "consumer_sample": [
+            {
+              "instance": "_417197_",
+              "type": "INVx1_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417200_",
+              "type": "AND4x1_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_417204_",
+              "type": "AND3x1_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417225_",
+              "type": "A2O1A1Ixp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_417230_",
+              "type": "AOI31xp33_ASAP7_75t_R",
+              "port": "A2"
+            }
+          ]
+        },
+        {
+          "instance": "_417200_",
+          "cell": "AND4x1_ASAP7_75t_R",
+          "net": "_118081_",
+          "delay_ns": 0.0368,
+          "arrival_ns": 27.171,
+          "capacitance_ff": 1.4928,
+          "slew_ns": 0.0236,
+          "fanout": 3
+        },
+        {
+          "instance": "_417205_",
+          "cell": "AOI211xp5_ASAP7_75t_R",
+          "net": "_118086_",
+          "delay_ns": 0.0176,
+          "arrival_ns": 27.1886,
+          "capacitance_ff": 0.9927,
+          "slew_ns": 0.0886,
+          "fanout": 2
+        },
+        {
+          "instance": "_417206_",
+          "cell": "OA21x2_ASAP7_75t_R",
+          "net": "_118087_",
+          "delay_ns": 0.0381,
+          "arrival_ns": 27.2267,
+          "capacitance_ff": 1.4739,
+          "slew_ns": 0.0122,
+          "fanout": 3
+        },
+        {
+          "instance": "_417214_",
+          "cell": "AND4x1_ASAP7_75t_R",
+          "net": "_118095_",
+          "delay_ns": 0.0171,
+          "arrival_ns": 27.2438,
+          "capacitance_ff": 0.8584,
+          "slew_ns": 0.011,
+          "fanout": 2,
+          "root_direct_load_pins": 2,
+          "consumer_sample": [
+            {
+              "instance": "_417215_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_417216_",
+              "type": "OA211x2_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_417216_",
+          "cell": "OA211x2_ASAP7_75t_R",
+          "net": "_118097_",
+          "delay_ns": 0.0393,
+          "arrival_ns": 27.2831,
+          "capacitance_ff": 2.2082,
+          "slew_ns": 0.0242,
+          "fanout": 5
+        },
+        {
+          "instance": "_417217_",
+          "cell": "OA211x2_ASAP7_75t_R",
+          "net": "_118098_",
+          "delay_ns": 0.0404,
+          "arrival_ns": 27.3235,
+          "capacitance_ff": 0.9531,
+          "slew_ns": 0.0181,
+          "fanout": 2,
+          "root_direct_load_pins": 2,
+          "consumer_sample": [
+            {
+              "instance": "_417220_",
+              "type": "AOI31xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417231_",
+              "type": "OAI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            }
+          ]
+        },
+        {
+          "instance": "_417220_",
+          "cell": "AOI31xp33_ASAP7_75t_R",
+          "net": "_118101_",
+          "delay_ns": 0.0321,
+          "arrival_ns": 27.3556,
+          "capacitance_ff": 1.4303,
+          "slew_ns": 0.048,
+          "fanout": 3
+        },
+        {
+          "instance": "_417227_",
+          "cell": "AOI21xp33_ASAP7_75t_R",
+          "net": "_118108_",
+          "delay_ns": 0.019,
+          "arrival_ns": 27.3746,
+          "capacitance_ff": 0.3467,
+          "slew_ns": 0.0212,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_417228_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_417228_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118109_",
+          "delay_ns": 0.0482,
+          "arrival_ns": 27.4228,
+          "capacitance_ff": 3.0318,
+          "slew_ns": 0.0911,
+          "fanout": 7
+        },
+        {
+          "instance": "_417236_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118117_",
+          "delay_ns": 0.0663,
+          "arrival_ns": 27.4891,
+          "capacitance_ff": 4.0126,
+          "slew_ns": 0.2212,
+          "fanout": 8
+        },
+        {
+          "instance": "_417375_",
+          "cell": "OR2x2_ASAP7_75t_R",
+          "net": "_118242_",
+          "delay_ns": 0.0587,
+          "arrival_ns": 27.5478,
+          "capacitance_ff": 1.3926,
+          "slew_ns": 0.0179,
+          "fanout": 4
+        },
+        {
+          "instance": "_417527_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_118366_",
+          "delay_ns": 0.4918,
+          "arrival_ns": 28.0396,
+          "capacitance_ff": 41.6546,
+          "slew_ns": 1.0459,
+          "fanout": 103,
+          "root_direct_load_pins": 103,
+          "consumer_sample": [
+            {
+              "instance": "_417533_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417539_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417545_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_417549_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_417559_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_417564_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429256_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429267_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429277_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429288_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429298_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429308_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429329_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429340_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429351_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429361_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429412_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429464_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429475_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_429486_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_429498_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_444428_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_444431_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_444438_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            }
+          ]
+        },
+        {
+          "instance": "_417533_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "_118372_",
+          "delay_ns": 0.0804,
+          "arrival_ns": 28.12,
+          "capacitance_ff": 0.6934,
+          "slew_ns": 0.1417,
+          "fanout": 2,
+          "root_direct_load_pins": 2,
+          "consumer_sample": [
+            {
+              "instance": "_417536_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417538_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_417536_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118375_",
+          "delay_ns": 1.1502,
+          "arrival_ns": 29.2702,
+          "capacitance_ff": 92.956,
+          "slew_ns": 2.4169,
+          "fanout": 191,
+          "root_direct_load_pins": 191,
+          "consumer_sample": [
+            {
+              "instance": "_417544_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_417552_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_417555_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_417558_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_417562_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429169_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429194_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429205_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429215_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429225_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429235_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429245_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429255_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429265_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429276_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429286_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429297_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429307_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429317_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429339_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429349_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429360_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429370_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_429380_",
+              "type": "O2A1O1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            }
+          ]
+        },
+        {
+          "instance": "_429169_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_129780_",
+          "delay_ns": 0.5515,
+          "arrival_ns": 29.8218,
+          "capacitance_ff": 3.7561,
+          "slew_ns": 0.6078,
+          "fanout": 8,
+          "root_direct_load_pins": 8,
+          "consumer_sample": [
+            {
+              "instance": "_429170_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429332_",
+              "type": "OR3x1_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429478_",
+              "type": "OR3x1_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_593502_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_609803_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_609805_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_609843_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_609845_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A2"
+            }
+          ]
+        },
+        {
+          "instance": "_429170_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_129781_",
+          "delay_ns": 0.8232,
+          "arrival_ns": 30.645,
+          "capacitance_ff": 53.0159,
+          "slew_ns": 1.2698,
+          "fanout": 126
+        },
+        {
+          "instance": "_429424_",
+          "cell": "OAI31xp33_ASAP7_75t_R",
+          "net": "_130012_",
+          "delay_ns": 0.1162,
+          "arrival_ns": 30.7612,
+          "capacitance_ff": 0.4077,
+          "slew_ns": 0.1611,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_429425_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_429425_",
+          "cell": "OAI21xp33_ASAP7_75t_R",
+          "net": "_032327_",
+          "delay_ns": 0.0361,
+          "arrival_ns": 30.7973,
+          "capacitance_ff": 0.5588,
+          "slew_ns": 0.1537,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_637263_",
+              "type": "DFFHQNx1_ASAP7_75t_R",
+              "port": "D"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "startpoint": "_610980_/QN",
+      "endpoint": "_637267_/D",
+      "arrival_ns": 30.7973,
+      "segments": [
+        {
+          "instance": "_332882_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296495_",
+          "delay_ns": 0.3806,
+          "arrival_ns": 0.5782,
+          "capacitance_ff": 23.1104,
+          "slew_ns": 0.6188,
+          "fanout": 56
+        },
+        {
+          "instance": "_332912_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_296525_",
+          "delay_ns": 0.4122,
+          "arrival_ns": 0.9904,
+          "capacitance_ff": 19.05,
+          "slew_ns": 0.4684,
+          "fanout": 42
+        },
+        {
+          "instance": "_332917_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296530_",
+          "delay_ns": 0.3969,
+          "arrival_ns": 1.3873,
+          "capacitance_ff": 18.077,
+          "slew_ns": 0.5274,
+          "fanout": 43
+        },
+        {
+          "instance": "_332918_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_296531_",
+          "delay_ns": 0.2522,
+          "arrival_ns": 1.6395,
+          "capacitance_ff": 8.2583,
+          "slew_ns": 0.2743,
+          "fanout": 19
+        },
+        {
+          "instance": "_332920_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296533_",
+          "delay_ns": 0.1398,
+          "arrival_ns": 1.7794,
+          "capacitance_ff": 4.0305,
+          "slew_ns": 0.1658,
+          "fanout": 9
+        },
+        {
+          "instance": "_333115_",
+          "cell": "OAI222xp33_ASAP7_75t_R",
+          "net": "_296728_",
+          "delay_ns": 0.0379,
+          "arrival_ns": 1.8173,
+          "capacitance_ff": 0.5672,
+          "slew_ns": 0.0434,
+          "fanout": 1
+        },
+        {
+          "instance": "_333116_",
+          "cell": "OR4x1_ASAP7_75t_R",
+          "net": "_296729_",
+          "delay_ns": 0.0427,
+          "arrival_ns": 1.86,
+          "capacitance_ff": 0.5925,
+          "slew_ns": 0.0135,
+          "fanout": 1
+        },
+        {
+          "instance": "_333123_",
+          "cell": "OR4x1_ASAP7_75t_R",
+          "net": "_296736_",
+          "delay_ns": 0.032,
+          "arrival_ns": 1.8919,
+          "capacitance_ff": 0.471,
+          "slew_ns": 0.0133,
+          "fanout": 1
+        },
+        {
+          "instance": "_333140_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "_296753_",
+          "delay_ns": 0.0222,
+          "arrival_ns": 1.9142,
+          "capacitance_ff": 0.8791,
+          "slew_ns": 0.0382,
+          "fanout": 1
+        },
+        {
+          "instance": "_333141_",
+          "cell": "XNOR2xp5_ASAP7_75t_R",
+          "net": "_296754_",
+          "delay_ns": 0.0234,
+          "arrival_ns": 1.9376,
+          "capacitance_ff": 0.4677,
+          "slew_ns": 0.0227,
+          "fanout": 1
+        },
+        {
+          "instance": "_333275_",
+          "cell": "NAND5xp2_ASAP7_75t_R",
+          "net": "_296888_",
+          "delay_ns": 0.0241,
+          "arrival_ns": 1.9616,
+          "capacitance_ff": 0.471,
+          "slew_ns": 0.0358,
+          "fanout": 1
+        },
+        {
+          "instance": "_333444_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "core.frontend.redirect_valid_i",
+          "delay_ns": 7.4105,
+          "arrival_ns": 9.3721,
+          "capacitance_ff": 640.6143,
+          "slew_ns": 15.8704,
+          "fanout": 1383
+        },
+        {
+          "instance": "_333445_",
+          "cell": "INVx1_ASAP7_75t_R",
+          "net": "_297057_",
+          "delay_ns": 6.5727,
+          "arrival_ns": 15.9448,
+          "capacitance_ff": 58.0252,
+          "slew_ns": 2.8947,
+          "fanout": 123
+        },
+        {
+          "instance": "_362281_",
+          "cell": "NAND3xp33_ASAP7_75t_R",
+          "net": "core.g_decode_pipeline.pipe.flush_i",
+          "delay_ns": 9.4477,
+          "arrival_ns": 25.3925,
+          "capacitance_ff": 410.6031,
+          "slew_ns": 5.3443,
+          "fanout": 794
+        },
+        {
+          "instance": "_362282_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_066972_",
+          "delay_ns": 0.7431,
+          "arrival_ns": 26.1356,
+          "capacitance_ff": 1.5514,
+          "slew_ns": 0.9164,
+          "fanout": 4
+        },
+        {
+          "instance": "_362501_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_067191_",
+          "delay_ns": 0.207,
+          "arrival_ns": 26.3425,
+          "capacitance_ff": 1.5468,
+          "slew_ns": 0.228,
+          "fanout": 3
+        },
+        {
+          "instance": "_362506_",
+          "cell": "OR3x1_ASAP7_75t_R",
+          "net": "_067196_",
+          "delay_ns": 0.0995,
+          "arrival_ns": 26.4421,
+          "capacitance_ff": 15.79,
+          "slew_ns": 0.1433,
+          "fanout": 39
+        },
+        {
+          "instance": "_417193_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_118074_",
+          "delay_ns": 0.4717,
+          "arrival_ns": 26.9138,
+          "capacitance_ff": 43.1161,
+          "slew_ns": 0.8589,
+          "fanout": 103
+        },
+        {
+          "instance": "_417195_",
+          "cell": "AOI211xp5_ASAP7_75t_R",
+          "net": "_118076_",
+          "delay_ns": 0.1679,
+          "arrival_ns": 27.0816,
+          "capacitance_ff": 3.7866,
+          "slew_ns": 0.2243,
+          "fanout": 8
+        },
+        {
+          "instance": "_417196_",
+          "cell": "AND2x2_ASAP7_75t_R",
+          "net": "_118077_",
+          "delay_ns": 0.0526,
+          "arrival_ns": 27.1342,
+          "capacitance_ff": 2.6632,
+          "slew_ns": 0.0224,
+          "fanout": 5
+        },
+        {
+          "instance": "_417200_",
+          "cell": "AND4x1_ASAP7_75t_R",
+          "net": "_118081_",
+          "delay_ns": 0.0368,
+          "arrival_ns": 27.171,
+          "capacitance_ff": 1.4928,
+          "slew_ns": 0.0236,
+          "fanout": 3
+        },
+        {
+          "instance": "_417205_",
+          "cell": "AOI211xp5_ASAP7_75t_R",
+          "net": "_118086_",
+          "delay_ns": 0.0176,
+          "arrival_ns": 27.1886,
+          "capacitance_ff": 0.9927,
+          "slew_ns": 0.0886,
+          "fanout": 2
+        },
+        {
+          "instance": "_417206_",
+          "cell": "OA21x2_ASAP7_75t_R",
+          "net": "_118087_",
+          "delay_ns": 0.0381,
+          "arrival_ns": 27.2267,
+          "capacitance_ff": 1.4739,
+          "slew_ns": 0.0122,
+          "fanout": 3
+        },
+        {
+          "instance": "_417214_",
+          "cell": "AND4x1_ASAP7_75t_R",
+          "net": "_118095_",
+          "delay_ns": 0.0171,
+          "arrival_ns": 27.2438,
+          "capacitance_ff": 0.8584,
+          "slew_ns": 0.011,
+          "fanout": 2
+        },
+        {
+          "instance": "_417216_",
+          "cell": "OA211x2_ASAP7_75t_R",
+          "net": "_118097_",
+          "delay_ns": 0.0393,
+          "arrival_ns": 27.2831,
+          "capacitance_ff": 2.2082,
+          "slew_ns": 0.0242,
+          "fanout": 5
+        },
+        {
+          "instance": "_417217_",
+          "cell": "OA211x2_ASAP7_75t_R",
+          "net": "_118098_",
+          "delay_ns": 0.0404,
+          "arrival_ns": 27.3235,
+          "capacitance_ff": 0.9531,
+          "slew_ns": 0.0181,
+          "fanout": 2
+        },
+        {
+          "instance": "_417220_",
+          "cell": "AOI31xp33_ASAP7_75t_R",
+          "net": "_118101_",
+          "delay_ns": 0.0321,
+          "arrival_ns": 27.3556,
+          "capacitance_ff": 1.4303,
+          "slew_ns": 0.048,
+          "fanout": 3
+        },
+        {
+          "instance": "_417227_",
+          "cell": "AOI21xp33_ASAP7_75t_R",
+          "net": "_118108_",
+          "delay_ns": 0.019,
+          "arrival_ns": 27.3746,
+          "capacitance_ff": 0.3467,
+          "slew_ns": 0.0212,
+          "fanout": 1
+        },
+        {
+          "instance": "_417228_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118109_",
+          "delay_ns": 0.0482,
+          "arrival_ns": 27.4228,
+          "capacitance_ff": 3.0318,
+          "slew_ns": 0.0911,
+          "fanout": 7
+        },
+        {
+          "instance": "_417236_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118117_",
+          "delay_ns": 0.0663,
+          "arrival_ns": 27.4891,
+          "capacitance_ff": 4.0126,
+          "slew_ns": 0.2212,
+          "fanout": 8
+        },
+        {
+          "instance": "_417375_",
+          "cell": "OR2x2_ASAP7_75t_R",
+          "net": "_118242_",
+          "delay_ns": 0.0587,
+          "arrival_ns": 27.5478,
+          "capacitance_ff": 1.3926,
+          "slew_ns": 0.0179,
+          "fanout": 4
+        },
+        {
+          "instance": "_417527_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_118366_",
+          "delay_ns": 0.4918,
+          "arrival_ns": 28.0396,
+          "capacitance_ff": 41.6546,
+          "slew_ns": 1.0459,
+          "fanout": 103
+        },
+        {
+          "instance": "_417533_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "_118372_",
+          "delay_ns": 0.0804,
+          "arrival_ns": 28.12,
+          "capacitance_ff": 0.6934,
+          "slew_ns": 0.1417,
+          "fanout": 2
+        },
+        {
+          "instance": "_417536_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118375_",
+          "delay_ns": 1.1502,
+          "arrival_ns": 29.2702,
+          "capacitance_ff": 92.956,
+          "slew_ns": 2.4169,
+          "fanout": 191
+        },
+        {
+          "instance": "_429169_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_129780_",
+          "delay_ns": 0.5515,
+          "arrival_ns": 29.8218,
+          "capacitance_ff": 3.7561,
+          "slew_ns": 0.6078,
+          "fanout": 8
+        },
+        {
+          "instance": "_429170_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_129781_",
+          "delay_ns": 0.8232,
+          "arrival_ns": 30.645,
+          "capacitance_ff": 53.0159,
+          "slew_ns": 1.2698,
+          "fanout": 126
+        },
+        {
+          "instance": "_429383_",
+          "cell": "OAI31xp33_ASAP7_75t_R",
+          "net": "_129975_",
+          "delay_ns": 0.1162,
+          "arrival_ns": 30.7612,
+          "capacitance_ff": 0.4077,
+          "slew_ns": 0.1611,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_429384_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_429384_",
+          "cell": "OAI21xp33_ASAP7_75t_R",
+          "net": "_032323_",
+          "delay_ns": 0.0361,
+          "arrival_ns": 30.7973,
+          "capacitance_ff": 0.5588,
+          "slew_ns": 0.1537,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_637267_",
+              "type": "DFFHQNx1_ASAP7_75t_R",
+              "port": "D"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "startpoint": "_610980_/QN",
+      "endpoint": "_637268_/D",
+      "arrival_ns": 30.7973,
+      "segments": [
+        {
+          "instance": "_332882_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296495_",
+          "delay_ns": 0.3806,
+          "arrival_ns": 0.5782,
+          "capacitance_ff": 23.1104,
+          "slew_ns": 0.6188,
+          "fanout": 56
+        },
+        {
+          "instance": "_332912_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_296525_",
+          "delay_ns": 0.4122,
+          "arrival_ns": 0.9904,
+          "capacitance_ff": 19.05,
+          "slew_ns": 0.4684,
+          "fanout": 42
+        },
+        {
+          "instance": "_332917_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296530_",
+          "delay_ns": 0.3969,
+          "arrival_ns": 1.3873,
+          "capacitance_ff": 18.077,
+          "slew_ns": 0.5274,
+          "fanout": 43
+        },
+        {
+          "instance": "_332918_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_296531_",
+          "delay_ns": 0.2522,
+          "arrival_ns": 1.6395,
+          "capacitance_ff": 8.2583,
+          "slew_ns": 0.2743,
+          "fanout": 19
+        },
+        {
+          "instance": "_332920_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296533_",
+          "delay_ns": 0.1398,
+          "arrival_ns": 1.7794,
+          "capacitance_ff": 4.0305,
+          "slew_ns": 0.1658,
+          "fanout": 9
+        },
+        {
+          "instance": "_333115_",
+          "cell": "OAI222xp33_ASAP7_75t_R",
+          "net": "_296728_",
+          "delay_ns": 0.0379,
+          "arrival_ns": 1.8173,
+          "capacitance_ff": 0.5672,
+          "slew_ns": 0.0434,
+          "fanout": 1
+        },
+        {
+          "instance": "_333116_",
+          "cell": "OR4x1_ASAP7_75t_R",
+          "net": "_296729_",
+          "delay_ns": 0.0427,
+          "arrival_ns": 1.86,
+          "capacitance_ff": 0.5925,
+          "slew_ns": 0.0135,
+          "fanout": 1
+        },
+        {
+          "instance": "_333123_",
+          "cell": "OR4x1_ASAP7_75t_R",
+          "net": "_296736_",
+          "delay_ns": 0.032,
+          "arrival_ns": 1.8919,
+          "capacitance_ff": 0.471,
+          "slew_ns": 0.0133,
+          "fanout": 1
+        },
+        {
+          "instance": "_333140_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "_296753_",
+          "delay_ns": 0.0222,
+          "arrival_ns": 1.9142,
+          "capacitance_ff": 0.8791,
+          "slew_ns": 0.0382,
+          "fanout": 1
+        },
+        {
+          "instance": "_333141_",
+          "cell": "XNOR2xp5_ASAP7_75t_R",
+          "net": "_296754_",
+          "delay_ns": 0.0234,
+          "arrival_ns": 1.9376,
+          "capacitance_ff": 0.4677,
+          "slew_ns": 0.0227,
+          "fanout": 1
+        },
+        {
+          "instance": "_333275_",
+          "cell": "NAND5xp2_ASAP7_75t_R",
+          "net": "_296888_",
+          "delay_ns": 0.0241,
+          "arrival_ns": 1.9616,
+          "capacitance_ff": 0.471,
+          "slew_ns": 0.0358,
+          "fanout": 1
+        },
+        {
+          "instance": "_333444_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "core.frontend.redirect_valid_i",
+          "delay_ns": 7.4105,
+          "arrival_ns": 9.3721,
+          "capacitance_ff": 640.6143,
+          "slew_ns": 15.8704,
+          "fanout": 1383
+        },
+        {
+          "instance": "_333445_",
+          "cell": "INVx1_ASAP7_75t_R",
+          "net": "_297057_",
+          "delay_ns": 6.5727,
+          "arrival_ns": 15.9448,
+          "capacitance_ff": 58.0252,
+          "slew_ns": 2.8947,
+          "fanout": 123
+        },
+        {
+          "instance": "_362281_",
+          "cell": "NAND3xp33_ASAP7_75t_R",
+          "net": "core.g_decode_pipeline.pipe.flush_i",
+          "delay_ns": 9.4477,
+          "arrival_ns": 25.3925,
+          "capacitance_ff": 410.6031,
+          "slew_ns": 5.3443,
+          "fanout": 794
+        },
+        {
+          "instance": "_362282_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_066972_",
+          "delay_ns": 0.7431,
+          "arrival_ns": 26.1356,
+          "capacitance_ff": 1.5514,
+          "slew_ns": 0.9164,
+          "fanout": 4
+        },
+        {
+          "instance": "_362501_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_067191_",
+          "delay_ns": 0.207,
+          "arrival_ns": 26.3425,
+          "capacitance_ff": 1.5468,
+          "slew_ns": 0.228,
+          "fanout": 3
+        },
+        {
+          "instance": "_362506_",
+          "cell": "OR3x1_ASAP7_75t_R",
+          "net": "_067196_",
+          "delay_ns": 0.0995,
+          "arrival_ns": 26.4421,
+          "capacitance_ff": 15.79,
+          "slew_ns": 0.1433,
+          "fanout": 39
+        },
+        {
+          "instance": "_417193_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_118074_",
+          "delay_ns": 0.4717,
+          "arrival_ns": 26.9138,
+          "capacitance_ff": 43.1161,
+          "slew_ns": 0.8589,
+          "fanout": 103
+        },
+        {
+          "instance": "_417195_",
+          "cell": "AOI211xp5_ASAP7_75t_R",
+          "net": "_118076_",
+          "delay_ns": 0.1679,
+          "arrival_ns": 27.0816,
+          "capacitance_ff": 3.7866,
+          "slew_ns": 0.2243,
+          "fanout": 8
+        },
+        {
+          "instance": "_417196_",
+          "cell": "AND2x2_ASAP7_75t_R",
+          "net": "_118077_",
+          "delay_ns": 0.0526,
+          "arrival_ns": 27.1342,
+          "capacitance_ff": 2.6632,
+          "slew_ns": 0.0224,
+          "fanout": 5
+        },
+        {
+          "instance": "_417200_",
+          "cell": "AND4x1_ASAP7_75t_R",
+          "net": "_118081_",
+          "delay_ns": 0.0368,
+          "arrival_ns": 27.171,
+          "capacitance_ff": 1.4928,
+          "slew_ns": 0.0236,
+          "fanout": 3
+        },
+        {
+          "instance": "_417205_",
+          "cell": "AOI211xp5_ASAP7_75t_R",
+          "net": "_118086_",
+          "delay_ns": 0.0176,
+          "arrival_ns": 27.1886,
+          "capacitance_ff": 0.9927,
+          "slew_ns": 0.0886,
+          "fanout": 2
+        },
+        {
+          "instance": "_417206_",
+          "cell": "OA21x2_ASAP7_75t_R",
+          "net": "_118087_",
+          "delay_ns": 0.0381,
+          "arrival_ns": 27.2267,
+          "capacitance_ff": 1.4739,
+          "slew_ns": 0.0122,
+          "fanout": 3
+        },
+        {
+          "instance": "_417214_",
+          "cell": "AND4x1_ASAP7_75t_R",
+          "net": "_118095_",
+          "delay_ns": 0.0171,
+          "arrival_ns": 27.2438,
+          "capacitance_ff": 0.8584,
+          "slew_ns": 0.011,
+          "fanout": 2
+        },
+        {
+          "instance": "_417216_",
+          "cell": "OA211x2_ASAP7_75t_R",
+          "net": "_118097_",
+          "delay_ns": 0.0393,
+          "arrival_ns": 27.2831,
+          "capacitance_ff": 2.2082,
+          "slew_ns": 0.0242,
+          "fanout": 5
+        },
+        {
+          "instance": "_417217_",
+          "cell": "OA211x2_ASAP7_75t_R",
+          "net": "_118098_",
+          "delay_ns": 0.0404,
+          "arrival_ns": 27.3235,
+          "capacitance_ff": 0.9531,
+          "slew_ns": 0.0181,
+          "fanout": 2
+        },
+        {
+          "instance": "_417220_",
+          "cell": "AOI31xp33_ASAP7_75t_R",
+          "net": "_118101_",
+          "delay_ns": 0.0321,
+          "arrival_ns": 27.3556,
+          "capacitance_ff": 1.4303,
+          "slew_ns": 0.048,
+          "fanout": 3
+        },
+        {
+          "instance": "_417227_",
+          "cell": "AOI21xp33_ASAP7_75t_R",
+          "net": "_118108_",
+          "delay_ns": 0.019,
+          "arrival_ns": 27.3746,
+          "capacitance_ff": 0.3467,
+          "slew_ns": 0.0212,
+          "fanout": 1
+        },
+        {
+          "instance": "_417228_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118109_",
+          "delay_ns": 0.0482,
+          "arrival_ns": 27.4228,
+          "capacitance_ff": 3.0318,
+          "slew_ns": 0.0911,
+          "fanout": 7
+        },
+        {
+          "instance": "_417236_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118117_",
+          "delay_ns": 0.0663,
+          "arrival_ns": 27.4891,
+          "capacitance_ff": 4.0126,
+          "slew_ns": 0.2212,
+          "fanout": 8
+        },
+        {
+          "instance": "_417375_",
+          "cell": "OR2x2_ASAP7_75t_R",
+          "net": "_118242_",
+          "delay_ns": 0.0587,
+          "arrival_ns": 27.5478,
+          "capacitance_ff": 1.3926,
+          "slew_ns": 0.0179,
+          "fanout": 4
+        },
+        {
+          "instance": "_417527_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_118366_",
+          "delay_ns": 0.4918,
+          "arrival_ns": 28.0396,
+          "capacitance_ff": 41.6546,
+          "slew_ns": 1.0459,
+          "fanout": 103
+        },
+        {
+          "instance": "_417533_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "_118372_",
+          "delay_ns": 0.0804,
+          "arrival_ns": 28.12,
+          "capacitance_ff": 0.6934,
+          "slew_ns": 0.1417,
+          "fanout": 2
+        },
+        {
+          "instance": "_417536_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118375_",
+          "delay_ns": 1.1502,
+          "arrival_ns": 29.2702,
+          "capacitance_ff": 92.956,
+          "slew_ns": 2.4169,
+          "fanout": 191
+        },
+        {
+          "instance": "_429169_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_129780_",
+          "delay_ns": 0.5515,
+          "arrival_ns": 29.8218,
+          "capacitance_ff": 3.7561,
+          "slew_ns": 0.6078,
+          "fanout": 8
+        },
+        {
+          "instance": "_429170_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_129781_",
+          "delay_ns": 0.8232,
+          "arrival_ns": 30.645,
+          "capacitance_ff": 53.0159,
+          "slew_ns": 1.2698,
+          "fanout": 126
+        },
+        {
+          "instance": "_429373_",
+          "cell": "OAI31xp33_ASAP7_75t_R",
+          "net": "_129966_",
+          "delay_ns": 0.1162,
+          "arrival_ns": 30.7612,
+          "capacitance_ff": 0.4077,
+          "slew_ns": 0.1611,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_429374_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_429374_",
+          "cell": "OAI21xp33_ASAP7_75t_R",
+          "net": "_032322_",
+          "delay_ns": 0.0361,
+          "arrival_ns": 30.7973,
+          "capacitance_ff": 0.5588,
+          "slew_ns": 0.1537,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_637268_",
+              "type": "DFFHQNx1_ASAP7_75t_R",
+              "port": "D"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "startpoint": "_610980_/QN",
+      "endpoint": "_637280_/D",
+      "arrival_ns": 30.7973,
+      "segments": [
+        {
+          "instance": "_332882_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296495_",
+          "delay_ns": 0.3806,
+          "arrival_ns": 0.5782,
+          "capacitance_ff": 23.1104,
+          "slew_ns": 0.6188,
+          "fanout": 56
+        },
+        {
+          "instance": "_332912_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_296525_",
+          "delay_ns": 0.4122,
+          "arrival_ns": 0.9904,
+          "capacitance_ff": 19.05,
+          "slew_ns": 0.4684,
+          "fanout": 42
+        },
+        {
+          "instance": "_332917_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296530_",
+          "delay_ns": 0.3969,
+          "arrival_ns": 1.3873,
+          "capacitance_ff": 18.077,
+          "slew_ns": 0.5274,
+          "fanout": 43
+        },
+        {
+          "instance": "_332918_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_296531_",
+          "delay_ns": 0.2522,
+          "arrival_ns": 1.6395,
+          "capacitance_ff": 8.2583,
+          "slew_ns": 0.2743,
+          "fanout": 19
+        },
+        {
+          "instance": "_332920_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296533_",
+          "delay_ns": 0.1398,
+          "arrival_ns": 1.7794,
+          "capacitance_ff": 4.0305,
+          "slew_ns": 0.1658,
+          "fanout": 9
+        },
+        {
+          "instance": "_333115_",
+          "cell": "OAI222xp33_ASAP7_75t_R",
+          "net": "_296728_",
+          "delay_ns": 0.0379,
+          "arrival_ns": 1.8173,
+          "capacitance_ff": 0.5672,
+          "slew_ns": 0.0434,
+          "fanout": 1
+        },
+        {
+          "instance": "_333116_",
+          "cell": "OR4x1_ASAP7_75t_R",
+          "net": "_296729_",
+          "delay_ns": 0.0427,
+          "arrival_ns": 1.86,
+          "capacitance_ff": 0.5925,
+          "slew_ns": 0.0135,
+          "fanout": 1
+        },
+        {
+          "instance": "_333123_",
+          "cell": "OR4x1_ASAP7_75t_R",
+          "net": "_296736_",
+          "delay_ns": 0.032,
+          "arrival_ns": 1.8919,
+          "capacitance_ff": 0.471,
+          "slew_ns": 0.0133,
+          "fanout": 1
+        },
+        {
+          "instance": "_333140_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "_296753_",
+          "delay_ns": 0.0222,
+          "arrival_ns": 1.9142,
+          "capacitance_ff": 0.8791,
+          "slew_ns": 0.0382,
+          "fanout": 1
+        },
+        {
+          "instance": "_333141_",
+          "cell": "XNOR2xp5_ASAP7_75t_R",
+          "net": "_296754_",
+          "delay_ns": 0.0234,
+          "arrival_ns": 1.9376,
+          "capacitance_ff": 0.4677,
+          "slew_ns": 0.0227,
+          "fanout": 1
+        },
+        {
+          "instance": "_333275_",
+          "cell": "NAND5xp2_ASAP7_75t_R",
+          "net": "_296888_",
+          "delay_ns": 0.0241,
+          "arrival_ns": 1.9616,
+          "capacitance_ff": 0.471,
+          "slew_ns": 0.0358,
+          "fanout": 1
+        },
+        {
+          "instance": "_333444_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "core.frontend.redirect_valid_i",
+          "delay_ns": 7.4105,
+          "arrival_ns": 9.3721,
+          "capacitance_ff": 640.6143,
+          "slew_ns": 15.8704,
+          "fanout": 1383
+        },
+        {
+          "instance": "_333445_",
+          "cell": "INVx1_ASAP7_75t_R",
+          "net": "_297057_",
+          "delay_ns": 6.5727,
+          "arrival_ns": 15.9448,
+          "capacitance_ff": 58.0252,
+          "slew_ns": 2.8947,
+          "fanout": 123
+        },
+        {
+          "instance": "_362281_",
+          "cell": "NAND3xp33_ASAP7_75t_R",
+          "net": "core.g_decode_pipeline.pipe.flush_i",
+          "delay_ns": 9.4477,
+          "arrival_ns": 25.3925,
+          "capacitance_ff": 410.6031,
+          "slew_ns": 5.3443,
+          "fanout": 794
+        },
+        {
+          "instance": "_362282_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_066972_",
+          "delay_ns": 0.7431,
+          "arrival_ns": 26.1356,
+          "capacitance_ff": 1.5514,
+          "slew_ns": 0.9164,
+          "fanout": 4
+        },
+        {
+          "instance": "_362501_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_067191_",
+          "delay_ns": 0.207,
+          "arrival_ns": 26.3425,
+          "capacitance_ff": 1.5468,
+          "slew_ns": 0.228,
+          "fanout": 3
+        },
+        {
+          "instance": "_362506_",
+          "cell": "OR3x1_ASAP7_75t_R",
+          "net": "_067196_",
+          "delay_ns": 0.0995,
+          "arrival_ns": 26.4421,
+          "capacitance_ff": 15.79,
+          "slew_ns": 0.1433,
+          "fanout": 39
+        },
+        {
+          "instance": "_417193_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_118074_",
+          "delay_ns": 0.4717,
+          "arrival_ns": 26.9138,
+          "capacitance_ff": 43.1161,
+          "slew_ns": 0.8589,
+          "fanout": 103
+        },
+        {
+          "instance": "_417195_",
+          "cell": "AOI211xp5_ASAP7_75t_R",
+          "net": "_118076_",
+          "delay_ns": 0.1679,
+          "arrival_ns": 27.0816,
+          "capacitance_ff": 3.7866,
+          "slew_ns": 0.2243,
+          "fanout": 8
+        },
+        {
+          "instance": "_417196_",
+          "cell": "AND2x2_ASAP7_75t_R",
+          "net": "_118077_",
+          "delay_ns": 0.0526,
+          "arrival_ns": 27.1342,
+          "capacitance_ff": 2.6632,
+          "slew_ns": 0.0224,
+          "fanout": 5
+        },
+        {
+          "instance": "_417200_",
+          "cell": "AND4x1_ASAP7_75t_R",
+          "net": "_118081_",
+          "delay_ns": 0.0368,
+          "arrival_ns": 27.171,
+          "capacitance_ff": 1.4928,
+          "slew_ns": 0.0236,
+          "fanout": 3
+        },
+        {
+          "instance": "_417205_",
+          "cell": "AOI211xp5_ASAP7_75t_R",
+          "net": "_118086_",
+          "delay_ns": 0.0176,
+          "arrival_ns": 27.1886,
+          "capacitance_ff": 0.9927,
+          "slew_ns": 0.0886,
+          "fanout": 2
+        },
+        {
+          "instance": "_417206_",
+          "cell": "OA21x2_ASAP7_75t_R",
+          "net": "_118087_",
+          "delay_ns": 0.0381,
+          "arrival_ns": 27.2267,
+          "capacitance_ff": 1.4739,
+          "slew_ns": 0.0122,
+          "fanout": 3
+        },
+        {
+          "instance": "_417214_",
+          "cell": "AND4x1_ASAP7_75t_R",
+          "net": "_118095_",
+          "delay_ns": 0.0171,
+          "arrival_ns": 27.2438,
+          "capacitance_ff": 0.8584,
+          "slew_ns": 0.011,
+          "fanout": 2
+        },
+        {
+          "instance": "_417216_",
+          "cell": "OA211x2_ASAP7_75t_R",
+          "net": "_118097_",
+          "delay_ns": 0.0393,
+          "arrival_ns": 27.2831,
+          "capacitance_ff": 2.2082,
+          "slew_ns": 0.0242,
+          "fanout": 5
+        },
+        {
+          "instance": "_417217_",
+          "cell": "OA211x2_ASAP7_75t_R",
+          "net": "_118098_",
+          "delay_ns": 0.0404,
+          "arrival_ns": 27.3235,
+          "capacitance_ff": 0.9531,
+          "slew_ns": 0.0181,
+          "fanout": 2
+        },
+        {
+          "instance": "_417220_",
+          "cell": "AOI31xp33_ASAP7_75t_R",
+          "net": "_118101_",
+          "delay_ns": 0.0321,
+          "arrival_ns": 27.3556,
+          "capacitance_ff": 1.4303,
+          "slew_ns": 0.048,
+          "fanout": 3
+        },
+        {
+          "instance": "_417227_",
+          "cell": "AOI21xp33_ASAP7_75t_R",
+          "net": "_118108_",
+          "delay_ns": 0.019,
+          "arrival_ns": 27.3746,
+          "capacitance_ff": 0.3467,
+          "slew_ns": 0.0212,
+          "fanout": 1
+        },
+        {
+          "instance": "_417228_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118109_",
+          "delay_ns": 0.0482,
+          "arrival_ns": 27.4228,
+          "capacitance_ff": 3.0318,
+          "slew_ns": 0.0911,
+          "fanout": 7
+        },
+        {
+          "instance": "_417236_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118117_",
+          "delay_ns": 0.0663,
+          "arrival_ns": 27.4891,
+          "capacitance_ff": 4.0126,
+          "slew_ns": 0.2212,
+          "fanout": 8
+        },
+        {
+          "instance": "_417375_",
+          "cell": "OR2x2_ASAP7_75t_R",
+          "net": "_118242_",
+          "delay_ns": 0.0587,
+          "arrival_ns": 27.5478,
+          "capacitance_ff": 1.3926,
+          "slew_ns": 0.0179,
+          "fanout": 4
+        },
+        {
+          "instance": "_417527_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_118366_",
+          "delay_ns": 0.4918,
+          "arrival_ns": 28.0396,
+          "capacitance_ff": 41.6546,
+          "slew_ns": 1.0459,
+          "fanout": 103
+        },
+        {
+          "instance": "_417533_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "_118372_",
+          "delay_ns": 0.0804,
+          "arrival_ns": 28.12,
+          "capacitance_ff": 0.6934,
+          "slew_ns": 0.1417,
+          "fanout": 2
+        },
+        {
+          "instance": "_417536_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118375_",
+          "delay_ns": 1.1502,
+          "arrival_ns": 29.2702,
+          "capacitance_ff": 92.956,
+          "slew_ns": 2.4169,
+          "fanout": 191
+        },
+        {
+          "instance": "_429169_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_129780_",
+          "delay_ns": 0.5515,
+          "arrival_ns": 29.8218,
+          "capacitance_ff": 3.7561,
+          "slew_ns": 0.6078,
+          "fanout": 8
+        },
+        {
+          "instance": "_429170_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_129781_",
+          "delay_ns": 0.8232,
+          "arrival_ns": 30.645,
+          "capacitance_ff": 53.0159,
+          "slew_ns": 1.2698,
+          "fanout": 126
+        },
+        {
+          "instance": "_429248_",
+          "cell": "OAI31xp33_ASAP7_75t_R",
+          "net": "_129853_",
+          "delay_ns": 0.1162,
+          "arrival_ns": 30.7612,
+          "capacitance_ff": 0.4077,
+          "slew_ns": 0.1611,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_429249_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_429249_",
+          "cell": "OAI21xp33_ASAP7_75t_R",
+          "net": "_032310_",
+          "delay_ns": 0.0361,
+          "arrival_ns": 30.7973,
+          "capacitance_ff": 0.5588,
+          "slew_ns": 0.1537,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_637280_",
+              "type": "DFFHQNx1_ASAP7_75t_R",
+              "port": "D"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 5,
+      "startpoint": "_610980_/QN",
+      "endpoint": "_637286_/D",
+      "arrival_ns": 30.7973,
+      "segments": [
+        {
+          "instance": "_332882_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296495_",
+          "delay_ns": 0.3806,
+          "arrival_ns": 0.5782,
+          "capacitance_ff": 23.1104,
+          "slew_ns": 0.6188,
+          "fanout": 56,
+          "root_direct_load_pins": 56,
+          "consumer_sample": [
+            {
+              "instance": "_332912_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_332916_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_332993_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_474549_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_474550_",
+              "type": "OR2x2_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_474558_",
+              "type": "OAI31xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_474694_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_474784_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_474833_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_474938_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_474984_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_474995_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_475124_",
+              "type": "OAI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_475172_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_475216_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_522918_",
+              "type": "OAI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_522949_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_523693_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_523729_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_524333_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_524423_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525688_",
+              "type": "OAI22xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525707_",
+              "type": "AO21x1_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525708_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            }
+          ]
+        },
+        {
+          "instance": "_332912_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_296525_",
+          "delay_ns": 0.4122,
+          "arrival_ns": 0.9904,
+          "capacitance_ff": 19.05,
+          "slew_ns": 0.4684,
+          "fanout": 42
+        },
+        {
+          "instance": "_332917_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296530_",
+          "delay_ns": 0.3969,
+          "arrival_ns": 1.3873,
+          "capacitance_ff": 18.077,
+          "slew_ns": 0.5274,
+          "fanout": 43
+        },
+        {
+          "instance": "_332918_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_296531_",
+          "delay_ns": 0.2522,
+          "arrival_ns": 1.6395,
+          "capacitance_ff": 8.2583,
+          "slew_ns": 0.2743,
+          "fanout": 19,
+          "root_direct_load_pins": 19,
+          "consumer_sample": [
+            {
+              "instance": "_332920_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_522321_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_523695_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_523734_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_524427_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525658_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_525715_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_525891_",
+              "type": "OAI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_526869_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_528971_",
+              "type": "OA21x2_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_530368_",
+              "type": "OA21x2_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_532766_",
+              "type": "AOI22xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_532810_",
+              "type": "OA21x2_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_533377_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "B2"
+            },
+            {
+              "instance": "_564699_",
+              "type": "AOI221xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_565328_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_565413_",
+              "type": "OA21x2_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_565944_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_566019_",
+              "type": "OA21x2_ASAP7_75t_R",
+              "port": "A1"
+            }
+          ]
+        },
+        {
+          "instance": "_332920_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_296533_",
+          "delay_ns": 0.1398,
+          "arrival_ns": 1.7794,
+          "capacitance_ff": 4.0305,
+          "slew_ns": 0.1658,
+          "fanout": 9
+        },
+        {
+          "instance": "_333115_",
+          "cell": "OAI222xp33_ASAP7_75t_R",
+          "net": "_296728_",
+          "delay_ns": 0.0379,
+          "arrival_ns": 1.8173,
+          "capacitance_ff": 0.5672,
+          "slew_ns": 0.0434,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_333116_",
+              "type": "OR4x1_ASAP7_75t_R",
+              "port": "D"
+            }
+          ]
+        },
+        {
+          "instance": "_333116_",
+          "cell": "OR4x1_ASAP7_75t_R",
+          "net": "_296729_",
+          "delay_ns": 0.0427,
+          "arrival_ns": 1.86,
+          "capacitance_ff": 0.5925,
+          "slew_ns": 0.0135,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_333123_",
+              "type": "OR4x1_ASAP7_75t_R",
+              "port": "A"
+            }
+          ]
+        },
+        {
+          "instance": "_333123_",
+          "cell": "OR4x1_ASAP7_75t_R",
+          "net": "_296736_",
+          "delay_ns": 0.032,
+          "arrival_ns": 1.8919,
+          "capacitance_ff": 0.471,
+          "slew_ns": 0.0133,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_333140_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_333140_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "_296753_",
+          "delay_ns": 0.0222,
+          "arrival_ns": 1.9142,
+          "capacitance_ff": 0.8791,
+          "slew_ns": 0.0382,
+          "fanout": 1
+        },
+        {
+          "instance": "_333141_",
+          "cell": "XNOR2xp5_ASAP7_75t_R",
+          "net": "_296754_",
+          "delay_ns": 0.0234,
+          "arrival_ns": 1.9376,
+          "capacitance_ff": 0.4677,
+          "slew_ns": 0.0227,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_333275_",
+              "type": "NAND5xp2_ASAP7_75t_R",
+              "port": "C"
+            }
+          ]
+        },
+        {
+          "instance": "_333275_",
+          "cell": "NAND5xp2_ASAP7_75t_R",
+          "net": "_296888_",
+          "delay_ns": 0.0241,
+          "arrival_ns": 1.9616,
+          "capacitance_ff": 0.471,
+          "slew_ns": 0.0358,
+          "fanout": 1
+        },
+        {
+          "instance": "_333444_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "core.frontend.redirect_valid_i",
+          "delay_ns": 7.4105,
+          "arrival_ns": 9.3721,
+          "capacitance_ff": 640.6143,
+          "slew_ns": 15.8704,
+          "fanout": 1383
+        },
+        {
+          "instance": "_333445_",
+          "cell": "INVx1_ASAP7_75t_R",
+          "net": "_297057_",
+          "delay_ns": 6.5727,
+          "arrival_ns": 15.9448,
+          "capacitance_ff": 58.0252,
+          "slew_ns": 2.8947,
+          "fanout": 123
+        },
+        {
+          "instance": "_362281_",
+          "cell": "NAND3xp33_ASAP7_75t_R",
+          "net": "core.g_decode_pipeline.pipe.flush_i",
+          "delay_ns": 9.4477,
+          "arrival_ns": 25.3925,
+          "capacitance_ff": 410.6031,
+          "slew_ns": 5.3443,
+          "fanout": 794,
+          "root_direct_load_pins": 2,
+          "consumer_sample": [
+            {
+              "instance": "_362282_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_371996_",
+              "type": "AOI211xp5_ASAP7_75t_R",
+              "port": "C"
+            }
+          ]
+        },
+        {
+          "instance": "_362282_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_066972_",
+          "delay_ns": 0.7431,
+          "arrival_ns": 26.1356,
+          "capacitance_ff": 1.5514,
+          "slew_ns": 0.9164,
+          "fanout": 4,
+          "root_direct_load_pins": 4,
+          "consumer_sample": [
+            {
+              "instance": "_362501_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_409199_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_409209_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_409211_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_362501_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_067191_",
+          "delay_ns": 0.207,
+          "arrival_ns": 26.3425,
+          "capacitance_ff": 1.5468,
+          "slew_ns": 0.228,
+          "fanout": 3
+        },
+        {
+          "instance": "_362506_",
+          "cell": "OR3x1_ASAP7_75t_R",
+          "net": "_067196_",
+          "delay_ns": 0.0995,
+          "arrival_ns": 26.4421,
+          "capacitance_ff": 15.79,
+          "slew_ns": 0.1433,
+          "fanout": 39,
+          "root_direct_load_pins": 39,
+          "consumer_sample": [
+            {
+              "instance": "_388412_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417173_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417183_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417185_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417189_",
+              "type": "AOI211xp5_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_417190_",
+              "type": "AO21x1_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_417191_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417192_",
+              "type": "OAI31xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_417193_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417195_",
+              "type": "AOI211xp5_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_417202_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_417324_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417371_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417451_",
+              "type": "NOR4xp25_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417955_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_452114_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_452203_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_452220_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_452312_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_452360_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_457204_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_457212_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_457220_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_474442_",
+              "type": "NOR3xp33_ASAP7_75t_R",
+              "port": "C"
+            }
+          ]
+        },
+        {
+          "instance": "_417193_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_118074_",
+          "delay_ns": 0.4717,
+          "arrival_ns": 26.9138,
+          "capacitance_ff": 43.1161,
+          "slew_ns": 0.8589,
+          "fanout": 103
+        },
+        {
+          "instance": "_417195_",
+          "cell": "AOI211xp5_ASAP7_75t_R",
+          "net": "_118076_",
+          "delay_ns": 0.1679,
+          "arrival_ns": 27.0816,
+          "capacitance_ff": 3.7866,
+          "slew_ns": 0.2243,
+          "fanout": 8,
+          "root_direct_load_pins": 8,
+          "consumer_sample": [
+            {
+              "instance": "_417196_",
+              "type": "AND2x2_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417208_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417210_",
+              "type": "OAI211xp5_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417211_",
+              "type": "OAI211xp5_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417215_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417216_",
+              "type": "OA211x2_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_417217_",
+              "type": "OA211x2_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_417238_",
+              "type": "A2O1A1Ixp33_ASAP7_75t_R",
+              "port": "A2"
+            }
+          ]
+        },
+        {
+          "instance": "_417196_",
+          "cell": "AND2x2_ASAP7_75t_R",
+          "net": "_118077_",
+          "delay_ns": 0.0526,
+          "arrival_ns": 27.1342,
+          "capacitance_ff": 2.6632,
+          "slew_ns": 0.0224,
+          "fanout": 5
+        },
+        {
+          "instance": "_417200_",
+          "cell": "AND4x1_ASAP7_75t_R",
+          "net": "_118081_",
+          "delay_ns": 0.0368,
+          "arrival_ns": 27.171,
+          "capacitance_ff": 1.4928,
+          "slew_ns": 0.0236,
+          "fanout": 3,
+          "root_direct_load_pins": 3,
+          "consumer_sample": [
+            {
+              "instance": "_417201_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417205_",
+              "type": "AOI211xp5_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417233_",
+              "type": "OR3x1_ASAP7_75t_R",
+              "port": "A"
+            }
+          ]
+        },
+        {
+          "instance": "_417205_",
+          "cell": "AOI211xp5_ASAP7_75t_R",
+          "net": "_118086_",
+          "delay_ns": 0.0176,
+          "arrival_ns": 27.1886,
+          "capacitance_ff": 0.9927,
+          "slew_ns": 0.0886,
+          "fanout": 2,
+          "root_direct_load_pins": 2,
+          "consumer_sample": [
+            {
+              "instance": "_417206_",
+              "type": "OA21x2_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417230_",
+              "type": "AOI31xp33_ASAP7_75t_R",
+              "port": "A3"
+            }
+          ]
+        },
+        {
+          "instance": "_417206_",
+          "cell": "OA21x2_ASAP7_75t_R",
+          "net": "_118087_",
+          "delay_ns": 0.0381,
+          "arrival_ns": 27.2267,
+          "capacitance_ff": 1.4739,
+          "slew_ns": 0.0122,
+          "fanout": 3,
+          "root_direct_load_pins": 3,
+          "consumer_sample": [
+            {
+              "instance": "_417213_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417214_",
+              "type": "AND4x1_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417238_",
+              "type": "A2O1A1Ixp33_ASAP7_75t_R",
+              "port": "C"
+            }
+          ]
+        },
+        {
+          "instance": "_417214_",
+          "cell": "AND4x1_ASAP7_75t_R",
+          "net": "_118095_",
+          "delay_ns": 0.0171,
+          "arrival_ns": 27.2438,
+          "capacitance_ff": 0.8584,
+          "slew_ns": 0.011,
+          "fanout": 2
+        },
+        {
+          "instance": "_417216_",
+          "cell": "OA211x2_ASAP7_75t_R",
+          "net": "_118097_",
+          "delay_ns": 0.0393,
+          "arrival_ns": 27.2831,
+          "capacitance_ff": 2.2082,
+          "slew_ns": 0.0242,
+          "fanout": 5,
+          "root_direct_load_pins": 5,
+          "consumer_sample": [
+            {
+              "instance": "_417217_",
+              "type": "OA211x2_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417219_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417220_",
+              "type": "AOI31xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_417223_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417232_",
+              "type": "AND4x1_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_417217_",
+          "cell": "OA211x2_ASAP7_75t_R",
+          "net": "_118098_",
+          "delay_ns": 0.0404,
+          "arrival_ns": 27.3235,
+          "capacitance_ff": 0.9531,
+          "slew_ns": 0.0181,
+          "fanout": 2
+        },
+        {
+          "instance": "_417220_",
+          "cell": "AOI31xp33_ASAP7_75t_R",
+          "net": "_118101_",
+          "delay_ns": 0.0321,
+          "arrival_ns": 27.3556,
+          "capacitance_ff": 1.4303,
+          "slew_ns": 0.048,
+          "fanout": 3,
+          "root_direct_load_pins": 3,
+          "consumer_sample": [
+            {
+              "instance": "_417227_",
+              "type": "AOI21xp33_ASAP7_75t_R",
+              "port": "A1"
+            },
+            {
+              "instance": "_417232_",
+              "type": "AND4x1_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_417240_",
+              "type": "AND2x2_ASAP7_75t_R",
+              "port": "A"
+            }
+          ]
+        },
+        {
+          "instance": "_417227_",
+          "cell": "AOI21xp33_ASAP7_75t_R",
+          "net": "_118108_",
+          "delay_ns": 0.019,
+          "arrival_ns": 27.3746,
+          "capacitance_ff": 0.3467,
+          "slew_ns": 0.0212,
+          "fanout": 1
+        },
+        {
+          "instance": "_417228_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118109_",
+          "delay_ns": 0.0482,
+          "arrival_ns": 27.4228,
+          "capacitance_ff": 3.0318,
+          "slew_ns": 0.0911,
+          "fanout": 7,
+          "root_direct_load_pins": 7,
+          "consumer_sample": [
+            {
+              "instance": "_417236_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417328_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417412_",
+              "type": "NAND2xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417414_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417569_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "A"
+            },
+            {
+              "instance": "_417574_",
+              "type": "NAND4xp25_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417725_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "A"
+            }
+          ]
+        },
+        {
+          "instance": "_417236_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118117_",
+          "delay_ns": 0.0663,
+          "arrival_ns": 27.4891,
+          "capacitance_ff": 4.0126,
+          "slew_ns": 0.2212,
+          "fanout": 8,
+          "root_direct_load_pins": 8,
+          "consumer_sample": [
+            {
+              "instance": "_417237_",
+              "type": "NAND3xp33_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_417245_",
+              "type": "NAND4xp25_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_417375_",
+              "type": "OR2x2_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417377_",
+              "type": "OR3x1_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417450_",
+              "type": "NAND4xp25_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_417528_",
+              "type": "OR3x1_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417610_",
+              "type": "NAND4xp25_ASAP7_75t_R",
+              "port": "C"
+            },
+            {
+              "instance": "_417690_",
+              "type": "OR3x1_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_417375_",
+          "cell": "OR2x2_ASAP7_75t_R",
+          "net": "_118242_",
+          "delay_ns": 0.0587,
+          "arrival_ns": 27.5478,
+          "capacitance_ff": 1.3926,
+          "slew_ns": 0.0179,
+          "fanout": 4,
+          "root_direct_load_pins": 4,
+          "consumer_sample": [
+            {
+              "instance": "_417376_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417378_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417527_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_417689_",
+              "type": "NOR2xp33_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_417527_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_118366_",
+          "delay_ns": 0.4918,
+          "arrival_ns": 28.0396,
+          "capacitance_ff": 41.6546,
+          "slew_ns": 1.0459,
+          "fanout": 103
+        },
+        {
+          "instance": "_417533_",
+          "cell": "NOR3xp33_ASAP7_75t_R",
+          "net": "_118372_",
+          "delay_ns": 0.0804,
+          "arrival_ns": 28.12,
+          "capacitance_ff": 0.6934,
+          "slew_ns": 0.1417,
+          "fanout": 2
+        },
+        {
+          "instance": "_417536_",
+          "cell": "NAND2xp33_ASAP7_75t_R",
+          "net": "_118375_",
+          "delay_ns": 1.1502,
+          "arrival_ns": 29.2702,
+          "capacitance_ff": 92.956,
+          "slew_ns": 2.4169,
+          "fanout": 191
+        },
+        {
+          "instance": "_429169_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_129780_",
+          "delay_ns": 0.5515,
+          "arrival_ns": 29.8218,
+          "capacitance_ff": 3.7561,
+          "slew_ns": 0.6078,
+          "fanout": 8
+        },
+        {
+          "instance": "_429170_",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "net": "_129781_",
+          "delay_ns": 0.8232,
+          "arrival_ns": 30.645,
+          "capacitance_ff": 53.0159,
+          "slew_ns": 1.2698,
+          "fanout": 126,
+          "root_direct_load_pins": 126,
+          "consumer_sample": [
+            {
+              "instance": "_429187_",
+              "type": "OAI31xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429188_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429198_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429199_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429208_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429209_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429218_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429219_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429228_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429229_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429238_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429239_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429248_",
+              "type": "OAI31xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429249_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429258_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429259_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429269_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429270_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429279_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429280_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429290_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429291_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            },
+            {
+              "instance": "_429300_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            },
+            {
+              "instance": "_429301_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "A2"
+            }
+          ]
+        },
+        {
+          "instance": "_429187_",
+          "cell": "OAI31xp33_ASAP7_75t_R",
+          "net": "_129798_",
+          "delay_ns": 0.1162,
+          "arrival_ns": 30.7612,
+          "capacitance_ff": 0.4077,
+          "slew_ns": 0.1611,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_429188_",
+              "type": "OAI21xp33_ASAP7_75t_R",
+              "port": "B"
+            }
+          ]
+        },
+        {
+          "instance": "_429188_",
+          "cell": "OAI21xp33_ASAP7_75t_R",
+          "net": "_032304_",
+          "delay_ns": 0.0361,
+          "arrival_ns": 30.7973,
+          "capacitance_ff": 0.5588,
+          "slew_ns": 0.1537,
+          "fanout": 1,
+          "root_direct_load_pins": 1,
+          "consumer_sample": [
+            {
+              "instance": "_637286_",
+              "type": "DFFHQNx1_ASAP7_75t_R",
+              "port": "D"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "dominant_segments": [
+    {
+      "instance": "_362281_",
+      "cell": "NAND3xp33_ASAP7_75t_R",
+      "net": "core.g_decode_pipeline.pipe.flush_i",
+      "delay_ns": 9.4477,
+      "arrival_ns": 25.3925,
+      "capacitance_ff": 410.6031,
+      "slew_ns": 5.3443,
+      "fanout": 794,
+      "root_direct_load_pins": 2,
+      "consumer_sample": [
+        {
+          "instance": "_362282_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_371996_",
+          "type": "AOI211xp5_ASAP7_75t_R",
+          "port": "C"
+        }
+      ]
+    },
+    {
+      "instance": "_333444_",
+      "cell": "NOR3xp33_ASAP7_75t_R",
+      "net": "core.frontend.redirect_valid_i",
+      "delay_ns": 7.4105,
+      "arrival_ns": 9.3721,
+      "capacitance_ff": 640.6143,
+      "slew_ns": 15.8704,
+      "fanout": 1383,
+      "root_direct_load_pins": 235,
+      "consumer_sample": [
+        {
+          "instance": "_333445_",
+          "type": "INVx1_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_333446_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_352098_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_370412_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_370417_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370426_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370428_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370430_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370432_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370434_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370473_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_372861_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_372864_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_372866_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_372872_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_372879_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_372904_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_372906_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_372938_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_372939_",
+          "type": "NAND4xp25_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_372984_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_372985_",
+          "type": "NAND4xp25_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_373016_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_373034_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        }
+      ]
+    },
+    {
+      "instance": "_333445_",
+      "cell": "INVx1_ASAP7_75t_R",
+      "net": "_297057_",
+      "delay_ns": 6.5727,
+      "arrival_ns": 15.9448,
+      "capacitance_ff": 58.0252,
+      "slew_ns": 2.8947,
+      "fanout": 123,
+      "root_direct_load_pins": 123,
+      "consumer_sample": [
+        {
+          "instance": "_333447_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_362280_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_362281_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_370413_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_370414_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370420_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370423_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370436_",
+          "type": "OA22x2_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370438_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370441_",
+          "type": "OA22x2_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370443_",
+          "type": "OA22x2_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370445_",
+          "type": "OA22x2_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370447_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_370450_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370454_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370456_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_370459_",
+          "type": "OA22x2_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370461_",
+          "type": "OA22x2_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370463_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_370466_",
+          "type": "OA22x2_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370468_",
+          "type": "OA22x2_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370472_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_370475_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_370478_",
+          "type": "OA22x2_ASAP7_75t_R",
+          "port": "A2"
+        }
+      ]
+    },
+    {
+      "instance": "_417536_",
+      "cell": "NAND2xp33_ASAP7_75t_R",
+      "net": "_118375_",
+      "delay_ns": 1.1502,
+      "arrival_ns": 29.2702,
+      "capacitance_ff": 92.956,
+      "slew_ns": 2.4169,
+      "fanout": 191,
+      "root_direct_load_pins": 191,
+      "consumer_sample": [
+        {
+          "instance": "_417544_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_417552_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_417555_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_417558_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_417562_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429169_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429194_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429205_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429215_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429225_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429235_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429245_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429255_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429265_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429276_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429286_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429297_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429307_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429317_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429339_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429349_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429360_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429370_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_429380_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        }
+      ]
+    },
+    {
+      "instance": "_429170_",
+      "cell": "NOR2xp33_ASAP7_75t_R",
+      "net": "_129781_",
+      "delay_ns": 0.8232,
+      "arrival_ns": 30.645,
+      "capacitance_ff": 53.0159,
+      "slew_ns": 1.2698,
+      "fanout": 126,
+      "root_direct_load_pins": 126,
+      "consumer_sample": [
+        {
+          "instance": "_429187_",
+          "type": "OAI31xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429188_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429198_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429199_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429208_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429209_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429218_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429219_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429228_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429229_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429238_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429239_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429248_",
+          "type": "OAI31xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429249_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429258_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429259_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429269_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429270_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429279_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429280_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429290_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429291_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429300_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429301_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        }
+      ]
+    },
+    {
+      "instance": "_362282_",
+      "cell": "NOR2xp33_ASAP7_75t_R",
+      "net": "_066972_",
+      "delay_ns": 0.7431,
+      "arrival_ns": 26.1356,
+      "capacitance_ff": 1.5514,
+      "slew_ns": 0.9164,
+      "fanout": 4,
+      "root_direct_load_pins": 4,
+      "consumer_sample": [
+        {
+          "instance": "_362501_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_409199_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_409209_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_409211_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_429169_",
+      "cell": "NOR2xp33_ASAP7_75t_R",
+      "net": "_129780_",
+      "delay_ns": 0.5515,
+      "arrival_ns": 29.8218,
+      "capacitance_ff": 3.7561,
+      "slew_ns": 0.6078,
+      "fanout": 8,
+      "root_direct_load_pins": 8,
+      "consumer_sample": [
+        {
+          "instance": "_429170_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429332_",
+          "type": "OR3x1_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429478_",
+          "type": "OR3x1_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_593502_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_609803_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_609805_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_609843_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_609845_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A2"
+        }
+      ]
+    },
+    {
+      "instance": "_417527_",
+      "cell": "NOR2xp33_ASAP7_75t_R",
+      "net": "_118366_",
+      "delay_ns": 0.4918,
+      "arrival_ns": 28.0396,
+      "capacitance_ff": 41.6546,
+      "slew_ns": 1.0459,
+      "fanout": 103,
+      "root_direct_load_pins": 103,
+      "consumer_sample": [
+        {
+          "instance": "_417533_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417539_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417545_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_417549_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_417559_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_417564_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_429256_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429267_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429277_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429288_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429298_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429308_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429329_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429340_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429351_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429361_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429412_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429464_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429475_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429486_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429498_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_444428_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_444431_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_444438_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        }
+      ]
+    },
+    {
+      "instance": "_417193_",
+      "cell": "NOR2xp33_ASAP7_75t_R",
+      "net": "_118074_",
+      "delay_ns": 0.4717,
+      "arrival_ns": 26.9138,
+      "capacitance_ff": 43.1161,
+      "slew_ns": 0.8589,
+      "fanout": 103,
+      "root_direct_load_pins": 103,
+      "consumer_sample": [
+        {
+          "instance": "_417195_",
+          "type": "AOI211xp5_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_417583_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417585_",
+          "type": "NOR4xp25_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417587_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_417591_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_417601_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_417605_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_429525_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429534_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429543_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429553_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429562_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429598_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429617_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429636_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429654_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429700_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_429758_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_429788_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_440433_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_440444_",
+          "type": "AOI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_440460_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_440469_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_440478_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A1"
+        }
+      ]
+    },
+    {
+      "instance": "_332912_",
+      "cell": "NOR2xp33_ASAP7_75t_R",
+      "net": "_296525_",
+      "delay_ns": 0.4122,
+      "arrival_ns": 0.9904,
+      "capacitance_ff": 19.05,
+      "slew_ns": 0.4684,
+      "fanout": 42,
+      "root_direct_load_pins": 42,
+      "consumer_sample": [
+        {
+          "instance": "_332917_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_332950_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_332991_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_474698_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_475093_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_475128_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_475205_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_475335_",
+          "type": "OAI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_522935_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_523730_",
+          "type": "OA21x2_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525057_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525086_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525231_",
+          "type": "OAI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525670_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525711_",
+          "type": "OA21x2_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_526165_",
+          "type": "AO32x1_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_526249_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_527655_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_527888_",
+          "type": "OAI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_528299_",
+          "type": "AOI31xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_528952_",
+          "type": "AOI311xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_530365_",
+          "type": "OA21x2_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_530966_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_531107_",
+          "type": "OAI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        }
+      ]
+    },
+    {
+      "instance": "_332917_",
+      "cell": "NAND2xp33_ASAP7_75t_R",
+      "net": "_296530_",
+      "delay_ns": 0.3969,
+      "arrival_ns": 1.3873,
+      "capacitance_ff": 18.077,
+      "slew_ns": 0.5274,
+      "fanout": 43,
+      "root_direct_load_pins": 43,
+      "consumer_sample": [
+        {
+          "instance": "_332918_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_332995_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_474993_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_475075_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_522317_",
+          "type": "OAI221xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_522380_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_522911_",
+          "type": "OAI221xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_522950_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525679_",
+          "type": "OAI221xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525721_",
+          "type": "A2O1A1Ixp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525888_",
+          "type": "AOI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_526881_",
+          "type": "OAI221xp5_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_526920_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_527685_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_527711_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_528300_",
+          "type": "OAI221xp5_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_528340_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_528933_",
+          "type": "OAI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_528967_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_529577_",
+          "type": "OAI221xp5_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_529626_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_530366_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_531541_",
+          "type": "OAI221xp5_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_531560_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        }
+      ]
+    },
+    {
+      "instance": "_332882_",
+      "cell": "NAND2xp33_ASAP7_75t_R",
+      "net": "_296495_",
+      "delay_ns": 0.3806,
+      "arrival_ns": 0.5782,
+      "capacitance_ff": 23.1104,
+      "slew_ns": 0.6188,
+      "fanout": 56,
+      "root_direct_load_pins": 56,
+      "consumer_sample": [
+        {
+          "instance": "_332912_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_332916_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_332993_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_474549_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_474550_",
+          "type": "OR2x2_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_474558_",
+          "type": "OAI31xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_474694_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_474784_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_474833_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_474938_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_474984_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_474995_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_475124_",
+          "type": "OAI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_475172_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_475216_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_522918_",
+          "type": "OAI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_522949_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_523693_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_523729_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_524333_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_524423_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525688_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525707_",
+          "type": "AO21x1_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525708_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        }
+      ]
+    },
+    {
+      "instance": "_332918_",
+      "cell": "NOR2xp33_ASAP7_75t_R",
+      "net": "_296531_",
+      "delay_ns": 0.2522,
+      "arrival_ns": 1.6395,
+      "capacitance_ff": 8.2583,
+      "slew_ns": 0.2743,
+      "fanout": 19,
+      "root_direct_load_pins": 19,
+      "consumer_sample": [
+        {
+          "instance": "_332920_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_522321_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_523695_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_523734_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_524427_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525658_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_525715_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_525891_",
+          "type": "OAI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_526869_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_528971_",
+          "type": "OA21x2_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_530368_",
+          "type": "OA21x2_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_532766_",
+          "type": "AOI22xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_532810_",
+          "type": "OA21x2_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_533377_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "B2"
+        },
+        {
+          "instance": "_564699_",
+          "type": "AOI221xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_565328_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_565413_",
+          "type": "OA21x2_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_565944_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_566019_",
+          "type": "OA21x2_ASAP7_75t_R",
+          "port": "A1"
+        }
+      ]
+    },
+    {
+      "instance": "_362501_",
+      "cell": "NAND2xp33_ASAP7_75t_R",
+      "net": "_067191_",
+      "delay_ns": 0.207,
+      "arrival_ns": 26.3425,
+      "capacitance_ff": 1.5468,
+      "slew_ns": 0.228,
+      "fanout": 3,
+      "root_direct_load_pins": 3,
+      "consumer_sample": [
+        {
+          "instance": "_362505_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_362506_",
+          "type": "OR3x1_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_607453_",
+          "type": "O2A1O1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        }
+      ]
+    },
+    {
+      "instance": "_417195_",
+      "cell": "AOI211xp5_ASAP7_75t_R",
+      "net": "_118076_",
+      "delay_ns": 0.1679,
+      "arrival_ns": 27.0816,
+      "capacitance_ff": 3.7866,
+      "slew_ns": 0.2243,
+      "fanout": 8,
+      "root_direct_load_pins": 8,
+      "consumer_sample": [
+        {
+          "instance": "_417196_",
+          "type": "AND2x2_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417208_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417210_",
+          "type": "OAI211xp5_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417211_",
+          "type": "OAI211xp5_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417215_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417216_",
+          "type": "OA211x2_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_417217_",
+          "type": "OA211x2_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_417238_",
+          "type": "A2O1A1Ixp33_ASAP7_75t_R",
+          "port": "A2"
+        }
+      ]
+    },
+    {
+      "instance": "_332920_",
+      "cell": "NAND2xp33_ASAP7_75t_R",
+      "net": "_296533_",
+      "delay_ns": 0.1398,
+      "arrival_ns": 1.7794,
+      "capacitance_ff": 4.0305,
+      "slew_ns": 0.1658,
+      "fanout": 9,
+      "root_direct_load_pins": 9,
+      "consumer_sample": [
+        {
+          "instance": "_332921_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "B1"
+        },
+        {
+          "instance": "_333040_",
+          "type": "OAI222xp33_ASAP7_75t_R",
+          "port": "C1"
+        },
+        {
+          "instance": "_333061_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_333115_",
+          "type": "OAI222xp33_ASAP7_75t_R",
+          "port": "C2"
+        },
+        {
+          "instance": "_333153_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_333318_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "B1"
+        },
+        {
+          "instance": "_333364_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "B1"
+        },
+        {
+          "instance": "_333407_",
+          "type": "OAI22xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_474573_",
+          "type": "AND3x1_ASAP7_75t_R",
+          "port": "A"
+        }
+      ]
+    },
+    {
+      "instance": "_429424_",
+      "cell": "OAI31xp33_ASAP7_75t_R",
+      "net": "_130012_",
+      "delay_ns": 0.1162,
+      "arrival_ns": 30.7612,
+      "capacitance_ff": 0.4077,
+      "slew_ns": 0.1611,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_429425_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_429383_",
+      "cell": "OAI31xp33_ASAP7_75t_R",
+      "net": "_129975_",
+      "delay_ns": 0.1162,
+      "arrival_ns": 30.7612,
+      "capacitance_ff": 0.4077,
+      "slew_ns": 0.1611,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_429384_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_429373_",
+      "cell": "OAI31xp33_ASAP7_75t_R",
+      "net": "_129966_",
+      "delay_ns": 0.1162,
+      "arrival_ns": 30.7612,
+      "capacitance_ff": 0.4077,
+      "slew_ns": 0.1611,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_429374_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_429248_",
+      "cell": "OAI31xp33_ASAP7_75t_R",
+      "net": "_129853_",
+      "delay_ns": 0.1162,
+      "arrival_ns": 30.7612,
+      "capacitance_ff": 0.4077,
+      "slew_ns": 0.1611,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_429249_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_429187_",
+      "cell": "OAI31xp33_ASAP7_75t_R",
+      "net": "_129798_",
+      "delay_ns": 0.1162,
+      "arrival_ns": 30.7612,
+      "capacitance_ff": 0.4077,
+      "slew_ns": 0.1611,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_429188_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_362506_",
+      "cell": "OR3x1_ASAP7_75t_R",
+      "net": "_067196_",
+      "delay_ns": 0.0995,
+      "arrival_ns": 26.4421,
+      "capacitance_ff": 15.79,
+      "slew_ns": 0.1433,
+      "fanout": 39,
+      "root_direct_load_pins": 39,
+      "consumer_sample": [
+        {
+          "instance": "_388412_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417173_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417183_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417185_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417189_",
+          "type": "AOI211xp5_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_417190_",
+          "type": "AO21x1_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_417191_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417192_",
+          "type": "OAI31xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_417193_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417195_",
+          "type": "AOI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_417202_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_417324_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417371_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417451_",
+          "type": "NOR4xp25_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417955_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_452114_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_452203_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_452220_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_452312_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_452360_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_457204_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_457212_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_457220_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_474442_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "C"
+        }
+      ]
+    },
+    {
+      "instance": "_417533_",
+      "cell": "NOR3xp33_ASAP7_75t_R",
+      "net": "_118372_",
+      "delay_ns": 0.0804,
+      "arrival_ns": 28.12,
+      "capacitance_ff": 0.6934,
+      "slew_ns": 0.1417,
+      "fanout": 2,
+      "root_direct_load_pins": 2,
+      "consumer_sample": [
+        {
+          "instance": "_417536_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417538_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_417236_",
+      "cell": "NAND2xp33_ASAP7_75t_R",
+      "net": "_118117_",
+      "delay_ns": 0.0663,
+      "arrival_ns": 27.4891,
+      "capacitance_ff": 4.0126,
+      "slew_ns": 0.2212,
+      "fanout": 8,
+      "root_direct_load_pins": 8,
+      "consumer_sample": [
+        {
+          "instance": "_417237_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_417245_",
+          "type": "NAND4xp25_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_417375_",
+          "type": "OR2x2_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417377_",
+          "type": "OR3x1_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417450_",
+          "type": "NAND4xp25_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_417528_",
+          "type": "OR3x1_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417610_",
+          "type": "NAND4xp25_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_417690_",
+          "type": "OR3x1_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_417375_",
+      "cell": "OR2x2_ASAP7_75t_R",
+      "net": "_118242_",
+      "delay_ns": 0.0587,
+      "arrival_ns": 27.5478,
+      "capacitance_ff": 1.3926,
+      "slew_ns": 0.0179,
+      "fanout": 4,
+      "root_direct_load_pins": 4,
+      "consumer_sample": [
+        {
+          "instance": "_417376_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417378_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417527_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417689_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_417196_",
+      "cell": "AND2x2_ASAP7_75t_R",
+      "net": "_118077_",
+      "delay_ns": 0.0526,
+      "arrival_ns": 27.1342,
+      "capacitance_ff": 2.6632,
+      "slew_ns": 0.0224,
+      "fanout": 5,
+      "root_direct_load_pins": 5,
+      "consumer_sample": [
+        {
+          "instance": "_417197_",
+          "type": "INVx1_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417200_",
+          "type": "AND4x1_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_417204_",
+          "type": "AND3x1_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417225_",
+          "type": "A2O1A1Ixp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_417230_",
+          "type": "AOI31xp33_ASAP7_75t_R",
+          "port": "A2"
+        }
+      ]
+    },
+    {
+      "instance": "_417228_",
+      "cell": "NAND2xp33_ASAP7_75t_R",
+      "net": "_118109_",
+      "delay_ns": 0.0482,
+      "arrival_ns": 27.4228,
+      "capacitance_ff": 3.0318,
+      "slew_ns": 0.0911,
+      "fanout": 7,
+      "root_direct_load_pins": 7,
+      "consumer_sample": [
+        {
+          "instance": "_417236_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417328_",
+          "type": "NOR2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417412_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417414_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417569_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417574_",
+          "type": "NAND4xp25_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417725_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "A"
+        }
+      ]
+    },
+    {
+      "instance": "_333116_",
+      "cell": "OR4x1_ASAP7_75t_R",
+      "net": "_296729_",
+      "delay_ns": 0.0427,
+      "arrival_ns": 1.86,
+      "capacitance_ff": 0.5925,
+      "slew_ns": 0.0135,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_333123_",
+          "type": "OR4x1_ASAP7_75t_R",
+          "port": "A"
+        }
+      ]
+    },
+    {
+      "instance": "_417217_",
+      "cell": "OA211x2_ASAP7_75t_R",
+      "net": "_118098_",
+      "delay_ns": 0.0404,
+      "arrival_ns": 27.3235,
+      "capacitance_ff": 0.9531,
+      "slew_ns": 0.0181,
+      "fanout": 2,
+      "root_direct_load_pins": 2,
+      "consumer_sample": [
+        {
+          "instance": "_417220_",
+          "type": "AOI31xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417231_",
+          "type": "OAI211xp5_ASAP7_75t_R",
+          "port": "A1"
+        }
+      ]
+    },
+    {
+      "instance": "_417216_",
+      "cell": "OA211x2_ASAP7_75t_R",
+      "net": "_118097_",
+      "delay_ns": 0.0393,
+      "arrival_ns": 27.2831,
+      "capacitance_ff": 2.2082,
+      "slew_ns": 0.0242,
+      "fanout": 5,
+      "root_direct_load_pins": 5,
+      "consumer_sample": [
+        {
+          "instance": "_417217_",
+          "type": "OA211x2_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417219_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417220_",
+          "type": "AOI31xp33_ASAP7_75t_R",
+          "port": "A2"
+        },
+        {
+          "instance": "_417223_",
+          "type": "OAI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417232_",
+          "type": "AND4x1_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_417206_",
+      "cell": "OA21x2_ASAP7_75t_R",
+      "net": "_118087_",
+      "delay_ns": 0.0381,
+      "arrival_ns": 27.2267,
+      "capacitance_ff": 1.4739,
+      "slew_ns": 0.0122,
+      "fanout": 3,
+      "root_direct_load_pins": 3,
+      "consumer_sample": [
+        {
+          "instance": "_417213_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417214_",
+          "type": "AND4x1_ASAP7_75t_R",
+          "port": "A"
+        },
+        {
+          "instance": "_417238_",
+          "type": "A2O1A1Ixp33_ASAP7_75t_R",
+          "port": "C"
+        }
+      ]
+    },
+    {
+      "instance": "_333115_",
+      "cell": "OAI222xp33_ASAP7_75t_R",
+      "net": "_296728_",
+      "delay_ns": 0.0379,
+      "arrival_ns": 1.8173,
+      "capacitance_ff": 0.5672,
+      "slew_ns": 0.0434,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_333116_",
+          "type": "OR4x1_ASAP7_75t_R",
+          "port": "D"
+        }
+      ]
+    },
+    {
+      "instance": "_417200_",
+      "cell": "AND4x1_ASAP7_75t_R",
+      "net": "_118081_",
+      "delay_ns": 0.0368,
+      "arrival_ns": 27.171,
+      "capacitance_ff": 1.4928,
+      "slew_ns": 0.0236,
+      "fanout": 3,
+      "root_direct_load_pins": 3,
+      "consumer_sample": [
+        {
+          "instance": "_417201_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417205_",
+          "type": "AOI211xp5_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417233_",
+          "type": "OR3x1_ASAP7_75t_R",
+          "port": "A"
+        }
+      ]
+    },
+    {
+      "instance": "_429425_",
+      "cell": "OAI21xp33_ASAP7_75t_R",
+      "net": "_032327_",
+      "delay_ns": 0.0361,
+      "arrival_ns": 30.7973,
+      "capacitance_ff": 0.5588,
+      "slew_ns": 0.1537,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_637263_",
+          "type": "DFFHQNx1_ASAP7_75t_R",
+          "port": "D"
+        }
+      ]
+    },
+    {
+      "instance": "_429384_",
+      "cell": "OAI21xp33_ASAP7_75t_R",
+      "net": "_032323_",
+      "delay_ns": 0.0361,
+      "arrival_ns": 30.7973,
+      "capacitance_ff": 0.5588,
+      "slew_ns": 0.1537,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_637267_",
+          "type": "DFFHQNx1_ASAP7_75t_R",
+          "port": "D"
+        }
+      ]
+    },
+    {
+      "instance": "_429374_",
+      "cell": "OAI21xp33_ASAP7_75t_R",
+      "net": "_032322_",
+      "delay_ns": 0.0361,
+      "arrival_ns": 30.7973,
+      "capacitance_ff": 0.5588,
+      "slew_ns": 0.1537,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_637268_",
+          "type": "DFFHQNx1_ASAP7_75t_R",
+          "port": "D"
+        }
+      ]
+    },
+    {
+      "instance": "_429249_",
+      "cell": "OAI21xp33_ASAP7_75t_R",
+      "net": "_032310_",
+      "delay_ns": 0.0361,
+      "arrival_ns": 30.7973,
+      "capacitance_ff": 0.5588,
+      "slew_ns": 0.1537,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_637280_",
+          "type": "DFFHQNx1_ASAP7_75t_R",
+          "port": "D"
+        }
+      ]
+    },
+    {
+      "instance": "_429188_",
+      "cell": "OAI21xp33_ASAP7_75t_R",
+      "net": "_032304_",
+      "delay_ns": 0.0361,
+      "arrival_ns": 30.7973,
+      "capacitance_ff": 0.5588,
+      "slew_ns": 0.1537,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_637286_",
+          "type": "DFFHQNx1_ASAP7_75t_R",
+          "port": "D"
+        }
+      ]
+    },
+    {
+      "instance": "_417220_",
+      "cell": "AOI31xp33_ASAP7_75t_R",
+      "net": "_118101_",
+      "delay_ns": 0.0321,
+      "arrival_ns": 27.3556,
+      "capacitance_ff": 1.4303,
+      "slew_ns": 0.048,
+      "fanout": 3,
+      "root_direct_load_pins": 3,
+      "consumer_sample": [
+        {
+          "instance": "_417227_",
+          "type": "AOI21xp33_ASAP7_75t_R",
+          "port": "A1"
+        },
+        {
+          "instance": "_417232_",
+          "type": "AND4x1_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_417240_",
+          "type": "AND2x2_ASAP7_75t_R",
+          "port": "A"
+        }
+      ]
+    },
+    {
+      "instance": "_333123_",
+      "cell": "OR4x1_ASAP7_75t_R",
+      "net": "_296736_",
+      "delay_ns": 0.032,
+      "arrival_ns": 1.8919,
+      "capacitance_ff": 0.471,
+      "slew_ns": 0.0133,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_333140_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_333275_",
+      "cell": "NAND5xp2_ASAP7_75t_R",
+      "net": "_296888_",
+      "delay_ns": 0.0241,
+      "arrival_ns": 1.9616,
+      "capacitance_ff": 0.471,
+      "slew_ns": 0.0358,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_333444_",
+          "type": "NOR3xp33_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_333141_",
+      "cell": "XNOR2xp5_ASAP7_75t_R",
+      "net": "_296754_",
+      "delay_ns": 0.0234,
+      "arrival_ns": 1.9376,
+      "capacitance_ff": 0.4677,
+      "slew_ns": 0.0227,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_333275_",
+          "type": "NAND5xp2_ASAP7_75t_R",
+          "port": "C"
+        }
+      ]
+    },
+    {
+      "instance": "_333140_",
+      "cell": "NOR3xp33_ASAP7_75t_R",
+      "net": "_296753_",
+      "delay_ns": 0.0222,
+      "arrival_ns": 1.9142,
+      "capacitance_ff": 0.8791,
+      "slew_ns": 0.0382,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_333141_",
+          "type": "XNOR2xp5_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_417227_",
+      "cell": "AOI21xp33_ASAP7_75t_R",
+      "net": "_118108_",
+      "delay_ns": 0.019,
+      "arrival_ns": 27.3746,
+      "capacitance_ff": 0.3467,
+      "slew_ns": 0.0212,
+      "fanout": 1,
+      "root_direct_load_pins": 1,
+      "consumer_sample": [
+        {
+          "instance": "_417228_",
+          "type": "NAND2xp33_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    },
+    {
+      "instance": "_417205_",
+      "cell": "AOI211xp5_ASAP7_75t_R",
+      "net": "_118086_",
+      "delay_ns": 0.0176,
+      "arrival_ns": 27.1886,
+      "capacitance_ff": 0.9927,
+      "slew_ns": 0.0886,
+      "fanout": 2,
+      "root_direct_load_pins": 2,
+      "consumer_sample": [
+        {
+          "instance": "_417206_",
+          "type": "OA21x2_ASAP7_75t_R",
+          "port": "B"
+        },
+        {
+          "instance": "_417230_",
+          "type": "AOI31xp33_ASAP7_75t_R",
+          "port": "A3"
+        }
+      ]
+    },
+    {
+      "instance": "_417214_",
+      "cell": "AND4x1_ASAP7_75t_R",
+      "net": "_118095_",
+      "delay_ns": 0.0171,
+      "arrival_ns": 27.2438,
+      "capacitance_ff": 0.8584,
+      "slew_ns": 0.011,
+      "fanout": 2,
+      "root_direct_load_pins": 2,
+      "consumer_sample": [
+        {
+          "instance": "_417215_",
+          "type": "NAND3xp33_ASAP7_75t_R",
+          "port": "C"
+        },
+        {
+          "instance": "_417216_",
+          "type": "OA211x2_ASAP7_75t_R",
+          "port": "B"
+        }
+      ]
+    }
+  ],
+  "relevant_instances": {
+    "_332882_": {
+      "type": "NAND2xp33_ASAP7_75t_R",
+      "name": "_332882_",
+      "ports": {
+        "A": "_003870_",
+        "B": "_003871_",
+        "Y": "_296495_"
+      }
+    },
+    "_332912_": {
+      "type": "NOR2xp33_ASAP7_75t_R",
+      "name": "_332912_",
+      "ports": {
+        "A": "_284973_",
+        "B": "_296495_",
+        "Y": "_296525_"
+      }
+    },
+    "_332917_": {
+      "type": "NAND2xp33_ASAP7_75t_R",
+      "name": "_332917_",
+      "ports": {
+        "A": "_003868_",
+        "B": "_296525_",
+        "Y": "_296530_"
+      }
+    },
+    "_332918_": {
+      "type": "NOR2xp33_ASAP7_75t_R",
+      "name": "_332918_",
+      "ports": {
+        "A": "_284971_",
+        "B": "_296530_",
+        "Y": "_296531_"
+      }
+    },
+    "_332920_": {
+      "type": "NAND2xp33_ASAP7_75t_R",
+      "name": "_332920_",
+      "ports": {
+        "A": "_284970_",
+        "B": "_296531_",
+        "Y": "_296533_"
+      }
+    },
+    "_333115_": {
+      "type": "OAI222xp33_ASAP7_75t_R",
+      "name": "_333115_",
+      "ports": {
+        "A1": "_024181_",
+        "A2": "_296573_",
+        "B1": "_296579_",
+        "B2": "_024188_",
+        "C1": "_024335_",
+        "C2": "_296533_",
+        "Y": "_296728_"
+      }
+    },
+    "_333116_": {
+      "type": "OR4x1_ASAP7_75t_R",
+      "name": "_333116_",
+      "ports": {
+        "A": "_296718_",
+        "B": "_296719_",
+        "C": "_296727_",
+        "D": "_296728_",
+        "Y": "_296729_"
+      }
+    },
+    "_333123_": {
+      "type": "OR4x1_ASAP7_75t_R",
+      "name": "_333123_",
+      "ports": {
+        "A": "_296729_",
+        "B": "_296730_",
+        "C": "_296731_",
+        "D": "_296735_",
+        "Y": "_296736_"
+      }
+    },
+    "_333140_": {
+      "type": "NOR3xp33_ASAP7_75t_R",
+      "name": "_333140_",
+      "ports": {
+        "A": "_296726_",
+        "B": "_296736_",
+        "C": "_296752_",
+        "Y": "_296753_"
+      }
+    },
+    "_333141_": {
+      "type": "XNOR2xp5_ASAP7_75t_R",
+      "name": "_333141_",
+      "ports": {
+        "A": "_003878_",
+        "B": "_296753_",
+        "Y": "_296754_"
+      }
+    },
+    "_333275_": {
+      "type": "NAND5xp2_ASAP7_75t_R",
+      "name": "_333275_",
+      "ports": {
+        "A": "_296714_",
+        "B": "_296715_",
+        "C": "_296754_",
+        "D": "_296799_",
+        "E": "_296887_",
+        "Y": "_296888_"
+      }
+    },
+    "_333444_": {
+      "type": "NOR3xp33_ASAP7_75t_R",
+      "name": "_333444_",
+      "ports": {
+        "A": "_296713_",
+        "B": "_296888_",
+        "C": "_297056_",
+        "Y": "core.frontend.redirect_valid_i"
+      }
+    },
+    "_333445_": {
+      "type": "INVx1_ASAP7_75t_R",
+      "name": "_333445_",
+      "ports": {
+        "A": "core.frontend.redirect_valid_i",
+        "Y": "_297057_"
+      }
+    },
+    "_362281_": {
+      "type": "NAND3xp33_ASAP7_75t_R",
+      "name": "_362281_",
+      "ports": {
+        "A": "_000358_",
+        "B": "_000359_",
+        "C": "_297057_",
+        "Y": "core.g_decode_pipeline.pipe.flush_i"
+      }
+    },
+    "_362282_": {
+      "type": "NOR2xp33_ASAP7_75t_R",
+      "name": "_362282_",
+      "ports": {
+        "A": "reset",
+        "B": "core.g_decode_pipeline.pipe.flush_i",
+        "Y": "_066972_"
+      }
+    },
+    "_362501_": {
+      "type": "NAND2xp33_ASAP7_75t_R",
+      "name": "_362501_",
+      "ports": {
+        "A": "_066972_",
+        "B": "_067190_",
+        "Y": "_067191_"
+      }
+    },
+    "_362506_": {
+      "type": "OR3x1_ASAP7_75t_R",
+      "name": "_362506_",
+      "ports": {
+        "A": "_066971_",
+        "B": "_067191_",
+        "C": "_067194_",
+        "Y": "_067196_"
+      }
+    },
+    "_417193_": {
+      "type": "NOR2xp33_ASAP7_75t_R",
+      "name": "_417193_",
+      "ports": {
+        "A": "_067196_",
+        "B": "_118037_",
+        "Y": "_118074_"
+      }
+    },
+    "_417195_": {
+      "type": "AOI211xp5_ASAP7_75t_R",
+      "name": "_417195_",
+      "ports": {
+        "A1": "_067196_",
+        "A2": "_118011_",
+        "B": "_118066_",
+        "C": "_118074_",
+        "Y": "_118076_"
+      }
+    },
+    "_417196_": {
+      "type": "AND2x2_ASAP7_75t_R",
+      "name": "_417196_",
+      "ports": {
+        "A": "_118071_",
+        "B": "_118076_",
+        "Y": "_118077_"
+      }
+    },
+    "_417200_": {
+      "type": "AND4x1_ASAP7_75t_R",
+      "name": "_417200_",
+      "ports": {
+        "A": "_002715_",
+        "B": "_117952_",
+        "C": "_118077_",
+        "D": "_118080_",
+        "Y": "_118081_"
+      }
+    },
+    "_417205_": {
+      "type": "AOI211xp5_ASAP7_75t_R",
+      "name": "_417205_",
+      "ports": {
+        "A1": "_002713_",
+        "A2": "_067202_",
+        "B": "_118081_",
+        "C": "_118085_",
+        "Y": "_118086_"
+      }
+    },
+    "_417206_": {
+      "type": "OA21x2_ASAP7_75t_R",
+      "name": "_417206_",
+      "ports": {
+        "A1": "_284856_",
+        "A2": "_118078_",
+        "B": "_118086_",
+        "Y": "_118087_"
+      }
+    },
+    "_417214_": {
+      "type": "AND4x1_ASAP7_75t_R",
+      "name": "_417214_",
+      "ports": {
+        "A": "_118087_",
+        "B": "_118089_",
+        "C": "_118091_",
+        "D": "_118092_",
+        "Y": "_118095_"
+      }
+    },
+    "_417216_": {
+      "type": "OA211x2_ASAP7_75t_R",
+      "name": "_417216_",
+      "ports": {
+        "A1": "_118071_",
+        "A2": "_118076_",
+        "B": "_118095_",
+        "C": "_118096_",
+        "Y": "_118097_"
+      }
+    },
+    "_417217_": {
+      "type": "OA211x2_ASAP7_75t_R",
+      "name": "_417217_",
+      "ports": {
+        "A1": "_118076_",
+        "A2": "_118090_",
+        "B": "_118097_",
+        "C": "_002731_",
+        "Y": "_118098_"
+      }
+    },
+    "_417220_": {
+      "type": "AOI31xp33_ASAP7_75t_R",
+      "name": "_417220_",
+      "ports": {
+        "A1": "_002733_",
+        "A2": "_118097_",
+        "A3": "_118099_",
+        "B": "_118098_",
+        "Y": "_118101_"
+      }
+    },
+    "_417227_": {
+      "type": "AOI21xp33_ASAP7_75t_R",
+      "name": "_417227_",
+      "ports": {
+        "A1": "_118101_",
+        "A2": "_118105_",
+        "B": "_118107_",
+        "Y": "_118108_"
+      }
+    },
+    "_417228_": {
+      "type": "NAND2xp33_ASAP7_75t_R",
+      "name": "_417228_",
+      "ports": {
+        "A": "_118096_",
+        "B": "_118108_",
+        "Y": "_118109_"
+      }
+    },
+    "_417236_": {
+      "type": "NAND2xp33_ASAP7_75t_R",
+      "name": "_417236_",
+      "ports": {
+        "A": "_067188_",
+        "B": "_118109_",
+        "Y": "_118117_"
+      }
+    },
+    "_417375_": {
+      "type": "OR2x2_ASAP7_75t_R",
+      "name": "_417375_",
+      "ports": {
+        "A": "_118114_",
+        "B": "_118117_",
+        "Y": "_118242_"
+      }
+    },
+    "_417527_": {
+      "type": "NOR2xp33_ASAP7_75t_R",
+      "name": "_417527_",
+      "ports": {
+        "A": "_118119_",
+        "B": "_118242_",
+        "Y": "_118366_"
+      }
+    },
+    "_417533_": {
+      "type": "NOR3xp33_ASAP7_75t_R",
+      "name": "_417533_",
+      "ports": {
+        "A": "_118366_",
+        "B": "_118368_",
+        "C": "_118370_",
+        "Y": "_118372_"
+      }
+    },
+    "_417536_": {
+      "type": "NAND2xp33_ASAP7_75t_R",
+      "name": "_417536_",
+      "ports": {
+        "A": "_117968_",
+        "B": "_118372_",
+        "Y": "_118375_"
+      }
+    },
+    "_429169_": {
+      "type": "NOR2xp33_ASAP7_75t_R",
+      "name": "_429169_",
+      "ports": {
+        "A": "_110685_",
+        "B": "_118375_",
+        "Y": "_129780_"
+      }
+    },
+    "_429170_": {
+      "type": "NOR2xp33_ASAP7_75t_R",
+      "name": "_429170_",
+      "ports": {
+        "A": "reset",
+        "B": "_129780_",
+        "Y": "_129781_"
+      }
+    },
+    "_429187_": {
+      "type": "OAI31xp33_ASAP7_75t_R",
+      "name": "_429187_",
+      "ports": {
+        "A1": "_129795_",
+        "A2": "_129796_",
+        "A3": "_129797_",
+        "B": "_129781_",
+        "Y": "_129798_"
+      }
+    },
+    "_429188_": {
+      "type": "OAI21xp33_ASAP7_75t_R",
+      "name": "_429188_",
+      "ports": {
+        "A1": "_026502_",
+        "A2": "_129781_",
+        "B": "_129798_",
+        "Y": "_032304_"
+      }
+    },
+    "_429248_": {
+      "type": "OAI31xp33_ASAP7_75t_R",
+      "name": "_429248_",
+      "ports": {
+        "A1": "_129850_",
+        "A2": "_129851_",
+        "A3": "_129852_",
+        "B": "_129781_",
+        "Y": "_129853_"
+      }
+    },
+    "_429249_": {
+      "type": "OAI21xp33_ASAP7_75t_R",
+      "name": "_429249_",
+      "ports": {
+        "A1": "_026496_",
+        "A2": "_129781_",
+        "B": "_129853_",
+        "Y": "_032310_"
+      }
+    },
+    "_429373_": {
+      "type": "OAI31xp33_ASAP7_75t_R",
+      "name": "_429373_",
+      "ports": {
+        "A1": "_129963_",
+        "A2": "_129964_",
+        "A3": "_129965_",
+        "B": "_129781_",
+        "Y": "_129966_"
+      }
+    },
+    "_429374_": {
+      "type": "OAI21xp33_ASAP7_75t_R",
+      "name": "_429374_",
+      "ports": {
+        "A1": "_026484_",
+        "A2": "_129781_",
+        "B": "_129966_",
+        "Y": "_032322_"
+      }
+    },
+    "_429383_": {
+      "type": "OAI31xp33_ASAP7_75t_R",
+      "name": "_429383_",
+      "ports": {
+        "A1": "_129972_",
+        "A2": "_129973_",
+        "A3": "_129974_",
+        "B": "_129781_",
+        "Y": "_129975_"
+      }
+    },
+    "_429384_": {
+      "type": "OAI21xp33_ASAP7_75t_R",
+      "name": "_429384_",
+      "ports": {
+        "A1": "_026483_",
+        "A2": "_129781_",
+        "B": "_129975_",
+        "Y": "_032323_"
+      }
+    },
+    "_429424_": {
+      "type": "OAI31xp33_ASAP7_75t_R",
+      "name": "_429424_",
+      "ports": {
+        "A1": "_130009_",
+        "A2": "_130010_",
+        "A3": "_130011_",
+        "B": "_129781_",
+        "Y": "_130012_"
+      }
+    },
+    "_429425_": {
+      "type": "OAI21xp33_ASAP7_75t_R",
+      "name": "_429425_",
+      "ports": {
+        "A1": "_026479_",
+        "A2": "_129781_",
+        "B": "_130012_",
+        "Y": "_032327_"
+      }
+    },
+    "_610980_": {
+      "type": "DFFHQNx1_ASAP7_75t_R",
+      "name": "_610980_",
+      "ports": {
+        "CLK": "clock",
+        "D": "_054930_",
+        "QN": "_003871_"
+      }
+    },
+    "_637263_": {
+      "type": "DFFHQNx1_ASAP7_75t_R",
+      "name": "_637263_",
+      "ports": {
+        "CLK": "clock",
+        "D": "_032327_",
+        "QN": "_026479_"
+      }
+    },
+    "_637267_": {
+      "type": "DFFHQNx1_ASAP7_75t_R",
+      "name": "_637267_",
+      "ports": {
+        "CLK": "clock",
+        "D": "_032323_",
+        "QN": "_026483_"
+      }
+    },
+    "_637268_": {
+      "type": "DFFHQNx1_ASAP7_75t_R",
+      "name": "_637268_",
+      "ports": {
+        "CLK": "clock",
+        "D": "_032322_",
+        "QN": "_026484_"
+      }
+    },
+    "_637280_": {
+      "type": "DFFHQNx1_ASAP7_75t_R",
+      "name": "_637280_",
+      "ports": {
+        "CLK": "clock",
+        "D": "_032310_",
+        "QN": "_026496_"
+      }
+    },
+    "_637286_": {
+      "type": "DFFHQNx1_ASAP7_75t_R",
+      "name": "_637286_",
+      "ports": {
+        "CLK": "clock",
+        "D": "_032304_",
+        "QN": "_026502_"
+      }
+    }
+  },
+  "aliases": [],
+  "caution": "Only the paths already reported by the course run are covered; root direct pin counts exclude internal loads behind preserved hierarchy."
+}
