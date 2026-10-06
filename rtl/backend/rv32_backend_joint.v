@@ -1726,7 +1726,11 @@ module rv32_backend_joint #(
     // and returns only destinations allocated by the killed younger suffix.
     wire [CHECK_RAT_WIDTH-1:0] parallel_recovery_rat;
     generate if (RAT_RECOVERY_IMPL != 0 && CHECKPOINT_IMPL != 0) begin : g_parallel_rat_recovery
+`ifdef CPU2026_WORD_SIM
+        rv32_rat_recovery_word #(.ROB_ENTRIES(ROB_ENTRIES), .PAW(PAW), .IMPL(2),
+`else
         rv32_rat_recovery #(.ROB_ENTRIES(ROB_ENTRIES), .PAW(PAW), .IMPL(2),
+`endif
             .SUFFIX_KEEPS_BRANCH_MAPPING(RAT_SUFFIX_BRANCH_MAPPING)) rat_recovery (
             .rat_i(rat_state), .head_i(rob_head_views[0 +: ROB_SLOT_WIDTH]),
             .branch_slot_i(recovery_tag_views[TAG_WIDTH+3 +: ROB_SLOT_WIDTH]),
