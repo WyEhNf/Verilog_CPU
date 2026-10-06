@@ -46,11 +46,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1452",
+    "source_commit": "2ba6b578fd9ed590201aab5794edc2e962d0c1e1",
     "commits": [
-      ":1452",
-      ":1454",
-      ":1456"
+      "2ba6b578fd9ed590201aab5794edc2e962d0c1e1",
+      "9ca7d81981cd9901ae2ca699f60217de7a970393",
+      "8275a449d393f95ad9cbae40cabd112c8eaaec08"
     ]
   },
   {
@@ -101,11 +101,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1462",
+    "source_commit": "010fdff8cd6b6082cc346428eaa7293a212a2957",
     "commits": [
-      ":1462",
-      ":1464",
-      ":1466"
+      "010fdff8cd6b6082cc346428eaa7293a212a2957",
+      "e5b4972e4c1e14167fdc8e2a2eb4aef71d087591",
+      "b767bf3ab2d4610a5cf08ddeff900c4468eb0aa8"
     ]
   },
   {
@@ -156,11 +156,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1472",
+    "source_commit": "5f7004de62ac4edf3918d2d0d4d7002a3019a44d",
     "commits": [
-      ":1472",
-      ":1474",
-      ":1476"
+      "5f7004de62ac4edf3918d2d0d4d7002a3019a44d",
+      "a8aaeb6dfd71db6de019dc629097117d89d247fe",
+      "a852a59b4ff493fc740513c9c50482c4ec40cf81"
     ]
   },
   {
@@ -211,11 +211,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1486",
+    "source_commit": "d3720c4b56eddb8b72c4a2a4cdcfdbb1e87aba4f",
     "commits": [
-      ":1486",
-      ":1488",
-      ":1490"
+      "d3720c4b56eddb8b72c4a2a4cdcfdbb1e87aba4f",
+      "38794945be1ed7648724fd6990f3f4126146c475",
+      "442f5f750376bce4fa9621c4285939cbaf16cfce"
     ]
   },
   {
@@ -227,10 +227,10 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1492",
+    "source_commit": "b32fbeccf1308bdcc0ee7aa161d09d722a38b1e6",
     "commits": [
-      ":1492",
-      ":1494"
+      "b32fbeccf1308bdcc0ee7aa161d09d722a38b1e6",
+      "897c000e43025ff00e15626e925f63d797ba5c34"
     ]
   },
   {
@@ -247,10 +247,10 @@
     },
     "description": "Prepare an isolated 16-versus-64-row Cache metadata-bank experiment.\n\nOnly bank geometry changes; actual data/tag SRAM, request sequencing and bank\nlogic are preserved. Keep the main and already-measured CPU sources frozen.\n",
     "parent_version": null,
-    "source_commit": ":1500",
+    "source_commit": "3e36917c91bfc05d07a59e4cf335f736980a52bd",
     "commits": [
-      ":1500",
-      ":1502"
+      "3e36917c91bfc05d07a59e4cf335f736980a52bd",
+      "6fdef4b0c24aa13b983acdff01b9a5e4dba95a68"
     ]
   },
   {
@@ -265,10 +265,10 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1507",
+    "source_commit": "e0822a58d112eba65925d6d71f4436bb6deee1b2",
     "commits": [
-      ":1507",
-      ":1509"
+      "e0822a58d112eba65925d6d71f4436bb6deee1b2",
+      "43c298c46341488c993585048685e416ad2765b9"
     ]
   },
   {
@@ -319,10 +319,10 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1513",
+    "source_commit": "c734f87f1a04d7c0be60d1504f60185b148e2f26",
     "commits": [
-      ":1513",
-      ":1515"
+      "c734f87f1a04d7c0be60d1504f60185b148e2f26",
+      "e4977c2da280cd8f0bae89bb61a8667d9536ee8b"
     ]
   },
   {
@@ -373,11 +373,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1519",
+    "source_commit": "1c7569749c01a81bb698e57acef33cced02f0922",
     "commits": [
-      ":1519",
-      ":1521",
-      ":1523"
+      "1c7569749c01a81bb698e57acef33cced02f0922",
+      "63ac93d124b4e2b95d16d8693d6e5f07b4542cc4",
+      "94b78fe4f37fd419fa54fbc02e3957acbbd34228"
     ]
   },
   {
@@ -392,10 +392,10 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1528",
+    "source_commit": "714f5f3e147f44a7f13c362e753c6286e9bd922b",
     "commits": [
-      ":1528",
-      ":1530"
+      "714f5f3e147f44a7f13c362e753c6286e9bd922b",
+      "1174fe6f849884d9f384df8ce2cc17fff47c8232"
     ]
   },
   {
@@ -446,11 +446,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1545",
+    "source_commit": "83cb842cf40e4364bb51a0e5119b82e18023142b",
     "commits": [
-      ":1545",
-      ":1546",
-      ":1548"
+      "83cb842cf40e4364bb51a0e5119b82e18023142b",
+      "e0224fc7b0b884a5a083ea9a5510b8364d83caa6",
+      "a0e00c59889456dfafa6151e1480c993b6a2f52b"
     ]
   },
   {
@@ -465,11 +465,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1552",
+    "source_commit": "ed08c860d14689907d050e8537770ad03fcd5ed2",
     "commits": [
-      ":1552",
-      ":1554",
-      ":1556"
+      "ed08c860d14689907d050e8537770ad03fcd5ed2",
+      "4228bf0b6eaac4a91c8bdd4677fc498a1d133353",
+      "71157d8324ea1a0e9cee0fc5d53df6d0723bd91f"
     ]
   },
   {
@@ -520,11 +520,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1561",
+    "source_commit": "050192481a27ce0095ea5d239c687dfe13b674da",
     "commits": [
-      ":1561",
-      ":1563",
-      ":1565"
+      "050192481a27ce0095ea5d239c687dfe13b674da",
+      "587923e8c94b4716b3bbd6de2b0a4ee8f93b4346",
+      "c7270d39c83867eaa98cbfa55a5b056250b5f95c"
     ]
   },
   {
@@ -575,11 +575,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1569",
+    "source_commit": "206f2b865d0bdaa14435849ae81e434f6f4fe0e5",
     "commits": [
-      ":1569",
-      ":1571",
-      ":1573"
+      "206f2b865d0bdaa14435849ae81e434f6f4fe0e5",
+      "f4ac97d498d89348d72c631d5674603756c27bf3",
+      "737b5996bbe6f7de1c845fef7e7679ecf6c7578c"
     ]
   },
   {
@@ -630,11 +630,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1581",
+    "source_commit": "bd148023b8aeeb268083e5e3e43bbe092a717991",
     "commits": [
-      ":1581",
-      ":1583",
-      ":1585"
+      "bd148023b8aeeb268083e5e3e43bbe092a717991",
+      "fa68907368c228f54137a7af5e79ae461e228bd9",
+      "8b74a6551042e36e7718976565d564198cc2821d"
     ]
   },
   {
@@ -685,11 +685,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1589",
+    "source_commit": "41b8c5c1949fd064547e191d07cce91bb14774e6",
     "commits": [
-      ":1589",
-      ":1591",
-      ":1593"
+      "41b8c5c1949fd064547e191d07cce91bb14774e6",
+      "2afbd2ead7f6cae073a412c5c5f126d5141e7cb5",
+      "1eafdf4ccb69b3aaf3e07d7d5294225b05aa5a0f"
     ]
   },
   {
@@ -740,11 +740,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1601",
+    "source_commit": "6f0a202ec1b3fc198223b4f357384fae9b85c67b",
     "commits": [
-      ":1601",
-      ":1602",
-      ":1604"
+      "6f0a202ec1b3fc198223b4f357384fae9b85c67b",
+      "6112ddac96343fa45658040120203ac3ed86a09d",
+      "cfcc9357b7580e3a727a3f33b0b50435787083da"
     ]
   },
   {
@@ -795,11 +795,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1606",
+    "source_commit": "dfe1c8798b2b37b267a835fd7e71872fce4716f5",
     "commits": [
-      ":1606",
-      ":1608",
-      ":1610"
+      "dfe1c8798b2b37b267a835fd7e71872fce4716f5",
+      "fd0b02c5b16582cbb5056ea67b3abb4d7265bbec",
+      "d44da2cb7958001c79e872d72fa1408300eeab08"
     ]
   },
   {
@@ -850,11 +850,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1613",
+    "source_commit": "180d0272642408386776c63801f5defb242e818c",
     "commits": [
-      ":1613",
-      ":1614",
-      ":1616"
+      "180d0272642408386776c63801f5defb242e818c",
+      "d9524ebe289e4975b217d78da1974d2791fe187a",
+      "07770453e495a4045997028924614e8efcd6da48"
     ]
   },
   {
@@ -905,11 +905,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1622",
+    "source_commit": "edf99d8d00bf2ee198b86198db86a50b5e1182b3",
     "commits": [
-      ":1622",
-      ":1623",
-      ":1625"
+      "edf99d8d00bf2ee198b86198db86a50b5e1182b3",
+      "58b215027dd2d4b3b34b7a51365483f41e37ca2c",
+      "e73ecf9ebf82133e8192c0f6455e030b508b3332"
     ]
   },
   {
@@ -960,11 +960,11 @@
     },
     "description": "",
     "parent_version": null,
-    "source_commit": ":1627",
+    "source_commit": "7449f798c48e770e0cd72b131a0d723c534c8645",
     "commits": [
-      ":1627",
-      ":1628",
-      ":1630"
+      "7449f798c48e770e0cd72b131a0d723c534c8645",
+      "f1a486e7b87f4e4de7ac538e996c52c657fe0436",
+      "daf4afcd3e7472e2a84c92b1fcde4c698850415a"
     ]
   },
   {
@@ -1015,11 +1015,11 @@
     },
     "description": "C plus immediate preview redirect, registered selective recovery/RAT/reclaim, pending-based allocation and execution freeze",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__C_split_signed_multiplier",
-    "source_commit": ":1633",
+    "source_commit": "fb542eb0e1dcd584af858c4d11e1414372855c43",
     "commits": [
-      ":1633",
-      ":1634",
-      ":1636"
+      "fb542eb0e1dcd584af858c4d11e1414372855c43",
+      "ee72e9405916cc88820b8f0f4947c4379dc397e5",
+      "1bc91ffd126ae9ecef3135972321548f7263e1d1"
     ]
   },
   {
@@ -1070,11 +1070,11 @@
     },
     "description": "D plus conservative registered allocation credits, local buffered ROB head domains, bounded LSQ pointer arithmetic, separated divider normalization/final correction and borrow-based restoring steps",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__D_staged_recovery",
-    "source_commit": ":1641",
+    "source_commit": "2c6c8256580ddd80b26da132e6e9ea7f3b6bc52e",
     "commits": [
-      ":1641",
-      ":1642",
-      ":1644"
+      "2c6c8256580ddd80b26da132e6e9ea7f3b6bc52e",
+      "25113c1a5b8780c84395369fa37bf7a4eed4ca1e",
+      "fab389e42e86898d02668bddc269c263c16aa4a6"
     ]
   },
   {
@@ -1125,11 +1125,11 @@
     },
     "description": "E plus parallel circular source ordering, held-source reservation, balanced one-hot payload reduction, priced local selection buffers, and static held-tag capture",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__E_registered_capacity_and_arithmetic",
-    "source_commit": ":1646",
+    "source_commit": "fbfdf4619587cda6a384a09e8e6aa521cc2af21b",
     "commits": [
-      ":1646",
-      ":1647",
-      ":1649"
+      "fbfdf4619587cda6a384a09e8e6aa521cc2af21b",
+      "7bed46967548ebc8e4aa247f819b2bfe7d93b2a5",
+      "03ae7b994d9c7229daa1364f4de95f87031873f0"
     ]
   },
   {
@@ -1180,11 +1180,11 @@
     },
     "description": "F plus two-entry tagged issue queues, occupancy-only input ready, exact selective recovery and local payload/read controls",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__F_parallel_completion",
-    "source_commit": ":1651",
+    "source_commit": "61b002846e6cfb787e3945d8b27cb93fb9b1a67b",
     "commits": [
-      ":1651",
-      ":1652",
-      ":1654"
+      "61b002846e6cfb787e3945d8b27cb93fb9b1a67b",
+      "38c6b15935a3db2ce5c6fb415728bacd62fd5126",
+      "b01584ac882841075a682a2547900148446ad8d0"
     ]
   },
   {
@@ -1235,11 +1235,11 @@
     },
     "description": "G plus allocation-time cached unsigned age comparisons; retains original numeric wrap ordering and slot tie breaker",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__G_buffered_issue",
-    "source_commit": ":1657",
+    "source_commit": "375d6bc76d316bbbf9c84f5cd58a093fbf77711c",
     "commits": [
-      ":1657",
-      ":1658",
-      ":1660"
+      "375d6bc76d316bbbf9c84f5cd58a093fbf77711c",
+      "9e871ad24c4365bfbe7a27006eefca869a004415",
+      "919a0b6f5c2e63a257dc33d09cd8fb6b9588f765"
     ]
   },
   {
@@ -1290,11 +1290,11 @@
     },
     "description": "H plus local per-row RS payload ownership and final qualified write drivers, shared wake comparisons and priced wide grant domains",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__H_cached_issue_age",
-    "source_commit": ":1663",
+    "source_commit": "53ece4e2f3dfa662b715f74adcdb8f9e3f749e94",
     "commits": [
-      ":1663",
-      ":1664",
-      ":1666"
+      "53ece4e2f3dfa662b715f74adcdb8f9e3f749e94",
+      "6a89882c8bd8f5058a4c900114bce3da16aa7071",
+      "b7becf87a6eb0be8ddc9525ebee88fcebe55ef9b"
     ]
   },
   {
@@ -1345,11 +1345,11 @@
     },
     "description": "I plus registered LSQ request identity/payload before forwarding, elastic continuation and a held forwarding snapshot under cache backpressure",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__I_local_rs_storage",
-    "source_commit": ":1669",
+    "source_commit": "ef7c5be4f865f6fc50ab8cc7bfdb42c48468100d",
     "commits": [
-      ":1669",
-      ":1670",
-      ":1672"
+      "ef7c5be4f865f6fc50ab8cc7bfdb42c48468100d",
+      "3f5d065e521e46b063d25d3d4a1700fe3a66fe81",
+      "07eb9642feb0fd1f479418d2fbd071f970eaf43c"
     ]
   },
   {
@@ -1400,11 +1400,11 @@
     },
     "description": "J plus two-entry epoch-qualified instruction-cache request stage with local query domains, and local ownership of existing D-cache query payload registers",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__J_lsq_request_boundary",
-    "source_commit": ":1676",
+    "source_commit": "734c03c667915850e46e96f1ed1da35a516cab17",
     "commits": [
-      ":1676",
-      ":1677",
-      ":1679"
+      "734c03c667915850e46e96f1ed1da35a516cab17",
+      "ea770e6b24c814c989cc3bbf42522f663bab6673",
+      "a235698b4033d323349a668dc7f67a6a0e694207"
     ]
   },
   {
@@ -1455,11 +1455,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__K_cache_request_domains",
-    "source_commit": ":1681",
+    "source_commit": "211547437c01318fada24660f745bf593725cd40",
     "commits": [
-      ":1681",
-      ":1683",
-      ":1685"
+      "211547437c01318fada24660f745bf593725cd40",
+      "f464b21a8a24931367b96146a77e58ba801fe1f4",
+      "b749294e227b4fc270971526576cc52a5c274332"
     ]
   },
   {
@@ -1510,11 +1510,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_L_20261004",
-    "source_commit": ":1687",
+    "source_commit": "64705a658fdaa39f2afa68a00735dcbb7f5db91d",
     "commits": [
-      ":1687",
-      ":1688",
-      ":1690"
+      "64705a658fdaa39f2afa68a00735dcbb7f5db91d",
+      "657fd9b7a2a3aa82a0448d849010aec74f70f3fc",
+      "93cb57d884e6940f71220ced24577027eb08a6b0"
     ]
   },
   {
@@ -1565,11 +1565,11 @@
     },
     "description": "Separate untested alternative: L1 plus four-slot reserved physical-register pool, registered allocation IDs/count, logical free bitmap including unused reservations and recovery return; no instruction stage added",
     "parent_version": "CPU2026CourseRuns__architecture_L1_20261004",
-    "source_commit": ":1693",
+    "source_commit": "54633b08e8f28004c3e4a7b4be86e210d529d2eb",
     "commits": [
-      ":1693",
-      ":1694",
-      ":1696"
+      "54633b08e8f28004c3e4a7b4be86e210d529d2eb",
+      "c635fdfa310e64e145c5de1591c8db78bb5f388d",
+      "9482c03cb9664b10c155b6e648b011929e374e61"
     ]
   },
   {
@@ -1620,11 +1620,11 @@
     },
     "description": "Separate untested alternative: O plus single-owner row-local PRF data and ready, balanced last-lane write selection and priced local read/write/allocation query and payload domains; no new stage",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__M_registered_free_pool",
-    "source_commit": ":1701",
+    "source_commit": "3b3af067634edb09fe555945b2648264c756b74a",
     "commits": [
-      ":1701",
-      ":1702",
-      ":1704"
+      "3b3af067634edb09fe555945b2648264c756b74a",
+      "c941fb6b3d756713215b44dae12a70298ad8af53",
+      "51dad619111b71fb75f72a15e0b860f94013ef96"
     ]
   },
   {
@@ -1675,11 +1675,11 @@
     },
     "description": "Separate untested alternative: P plus one Icache response-data owner with final qualified local word write/select drivers, unchanged SRAM-copy/refill priority and no new latency",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__P_local_prf_storage",
-    "source_commit": ":1706",
+    "source_commit": "144a36b183bc2d479d52c9aec0e35e64356140ea",
     "commits": [
-      ":1706",
-      ":1707",
-      ":1709"
+      "144a36b183bc2d479d52c9aec0e35e64356140ea",
+      "7b5e8f7526b7403bbc9a8aa6355bc7c11afb6b9b",
+      "c9b3daf1f076b56ce5fa0fab746c208cf7c128e0"
     ]
   },
   {
@@ -1730,11 +1730,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__Q_icache_response_data_owner",
-    "source_commit": ":1717",
+    "source_commit": "79e7ba5da8f9ad684e7fd4e2e90f4adfc9290472",
     "commits": [
-      ":1717",
-      ":1718",
-      ":1720"
+      "79e7ba5da8f9ad684e7fd4e2e90f4adfc9290472",
+      "efebcad57530684402bed13e062c0bcda4734d62",
+      "8ceeb272583bedd67c553428d3ba7911388bf614"
     ]
   },
   {
@@ -1785,11 +1785,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_W1_20261004",
-    "source_commit": ":1722",
+    "source_commit": "9e942f0fe920fe6d058016b1815db153dec24823",
     "commits": [
-      ":1722",
-      ":1723",
-      ":1725"
+      "9e942f0fe920fe6d058016b1815db153dec24823",
+      "7dbce5211486211c9c494b8235364011a887c4f9",
+      "cb8aa8dc949a3e15a8d3f33b04503d5562542017"
     ]
   },
   {
@@ -1840,11 +1840,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_X_20261004",
-    "source_commit": ":1727",
+    "source_commit": "b32b4094ca460399577e9387b178a04358cf79ac",
     "commits": [
-      ":1727",
-      ":1728",
-      ":1730"
+      "b32b4094ca460399577e9387b178a04358cf79ac",
+      "496b8ce89ab5a5e84812848e6796088b0efac06d",
+      "513023ec62b0badb734a0fd1ea1d9f506ddaf45f"
     ]
   },
   {
@@ -1895,11 +1895,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_Y_20261004",
-    "source_commit": ":1732",
+    "source_commit": "99d7d6a84c1263f94aae3edc9c0fb73ebd0ac7ba",
     "commits": [
-      ":1732",
-      ":1733",
-      ":1735"
+      "99d7d6a84c1263f94aae3edc9c0fb73ebd0ac7ba",
+      "6ebdc5e79067a8bdc71ca3e36ddff191ab3e9da6",
+      "447410bf8eebb8fddb91ae136f5686d2a60ddb7e"
     ]
   },
   {
@@ -1950,11 +1950,11 @@
     },
     "description": "Z plus parallel X-D/X-2D/X-3D radix-4 trials, 3D captured during existing prepare stage; unchanged two-bits-per-cycle iteration count, odd final digit, signs, caches, flush/live-tag and fast ISA results; 34 payload bits added, no new cycle, no EDA run",
     "parent_version": "CPU2026CourseRuns__architecture_Z_20261004",
-    "source_commit": ":1737",
+    "source_commit": "8fa46706a7a4693b99e5c5968257614ce963ae50",
     "commits": [
-      ":1737",
-      ":1738",
-      ":1740"
+      "8fa46706a7a4693b99e5c5968257614ce963ae50",
+      "d8ed9baf8d86f8215159b2ea78f17c37d063838f",
+      "2ac4246e3dbb371ffdc9b0053c8c6685f51b8217"
     ]
   },
   {
@@ -2005,11 +2005,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__frequency_research_20261003__AA_parallel_radix4_divider",
-    "source_commit": ":1742",
+    "source_commit": "536a6a379073d3bb560b5ce47f1d32d12258fcfd",
     "commits": [
-      ":1742",
-      ":1743",
-      ":1745"
+      "536a6a379073d3bb560b5ce47f1d32d12258fcfd",
+      "123de99aecfb6514d24958849756098e69af0518",
+      "d9f306a78a0b5dc86fdb0911a09987292cd2c1bc"
     ]
   },
   {
@@ -2060,11 +2060,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_AB_20261004",
-    "source_commit": ":1750",
+    "source_commit": "8ad097c6f8dc994ffbc1fb65c4290459a3d873ad",
     "commits": [
-      ":1750",
-      ":1751",
-      ":1753"
+      "8ad097c6f8dc994ffbc1fb65c4290459a3d873ad",
+      "555637eb9714c8f0fe57621be78e2ae4b93037e8",
+      "9b2c431e2ef7d08c3fa9ddcb6adf0b692988ea35"
     ]
   },
   {
@@ -2115,11 +2115,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_AC_20261004",
-    "source_commit": ":1756",
+    "source_commit": "8e816a01237266357c6f7b7d0cf156f6257a6465",
     "commits": [
-      ":1756",
-      ":1757",
-      ":1759"
+      "8e816a01237266357c6f7b7d0cf156f6257a6465",
+      "39982b7b31c6dcdd64372d2634c6cf73feeb9628",
+      "27dc511be8cf68bd57946109a3ed19dcdfea4536"
     ]
   },
   {
@@ -2170,11 +2170,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_AD_20261004",
-    "source_commit": ":1761",
+    "source_commit": "46ffa319991a3a7d0fa881ee15105e8967029fef",
     "commits": [
-      ":1761",
-      ":1762",
-      ":1764"
+      "46ffa319991a3a7d0fa881ee15105e8967029fef",
+      "d96119450ecd1cf6322da8b27cfd345e0ca033d3",
+      "ac45fab6076aa74492c084ba184c5c7e47111e84"
     ]
   },
   {
@@ -2225,11 +2225,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_AE_20261004",
-    "source_commit": ":1766",
+    "source_commit": "c4e92f3fcec5d31bc7a6300daa124202c3339268",
     "commits": [
-      ":1766",
-      ":1767",
-      ":1769"
+      "c4e92f3fcec5d31bc7a6300daa124202c3339268",
+      "e60abd13f1a5a3f6a3041954039409220864b114",
+      "d716d692d95ae78fc5ef8890387487239517e08d"
     ]
   },
   {
@@ -2280,11 +2280,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_AG_20261004",
-    "source_commit": ":1775",
+    "source_commit": "3f6db9771681535886000d44dee4ed7895f63d60",
     "commits": [
-      ":1775",
-      ":1776",
-      ":1778"
+      "3f6db9771681535886000d44dee4ed7895f63d60",
+      "32f639e6c4942170b35001cffd90d5fb8b375d6e",
+      "da2a50c9e812bfa6c3bb83a753fc6f055aac731d"
     ]
   },
   {
@@ -2335,11 +2335,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_AK_20261004",
-    "source_commit": ":1781",
+    "source_commit": "7f2fd9974cd7a1a238cefd8f98822f7a48522844",
     "commits": [
-      ":1781",
-      ":1782",
-      ":1784"
+      "7f2fd9974cd7a1a238cefd8f98822f7a48522844",
+      "2d2789d20516774c163153bdb92513e04de7c820",
+      "8419123e548e56f02afc251a0040d4171cfbed6e"
     ]
   },
   {
@@ -2390,11 +2390,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_AM_20261004",
-    "source_commit": ":1787",
+    "source_commit": "b0458a7628420994c4aa25c2169b21c85c636dee",
     "commits": [
-      ":1787",
-      ":1788",
-      ":1790"
+      "b0458a7628420994c4aa25c2169b21c85c636dee",
+      "4734cc458692f185802d75fbf6f47422cff8536e",
+      "2e94f82aa4f5131ffb62c2ea3ed4e59e430849c2"
     ]
   },
   {
@@ -2445,11 +2445,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_AO_20261004",
-    "source_commit": ":1795",
+    "source_commit": "70cc41c58d268995b09eb8166dba021535dd6271",
     "commits": [
-      ":1795",
-      ":1796",
-      ":1798"
+      "70cc41c58d268995b09eb8166dba021535dd6271",
+      "5c6608667c6a1051a6b9e4923ee070f070174efc",
+      "82e04695f5c5c3368927dc304e605de85921bef7"
     ]
   },
   {
@@ -2500,11 +2500,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_AS_20261004",
-    "source_commit": ":1811",
+    "source_commit": "9d9bb3f8d88aeb2b4d6cc1fb4238a19ef250c20b",
     "commits": [
-      ":1811",
-      ":1812",
-      ":1814"
+      "9d9bb3f8d88aeb2b4d6cc1fb4238a19ef250c20b",
+      "574a23bc5980617c28aa6ac50d9d0e89281110bb",
+      "bddaf185fa4909779c59ee1f443b1489c5ee339a"
     ]
   },
   {
@@ -2555,11 +2555,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_AV_20261004",
-    "source_commit": ":1816",
+    "source_commit": "8b9db48b5da4abb73f6d910a0279f0211482dd0f",
     "commits": [
-      ":1816",
-      ":1817",
-      ":1819"
+      "8b9db48b5da4abb73f6d910a0279f0211482dd0f",
+      "c9258ae6cadf44681647419a45d8efd16e8bf7a4",
+      "0f5c9e1ae28bf196018420af1368af5411856a25"
     ]
   },
   {
@@ -2610,11 +2610,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_AW1_20261004",
-    "source_commit": ":1822",
+    "source_commit": "a48bc1af1ea2f95c639ee20abf6d57db8791f92b",
     "commits": [
-      ":1822",
-      ":1823",
-      ":1825"
+      "a48bc1af1ea2f95c639ee20abf6d57db8791f92b",
+      "b98cf84c7d6eb227e34491b09306a5502afdb876",
+      "0efb55bffacd12da881e5a2f7db1113adc239cb4"
     ]
   },
   {
@@ -2665,11 +2665,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_BB_20261004",
-    "source_commit": ":1830",
+    "source_commit": "661f2c4fcf3c0b57d1fbfcb05d4f218719d8d28e",
     "commits": [
-      ":1830",
-      ":1831",
-      ":1833"
+      "661f2c4fcf3c0b57d1fbfcb05d4f218719d8d28e",
+      "aac3726b3dd87c62be9e8695abc84c8f7bf5225b",
+      "0ce3ac1edb962fba4784f409e18c028f34832278"
     ]
   },
   {
@@ -2720,11 +2720,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_BH_20261004",
-    "source_commit": ":1835",
+    "source_commit": "7799f460b88f676079253349f9147a57f9bafe57",
     "commits": [
-      ":1835",
-      ":1836",
-      ":1838"
+      "7799f460b88f676079253349f9147a57f9bafe57",
+      "99010a2d425f1a83a1235465e42a9d01a1332864",
+      "e9180e39d77086d557498401cf8d2006edfd3e36"
     ]
   },
   {
@@ -2775,11 +2775,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_BI_20261004",
-    "source_commit": ":1844",
+    "source_commit": "c67583984b657c7cf0c9ad540626290c6a1225c8",
     "commits": [
-      ":1844",
-      ":1845",
-      ":1847"
+      "c67583984b657c7cf0c9ad540626290c6a1225c8",
+      "96e369c1f7852af0cdf7703682b4fbe5588c7bda",
+      "d8a7d3cd82b9bc1a631a3d1de6471ad6d0079e6d"
     ]
   },
   {
@@ -2830,11 +2830,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_BR_20261004",
-    "source_commit": ":1851",
+    "source_commit": "13f88ddd43455d1214c143b5c11c886db70aa26a",
     "commits": [
-      ":1851",
-      ":1852",
-      ":1854"
+      "13f88ddd43455d1214c143b5c11c886db70aa26a",
+      "7eb9a639bca7d2c15d16ff8d8f099b30a087a056",
+      "6cb77a69c67415729a5aa9219d37ded76b308e97"
     ]
   },
   {
@@ -2885,11 +2885,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_BU_20261004",
-    "source_commit": ":1862",
+    "source_commit": "f27ca16e8dc5828fbe271cc4367181eec7182c4d",
     "commits": [
-      ":1862",
-      ":1863",
-      ":1865"
+      "f27ca16e8dc5828fbe271cc4367181eec7182c4d",
+      "4bd9af356465f55a90bbe8202a8bcbf6667ca8c2",
+      "e10062b070346cde2a1ecc59e22af73d0b560bf6"
     ]
   },
   {
@@ -2940,11 +2940,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_CD_20261004",
-    "source_commit": ":1871",
+    "source_commit": "5e408011a2e0852484839bbe30182b659a36a9cf",
     "commits": [
-      ":1871",
-      ":1872",
-      ":1874"
+      "5e408011a2e0852484839bbe30182b659a36a9cf",
+      "c1bb96d3fa9e5a105a1372be992aae56c9cf5156",
+      "14a5d239e332286727644c9c81250466593d158b"
     ]
   },
   {
@@ -2995,11 +2995,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_CD1_20261004",
-    "source_commit": ":1879",
+    "source_commit": "3a497e836626d3260a84e091d7d4ba0dd5a0b3c4",
     "commits": [
-      ":1879",
-      ":1880",
-      ":1882"
+      "3a497e836626d3260a84e091d7d4ba0dd5a0b3c4",
+      "7dc71908e41a52b3edc66f90610fa52e205d4f01",
+      "d18f73f313cd7028bf68d7e372c6f2c2ccd24a94"
     ]
   },
   {
@@ -3050,11 +3050,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_CL_20261004",
-    "source_commit": ":1884",
+    "source_commit": "7dff63414771483eab9c80ea17a5516bc1fe4c33",
     "commits": [
-      ":1884",
-      ":1885",
-      ":1887"
+      "7dff63414771483eab9c80ea17a5516bc1fe4c33",
+      "e8337b4bb3803ab4a3d2710bc5bf52bc371a7129",
+      "a2083e7d01982468181229cecd825dff68f0845f"
     ]
   },
   {
@@ -3105,11 +3105,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_CM_20261004",
-    "source_commit": ":1890",
+    "source_commit": "24f815622060aa568d9cbbc03f886016ce546e3d",
     "commits": [
-      ":1890",
-      ":1891",
-      ":1893"
+      "24f815622060aa568d9cbbc03f886016ce546e3d",
+      "4badcb8a90a178e935e4b08d8a6bbf1ad00dbf88",
+      "f7a652248bd746e72d54c256fb650a55f9ad3085"
     ]
   },
   {
@@ -3160,11 +3160,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_CN_20261004",
-    "source_commit": ":1898",
+    "source_commit": "ab074f3b5d8ea776c544c7e87d8e997f09c1b26b",
     "commits": [
-      ":1898",
-      ":1899",
-      ":1901"
+      "ab074f3b5d8ea776c544c7e87d8e997f09c1b26b",
+      "37155be4f448346d1167ce9b70a386fd65537258",
+      "2e2c989f152b0e0b80c9f7f35df5e7d63161af35"
     ]
   },
   {
@@ -3215,11 +3215,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_CR_20261004",
-    "source_commit": ":1905",
+    "source_commit": "97c41097dd7cacebcb1abf07aefeaf8c8400a367",
     "commits": [
-      ":1905",
-      ":1906",
-      ":1908"
+      "97c41097dd7cacebcb1abf07aefeaf8c8400a367",
+      "f738d8a5209ea8a2d754945c0780165adcba2020",
+      "2c72c9aa1a9e55a10e7c5b36ec4e8d782581fe72"
     ]
   },
   {
@@ -3270,11 +3270,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_CU1_20261004",
-    "source_commit": ":1911",
+    "source_commit": "e08bf7b01939b44087a4af5b6898ec9c597d4aa8",
     "commits": [
-      ":1911",
-      ":1912",
-      ":1914"
+      "e08bf7b01939b44087a4af5b6898ec9c597d4aa8",
+      "a4f0cb7aff87bdf8901091579d3b9476cfde99dc",
+      "e1998f17aac7f70a9b7c090399ca4c18059ad2f3"
     ]
   },
   {
@@ -3325,11 +3325,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_CV_20261004",
-    "source_commit": ":1924",
+    "source_commit": "009c33116d89fb42d93e1ab2dd85ea21963d4bb7",
     "commits": [
-      ":1924",
-      ":1925",
-      ":1927"
+      "009c33116d89fb42d93e1ab2dd85ea21963d4bb7",
+      "0036cf5e20bb161b00187a672fc387c81303ec3b",
+      "de146e1519a4dc380372a7db4c65a8f26022f505"
     ]
   },
   {
@@ -3380,11 +3380,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_CY_20261004",
-    "source_commit": ":1934",
+    "source_commit": "f8a94aea848a5823c4a4e0ddfafcbe6c95e8b79a",
     "commits": [
-      ":1934",
-      ":1935",
-      ":1937"
+      "f8a94aea848a5823c4a4e0ddfafcbe6c95e8b79a",
+      "14c7f8d55161406fb73a132c1ea21ed6dc45428d",
+      "f27697d71e84b7c7605761c69ebd91ab3706bec9"
     ]
   },
   {
@@ -3435,11 +3435,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_DD_20261005",
-    "source_commit": ":1940",
+    "source_commit": "7c7f75e82d820304c3a7ba5d84a99b1d93ce79c0",
     "commits": [
-      ":1940",
-      ":1941",
-      ":1943"
+      "7c7f75e82d820304c3a7ba5d84a99b1d93ce79c0",
+      "026d12702c1823c0d107079e1f39f7ce1553051c",
+      "875a885f74d78fe0f4c39ef1eadc676e57097997"
     ]
   },
   {
@@ -3490,11 +3490,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_DF1_20261005",
-    "source_commit": ":1949",
+    "source_commit": "eb8b1c27b038e42f911fbf1c5998fcc3c13fe0da",
     "commits": [
-      ":1949",
-      ":1950",
-      ":1952"
+      "eb8b1c27b038e42f911fbf1c5998fcc3c13fe0da",
+      "502229c54338794a01399e6bc0134cae8d21ec5a",
+      "ea4574043538b1d31203075ff7392cd50272d68c"
     ]
   },
   {
@@ -3545,11 +3545,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_DK_20261005",
-    "source_commit": ":1957",
+    "source_commit": "8aff482e3e48e28d9204a3b433b54a1006d55ecb",
     "commits": [
-      ":1957",
-      ":1958",
-      ":1960"
+      "8aff482e3e48e28d9204a3b433b54a1006d55ecb",
+      "4f25afaf20da137efdd4459bda91c2065f81bdc4",
+      "68a73838d0e6f39967cc13b05d8f7420b8948907"
     ]
   },
   {
@@ -3600,11 +3600,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_DM1_20261005",
-    "source_commit": ":1966",
+    "source_commit": "29001461ff5bca0bcdd6ed9cd7f6ab8156419cc8",
     "commits": [
-      ":1966",
-      ":1967",
-      ":1969"
+      "29001461ff5bca0bcdd6ed9cd7f6ab8156419cc8",
+      "1d46ad4e29dbef0b9028122690a3cd2150c0c00c",
+      "23aa5e94f7fac0bf464a1f65a126129f304e4d9f"
     ]
   },
   {
@@ -3655,11 +3655,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_DM1_20261005",
-    "source_commit": ":1974",
+    "source_commit": "4623f1065b85c5fa42d9857f2cbe01e5a86fefa4",
     "commits": [
-      ":1974",
-      ":1975",
-      ":1977"
+      "4623f1065b85c5fa42d9857f2cbe01e5a86fefa4",
+      "a99027d3c5337ce8a4f3b0e9969feac5024358aa",
+      "a9174c9d1bbc63938ae08608b2aef4e29a57f0a8"
     ]
   },
   {
@@ -3710,11 +3710,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_DY_20261005",
-    "source_commit": ":1980",
+    "source_commit": "77d952ae0301423b949ffdc2777759fff6f92d9e",
     "commits": [
-      ":1980",
-      ":1981",
-      ":1983"
+      "77d952ae0301423b949ffdc2777759fff6f92d9e",
+      "fa36428639861fcc40a9abdd9d72bf4e91b94a5e",
+      "f4ba55bfd3d6ef729d939e2f6358ea6c9d4af9f6"
     ]
   },
   {
@@ -3765,11 +3765,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_EA_20261005",
-    "source_commit": ":1988",
+    "source_commit": "8f538c39781437cd30e364193cf5a4a5d6081eb8",
     "commits": [
-      ":1988",
-      ":1989",
-      ":1991"
+      "8f538c39781437cd30e364193cf5a4a5d6081eb8",
+      "0a10713af38d67660eca05b2c8fb49f8564b83de",
+      "0268cfe94cceb02b8a1e53e5f148ae536df8dcb2"
     ]
   },
   {
@@ -3820,11 +3820,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_EF_20261005",
-    "source_commit": ":1998",
+    "source_commit": "5dfb859f7ca18f29e4833a79d115aaf59a9bf5fa",
     "commits": [
-      ":1998",
-      ":1999",
-      ":2001"
+      "5dfb859f7ca18f29e4833a79d115aaf59a9bf5fa",
+      "3096b6dcb73e65025ed8fa6197e81f346109cc22",
+      "8343af599e8bc2778572930505b8215b8856bd9b"
     ]
   },
   {
@@ -3875,11 +3875,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_EL1_20261005",
-    "source_commit": ":2005",
+    "source_commit": "7845cb7ba13e168920b96e7d2b77bbcf4675b5d2",
     "commits": [
-      ":2005",
-      ":2006",
-      ":2008"
+      "7845cb7ba13e168920b96e7d2b77bbcf4675b5d2",
+      "0b4b7848b8473c7c96c3084a113f24e174e477b9",
+      "d5ee17980bea32a2a5df84de5b9379bc3bf0c0e3"
     ]
   },
   {
@@ -3930,11 +3930,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_EP_20261005",
-    "source_commit": ":2010",
+    "source_commit": "4a353b8fe7d9e1ba572c7e5ae9f3b29e3374b55a",
     "commits": [
-      ":2010",
-      ":2011",
-      ":2013"
+      "4a353b8fe7d9e1ba572c7e5ae9f3b29e3374b55a",
+      "0a807f18b540afd07788dd8a5849dfe4958ba150",
+      "0150b5b8f712193fbd0660cb3c024b3a5f0a65d9"
     ]
   },
   {
@@ -3985,11 +3985,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_EP_20261005",
-    "source_commit": ":2015",
+    "source_commit": "4e586657e152c6a51955fea7c46667637043ca17",
     "commits": [
-      ":2015",
-      ":2016",
-      ":2018"
+      "4e586657e152c6a51955fea7c46667637043ca17",
+      "a800833b530afc824f23b103450568930d6d459d",
+      "93518830c7e412ae25dd04ebd3b729c51810afb1"
     ]
   },
   {
@@ -4040,11 +4040,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__architecture_ER1_20261005",
-    "source_commit": ":2023",
+    "source_commit": "cf786259ef36e612ecc97fa6d381887ae9fa750b",
     "commits": [
-      ":2023",
-      ":2024",
-      ":2026"
+      "cf786259ef36e612ecc97fa6d381887ae9fa750b",
+      "dd99dc27d573879eeadb7e730ee0e93ef6608c15",
+      "0e02fac918273f76987761516017267fb2936943"
     ]
   },
   {
@@ -4095,11 +4095,11 @@
     },
     "description": "Complete packet carried through original LSQ tournament with <=16-bit choices. Leaf packet follows the original slot-width assignment even for explicit width overrides. Same binary priority/default/fields/authority/state/edges. Source only.",
     "parent_version": "CPU2026CourseRuns__architecture_ER1_20261005",
-    "source_commit": ":2030",
+    "source_commit": "ba2ce3ebc7cc8d6f83e0622e30298fdd362367e6",
     "commits": [
-      ":2030",
-      ":2032",
-      ":2034"
+      "ba2ce3ebc7cc8d6f83e0622e30298fdd362367e6",
+      "9241c9fd487c886dae81623b0dd353c59f90afaa",
+      "efdd6562e379bf2835f7ac595e6c5ea7e48633ee"
     ]
   },
   {
@@ -4150,11 +4150,11 @@
     },
     "description": "Complete packet carried through original LSQ tournament with <=16-bit choices. Leaf packet follows the original slot-width assignment even for explicit width overrides. Same binary priority/default/fields/authority/state/edges. Source only.",
     "parent_version": "CPU2026CourseRuns__architecture_ER1_20261005",
-    "source_commit": ":2036",
+    "source_commit": "f0a89473825fd74419237db1877031054441640c",
     "commits": [
-      ":2036",
-      ":2038",
-      ":2040"
+      "f0a89473825fd74419237db1877031054441640c",
+      "27554d3ebc715d66151e3965f9464dd2e9acd309",
+      "251368fb09a2b4242f50b69dc0a16d109cfaa81a"
     ]
   },
   {
@@ -4205,11 +4205,11 @@
     },
     "description": "Complete packet carried through original LSQ tournament with <=16-bit choices. Leaf packet follows the original slot-width assignment even for explicit width overrides. Same binary priority/default/fields/authority/state/edges. Source only.",
     "parent_version": "CPU2026Candidates__tier3_er1_20261005__A2_early_load_r32_p56_rs8_d512",
-    "source_commit": ":2042",
+    "source_commit": "10be477937f12e4f8fab7ec604ee54277169bf54",
     "commits": [
-      ":2042",
-      ":2043",
-      ":2045"
+      "10be477937f12e4f8fab7ec604ee54277169bf54",
+      "54d908e8fa37371b5fbfa42760654e33dc0624f7",
+      "fcce4163f345a1612ae366bf2ef554656c2084d0"
     ]
   },
   {
@@ -4260,11 +4260,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__tier3_er1_20261005__A3_early_load_hit_bypass_r32_p56_rs8_d512",
-    "source_commit": ":2050",
+    "source_commit": "16186ef7db5b7a37a1ca16d9b738554fb4bda587",
     "commits": [
-      ":2050",
-      ":2052",
-      ":2054"
+      "16186ef7db5b7a37a1ca16d9b738554fb4bda587",
+      "5c05d2069f6068b208c34dabd71fd4bcc249bef8",
+      "76aefe097e86eebd7178c5a1c3f0224bf6f01e63"
     ]
   },
   {
@@ -4315,11 +4315,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__ER1_A8_tier3_20261005",
-    "source_commit": ":2063",
+    "source_commit": "236ea83f059c35292c8145e8abde9c5cefe29aba",
     "commits": [
-      ":2063",
-      ":2065",
-      ":2067"
+      "236ea83f059c35292c8145e8abde9c5cefe29aba",
+      "f50251a0025090d61937ff0748066cbf7bd4838e",
+      "5f1a17b0c6b688c9772117b2ac0ec146f6b28d4c"
     ]
   },
   {
@@ -4370,11 +4370,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__ER1_A16_tier3_20261005",
-    "source_commit": ":2069",
+    "source_commit": "ba819ca99102600959c7f9a484abc6dce575d040",
     "commits": [
-      ":2069",
-      ":2070",
-      ":2072"
+      "ba819ca99102600959c7f9a484abc6dce575d040",
+      "cae2267c17ff653035a232592c3a9455d7d0e075",
+      "8bfeed5e8cf294694e7a36c421dac8c34699a40d"
     ]
   },
   {
@@ -4425,11 +4425,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__ER1_A16R1_tier3_20261005",
-    "source_commit": ":2074",
+    "source_commit": "ef89c4d04077d10a02b22162a94b449c396f4a06",
     "commits": [
-      ":2074",
-      ":2075",
-      ":2077"
+      "ef89c4d04077d10a02b22162a94b449c396f4a06",
+      "947a0f477c44f1c8618394abfa7408f6d4faa0bb",
+      "a42b3177a27474dcce224b4cac48a5c896901c8d"
     ]
   },
   {
@@ -4480,11 +4480,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__ER1_A16R2_tier3_20261005",
-    "source_commit": ":2083",
+    "source_commit": "d1b12a759867d03bd087e31b069253c111e5f87b",
     "commits": [
-      ":2083",
-      ":2085",
-      ":2087"
+      "d1b12a759867d03bd087e31b069253c111e5f87b",
+      "a92d809ad96d3e41dce14c48c5e3e15952ff2b7e",
+      "0f61e31d415e33441f931a06d6176a60df268c25"
     ]
   },
   {
@@ -4535,11 +4535,11 @@
     },
     "description": "Redirect frontend from the same accepted full-tag-live branch capture, one edge before ROB preview; keep backend recovery descriptor/apply and epoch update unchanged.",
     "parent_version": "CPU2026CourseRuns__ER1_A21_tier3_20261005",
-    "source_commit": ":2092",
+    "source_commit": "7a58b7a867608b71e9238de9205b83dfb4ffa8c1",
     "commits": [
-      ":2092",
-      ":2094",
-      ":2096"
+      "7a58b7a867608b71e9238de9205b83dfb4ffa8c1",
+      "6d95770fc937a45ae0e725b0e65cf19483aa5c37",
+      "0730853d300ad10e483507a62bc8f09d04428eb5"
     ]
   },
   {
@@ -4590,11 +4590,11 @@
     },
     "description": "A ready newly allocated load can fill the existing request selection on its allocation edge only with no existing/earlier-lane stores and no prior eligible request; keep full owner generation and original request/backpressure/recovery boundary.",
     "parent_version": "CPU2026Candidates__tier3_er1_20261005__A23_early_frontend_redirect",
-    "source_commit": ":2107",
+    "source_commit": "2a038b1fbf1cc318daab4caafb47941f86d62215",
     "commits": [
-      ":2107",
-      ":2109",
-      ":2111"
+      "2a038b1fbf1cc318daab4caafb47941f86d62215",
+      "ab00a1c502e88d4300c5e4594a78a2a4d5e872e0",
+      "3b8c292b421bc4aacd3a77de0280ee23b98162f2"
     ]
   },
   {
@@ -4645,11 +4645,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__tier3_er1_20261005__A28_alloc_load_selection_bypass",
-    "source_commit": ":2120",
+    "source_commit": "350b0437d555ce9cf03c68fdb0e6a9a85118d6ff",
     "commits": [
-      ":2120",
-      ":2122",
-      ":2124"
+      "350b0437d555ce9cf03c68fdb0e6a9a85118d6ff",
+      "8f7482b140acc826dd5cffaee80b52ee956aef81",
+      "c950067942f91e3e6971e8862b6d310cdcb49215"
     ]
   },
   {
@@ -4700,11 +4700,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__ER1_A36_tier3_20261005",
-    "source_commit": ":2133",
+    "source_commit": "436dcc34742b1e28ed0f3970625a92cd6a1880ee",
     "commits": [
-      ":2133",
-      ":2135",
-      ":2137"
+      "436dcc34742b1e28ed0f3970625a92cd6a1880ee",
+      "449760de7c53b9e9d96f01bf81337c06235aec16",
+      "62c49b144e74f80a3102c12d83a5632a4c5aca5c"
     ]
   },
   {
@@ -4755,11 +4755,11 @@
     },
     "description": "Factor next-PC and response capacity directly from the same valid instruction prefix: parallel stop reductions, exactly one terminal lane, disjoint target/sequential events and constant occupancy comparisons. Preserve original bundle/enqueue/dequeue/queue state and all handshake/redirect ownership; no new fetch edge or storage.",
     "parent_version": "CPU2026CourseRuns__ER1_A41_tier3_20261005",
-    "source_commit": ":2149",
+    "source_commit": "757a9be53a7c01dde51667935bc8d440d0f1bab2",
     "commits": [
-      ":2149",
-      ":2151",
-      ":2153"
+      "757a9be53a7c01dde51667935bc8d440d0f1bab2",
+      "09483804464d95a88b99630f7e0202334b08a162",
+      "6a180d234e17fe7049b4894957d0540b1ff10ca5"
     ]
   },
   {
@@ -4810,11 +4810,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__tier3_er1_20261005__A49_frontend_parallel_bundle_control",
-    "source_commit": ":2159",
+    "source_commit": "fd111297651740aaed8915f0fc434d662bcbc9a3",
     "commits": [
-      ":2159",
-      ":2161",
-      ":2163"
+      "fd111297651740aaed8915f0fc434d662bcbc9a3",
+      "84f8a1ac8a363a0bee8c49a8465961cd1a11df23",
+      "c735cc6b12a0a094f35dda1f6676634de2ee2d4f"
     ]
   },
   {
@@ -4865,11 +4865,11 @@
     },
     "description": "Select each already-computed RS-row KILL_BRANCH age-cancel result with its unchanged issue payload. Forward it to direct ALU issue and through the unchanged MDU lane payload selector. Gate the bit with each unit actual issue_valid; remove enabled incoming-tag age decoders while retaining every held ALU/MDU/MUL/DIV cancellation guard and all state-update/accept/release rules.",
     "parent_version": "CPU2026CourseRuns__ER1_A55_tier3_20261005",
-    "source_commit": ":2172",
+    "source_commit": "e3ce4ba4990285e86c529a9d5d1fee625b18e856",
     "commits": [
-      ":2172",
-      ":2174",
-      ":2176"
+      "e3ce4ba4990285e86c529a9d5d1fee625b18e856",
+      "15adefc47e60d8fb2157ef5a00b539866a16b251",
+      "119b964c632ca9f6966d2c23003c003d3d01b631"
     ]
   },
   {
@@ -4920,11 +4920,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__tier3_er1_20261005__A63_rs_predecode_issue_cancel",
-    "source_commit": ":2184",
+    "source_commit": "26343b13fe9993e0d9da9d00da09030dc58614cb",
     "commits": [
-      ":2184",
-      ":2186",
-      ":2188"
+      "26343b13fe9993e0d9da9d00da09030dc58614cb",
+      "d08f80959f252e04340068c3e3fe78b2908e5f7d",
+      "10524f003f928cce2319f5339d5195106bd4009a"
     ]
   },
   {
@@ -4975,11 +4975,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__ER1_A69_tier3_20261006",
-    "source_commit": ":2194",
+    "source_commit": "f3fa9ab4969aaca5462089773c27dff672002df3",
     "commits": [
-      ":2194",
-      ":2196",
-      ":2198"
+      "f3fa9ab4969aaca5462089773c27dff672002df3",
+      "bbabe7cb512f8f7cdf8f4b24a34afd770a7c9826",
+      "b2c2bb779442af4ab66b684409f040cee61f0d7d"
     ]
   },
   {
@@ -5030,11 +5030,11 @@
     },
     "description": "Keep original per-store/per-byte overlap and value calculation. Express the original power-of-two youngest-store tournament as mutually exclusive highest-physical-row grants: highest overlapping wrapped row first, else highest overlapping nonwrapped row. Select each byte with original bounded one-hot event routing, preserve byte mask, saved forwarding snapshot, original request owner and all state/handshake edges. Default/other geometry retains byte tournament.",
     "parent_version": "CPU2026CourseRuns__ER1_A75_tier3_20261006",
-    "source_commit": ":2203",
+    "source_commit": "169ca7a00db40b97c7f3ed914302b4bcbf7dec5d",
     "commits": [
-      ":2203",
-      ":2205",
-      ":2207"
+      "169ca7a00db40b97c7f3ed914302b4bcbf7dec5d",
+      "a24470d5bef352ecfae2629e7ea3bbab593b881a",
+      "f15e2d0f01634318dc905327548424dde32e1add"
     ]
   },
   {
@@ -5085,11 +5085,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__tier3_er1_20261005__A78_lsq_forward_onehot",
-    "source_commit": ":2214",
+    "source_commit": "eb9a428191dac49b66fb33f0023aa2e3d97e0341",
     "commits": [
-      ":2214",
-      ":2216",
-      ":2218"
+      "eb9a428191dac49b66fb33f0023aa2e3d97e0341",
+      "c11c3a164743f2e259deac8aeb880de7817b4ecb",
+      "c09ba44dd2e1cb910f1a5ecf3a5c19629856eb5d"
     ]
   },
   {
@@ -5140,11 +5140,11 @@
     },
     "description": "Fast-store eligibility uses original saved PRF readiness and fallback address predicates only when neither source has a current matching legal WB. Matching WB or unready sources retain original RS/ALU execution without an added dispatch hold. Actual LSQ address/data remain original. Precompute ordinary RS demand and capacity with one fewer RS allocation, selecting only the final bool with the at-most-one fast store. Preserve original conservative D replacement credit.",
     "parent_version": "CPU2026CourseRuns__ER1_A83_tier3_20261006",
-    "source_commit": ":2226",
+    "source_commit": "4c4ece4dca31f6b2c03950f198d96aff7b317317",
     "commits": [
-      ":2226",
-      ":2228",
-      ":2230"
+      "4c4ece4dca31f6b2c03950f198d96aff7b317317",
+      "1342fa139ec65c8d3c69d554a5dbe7a451bd386c",
+      "7aca237d10b8126ec536d8c527c496ff71ea60d9"
     ]
   },
   {
@@ -5195,11 +5195,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__tier3_er1_20261005__A87_saved_store_operands_parallel_admission",
-    "source_commit": ":2236",
+    "source_commit": "67dc0c8431172a61f098be72841813b12768a82a",
     "commits": [
-      ":2236",
-      ":2238",
-      ":2240"
+      "67dc0c8431172a61f098be72841813b12768a82a",
+      "99ae224ff5ee5416977dbe5cfe5b15a6fc42fb42",
+      "157d085c29203884f3af656340cea1537642cd0c"
     ]
   },
   {
@@ -5250,11 +5250,11 @@
     },
     "description": "",
     "parent_version": "CPU2026CourseRuns__ER1_A92_tier3_20261006",
-    "source_commit": ":2245",
+    "source_commit": "6e9993289cf839c5efbc3bbfdf362acab469d344",
     "commits": [
-      ":2245",
-      ":2247",
-      ":2249"
+      "6e9993289cf839c5efbc3bbfdf362acab469d344",
+      "cb8e8f24b59ce75d285efa49affbcefcaf014899",
+      "396372ad4fa57ef115d811f25e5ab530fd7a9ec6"
     ]
   },
   {
@@ -5305,11 +5305,11 @@
     },
     "description": "All currently qualified saved-base RAM stores in an atomic D batch skip RS/ALU, rather than only first potential store. Every lane carries its unchanged saved full ROB tag to independent original row/GEN comparison, so late validity never selects a wide tag. Precompute B<=free+k for k0..BE, accept if an eligible subset of k fast stores exists; exact B-F<=free without late popcount/subtraction/comparison. Actual LSQ allocation, per-row ready-only fast completion, original buffered in-order commit/ACK/MMIO and D replace credit remain.",
     "parent_version": "CPU2026CourseRuns__ER1_A94_tier3_20261006",
-    "source_commit": ":2256",
+    "source_commit": "08155bcc9de2d6e5f7bf43583f2de3dc6543dced",
     "commits": [
-      ":2256",
-      ":2258",
-      ":2260"
+      "08155bcc9de2d6e5f7bf43583f2de3dc6543dced",
+      "b815dc327b4768073cf7de9e8f6f018563c8e384",
+      "b7f3328724931df5a7d9a78172a61f04f0fc69eb"
     ]
   },
   {
@@ -5360,11 +5360,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__tier3_er1_20261005__A96_fast_store_batch",
-    "source_commit": ":2265",
+    "source_commit": "6989be6b16f06a5c4f4a022924c726d8d254316a",
     "commits": [
-      ":2265",
-      ":2267",
-      ":2269"
+      "6989be6b16f06a5c4f4a022924c726d8d254316a",
+      "28236f889f23399ae0936096d320d7aaea660da7",
+      "c44e9c519ca1e28d91f3b5431d0b3faae8895a2a"
     ]
   },
   {
@@ -5415,11 +5415,11 @@
     },
     "description": "Source declaration audit before any test found only originalslot temporary INTEGER32, while original age/branch_age are unsigned ROB_SLOT_WIDTH regs. Correct new independent candidate age expressions to exact original bitwidth and comparison types. This repairs untested A102 source-review assumption; all late-bool recovery optimization, realapply/valid/fullGEN and original public/state behavior retained. A102 remains immutable/unmeasured/unadopted, not an equivalent-profile reference.",
     "parent_version": "CPU2026CourseRuns__ER1_A99_tier3_20261006",
-    "source_commit": ":2274",
+    "source_commit": "77ba0a9454c1ec904d0129c466b80c48deeeb0d2",
     "commits": [
-      ":2274",
-      ":2276",
-      ":2278"
+      "77ba0a9454c1ec904d0129c466b80c48deeeb0d2",
+      "ee10574ef66f164afb0f0c4a945200984dd7b3ce",
+      "338df2ca1e4eb3a7d12cea275ba3ff8a47765891"
     ]
   },
   {
@@ -5470,11 +5470,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__tier3_er1_20261005__A103_report_recovery_age_width",
-    "source_commit": ":2284",
+    "source_commit": "803cf223d9a462f650d874b03ed76f22c57b0fe2",
     "commits": [
-      ":2284",
-      ":2286",
-      ":2288"
+      "803cf223d9a462f650d874b03ed76f22c57b0fe2",
+      "db2f71ba8a14f6e611eaa9fc76ff0755a9faae74",
+      "53675a71aec03434eac64cbe226885cb313f5df6"
     ]
   },
   {
@@ -5525,11 +5525,11 @@
     },
     "description": "In the existing active head-packet branch, replace final whole REPORT_BASE_WIDTH-bit head/saved mux with the same mux sliced into <=16bit words. Original priced functional control tree carries exact load_report_identity_head_o to each word. All old values, choice policy and public packet equations are preserved, no state or latency change. Existing inactive head-packet branch unchanged.",
     "parent_version": "CPU2026CourseRuns__ER1_A105_tier3_20261006",
-    "source_commit": ":2293",
+    "source_commit": "140c50aaea60b87a5a8efd07c8a8bcb4a3020938",
     "commits": [
-      ":2293",
-      ":2295",
-      ":2297"
+      "140c50aaea60b87a5a8efd07c8a8bcb4a3020938",
+      "a12db60d19196dd871c2603e047e701625ed5123",
+      "c3823b80f85de13fbe180433333333843e0140e4"
     ]
   },
   {
@@ -5580,11 +5580,11 @@
     },
     "description": "",
     "parent_version": "CPU2026Candidates__tier3_er1_20261005__A108_head_report_word_select",
-    "source_commit": ":2302",
+    "source_commit": "e75549a9f4453ef85c906c36522efd51647e2ff4",
     "commits": [
-      ":2302",
-      ":2304",
-      ":2306"
+      "e75549a9f4453ef85c906c36522efd51647e2ff4",
+      "4c9df9d332de3b1ad39f6c2ffdc4f179097121c0",
+      "a11243df1c117446204b8ce104c52f1130a552bc"
     ]
   }
 ]
