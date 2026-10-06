@@ -1,0 +1,13 @@
+{
+  "purpose": "Bounded GCC profile training only; original course CPU program; no cached answer or simulator output",
+  "source_repository": "https://github.com/ACMClassCourse-2025/RISC-V-CPU-2026-Testcases",
+  "source_revision": "29f980727f7d99a1842a58f34091c7579ba3fe85",
+  "source_path": "correctness_pi/program.data",
+  "source_git_blob": "ca4d9a2ecfbcbe4d2157ef6733125b047c837b05",
+  "vendored_path": "tools/cpu2026_pgo_pi.txt",
+  "sha256": "7c85967558002c5ac836a7b671c61457b73be5c7f954771fda62c5bbf911662b",
+  "bytes": 1197,
+  "training_cycles": 100000,
+  "ram_mib": 256,
+  "latency": 10
+}

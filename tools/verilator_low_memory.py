@@ -281,7 +281,8 @@ def main(arguments=None):
         print("[build] Phase 2: C++ compilation; jobs=1; " + fast_flags, file=sys.stderr,
               flush=True)
         started = time.monotonic()
-        status = subprocess.call(compile_command, env=environment)
+        from cpu2026_pgo import compile_with_profile
+        status = compile_with_profile(generation, compile_command, environment)
         print(f"[build] Phase 2 finished: {time.monotonic() - started:.1f}s; "
               f"status={status}", file=sys.stderr, flush=True)
         return status

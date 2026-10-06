@@ -31,7 +31,12 @@ export CPU2026_CPP_GROUP_BYTES
 # Optimize simulator runtime while retaining bounded compilation jobs.
 CPU2026_OPT_FAST ?= -O3
 export CPU2026_OPT_FAST
-# Set CPU2026_OPT_FAST=-Os to restore the original hot-code optimization level.
+# Use CPU2026_OPT_FAST=-Os and CPU2026_PGO=0 for the original compiler level.
+# Train GCC hot-code branch profiles on a bounded original Pi window, then
+# link the final simulator with serial LTO. Unsupported/custom builds keep
+# the ordinary compiler path. CPU2026_PGO=0 disables this build optimization.
+CPU2026_PGO ?= 1
+export CPU2026_PGO
 # Split acyclic selector arrays to avoid repeated combinational evaluation.
 CPU2026_SPLIT_SCHEDULE ?= 1
 export CPU2026_SPLIT_SCHEDULE
