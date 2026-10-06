@@ -430,7 +430,29 @@ module rv32_icache_nonblocking #(
         assign region_match_views={CACHE_LINES*3{1'b1}};
     end endgenerate
     genvar match_row;
-    generate for (match_row=0; match_row<CACHE_LINES; match_row=match_row+1) begin:g_match_row
+    generate
+`ifdef CPU2026_WORD_SIM
+    if(CACHE_LINES==128 && CACHE_WAYS==2 && CACHE_SET_WIDTH==6 &&
+       CACHE_ENTRY_WIDTH==7 && CACHE_TAG_WIDTH==22 && TAG_MATCH_PARALLEL!=0) begin:g_word_tag_query
+        reg [127:0] demand0,demand1,prefetch_matches,control_matches;
+        wire [6:0] control0={control_target[9:4],1'b0};
+        wire [6:0] control1={control_target[9:4],1'b1};
+        always @* begin
+            demand0=0;demand1=0;prefetch_matches=0;control_matches=0;
+            demand0[request_way0]=valid_bits[request_way0] && tag_mem[request_way0]==request_tag;
+            demand1[request_way1]=valid_bits[request_way1] && tag_mem[request_way1]==request_tag;
+            prefetch_matches[prefetch_way0]=valid_bits[prefetch_way0] && tag_mem[prefetch_way0]==prefetch_tag;
+            prefetch_matches[prefetch_way1]=valid_bits[prefetch_way1] && tag_mem[prefetch_way1]==prefetch_tag;
+            control_matches[control0]=valid_bits[control0] && tag_mem[control0]==control_target[31:10];
+            control_matches[control1]=valid_bits[control1] && tag_mem[control1]==control_target[31:10];
+        end
+        assign demand_match_way0=demand0;
+        assign demand_match_way1=demand1;
+        assign prefetch_match_rows=prefetch_matches;
+        assign control_match_rows=control_matches;
+    end else begin:g_original_tag_query
+`endif
+        for (match_row=0; match_row<CACHE_LINES; match_row=match_row+1) begin:g_match_row
         if (TAG_MATCH_PARALLEL != 0) begin:g_parallel
             localparam integer DOMAIN=(match_row*4)/CACHE_LINES;
             wire [31:0] demand_pc=demand_pc_views[DOMAIN*32 +: 32];
@@ -456,7 +478,11 @@ module rv32_icache_nonblocking #(
             assign prefetch_match_rows[match_row] = 1'b0;
             assign control_match_rows[match_row] = 1'b0;
         end
-    end endgenerate
+        end
+`ifdef CPU2026_WORD_SIM
+    end
+`endif
+    endgenerate
     wire prefetch_line_resident = (TAG_MATCH_PARALLEL != 0) ? (|prefetch_match_rows) :
         ((valid_bits[prefetch_way0] &&
           (tag_mem[prefetch_way0] == prefetch_tag)) ||
@@ -580,6 +606,48 @@ module rv32_icache_nonblocking #(
         .views_o(lru_query_views));
     genvar metadata_entry,metadata_set;
     generate
+`ifdef CPU2026_WORD_SIM
+    if(CACHE_LINES==128 && CACHE_WAYS==2 && CACHE_SET_WIDTH==6 &&
+       CACHE_ENTRY_WIDTH==7 && CACHE_TAG_WIDTH==22) begin:g_word_metadata
+        reg [31:0] valid_words [0:3];
+        reg [TAG_STORED_WIDTH-1:0] stored_tags [0:127];
+        reg [63:0] lru_bits;
+        for(genvar word=0;word<4;word=word+1) begin:g_valid_word
+            wire [31:0] install=(refill_array_write && refill_entry[6:5]==word) ?
+                (32'b1 << refill_entry[4:0]) : 32'b0;
+            wire [31:0] invalidate=region_invalidate[word*32+:32];
+            assign valid_bits[word*32+:32]=valid_words[word];
+            always @(posedge clk_i) begin
+                if(reset_i) valid_words[word]<=0;
+                else if(|(install|invalidate))
+                    valid_words[word]<=(valid_words[word]&~invalidate)|install;
+            end
+        end
+        // Original tag writes have no reset, and only the qualified refill
+        // entry is written. Per-way exact prefixes retain their state owners.
+        always @(posedge clk_i) if(refill_array_write)
+            stored_tags[refill_entry]<=mem_resp_line_addr_i[31-TAG_REGION_BITS:CACHE_SET_WIDTH+4];
+        for(metadata_entry=0;metadata_entry<128;metadata_entry=metadata_entry+1) begin:g_tag_view
+            if(TAG_REGION_BITS!=0) begin:g_prefix
+                assign tag_mem[metadata_entry]={
+                    tag_regions[(metadata_entry%2)*REGION_STORAGE_WIDTH+:REGION_STORAGE_WIDTH],
+                    stored_tags[metadata_entry]};
+            end else begin:g_full
+                assign tag_mem[metadata_entry]=stored_tags[metadata_entry];
+            end
+        end
+        for(metadata_set=0;metadata_set<64;metadata_set=metadata_set+1) begin:g_lru_view
+            assign lru_mem[metadata_set]=lru_bits[metadata_set];
+        end
+        always @(posedge clk_i) begin
+            if(reset_i) lru_bits<=0;
+            else begin
+                if(hit_array_read) lru_bits[request_set]<=~request_entry[0];
+                if(refill_array_write) lru_bits[refill_set]<=~refill_entry[0];
+            end
+        end
+    end else begin:g_original_metadata
+`endif
         for(metadata_entry=0;metadata_entry<CACHE_LINES;metadata_entry=metadata_entry+1) begin:g_valid_owner
             reg valid_q;
             wire [CACHE_ENTRY_WIDTH-1:0] local_refill_entry;
@@ -624,6 +692,10 @@ module rv32_icache_nonblocking #(
                 end
             end
         end
+
+`ifdef CPU2026_WORD_SIM
+    end
+`endif
     endgenerate
 
     integer reset_index;
