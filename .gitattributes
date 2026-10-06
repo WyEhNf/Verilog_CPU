@@ -4,3 +4,4 @@
 /scripts/** text eol=lf
 /docs/axi4-lite.md text eol=lf
 /docs/sram.md text eol=lf
+/tools/verilator_low_memory.py text eol=lf

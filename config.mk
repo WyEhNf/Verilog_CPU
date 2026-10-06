@@ -12,7 +12,12 @@ BUILD_MAKE ?= make
 APPIMAGE ?= $(FRAMEWORK_DIR)/cpu2026-tools-x86_64.AppImage
 # Without an AppImage, build uses Verilator on PATH (provided by OJ).
 # Explicit overrides always win; an invalid override fails instead of falling back.
-VERILATOR ?=
+# Bound host compilation memory without modifying the official build scripts.
+VERILATOR ?= $(FRAMEWORK_DIR)/tools/verilator_low_memory.py
+JOBS ?= 1
+export CPU2026_BUILD_APPIMAGE = $(APPIMAGE)
+# Optional real executable override for the low-memory driver.
+# export CPU2026_REAL_VERILATOR = /path/to/verilator
 YOSYS ?=
 ABC ?=
 STA ?=

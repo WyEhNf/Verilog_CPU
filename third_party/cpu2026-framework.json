@@ -3,10 +3,15 @@
   "framework_revision": "54fc150ffc290f52aa024209ffb9a29d43856f6d",
   "testcases_repository": "https://github.com/ACMClassCourse-2025/RISC-V-CPU-2026-Testcases",
   "testcases_revision": "29f980727f7d99a1842a58f34091c7579ba3fe85",
-  "vendor_policy": "These framework files are copied unchanged from the pinned course commit. Machine overrides belong in ignored local config files.",
+  "vendor_policy": "The listed framework files are unchanged from the pinned course commit. config.mk selects a portable host compilation wrapper; the RTL, official scripts and simulation semantics are unchanged. Machine-specific paths belong in ignored local config files.",
+  "customized_files": {
+    "config.mk": {
+      "upstream_sha256": "073551bf208ca7f7e8607757a88c0d01b0f45eb786d291f30c262e7133fbcda1",
+      "purpose": "Select tools/verilator_low_memory.py and default JOBS=1; export the configured AppImage path."
+    }
+  },
   "vendored_sha256": {
     "Makefile": "200247e351eaee15c4a90e8d927e7281d1c03ee07932d056982999e4a274e20f",
-    "config.mk": "073551bf208ca7f7e8607757a88c0d01b0f45eb786d291f30c262e7133fbcda1",
     "docs/axi4-lite.md": "8bdf74ace7d9e63f9bc3bc7335c854d34ef7bac7a7742b22e0e0ddae7a7ffc16",
     "docs/sram.md": "afb854ba269c36027e839dcfcab7befa9af6791237ab0adfa7aaccaa1bc352e0",
     "scripts/build.py": "53a696ea526986a67e5affeab447e81378d61eeedce3fb37b92a45fb16318a8b",
