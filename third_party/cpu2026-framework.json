@@ -1,0 +1,25 @@
+{
+  "framework_repository": "https://github.com/ACMClassCourse-2025/RISC-V-CPU-2026",
+  "framework_revision": "54fc150ffc290f52aa024209ffb9a29d43856f6d",
+  "testcases_repository": "https://github.com/ACMClassCourse-2025/RISC-V-CPU-2026-Testcases",
+  "testcases_revision": "29f980727f7d99a1842a58f34091c7579ba3fe85",
+  "vendor_policy": "These framework files are copied unchanged from the pinned course commit. Machine overrides belong in ignored local config files.",
+  "vendored_sha256": {
+    "Makefile": "200247e351eaee15c4a90e8d927e7281d1c03ee07932d056982999e4a274e20f",
+    "config.mk": "073551bf208ca7f7e8607757a88c0d01b0f45eb786d291f30c262e7133fbcda1",
+    "docs/axi4-lite.md": "8bdf74ace7d9e63f9bc3bc7335c854d34ef7bac7a7742b22e0e0ddae7a7ffc16",
+    "docs/sram.md": "afb854ba269c36027e839dcfcab7befa9af6791237ab0adfa7aaccaa1bc352e0",
+    "scripts/build.py": "53a696ea526986a67e5affeab447e81378d61eeedce3fb37b92a45fb16318a8b",
+    "scripts/fakeram.py": "bcad1312d66d279e22c932fc548cb5aaf3ab0f795e6fcf15115e393ac87dcc21",
+    "scripts/oj_io.py": "6c2930aeabec7abfe7c9d2ba649877ae4d192bb394cbf4f4e7a34c1093878cd6",
+    "scripts/ram/sram_fakeram.sv": "c0a2389d5c3211fbd2fbca22a2e2e86edc38eafa9260407d72a55841274098cc",
+    "scripts/run.py": "7c5db9d823531482586b47f28a06a1768ecacdb87c44852d219c8e79279d83c8",
+    "scripts/sim.cpp": "8dc91fce4c30e48b2caa73d62fc2fa89f71b3d938bf53bb622efa5d0572836ec",
+    "scripts/synth.py": "f9456126fe0d35787a89f811947aa571dfd0c2bb09cacb1ec56ac69365eecbd6",
+    "scripts/synth_report.py": "e1f3967cb64786a73f112ccf17a29091cbcb094a55612285a19d09946a249924",
+    "scripts/testcase.py": "1bb479d37cac7d1f26aa1a016538429212ac49ed8ce7e73e5b56396f3d8c84f3",
+    "scripts/timing.py": "576be0b8273c7ee3616a414b759fc158634b9138500f61f2ea8db0fd133e5f3f",
+    "scripts/timing.tcl": "dc8314b75f29ef1ae483ece9d2dbbac076a4d0dd50bee6d9273f4a78c601b484",
+    "scripts/toolchain.py": "03a25cfc4b396214445e45b2b11c71a87cc7eb117ac8176c792b6d5c6f0a35fc"
+  }
+}

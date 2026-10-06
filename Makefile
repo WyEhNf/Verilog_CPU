@@ -1,353 +1,91 @@
-SHELL := cmd.exe
-.SHELLFLAGS := /C
-.DEFAULT_GOAL := gui
+FRAMEWORK_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+.DEFAULT_GOAL := code
+CONFIG ?= config.mk
+-include $(CONFIG)
 
-.PHONY: gui join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build join04 join05 join06-report reference-trace-build reference-trace-test doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression asap7-maplib synth synth-bb
+# Defaults also work when a student omits the optional config.mk.
+PYTHON ?= python3
+APPIMAGE ?= $(FRAMEWORK_DIR)/cpu2026-tools-x86_64.AppImage
+VERILATOR ?=
+YOSYS ?=
+ABC ?=
+STA ?=
+ASAP7_LIB ?=
+BUILD_MAKE ?= make
+CXX ?= g++
+AR ?= ar
+SIM ?=
+TESTCASES ?= $(FRAMEWORK_DIR)/testcases
+BUILD ?= build
+SYNTH_OUT ?= $(BUILD)/synth
+MODE ?= opt
+CLOCK_PERIOD_NS ?= 2.0
+FILELIST ?= verilog/filelist.f
+PROGRAM ?= program.bin
+EXPECTED ?=
+Case ?=
+JOBS ?= 4
+MAX_CYCLES ?= 1000000
+LATENCY ?= 10
+WAVE ?=
+LOG ?=
+ifneq ($(strip $(BLACKBOXES)),)
+$(error BLACKBOXES has been removed; instantiate sram_fakeram instead)
+endif
 
-ROOT := $(CURDIR)
-# Current course assessment uses only the pinned Windows native toolchain.
-# Legacy research targets below retain their historical tool settings.
-COURSE_PYTHON ?= C:/Users/admin/miniconda3/python.exe
+.PHONY: code help build run test perf synth clean
 
-.PHONY: course-standard-measure course-standard-versions
-course-standard-measure:
-	@set "PYTHONUTF8=1" && "$(COURSE_PYTHON)" tools/run_course_standard_windows.py
+# OJ always builds RTL and collects ./code. SIM affects local run/test/perf only.
+code:
+	rm -f -- code
+	$(MAKE) --no-print-directory -f "$(FRAMEWORK_DIR)/Makefile" build CONFIG="$(CONFIG)"
+	cp -- "$(BUILD)/sim" code
 
-course-standard-versions:
-	@set "PYTHONUTF8=1" && "$(COURSE_PYTHON)" tools/record_course_windows_toolchain.py
+help:
+	@echo 'Host prerequisites: Python 3.10+, GNU Make, G++ (C++17), and binutils. No Docker required.'
+	@echo 'Configure APPIMAGE or native VERILATOR/YOSYS/ABC/STA/ASAP7_LIB in config.mk.'
+	@echo 'make build [FILELIST=verilog/filelist.f BUILD=build JOBS=4]'
+	@echo 'make run PROGRAM=program.bin EXPECTED=186 [WAVE=trace.vcd] [LOG=run.log]'
+	@echo 'make test [Case=correctness_add_to_100] [SIM=/path/to/prebuilt/sim]'
+	@echo 'make perf [Case=perf_median] [SIM=/path/to/prebuilt/sim]'
+	@echo 'make synth [MODE=opt|diagnose CLOCK_PERIOD_NS=2.0 FILELIST=verilog/filelist.f]'
+	@echo '  Outputs: SYNTH_OUT/MODE/ (SYNTH_OUT defaults to build/synth)'
+	@echo 'make clean  (removes BUILD, SYNTH_OUT and code)'
+	@echo 'make / make code: compile RTL and produce ./code for OJ'
 
-OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
-RV_ROOT ?= $(ROOT)/.deps/riscv-toolchain-install/xpack-riscv-none-elf-gcc-15.2.0-1
-OSS_CAD_ROOT_WIN := $(subst /,\,$(OSS_CAD_ROOT))
-ICARUS ?= $(OSS_CAD_ROOT)/bin/iverilog.exe
-VVP ?= $(OSS_CAD_ROOT)/bin/vvp.exe
-VERILATOR ?= $(OSS_CAD_ROOT)/bin/verilator_bin.exe
-YOSYS ?= $(OSS_CAD_ROOT)/bin/yosys.exe
-GTKWAVE ?= $(OSS_CAD_ROOT)/bin/gtkwave.exe
-RISCV_PREFIX ?= $(RV_ROOT)/bin/riscv-none-elf-
+build:
+	"$(PYTHON)" "$(FRAMEWORK_DIR)/scripts/build.py" --filelist "$(FILELIST)" --out "$(BUILD)" --jobs $(JOBS) \
+		--appimage "$(APPIMAGE)" --cxx "$(CXX)" --ar "$(AR)" --make "$(BUILD_MAKE)" \
+		$(if $(VERILATOR),--verilator "$(VERILATOR)",)
 
-OSS_ENV = set "VERILATOR_ROOT=$(OSS_CAD_ROOT_WIN)\share\verilator" && set "YOSYSHQ_ROOT=" && call "$(OSS_CAD_ROOT_WIN)\environment.bat" &&
+ifeq ($(strip $(SIM)),)
+run test perf: build
+endif
 
-gui:
-	@python tools/cpu_gui.py
+run:
+	@test -n "$(EXPECTED)" || (echo 'EXPECTED=... is required for make run' >&2; exit 2)
+	"$(PYTHON)" "$(FRAMEWORK_DIR)/scripts/run.py" "$(PROGRAM)" --build "$(BUILD)" \
+		--expected $(EXPECTED) --max-cycles $(MAX_CYCLES) --latency $(LATENCY) \
+		$(if $(SIM),--sim "$(SIM)",) $(if $(WAVE),--wave "$(WAVE)",) \
+		$(if $(LOG),--log "$(LOG)",)
 
-# Synthesis configuration knobs.  CFG is only the output directory name;
-# FE_WIDTH/BE_WIDTH/PHYS_REGS/ROB_ENTRIES/MUL_IMPL are the real parameters.
-# Use distinct CFG names when comparing multiplier implementations.  Keep the
-# libdir path in forward-slash form: yosys treats backslashes in script strings
-# as escapes.
-FE_WIDTH ?= 1
-BE_WIDTH ?= 1
-PHYS_REGS ?= 64
-ROB_ENTRIES ?= 32
-RS_ENTRIES ?= 8
-LSQ_ENTRIES ?= 8
-INT_ISSUE_WIDTH ?= $(if $(filter 1,$(BE_WIDTH)),1,2)
-CDB_WIDTH ?= $(if $(filter 1,$(BE_WIDTH)),1,2)
-ENABLE_CACHE_STATS ?= 0
-ENABLE_CACHES ?= 1
-ICACHE_FAST_HIT ?= 1
-ICACHE_COMBINATIONAL_HIT ?= 0
-ICACHE_PREFETCH ?= 1
-ICACHE_MSHRS ?= 8
-ICACHE_LINES ?= 64
-ICACHE_WAYS ?= 2
-DCACHE_MSHRS ?= 4
-DCACHE_LINES ?= 256
-DCACHE_WAYS ?= 1
-DCACHE_INDEX_HASH ?= 0
-DCACHE_REQUEST_PIPELINE ?= 0
-RAM_SIZE_BYTES ?= 1048576
-LEGACY_SENTINEL_HALT ?= 1
-MEMORY_LATENCY ?= 50
-I_MEMORY_OUTSTANDING ?= 8
-D_MEMORY_OUTSTANDING ?= 4
-ENABLE_PREDICTOR ?= 1
-FETCH_QUEUE_DEPTH ?= 16
-COMPLETION_DEPTH ?= $(if $(filter 1,$(BE_WIDTH)),4,$(if $(filter 2,$(BE_WIDTH)),8,16))
-MUL_IMPL ?= 0
-SHIFT_IMPL ?= 0
-PHYS_TAG_IMPL ?= 0
-GENERATION_WIDTH ?= 8
-CHECKPOINT_IMPL ?= 0
-STORE_BUFFERED_RETIRE ?= 1
-COMPLETION_BYPASS ?= 0
-SERIAL_BACKEND ?= 0
-CFG ?= fe$(FE_WIDTH)_be$(BE_WIDTH)_p$(PHYS_REGS)_r$(ROB_ENTRIES)
-ASAP7_LIB_DIR ?= $(ROOT)/third_party/asap7/lib
-RTL_FILELIST = rtl/filelist.f
-COURSE_SRAM ?= .deps/RISC-V-CPU-2026/scripts/ram/sram_fakeram.sv
-RTL_FILES := $(strip $(file <$(RTL_FILELIST)))
-CPU_TB_PARAMS = -P cpu_core_image_tb.FE_WIDTH=$(FE_WIDTH) -P cpu_core_image_tb.BE_WIDTH=$(BE_WIDTH) -P cpu_core_image_tb.INT_ISSUE_WIDTH=$(INT_ISSUE_WIDTH) -P cpu_core_image_tb.CDB_WIDTH=$(CDB_WIDTH) -P cpu_core_image_tb.PHYS_REGS=$(PHYS_REGS) -P cpu_core_image_tb.ROB_ENTRIES=$(ROB_ENTRIES) -P cpu_core_image_tb.RS_ENTRIES=$(RS_ENTRIES) -P cpu_core_image_tb.LSQ_ENTRIES=$(LSQ_ENTRIES) -P cpu_core_image_tb.ENABLE_CACHE_STATS=$(ENABLE_CACHE_STATS) -P cpu_core_image_tb.ENABLE_CACHES=$(ENABLE_CACHES) -P cpu_core_image_tb.ICACHE_FAST_HIT=$(ICACHE_FAST_HIT) -P cpu_core_image_tb.ICACHE_COMBINATIONAL_HIT=$(ICACHE_COMBINATIONAL_HIT) -P cpu_core_image_tb.ICACHE_PREFETCH=$(ICACHE_PREFETCH) -P cpu_core_image_tb.ICACHE_MSHRS=$(ICACHE_MSHRS) -P cpu_core_image_tb.DCACHE_MSHRS=$(DCACHE_MSHRS) -P cpu_core_image_tb.DCACHE_LINES=$(DCACHE_LINES) -P cpu_core_image_tb.MEMORY_LATENCY=$(MEMORY_LATENCY) -P cpu_core_image_tb.I_MEMORY_OUTSTANDING=$(I_MEMORY_OUTSTANDING) -P cpu_core_image_tb.D_MEMORY_OUTSTANDING=$(D_MEMORY_OUTSTANDING) -P cpu_core_image_tb.ENABLE_PREDICTOR=$(ENABLE_PREDICTOR) -P cpu_core_image_tb.FETCH_QUEUE_DEPTH=$(FETCH_QUEUE_DEPTH) -P cpu_core_image_tb.COMPLETION_DEPTH=$(COMPLETION_DEPTH) -P cpu_core_image_tb.COMPLETION_BYPASS=$(COMPLETION_BYPASS) -P cpu_core_image_tb.STORE_BUFFERED_RETIRE=$(STORE_BUFFERED_RETIRE) -P cpu_core_image_tb.SERIAL_BACKEND=$(SERIAL_BACKEND) -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -P cpu_core_image_tb.SHIFT_IMPL=$(SHIFT_IMPL) -P cpu_core_image_tb.PHYS_TAG_IMPL=$(PHYS_TAG_IMPL) -P cpu_core_image_tb.GENERATION_WIDTH=$(GENERATION_WIDTH) -P cpu_core_image_tb.CHECKPOINT_IMPL=$(CHECKPOINT_IMPL)
+test:
+	"$(PYTHON)" "$(FRAMEWORK_DIR)/scripts/testcase.py" --kind correctness --build "$(BUILD)" \
+		--testcases "$(TESTCASES)" --max-cycles $(MAX_CYCLES) --latency $(LATENCY) \
+		$(if $(SIM),--sim "$(SIM)",) $(if $(Case),--case "$(Case)",)
 
-CPU_TB_PARAMS += -P cpu_core_image_tb.DCACHE_INDEX_HASH=$(DCACHE_INDEX_HASH)
-CPU_TB_PARAMS += -P cpu_core_image_tb.ICACHE_LINES=$(ICACHE_LINES) -P cpu_core_image_tb.ICACHE_WAYS=$(ICACHE_WAYS) -P cpu_core_image_tb.DCACHE_WAYS=$(DCACHE_WAYS) -P cpu_core_image_tb.DCACHE_REQUEST_PIPELINE=$(DCACHE_REQUEST_PIPELINE) -P cpu_core_image_tb.RAM_SIZE_BYTES=$(RAM_SIZE_BYTES) -P cpu_core_image_tb.LEGACY_SENTINEL_HALT=$(LEGACY_SENTINEL_HALT)
+perf:
+	"$(PYTHON)" "$(FRAMEWORK_DIR)/scripts/testcase.py" --kind perf --build "$(BUILD)" \
+		--testcases "$(TESTCASES)" --max-cycles $(MAX_CYCLES) --latency $(LATENCY) \
+		$(if $(SIM),--sim "$(SIM)",) $(if $(Case),--case "$(Case)",)
 
-doctor:
-	@$(OSS_ENV) "$(ICARUS)" -V
-	@$(OSS_ENV) "$(VERILATOR)" --version
-	@$(OSS_ENV) "$(YOSYS)" --version
-	@$(OSS_ENV) "$(GTKWAVE)" --version
-	@"$(RISCV_PREFIX)gcc.exe" --version
-	@"$(RISCV_PREFIX)objdump.exe" --version
-	@"$(RISCV_PREFIX)objcopy.exe" --version
-	@powershell -NoProfile -Command "& '$(RISCV_PREFIX)gcc.exe' -print-multi-lib | Select-String 'rv32i/ilp32|rv32im/ilp32'"
-	@if not exist "$(ASAP7_LIB_DIR)\asap7sc7p5t_SEQ_RVT_TT_nldm_201020.lib" (echo ERROR: ASAP7 RVT TT liberty files missing under $(ASAP7_LIB_DIR); run the third_party/asap7 fetch step & exit /b 1)
-	@echo ASAP7 RVT TT liberty: OK
+synth:
+	"$(PYTHON)" "$(FRAMEWORK_DIR)/scripts/synth.py" --filelist "$(FILELIST)" --out "$(SYNTH_OUT)" \
+		--mode "$(MODE)" --clock-period "$(CLOCK_PERIOD_NS)" \
+		--appimage "$(APPIMAGE)" $(if $(YOSYS),--yosys "$(YOSYS)",) \
+		$(if $(ABC),--abc "$(ABC)",) $(if $(STA),--sta "$(STA)",) \
+		$(if $(ASAP7_LIB),--asap7-lib "$(ASAP7_LIB)",)
 
-lint:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core -o build/h00_lint.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32im_defs_tb -o build/h01_defs_lint.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_defs_tb.v
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s h01_channel_tb -o build/h01_channel_lint.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/integration/h01_channel_tb.v
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Wno-fatal -Irtl --top-module cpu_core +1800-2017ext+sv -f $(RTL_FILELIST) "$(COURSE_SRAM)"
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_tag_compare.v
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_fifo.v
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_skid_buffer.v
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_prefix_alloc.v
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_priority_select.v
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -sv -noblackbox -D SYNTHESIS $(COURSE_SRAM); read_verilog -I rtl $(RTL_FILES); hierarchy -check -top cpu_core; check"
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/common/rv32im_tag_compare.v; hierarchy -check -top rv32im_tag_compare; proc; check"
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/common/rv32im_fifo.v; hierarchy -check -top rv32im_fifo; proc; memory; check"
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/common/rv32im_skid_buffer.v; hierarchy -check -top rv32im_skid_buffer; proc; check"
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/common/rv32im_prefix_alloc.v; hierarchy -check -top rv32im_prefix_alloc; proc; check"
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/common/rv32im_priority_select.v; hierarchy -check -top rv32im_priority_select; proc; check"
-
-unit:
-	@if not "$(NAME)"=="h00" if not "$(NAME)"=="" (echo Unknown unit NAME=$(NAME) & exit /b 2)
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_h00_tb -o build/cpu_core_h00_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_h00_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_h00_tb.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P cpu_core_h00_tb.ENABLE_CACHE_STATS=1 -s cpu_core_h00_tb -o build/cpu_core_h00_stats_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_h00_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_h00_stats_tb.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.FE_WIDTH=3 -o build/cpu_core_invalid_fe.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_invalid_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_invalid_fe.vvp | findstr /C:"ERROR: invalid FE_WIDTH" >NUL
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.BE_WIDTH=3 -o build/cpu_core_invalid_be.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_invalid_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_invalid_be.vvp | findstr /C:"ERROR: invalid BE_WIDTH" >NUL
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.PHYS_REGS=32 -o build/cpu_core_invalid_prf.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_invalid_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_invalid_prf.vvp | findstr /C:"ERROR: invalid PHYS_REGS" >NUL
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.ROB_ENTRIES=3 -o build/cpu_core_invalid_rob.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_invalid_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_invalid_rob.vvp | findstr /C:"ERROR: invalid ROB_ENTRIES" >NUL
-
-matrix:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_matrix_tb -o build/cpu_core_matrix_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_matrix_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_matrix_tb.vvp
-
-join01:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_join01_tb -o build/cpu_core_join01_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/unit/cpu_core_join01_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_join01_tb.vvp | findstr /C:"PASS: JOIN-01"
-
-join02:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl $(CPU_TB_PARAMS) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
-	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Vvp "$(VVP)" -Simulation build/cpu_core_image_tb.vvp -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
-
-# Fast full-system regression: Verilator-compiled cpu_core_image_tb.
-# --timing keeps the tb #5 clock and #12 reset delays; --debug makes the
-# deep hierarchical references in the tb $display diagnostics visible.
-join02-vlt-build:
-	@if not exist "build\vlt" mkdir "build\vlt"
-	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_join02_verilator.ps1 -Verilator "$(VERILATOR)" -VerilatorRoot "$(OSS_CAD_ROOT)/share/verilator" -CompilerBin "$(ROOT)/../mingw64/bin" -FeWidth $(FE_WIDTH) -BeWidth $(BE_WIDTH) -PhysRegs $(PHYS_REGS) -RobEntries $(ROB_ENTRIES) -RsEntries $(RS_ENTRIES) -LsqEntries $(LSQ_ENTRIES) -IntIssueWidth $(INT_ISSUE_WIDTH) -CdbWidth $(CDB_WIDTH) -EnableCacheStats $(ENABLE_CACHE_STATS) -IcacheMshrs $(ICACHE_MSHRS) -DcacheMshrs $(DCACHE_MSHRS) -DcacheLines $(DCACHE_LINES) -DcacheIndexHash $(DCACHE_INDEX_HASH) -DcacheRequestPipeline $(DCACHE_REQUEST_PIPELINE) -DcacheWays $(DCACHE_WAYS) -IcacheLines $(ICACHE_LINES) -IcacheWays $(ICACHE_WAYS) -RamSizeBytes $(RAM_SIZE_BYTES) -LegacySentinelHalt $(LEGACY_SENTINEL_HALT) -MemoryLatency $(MEMORY_LATENCY) -IMemoryOutstanding $(I_MEMORY_OUTSTANDING) -DMemoryOutstanding $(D_MEMORY_OUTSTANDING) -FetchQueueDepth $(FETCH_QUEUE_DEPTH) -CompletionDepth $(COMPLETION_DEPTH) -MulImpl $(MUL_IMPL) -ShiftImpl $(SHIFT_IMPL) -PhysTagImpl $(PHYS_TAG_IMPL) -GenerationWidth $(GENERATION_WIDTH) -CheckpointImpl $(CHECKPOINT_IMPL) -StoreBufferedRetire $(STORE_BUFFERED_RETIRE) -CompletionBypass $(COMPLETION_BYPASS) -SerialBackend $(SERIAL_BACKEND)
-
-join02-vlt: join02-vlt-build
-	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Executable build/vlt/obj_dir/cpu_core_image_vlt.exe -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
-
-# Fast regression: same image gate minus pi (pi alone costs ~30 min).
-# qsort/tak/superloop/queens still cover branch/recursion/load-store paths.
-join02-vlt-fast: join02-vlt-build
-	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Executable build/vlt/obj_dir/cpu_core_image_vlt.exe -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases -Skip pi
-
-join03-build:
-	@python tools/run_join03.py --build-only --report build/join03/build_report.json --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe"
-
-join03:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl $(CPU_TB_PARAMS) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
-	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb.vvp --config "$(CFG)"
-
-# JOIN-04 proves that the same full-system path executes with real two- and
-# four-wide decode/rename/dispatch/issue/commit configurations.
-join04: join03-build
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=2 -P cpu_core_image_tb.BE_WIDTH=2 -P cpu_core_image_tb.PHYS_REGS=64 -P cpu_core_image_tb.ROB_ENTRIES=32 -P cpu_core_image_tb.RS_ENTRIES=8 -P cpu_core_image_tb.LSQ_ENTRIES=8 -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb_w2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
-	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb_w2.vvp --report build/join03/report_w2.json --config fe2_be2_p64_r32
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=4 -P cpu_core_image_tb.BE_WIDTH=4 -P cpu_core_image_tb.PHYS_REGS=96 -P cpu_core_image_tb.ROB_ENTRIES=64 -P cpu_core_image_tb.RS_ENTRIES=16 -P cpu_core_image_tb.LSQ_ENTRIES=16 -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb_w4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
-	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb_w4.vvp --report build/join03/report_w4.json --config fe4_be4_p96_r64
-
-join05: join03-build
-	@$(OSS_ENV) python tools/run_join05.py --iverilog "$(ICARUS)" --vvp "$(VVP)"
-
-join06-report:
-	@python tools/run_join06.py
-
-reference-trace-build:
-	@python tools/reference_trace.py --build
-
-reference-trace-test:
-	@python tools/test_reference_trace.py
-
-join: join01 join02
-
-h01:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32im_defs_tb -o build/rv32im_defs_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_defs_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/rv32im_defs_tb.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s h01_channel_tb -o build/h01_channel_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/integration/h01_channel_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/h01_channel_tb.vvp
-
-h02:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32im_common_tb.LANES=1 -s rv32im_common_tb -o build/h02_lanes1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_common_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/h02_lanes1.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32im_common_tb.LANES=2 -s rv32im_common_tb -o build/h02_lanes2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_common_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/h02_lanes2.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32im_common_tb.LANES=4 -s rv32im_common_tb -o build/h02_lanes4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_common_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/h02_lanes4.vvp
-
-h03:
-	@powershell -NoProfile -Command "$$env:RISCV_PREFIX='$(RISCV_PREFIX)'; python tools/make_image.py tests/programs/accumulate.c --arch rv32i --out-dir build/images/accumulate-rv32i --cc '$(RISCV_PREFIX)gcc.exe' --objdump '$(RISCV_PREFIX)objdump.exe' --objcopy '$(RISCV_PREFIX)objcopy.exe' --readelf '$(RISCV_PREFIX)readelf.exe'"
-	@powershell -NoProfile -Command "python tools/test_image_pipeline.py build/images/accumulate-rv32i/accumulate.image"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32im_memory_model_tb -o build/rv32im_memory_model_tb.vvp tb/models/rv32im_memory_model.v tb/unit/rv32im_memory_model_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/rv32im_memory_model_tb.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32im_memory_image_tb -o build/rv32im_memory_image_tb.vvp tb/models/rv32im_memory_model.v tb/unit/rv32im_memory_image_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/rv32im_memory_image_tb.vvp +IMAGE=RISC-V-CPU-Simulator/testcases/naive.data
-
-h04:
-	@powershell -NoProfile -Command "python tools/test_trace_tools.py"
-
-a01:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32im_decoder_tb -o build/a01_decoder.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_decoder_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/a01_decoder.vvp | findstr /C:"PASS: A-01 decoder"
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/rv32im_decoder.v
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/rv32im_decoder.v; hierarchy -check -top rv32im_decoder; proc; check"
-
-a02:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32_branch_predictor_tb -o build/a02_predictor.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_branch_predictor_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/a02_predictor.vvp | findstr /C:"PASS: A-02 bimodal predictor and BTB"
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/predictor/rv32_branch_predictor.v
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/predictor/rv32_branch_predictor.v; hierarchy -check -top rv32_branch_predictor; proc; memory; check"
-
-a03:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32_icache_tb -o build/a03_icache.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/unit/rv32_icache_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/a03_icache.vvp | findstr /C:"PASS: A-03 I-cache"
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/cache/rv32_icache.v
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/cache/rv32_icache.v; hierarchy -check -top rv32_icache; proc; memory; check"
-
-a04:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=1 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_fetch_frontend_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/a04_frontend_fe1.vvp | findstr /C:"PASS: A-04 frontend FE_WIDTH=1"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=2 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_fetch_frontend_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/a04_frontend_fe2.vvp | findstr /C:"PASS: A-04 frontend FE_WIDTH=2"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=4 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_fetch_frontend_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/a04_frontend_fe4.vvp | findstr /C:"PASS: A-04 frontend FE_WIDTH=4"
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/frontend/rv32_fetch_frontend.v
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/frontend/rv32_fetch_frontend.v; hierarchy -check -top rv32_fetch_frontend; proc; memory; check"
-
-a05:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32_dcache_tb -o build/a05_dcache.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/unit/rv32_dcache_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/a05_dcache.vvp | findstr /C:"PASS: A-05 D-cache"
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/cache/rv32_dcache.v
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/cache/rv32_dcache.v; hierarchy -check -top rv32_dcache; proc; check"
-
-a06:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32_memory_bridge_tb -o build/a06_memory_bridge.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/unit/rv32_memory_bridge_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/a06_memory_bridge.vvp | findstr /C:"PASS: A-06 memory bridge"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -I rtl -s rv32_memory_bridge_256m_tb -o build/a06_memory_bridge_256m.vvp rtl/memory/rv32_memory_bridge.v tb/unit/rv32_memory_bridge_256m_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/a06_memory_bridge_256m.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32_cache_stats_tb -o build/a06_cache_stats.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_cache_stats_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/a06_cache_stats.vvp | findstr /C:"PASS: A-06 cache statistics"
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/memory/rv32_memory_bridge.v
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/cache/rv32_cache_stats.v
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/memory/rv32_memory_bridge.v; hierarchy -check -top rv32_memory_bridge; proc; check"
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/cache/rv32_cache_stats.v; hierarchy -check -top rv32_cache_stats; proc; check"
-
-a07:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s a07_frontend_cache_tb -o build/a07_frontend_cache.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/a07_frontend_cache_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/a07_frontend_cache.vvp | findstr /C:"PASS: A-07 frontend/cache joint gate"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s a07_image_fetch_smoke_tb -o build/a07_image_fetch_smoke.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/a07_image_fetch_smoke_tb.v
-	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_a07_image_smoke.ps1 -Vvp "$(VVP)" -Simulation build/a07_image_fetch_smoke.vvp -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
-
-b01:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=1 -P rv32_physical_register_file_tb.PHYS_REGS=48 -s rv32_physical_register_file_tb -o build/b01_be1_p48.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_physical_register_file_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b01_be1_p48.vvp | findstr /C:"PASS: B-01 PRF BE_WIDTH=1 PHYS_REGS=48"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=2 -P rv32_physical_register_file_tb.PHYS_REGS=64 -s rv32_physical_register_file_tb -o build/b01_be2_p64.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_physical_register_file_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b01_be2_p64.vvp | findstr /C:"PASS: B-01 PRF BE_WIDTH=2 PHYS_REGS=64"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=4 -P rv32_physical_register_file_tb.PHYS_REGS=96 -s rv32_physical_register_file_tb -o build/b01_be4_p96.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_physical_register_file_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b01_be4_p96.vvp | findstr /C:"PASS: B-01 PRF BE_WIDTH=4 PHYS_REGS=96"
-
-b02:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=1 -P rv32_rename_unit_tb.PHYS_REGS=48 -s rv32_rename_unit_tb -o build/b02_be1_p48.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rename_unit_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b02_be1_p48.vvp | findstr /C:"PASS: B-02 rename BE_WIDTH=1 PHYS_REGS=48"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=2 -P rv32_rename_unit_tb.PHYS_REGS=64 -s rv32_rename_unit_tb -o build/b02_be2_p64.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rename_unit_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b02_be2_p64.vvp | findstr /C:"PASS: B-02 rename BE_WIDTH=2 PHYS_REGS=64"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=4 -P rv32_rename_unit_tb.PHYS_REGS=96 -s rv32_rename_unit_tb -o build/b02_be4_p96.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rename_unit_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b02_be4_p96.vvp | findstr /C:"PASS: B-02 rename BE_WIDTH=4 PHYS_REGS=96"
-
-b03:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=1 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rob_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b03_be1.vvp | findstr /C:"PASS: B-03 ROB BE_WIDTH=1"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=2 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rob_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b03_be2.vvp | findstr /C:"PASS: B-03 ROB BE_WIDTH=2"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=4 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rob_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b03_be4.vvp | findstr /C:"PASS: B-03 ROB BE_WIDTH=4"
-
-b04:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_reservation_station_tb.BE_WIDTH=1 -P rv32_reservation_station_tb.ENTRIES=4 -s rv32_reservation_station_tb -o build/b04_be1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_reservation_station_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b04_be1.vvp | findstr /C:"PASS: B-04 RS BE_WIDTH=1 ENTRIES=4"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_reservation_station_tb.BE_WIDTH=2 -P rv32_reservation_station_tb.ENTRIES=4 -s rv32_reservation_station_tb -o build/b04_be2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_reservation_station_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b04_be2.vvp | findstr /C:"PASS: B-04 RS BE_WIDTH=2 ENTRIES=4"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_reservation_station_tb.BE_WIDTH=4 -P rv32_reservation_station_tb.ENTRIES=4 -s rv32_reservation_station_tb -o build/b04_be4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_reservation_station_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b04_be4.vvp | findstr /C:"PASS: B-04 RS BE_WIDTH=4 ENTRIES=4"
-
-b05:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32i_alu_tb -o build/b05.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32i_alu_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b05.vvp | findstr /C:"PASS: B-05 ALU/branch/AGU"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32i_alu_tb.SHIFT_IMPL=1 -s rv32i_alu_tb -o build/b05_iter_shift.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32i_alu_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b05_iter_shift.vvp | findstr /C:"PASS: B-05 ALU/branch/AGU"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -I rtl -s rv32i_alu_compare_tb -o build/b05_compare_add.vvp rtl/rv32i_alu.v tb/unit/rv32i_alu_compare_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b05_compare_add.vvp
-
-b06:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32m_units_tb -o build/b06.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_units_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b06.vvp | findstr /C:"PASS: B-06 multiplier/divider"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32m_units_tb.MUL_IMPL=1 -s rv32m_units_tb -o build/b06_radix4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_units_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b06_radix4.vvp | findstr /C:"PASS: B-06 multiplier/divider"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32m_units_tb.MUL_IMPL=2 -s rv32m_units_tb -o build/b06_unified.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_units_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b06_unified.vvp | findstr /C:"PASS: B-06 multiplier/divider"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32m_mdu_reservation_station_tb -o build/b06_mdu.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_mdu_reservation_station_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu.vvp | findstr /C:"PASS: B-06 MDU RS"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32m_mdu_reservation_station_tb.MUL_IMPL=1 -s rv32m_mdu_reservation_station_tb -o build/b06_mdu_radix4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_mdu_reservation_station_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu_radix4.vvp | findstr /C:"PASS: B-06 MDU RS"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32m_mdu_reservation_station_tb.MUL_IMPL=2 -s rv32m_mdu_reservation_station_tb -o build/b06_mdu_unified.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_mdu_reservation_station_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu_unified.vvp | findstr /C:"PASS: B-06 MDU RS"
-
-b07:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_completion_network_tb.BE_WIDTH=1 -s rv32_completion_network_tb -o build/b07_be1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_completion_network_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b07_be1.vvp | findstr /C:"PASS: B-07 completion network BE_WIDTH=1"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_completion_network_tb.BE_WIDTH=2 -s rv32_completion_network_tb -o build/b07_be2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_completion_network_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b07_be2.vvp | findstr /C:"PASS: B-07 completion network BE_WIDTH=2"
-
-b08:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_lsq_tb.BE_WIDTH=1 -s rv32_lsq_tb -o build/b08_be1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_lsq_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b08_be1.vvp | findstr /C:"PASS: B-08 LSQ BE_WIDTH=1"
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_lsq_tb.BE_WIDTH=2 -s rv32_lsq_tb -o build/b08_be2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_lsq_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b08_be2.vvp | findstr /C:"PASS: B-08 LSQ BE_WIDTH=2"
-
-b09:
-	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_backend_joint_tb.BE_WIDTH=1 -s rv32_backend_joint_tb -o build/b09_be1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_backend_joint_tb.v
-	@$(OSS_ENV) "$(VVP)" -N build/b09_be1.vvp | findstr /C:"PASS: B-09 backend joint BE_WIDTH=1"
-
-regression:
-	@powershell -NoProfile -Command "python tools/regression.py"
-
-# Area synthesis with Yosys + ASAP7 7.5T RVT TT.
-#   make synth CFG=fe1_be1_p64_r32 [FE_WIDTH=1 BE_WIDTH=1 PHYS_REGS=64 ROB_ENTRIES=32]
-# synth = explicit register/mux reference (memory_map), synth-bb = blackbox arrays.
-# Artifacts go to build/synth/<CFG>[/_bb]/: yosys.log (verbose run log for the
-# progress window), synth.log, stat_after_abc.log, cpu_core_synth.v.
-asap7-maplib:
-	@python tools/filter_asap7_lib.py
-	@python tools/liberty2genlib.py
-
-synth: asap7-maplib
-	@if not exist "build\synth\$(CFG)" mkdir "build\synth\$(CFG)"
-	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG) $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL) $(ENABLE_CACHES) $(ENABLE_PREDICTOR) $(FETCH_QUEUE_DEPTH) $(COMPLETION_DEPTH) $(SHIFT_IMPL) $(PHYS_TAG_IMPL) $(GENERATION_WIDTH) $(CHECKPOINT_IMPL) $(COMPLETION_BYPASS) $(SERIAL_BACKEND) $(INT_ISSUE_WIDTH) $(CDB_WIDTH) $(ICACHE_MSHRS) $(DCACHE_MSHRS) $(DCACHE_LINES) $(DCACHE_INDEX_HASH) $(DCACHE_REQUEST_PIPELINE) $(DCACHE_WAYS) $(RAM_SIZE_BYTES) $(LEGACY_SENTINEL_HALT) $(ICACHE_LINES) $(ICACHE_WAYS)" > "build\synth\$(CFG)\yosys.log" 2>&1
-	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)/synth.log" --memory-dump "build/synth/$(CFG)/memory_manifest.il" --output "build/synth/$(CFG)/area_audit.json" --profile ff-reference --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL) --shift-impl $(SHIFT_IMPL) --phys-tag-impl $(PHYS_TAG_IMPL) --generation-width $(GENERATION_WIDTH) --checkpoint-impl $(CHECKPOINT_IMPL) --caches $(ENABLE_CACHES) --predictor $(ENABLE_PREDICTOR) --fetch-queue-depth $(FETCH_QUEUE_DEPTH) --completion-depth $(COMPLETION_DEPTH) --completion-bypass $(COMPLETION_BYPASS) --serial-backend $(SERIAL_BACKEND) --dcache-lines $(DCACHE_LINES) --dcache-index-hash $(DCACHE_INDEX_HASH) --dcache-request-pipeline $(DCACHE_REQUEST_PIPELINE) --dcache-ways $(DCACHE_WAYS) --ram-size-bytes $(RAM_SIZE_BYTES) --legacy-sentinel-halt $(LEGACY_SENTINEL_HALT) --icache-lines $(ICACHE_LINES) --icache-ways $(ICACHE_WAYS)
-
-synth-bb: asap7-maplib
-	@if not exist "build\synth\$(CFG)_bb" mkdir "build\synth\$(CFG)_bb"
-	@$(OSS_ENV) "$(YOSYS)" -p "tcl synth/synth_bb.tcl $(FE_WIDTH) $(BE_WIDTH) $(PHYS_REGS) $(ROB_ENTRIES) build/synth/$(CFG)_bb $(RS_ENTRIES) $(LSQ_ENTRIES) $(ENABLE_CACHE_STATS) $(MUL_IMPL) $(ENABLE_CACHES) $(ENABLE_PREDICTOR) $(FETCH_QUEUE_DEPTH) $(COMPLETION_DEPTH) $(SHIFT_IMPL) $(PHYS_TAG_IMPL) $(GENERATION_WIDTH) $(CHECKPOINT_IMPL) $(COMPLETION_BYPASS) $(SERIAL_BACKEND) $(INT_ISSUE_WIDTH) $(CDB_WIDTH) $(ICACHE_MSHRS) $(DCACHE_MSHRS) $(DCACHE_LINES) $(DCACHE_INDEX_HASH) $(DCACHE_REQUEST_PIPELINE) $(DCACHE_WAYS) $(RAM_SIZE_BYTES) $(LEGACY_SENTINEL_HALT) $(ICACHE_LINES) $(ICACHE_WAYS)" > "build\synth\$(CFG)_bb\yosys.log" 2>&1
-	@python tools/audit_synth.py --synth-log "build/synth/$(CFG)_bb/synth.log" --memory-dump "build/synth/$(CFG)_bb/memory_manifest.il" --output "build/synth/$(CFG)_bb/area_audit.json" --profile logic-blackbox --fe-width $(FE_WIDTH) --be-width $(BE_WIDTH) --phys-regs $(PHYS_REGS) --rob-entries $(ROB_ENTRIES) --rs-entries $(RS_ENTRIES) --lsq-entries $(LSQ_ENTRIES) --cache-stats $(ENABLE_CACHE_STATS) --mul-impl $(MUL_IMPL) --shift-impl $(SHIFT_IMPL) --phys-tag-impl $(PHYS_TAG_IMPL) --generation-width $(GENERATION_WIDTH) --checkpoint-impl $(CHECKPOINT_IMPL) --caches $(ENABLE_CACHES) --predictor $(ENABLE_PREDICTOR) --fetch-queue-depth $(FETCH_QUEUE_DEPTH) --completion-depth $(COMPLETION_DEPTH) --completion-bypass $(COMPLETION_BYPASS) --serial-backend $(SERIAL_BACKEND) --dcache-lines $(DCACHE_LINES) --dcache-index-hash $(DCACHE_INDEX_HASH) --dcache-request-pipeline $(DCACHE_REQUEST_PIPELINE) --dcache-ways $(DCACHE_WAYS) --ram-size-bytes $(RAM_SIZE_BYTES) --legacy-sentinel-halt $(LEGACY_SENTINEL_HALT) --icache-lines $(ICACHE_LINES) --icache-ways $(ICACHE_WAYS)
+clean:
+	rm -rf -- "$(BUILD)" "$(SYNTH_OUT)"
+	rm -f -- code

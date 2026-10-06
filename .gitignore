@@ -65,6 +65,13 @@ synth/help_timing.ys
 !/.deps/.gitkeep
 obj_dir/
 
+# Local course tool paths and generated OJ executable
+/config.local.mk
+/config.*.local.mk
+/code
+/code.exe
+/cpu2026-tools-*.AppImage
+
 # Simulation waveforms and logs
 *.vcd
 *.fst
