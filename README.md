@@ -35,7 +35,11 @@ ASAP7_LIB = /path/to/asap7/lib
 make CONFIG=config.local.mk
 ```
 
-The default `config.mk` selects `tools/verilator_low_memory.py`. It runs Verilator generation first and waits for that process to exit before running C++ compilation with one job. Generated files, functions, and trace functions use a split threshold of 2000; the existing verified Verilator 5.020 loop thresholds are retained. This bounds concurrent host memory use and reduces individual compilation units while keeping the official RTL, simulator, assertions, waveform support, C++ optimization level, and test semantics. It does not establish that a particular OJ memory cap is met; generation and C++ compilation can still exceed a sufficiently small cap.
+The default `config.mk` selects `tools/verilator_low_memory.py`. It runs Verilator generation first and waits for that process to exit before running C++ compilation with one job. Generated files use a split threshold of 8000, while functions and trace functions retain a threshold of 2000. The existing verified Verilator 5.020 loop thresholds and C++ optimization levels are retained. This bounds concurrent host memory use and avoids the compiler startup cost of unnecessarily small files. Verilator's split thresholds count operations, not bytes, and do not guarantee a maximum file size or memory footprint.
+
+The default `CPU2026_TRACE_DEPTH=1` generates waveforms for top-level signals, including the AXI interface and diagnostic outputs. The official simulator and its waveform API are unchanged. Full internal waveform visibility can be restored with `make CPU2026_TRACE_DEPTH=0`; that generates substantially more C++ and increases build time. The wrapper prints separate elapsed times and exit statuses for generation and compilation to help locate build failures. Neither this profile nor testcase runtime limits establish that a particular OJ compilation time or memory cap is met.
+
+`CPU2026_COMPACT_IDS=1` shortens private generated C++ identifiers with Verilator's `--protect-ids` option and a fixed public key for reproducible names. It preserves top-level port names and the original RTL remains in the repository. The generated `Vstudent_top__idmap.xml` maps the short names back to their RTL names. To debug full internal waveforms with original names, use `make CPU2026_TRACE_DEPTH=0 CPU2026_COMPACT_IDS=0`. The profile also sets Verilator 5.020's `--comp-limit-parens 32` compiler depth threshold: it materializes subexpressions as temporary values instead of emitting deeply nested packed RAT recovery expressions. The optimization level of the C++ compiler is unchanged. CPU simulation wall time under this profile has not been measured.
 
 The wrapper selects the configured AppImage or the installed Verilator. `CPU2026_REAL_VERILATOR` can explicitly select the real executable; setting `VERILATOR` itself bypasses the wrapper. Command-line and machine configuration overrides remain supported. No newer-version `--output-groups` option is used. The default `JOBS` is 1; the wrapper always compiles with one job, including when the caller requested more.
 
@@ -62,7 +66,7 @@ make -f Makefile.windows doctor
 make -f Makefile.windows lint
 ```
 
-These are the historical research commands and settings. Course measurements use the pinned native Windows tools recorded in `tools/course_windows_config.json`; use native MSYS2 GNU Make/MinGW when configuring the official entry on Windows. WSL is not used for this project. New builds, simulations, and synthesis were not run as part of the submission-entry update.
+These are the historical research commands and settings. Course measurements use the pinned native Windows tools recorded in `tools/course_windows_config.json`; use native MSYS2 GNU Make/MinGW when configuring the official entry on Windows. WSL is not used for this project. The compilation profile was measured separately from CPU simulation and synthesis; see [the host build report](reports/OJ_host_build_profile_2026-10-06.md).
 
 ## Current implementation and verified results
 

@@ -61,6 +61,7 @@ synth/help_timing.ys
 !/reports/store_admission_2026-10-01.md
 !/reports/direct_branch_target_2026-10-01.md
 !/reports/indexed_history_predictor_2026-10-01.md
+!/reports/OJ_host_build_profile_2026-10-06.md
 /.deps/*
 !/.deps/.gitkeep
 obj_dir/
