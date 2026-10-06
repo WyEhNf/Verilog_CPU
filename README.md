@@ -1,73 +1,95 @@
 # Parameterized RV32IM Out-of-Order CPU
 
-This repository develops a synthesizable, Verilog-2005 implementation of a parameterized RV32IM processor. The design is intended to be correct by construction, independently testable, and suitable for synthesis after functional verification.
+The current default RTL is A109: an out-of-order RV32IM core with register renaming, a ROB for in-order commit, instruction/data caches, and the course AXI4-Lite interface. It implements byte, halfword, and word loads/stores and all eight M-extension operations. The top module is `student_top`, listed in `verilog/filelist.f`.
 
-## Design Scope
+## Course submission entry
 
-The processor implements the RV32I base integer instruction set required by the project acceptance programs, including byte and word loads and stores (`LB`, `LBU`, `LW`, `SB`, and `SW`), together with the RV32M multiply and divide extension (`MUL`, `MULH`, `MULHSU`, `MULHU`, `DIV`, `DIVU`, `REM`, and `REMU`). Unsupported or reserved encodings are reported as illegal instructions rather than being treated as no-ops.
+The root `Makefile`, `config.mk`, and all files under `scripts/` are unchanged copies of the official course framework at commit `54fc150ffc290f52aa024209ffb9a29d43856f6d`. Their hashes and origin are recorded in [third_party/cpu2026-framework.json](third_party/cpu2026-framework.json). The official `testcases` submodule is pinned to `29f980727f7d99a1842a58f34091c7579ba3fe85` and uses a public HTTPS URL.
 
-The microarchitecture is an out-of-order Tomasulo-style core with:
-
-- speculative register renaming through a RAT, committed mappings through an RRAT, and a physical register free list;
-- a parameterized reorder buffer (ROB) providing in-order retirement, precise exceptions, HALT handling, and branch recovery;
-- separate integer, multiply, divide, and load/store reservation stations;
-- a completion and writeback network with explicit tags, valid/ready backpressure, and bounded arbitration;
-- a branch frontend using a bimodal predictor and a direct-mapped BTB;
-- independent L1 instruction and data caches with three-cycle hit latency, write-back data-cache behavior, and single-outstanding miss handling in the initial implementation;
-- an explicit two-port, little-endian memory protocol backed by a deterministic 50-cycle memory model in verification.
-
-All inter-module interfaces use packed buses and valid/ready handshakes. Payloads remain stable while valid is asserted without ready. Flush, redirect, writeback, store visibility, and retirement priorities are defined centrally in the public RTL definitions.
-
-## Repository Layout
-
-```text
-rtl/           Synthesizable Verilog-2005 RTL and shared definitions
-tb/            Unit, integration, and memory-model testbenches
-tests/         Bare-metal programs, imported simulator cases, vectors, and manifest
-tools/         Image generation, startup/runtime support, and regression utilities
-docs/          Component design documentation
-synth/         Yosys and ASAP7 synthesis scripts and constraints
-build/         Ignored simulation, image, and synthesis intermediates
-reports/       Correctness, performance, area, and waveform indexes
-third_party/   License and pinned dependency metadata
-unit_test/     Additional standalone unit-test workspace
+```sh
+git submodule update --init testcases
+make                 # Build RTL and create ./code for OJ
+# Equivalent: make code
 ```
 
-The external `RISC-V-CPU-Simulator` directory is reference input only. It is not modified by this project.
+The build uses the checked-in RTL and official `scripts/sim.cpp`; it does not use a simulator from an earlier experiment. OJ supplies its toolchain and testcase inputs. Tool executables or build outputs do not need to be committed. No file in this submission entry depends on the ignored `.deps/` directory or this machine's drive letters.
 
-## Configuration
+Host prerequisites are Python 3.10+, GNU Make, a C++17 compiler, binutils, and the course hardware tools. An optional course AppImage can be placed at the repository root. If it is absent, the official framework uses tools on PATH; explicit tool overrides take precedence. See the [official course instructions](https://github.com/ACMClassCourse-2025/RISC-V-CPU-2026).
 
-The default configuration is a single-issue/single-commit core:
+For machine-specific overrides, create the ignored `config.local.mk` and select it explicitly:
 
-```text
-FE_WIDTH       = 1
-BE_WIDTH       = 1
-PHYS_REGS      = 64
-ROB_ENTRIES    = 32
+```make
+# config.local.mk -- keep this file out of Git
+APPIMAGE =
+PYTHON = python3
+VERILATOR = /path/to/verilator
+YOSYS = /path/to/yosys
+ABC = /path/to/yosys-abc
+STA = /path/to/sta
+ASAP7_LIB = /path/to/asap7/lib
 ```
 
-Frontend and backend widths independently support 1, 2, and 4 lanes. Physical-register and queue capacities are validated at elaboration. Queue and tag capacities must be powers of two where required by the plan, and at least 33 physical registers are required so that architectural register zero remains permanently mapped to physical register zero.
-
-## Verification Contract
-
-The verification flow is layered. Each RTL unit has an independent testbench before it is connected to the top level. Icarus Verilog is used for fast Verilog-2005 unit simulation, Verilator is used for lint and larger simulations, and Yosys is used for synthesis-oriented structural checks. Testbenches enforce reset determinism, no-X behavior, stable valid/ready payloads, tag-generation checks, watchdog timeouts, and precise retirement ordering.
-
-Programs are converted through a reproducible `C -> object -> ELF -> objdump -> sparse byte image` flow. Images begin at address zero, use a one-mebibyte little-endian memory space, preserve section addresses, and end with the agreed `0x0ff00513` HALT instruction. The architectural result is the committed return value in `a0[7:0]`; cycle counts are reported separately and are not used as an architectural reference.
-
-## Toolchain
-
-The planned environment includes Icarus Verilog, Verilator, GTKWave, Yosys, CMake, GNU Make, Python 3, Git, and a RISC-V GNU toolchain with `rv32i/ilp32` and `rv32im/ilp32` multilib support. Run `make doctor` before simulation. Generated outputs belong under `build/` or `reports/` and are ignored by Git.
-
-## Initial Commands
-
-```text
-make doctor       Check required tools and paths
-make lint         Run Verilog-2005, Verilator, and Yosys checks
-make unit         Run focused RTL unit tests
-make smoke        Run short architectural programs
-make regression   Run the complete acceptance manifest
-make matrix       Check supported parameter combinations
-make synth        Run synthesis and area reporting
+```sh
+make CONFIG=config.local.mk
 ```
 
-The implementation follows `plan.md`; the plan is the authoritative source for interfaces, timing, acceptance programs, and completion criteria.
+`config.mk` retains the portable course defaults. The `SIM` override only applies to local run/test/perf; `make` and `make code` always build RTL. The resulting `code` executable accepts the course `CPU2026-OJ` stdin protocol and writes the exit result to stdout.
+
+## Local course commands
+
+```sh
+make help
+make build                                  # Produce build/sim
+make test Case=correctness_add_to_100
+make test MAX_CYCLES=48000000 LATENCY=10      # Local full-suite budget including Pi
+make perf LATENCY=10
+make synth MODE=opt CLOCK_PERIOD_NS=2.0
+```
+
+The official defaults remain `LATENCY=10` and `MAX_CYCLES=1000000`. The measured A109 Pi run needed 38,853,527 cycles and passed with a 48,000,000-cycle limit. Setting a local limit does not change an OJ testcase's cycle budget, which is supplied through its input. The OJ grading configuration is maintained separately; its Pi budget has not been verified here.
+
+For Windows development, the previous Makefile is preserved as `Makefile.windows`:
+
+```text
+make -f Makefile.windows gui
+make -f Makefile.windows doctor
+make -f Makefile.windows lint
+```
+
+These are the historical research commands and settings. Course measurements use the pinned native Windows tools recorded in `tools/course_windows_config.json`; use native MSYS2 GNU Make/MinGW when configuring the official entry on Windows. WSL is not used for this project. New builds, simulations, and synthesis were not run as part of the submission-entry update.
+
+## Current implementation and verified results
+
+| Item | A109 default / existing measured result |
+|---|---:|
+| Frontend / commit width | 4 / 2 |
+| Integer issue / CDB width | 2 / 2 |
+| ROB / physical registers / RS / LSQ | 32 / 56 / 8 / 16 |
+| I-cache | 128 lines, 2 ways, 16 bytes/line |
+| D-cache | 1024 lines, 2 ways, 16 bytes/line |
+| Six-benchmark IPC GEOMEAN | 1.115262692 |
+| Total area, including SRAM | 35,891.672318 um² |
+| Course synthesis/STA estimated Fmax | 321.608040 MHz |
+
+These existing results meet the course Tier3 thresholds. They are measurements of the frozen A109 sources under the pinned course tools, not a new OJ result or post-layout frequency. See [the verified A109 report](reports/ER1_A109_Tier3_verified_2026-10-06.md) for the exact correctness runs, budgets, tool versions, and source identity.
+
+The AXI4-Lite exit convention is a word store to `0x80000000` with `WSTRB=4'hf`; the 32-bit write data is the exit result. External RAM is 256 MiB. `student_top` provides all required course ports and three additional diagnostic outputs accepted by the previously verified official simulator; this entry update leaves that RTL unchanged. Protocol and SRAM specifications are in [docs/axi4-lite.md](docs/axi4-lite.md) and [docs/sram.md](docs/sram.md).
+
+## Repository layout
+
+```text
+Makefile           Official course build/OJ/test/synthesis entry
+Makefile.windows   Preserved Windows research commands
+config.mk          Portable official defaults
+scripts/           Unmodified pinned course framework and SRAM model
+testcases/         Official testcases submodule
+verilog/filelist.f  Relative paths to the submitted RTL
+rtl/               A109 RTL and definitions
+rv32im_defs.vh      Root include alias required by the course build
+tb/ tests/ tools/   Historical development and verification utilities
+docs/ reports/     Design documents, exploration, and measured results
+history/           Important version and commit indexes
+build/             Ignored local outputs
+```
+
+The [parameter sensitivity report](reports/parameter_sensitivity.md), [architecture exploration](reports/architecture_exploration.md), and [important version index](history/important_versions/README.md) preserve development evidence. Historical measurements used their documented source and tool settings; the A109 verified report defines the current course results.
