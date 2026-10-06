@@ -26,6 +26,10 @@ def sha(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--outdir", default="build/synth/p4_i16_d32k_full")
+    parser.add_argument("--lib-dir", type=Path, default=LIBDIR)
+    parser.add_argument("--abc-mode", choices=("genlib", "course"), default="genlib")
+    parser.add_argument("--abc-delay-ps", type=float, default=3333.3333333333335)
+    parser.add_argument("--abc-script", choices=("standard", "classic-area"), default="standard")
     for name, default in (("fe-width", 4), ("be-width", 4), ("phys-regs", 96),
                           ("rob-entries", 64), ("rs-entries", 16), ("lsq-entries", 16),
                           ("int-issue-width", 4), ("cdb-width", 4),
@@ -38,6 +42,13 @@ def main():
                           ("icache-lines", 64), ("icache-ways", 2)):
         parser.add_argument("--" + name, type=int, default=default)
     args = parser.parse_args()
+    libdir = args.lib_dir.resolve()
+    libs = sorted(libdir.glob("*.lib"))
+    if len(libs) != 5:
+        raise SystemExit("Exactly five ASAP7 libraries required")
+    seq_libs = [path for path in libs if "_SEQ_" in path.name]
+    if len(seq_libs) != 1 or not 0 < args.abc_delay_ps < float('inf'):
+        raise SystemExit("One sequential library and a finite positive ABC delay required")
     out = (ROOT / args.outdir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     suite = ROOT / ".deps/oss-cad-suite-install/oss-cad-suite"
@@ -54,26 +65,38 @@ def main():
               args.icache_lines, args.icache_ways]
     sources = [ROOT / p.strip() for p in (ROOT / "rtl/filelist.f").read_text().splitlines() if p.strip()]
     sources += list((ROOT / "rtl").rglob("*.vh"))
-    sources += [ROOT / "synth/synth.tcl", Path(__file__), *LIBS, LIBDIR / "asap7_comb.genlib"]
+    sources += [ROOT / "rtl/filelist.f", ROOT / "synth/synth.tcl", Path(__file__), *libs]
+    if args.abc_mode == "genlib":
+        sources.append(LIBDIR / "asap7_comb.genlib")
     hashes = {p.relative_to(ROOT).as_posix(): sha(p) for p in sources}
-    fingerprint = hashlib.sha256(json.dumps([config, hashes], sort_keys=True).encode()).hexdigest()
+    mapping_options = dict(lib_dir=libdir.as_posix(), abc_mode=args.abc_mode,
+                           abc_delay_ps=args.abc_delay_ps, abc_script=args.abc_script)
+    fingerprint = hashlib.sha256(json.dumps([config, hashes, mapping_options], sort_keys=True).encode()).hexdigest()
     manifest_path = out / "run_manifest.json"
     if manifest_path.exists():
         previous = json.loads(manifest_path.read_text())
         if previous["fingerprint"] != fingerprint:
             changed = {key for key in hashes.keys() | previous["source_sha256"].keys()
                        if hashes.get(key) != previous["source_sha256"].get(key)}
-            if changed != {"tools/run_full_area.py"} or previous["parameters"] != config:
+            previous_options = dict(previous.get("mapping_options", mapping_options))
+            previous_options.setdefault('abc_script', 'standard')
+            # The mapping stage's script hash invalidates every changed map.
+            # Preserve elaboration/preparation when only the mapper changes.
+            previous_options['abc_script'] = args.abc_script
+            if (changed != {"tools/run_full_area.py"} or previous["parameters"] != config
+                    or previous_options != mapping_options):
                 raise SystemExit("Design inputs changed; use a new --outdir to preserve the prior run.")
             # A runner fix may resume unchanged stage scripts; each stage has
             # its own content hash. Retain the previous provenance as well.
             history = out / ("run_manifest_" + previous["fingerprint"][:12] + ".json")
             history.write_text(json.dumps(previous, indent=2) + "\n")
             manifest_path.write_text(json.dumps({"fingerprint": fingerprint, "parameters": config,
-                                                "source_sha256": hashes}, indent=2) + "\n")
+                                                "source_sha256": hashes,
+                                                "mapping_options": mapping_options}, indent=2) + "\n")
     else:
         manifest_path.write_text(json.dumps({"fingerprint": fingerprint, "parameters": config,
-                                            "source_sha256": hashes}, indent=2) + "\n")
+                                            "source_sha256": hashes,
+                                            "mapping_options": mapping_options}, indent=2) + "\n")
 
     def run(name, script, tcl=False, parameters=None):
         script_path = out / (name + (".tcl" if tcl else ".ys"))
@@ -138,9 +161,14 @@ select -clear
 '''
     run("prepare", prep, tcl=True, parameters=config)
     modules = [line.split("\t", 1) for line in (out / "modules.tsv").read_text().splitlines()]
-    libargs = " ".join("-liberty " + p.as_posix() for p in LIBS)
-    libread = "\n".join("read_liberty -lib -ignore_miss_func " + p.as_posix() for p in LIBS)
-    seq = LIBDIR / "asap7sc7p5t_SEQ_RVT_TT_nldm_201020.lib"
+    libargs = " ".join("-liberty " + p.as_posix() for p in libs)
+    libread = "\n".join("read_liberty -lib -ignore_miss_func " + p.as_posix() for p in libs)
+    seq = seq_libs[0]
+    abc_command = (f'abc {libargs} -D {args.abc_delay_ps:.9g}' if args.abc_mode == 'course'
+                   else f'abc -genlib {LIBDIR.as_posix()}/asap7_comb.genlib '
+                        '-script "+strash;scorr;dc2;dretime;strash;map -a"')
+    if args.abc_mode == 'course' and args.abc_script == 'classic-area':
+        abc_command = f'abc {libargs} -script "+strash;scorr;dc2;dretime;strash;map -a"'
     mapped = []
     for i, module in modules:
         path = out / f"mapped_{i}.il"
@@ -151,7 +179,7 @@ techmap
 opt
 dfflibmap -liberty {seq.as_posix()}
 opt
-abc -genlib {LIBDIR.as_posix()}/asap7_comb.genlib -script "+strash;scorr;dc2;dretime;strash;map -a"
+{abc_command}
 opt_clean
 select -assert-none t:$* t:$paramod* %d
 tee -o {out.as_posix()}/mapped_{i}_stat.log stat {libargs}
@@ -194,6 +222,7 @@ write_verilog -noattr -noexpr {out.as_posix()}/cpu_core_synth.v
     report = {
         "format": "synth-area-audit-v1", "status": "COMPLETE", "complete": True,
         "profile": "ff-reference", "mapping": "hierarchical, SAT memory-port optimizations skipped",
+        "mapping_options": mapping_options,
         "configuration": configuration,
         "area_um2": audit["top_area_um2_known_cells_only"],
         "area": {"known_standard_cell_um2": audit["top_area_um2_known_cells_only"],

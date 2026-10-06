@@ -1,0 +1,99 @@
+"""Create the fresh A106-A109 coherent PPA-gated manager; no measurement."""
+from manage_frozen_baseline_programs import ROOT, sha
+
+
+def once(text, old, new):
+    assert text.count(old) == 1, old
+    return text.replace(old, new)
+
+
+def main():
+    source = ROOT/'tools/manage_er1_a105_measurement.py'
+    target = ROOT/'tools/manage_er1_a109_measurement.py'
+    assert not target.exists()
+    assert sha(source) == 'f375cca44046c5df5d6c740374f01eb44f315eba6e7d6515bf3182de6b1dda63'
+    text = source.read_text(encoding='utf-8')
+    for old, new in [
+        ('Windows A95-A105 coherent PPA-gated characterization.', 'Windows A95-A109 coherent PPA-gated characterization.'),
+        ("CANDIDATE=Path('F:/CPU2026Candidates/tier3_er1_20261005/A105_rob_recovery_row_live')", "CANDIDATE=Path('F:/CPU2026Candidates/tier3_er1_20261005/A109_rob_occupancy_distribution')"),
+        ("RUN=Path('F:/CPU2026CourseRuns/ER1_A105_tier3_20261006')", "RUN=Path('F:/CPU2026CourseRuns/ER1_A109_tier3_20261006')"),
+        ("REPORT=ROOT/'reports/ER1_A105_pretest_2026-10-06.md'", "REPORT=ROOT/'reports/ER1_A109_pretest_2026-10-06.md'"),
+        ("ROOT/'tools/prepare_er1_a105_measurement_manager.py'", "ROOT/'tools/prepare_er1_a109_measurement_manager.py'"),
+        ('for number in range(95,106):', 'for number in range(95,110):'),
+        ("    105:'prepare_er1_rob_recovery_row_live.py',", "    105:'prepare_er1_rob_recovery_row_live.py',\n"
+         "    106:'prepare_er1_report_recovery_circular_compare.py',\n"
+         "    107:'prepare_er1_allocation_payload_preselect.py',\n"
+         "    108:'prepare_er1_head_report_word_select.py',\n"
+         "    109:'prepare_er1_rob_occupancy_distribution.py',"),
+        ("'LSQ_REPORT_RECOVERY_PREQUALIFY','LSQ_ALLOC_FIRE_DISTRIBUTE','ROB_RECOVERY_ROW_LIVE_QUALIFY'):",
+         "'LSQ_REPORT_RECOVERY_PREQUALIFY','LSQ_ALLOC_FIRE_DISTRIBUTE','ROB_RECOVERY_ROW_LIVE_QUALIFY',\n"
+         "        'LSQ_REPORT_RECOVERY_CIRCULAR_COMPARE','LSQ_ALLOC_PAYLOAD_PRESELECT','ROB_OCCUPANCY_DISTRIBUTE'):"),
+        ("        'er1_a105_source_progress_20261006.json']:",
+         "        'er1_a105_source_progress_20261006.json',\n"
+         "        'er1_a106_background_progress_20261006.json',\n"
+         "        'er1_a107_background_progress_20261006.json',\n"
+         "        'er1_a105_result_a108_a109_progress_20261006.json']:"),
+        ("status='A105_FROZEN_PPA_GATED_PRETEST_NOT_STARTED'", "status='A109_FROZEN_PPA_GATED_PRETEST_NOT_STARTED'"),
+        ("'PROGRESS_A103_A105_RECOVERY_ROOT_MIDDLE_TAIL_NATIVE_PRETEST_FROZEN'", "'PROGRESS_A106_A109_COUNT_REPORT_RECOVERY_ALLOCATION_NATIVE_PRETEST_FROZEN'"),
+        ("status='A105_PPA_GATED_CHARACTERIZATION_IN_PROGRESS'", "status='A109_PPA_GATED_CHARACTERIZATION_IN_PROGRESS'"),
+        ("'PROGRESS_A105_PRETEST_REPORTED_PPA_GATED_NATIVE_SERIAL_DISPATCH'", "'PROGRESS_A109_PRETEST_REPORTED_PPA_GATED_NATIVE_SERIAL_DISPATCH'"),
+        ("    assert effective['LSQ_REPORT_RECOVERY_PREQUALIFY']==effective['LSQ_ALLOC_FIRE_DISTRIBUTE']==effective['ROB_RECOVERY_ROW_LIVE_QUALIFY']==1",
+         "    assert effective['LSQ_REPORT_RECOVERY_PREQUALIFY']==effective['LSQ_ALLOC_FIRE_DISTRIBUTE']==1\n"
+         "    assert effective['ROB_RECOVERY_ROW_LIVE_QUALIFY']==0\n"
+         "    assert effective['LSQ_REPORT_RECOVERY_CIRCULAR_COMPARE']==effective['LSQ_ALLOC_PAYLOAD_PRESELECT']==effective['ROB_OCCUPANCY_DISTRIBUTE']==1"),
+    ]:
+        text = once(text, old, new)
+    marker = "    active_path=ROOT/'build/cpu2026/active_frequency_implementation_20261004.json'"
+    text = once(text, marker, """    old_a105=Path('F:/CPU2026CourseRuns/ER1_A105_tier3_20261006')
+    from manage_er1_a105_measurement import check as check_a105
+    check_a105()
+    assert not live(read(old_a105/'dispatch_identity.json')['process_id'])
+    assert read(old_a105/'serial_phase_identity.json')['status']=='SERIAL_TIMING_COMPLETE_PERFORMANCE_DEFERRED'
+    prior=read(ROOT/'build/cpu2026/er1_a105_result_a108_a109_progress_20261006.json')['metrics']
+    assert sha(old_a105/'result/synth/opt/report.json')==prior['ppa_sha256']
+    assert sha(old_a105/'result/timing_only.json')==prior['timing_report_sha256']
+""" + marker)
+    marker = "    ROOT/'tools/verilator_windows_time_zero.cpp',ROOT/'tools/prepare_er1_a109_measurement_manager.py',Path(__file__)]"
+    text = once(text, marker, "    ROOT/'tools/verilator_windows_time_zero.cpp',ROOT/'tools/prepare_er1_a109_measurement_manager.py',\n"
+        "    ROOT/'tools/manage_er1_a105_measurement.py',ROOT/'tools/prepare_er1_a105_measurement_manager.py',Path(__file__)]")
+    start = text.index("    REPORT.write_text(f'''")
+    end = text.index('    assert effective[', start)
+    report = """    REPORT.write_text(f'''# A109：计数负载、报告选择、恢复分类与分配载荷的完整频率批次
+
+目标严格>300MHz、六perf IPC几何平均>=1.1、总面积含SRAM<=36000μm²，完整RV32IM/OoO/顺序提交/MMIO/参数化保持。此报告先于任何新测试。
+
+最新完整三指标仍A94：IPC{original['ipc']:.9f}、Fmax{original['fmax_mhz']:.6f}MHz、面积{original['area_um2']:.6f}μm²，六perf答案通过、原19正确性未跑。最近A105原PID96096已终态：Fmax{prior['fmax_mhz']:.9f}MHz、面积{prior['area_um2']:.6f}μm²、周期{prior['minimum_period_ns']:.9f}ns。PPA未过，未构建CPU或测IPC；频率/面积分别比A99差13.565393MHz/+140.2596μm²，不单独归因于某一修改。
+
+新最慢五条由原ROB countbit3起始，到达3.586/3.573/3.553/3.543/3.536ns：count launch TCQ177.6ps/33.77fF+INV170.6ps→恢复域0.615ns→LSQ/source3 direct payload physbit4 1.808ns→RS物理唤醒/issue 2.427ns→ALU subtract control2.631ns→FF。最大OAI21门529ps、43.73fF、slew1.1ns。需周期缩短超过313.151ps，并至少降低56.018μm²面积。仅取top5，不能声称旧分配/报告链已全部消失。
+
+| 本次已完成源修改 | 作用与原行为约束 |
+|---|---|
+| A106 | 精确原unsigned W-bit age分类改成环形slot比较，共享完整head+occupancy端点。保留2^W回绕、原age/GEN/range与全部rawcount行为，晚head选择仍选原bool。 |
+| A107 | 由既有稀疏plan预选完整LSQ slot/GEN载荷。只在原actual alloc_fire消费者使用，public tag/fire/count/ready和scarce resource/flush/recovery/所有写事件不变，切断载荷对晚fire的依赖。 |
+| A108 | 最后73bit head/saved报告mux用5个<=16bit功能驱动叶选择同样字段；原控制树真实计价，packet/priority/周期不变。新course profile把可选A105每行GEN查询置0，恢复原9bit selected currentGEN reader，控制复制比较成本。 |
+| A109 | 同一真实occupancy_reg按四行分组驱动恢复比较，并分离lane/public/query域，减轻实测count起点高负载。原count状态赋值、unsigned width、所有门槛/事件/队列不变。 |
+
+这批覆盖真实数百ps负载及前一轮串行链，源级可观收益依据足够支持一次整批PPA判断；不能把529ps和348ps直接相加当作节省，新增驱动延迟、映射变化、新瓶颈或组合面积会抵消。529ps内部driver没有head_choice标签，其与最后未分组73bit mux的关联是结构推断；countbit3通过原JSON INV/FF绑定。所有新增FF/SRAM/流水边沿为0，不代表实际面积不增；A105可选结构退出本profile的净面积仍待测。
+
+源推导复查了原年龄位宽、所有环形边界/count0/M/>M/nonpower/entries1、实际plan==fire时完整slot/GEN等值、所有实际写消费者与无credit反馈、分组选择逐bit等值、同一count状态/width/所有比较类型，以及原public/state后缀。没有逐修改HDL/lint/形式/仿真/综合/STA/单元测试。新profile保留FE4/BE2/整数2/CDB2、ROB32/PRF56/RS8/LSQ16/BTB16、缓存/预测规模及8ROBGEN/9LSQGEN；HELD_LOAD_IDENTITY_QUERY0、FAST_STORE_BATCH0，其余纯组合方案继承，不把旧IPC借给新候选。
+
+其余方案已评估：恢复/CDB/issue再加寄存器改变同周期唤醒与等待，A94 IPC仅约1.37%余量，尚无可控周期代价依据；扩大结构违背当前紧面积；删GEN/取消/ISA违背要求；原RS source-before-mux比较需要新的身份/仲裁优先接口及更多比较，在当前明确529ps/348ps控制负载未处理前没有更直接净收益依据；ALU已有分段，当前延迟主要在算术之前。本批已完成当前更有直接证据的源修改，没有另一个有更明确净收益的同批修改待实现；未来架构方向仍可根据本次原数据继续判断。
+
+新独立运行目录{RUN}，冻结{len(names)}文件，其中{len(dependencies)}课程依赖与成功A94逐字相同。Windows native、无WSL；框架54fc150ffc290f52aa024209ffb9a29d43856f6d、测试29f980727f7d99a1842a58f34091c7579ba3fe85；Yosys0.63/ABC/OpenSTA3.1/Verilator5.020/ASAP7RVT TT/FakeRAM，latency10、clock2ns、原I/O/uncertainty/load完整保持。15份95-109准备脚本/源审阅，A102被A103修正的错误位宽记录、旧成功完整指标与原终态/newpath/closingcoverage及工具绑定哈希；不重启或编辑旧成功任务。
+
+对话汇报之后唯一一次综合/STA。只有实际Fmax>300且含SRAM总面积<=36000，才复用同manifest/config/PPA构建一次课程CPU、跑六perf（各1000000周期上限），核对原答案/动态指令/GEOMEAN；PPA不过则终态跳过CPU/IPC。三项达标后另存正确性证据，复用同CPU一次19官方正确性（10000000周期上限）+4份既有冻结边界程序（各200000周期上限、latency10），不重综合/构建/六perf。四程序的独立解释器共8762指令覆盖45类及全8M、除零/溢出/控制/自然对齐/RAM边界；它们还不是当前CPU通过证明。关键参数维度与完整架构源审阅仍须完成。
+
+主E40源不变、未采用，目标尚未达成；准备时未派发新测试。
+
+候选SHA256：{sha(CANDIDATE/'candidate.json')}
+
+源manifest SHA256：{sha(RUN/'source_manifest.json')}
+''',encoding='utf-8')
+"""
+    text = text[:start]+report+text[end:]
+    target.write_text(text,encoding='utf-8')
+    print(dict(manager=str(target),manager_sha256=sha(target),source_manager_sha256=sha(source),tests_started=False))
+
+
+if __name__ == '__main__':
+    main()

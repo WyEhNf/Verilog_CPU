@@ -1,0 +1,112 @@
+"""Create a fresh A84-A94 manager, retaining the original failed A92 run."""
+from pathlib import Path
+
+from manage_frozen_baseline_programs import ROOT, sha
+
+
+def once(text, old, new):
+    assert text.count(old) == 1, old
+    return text.replace(old, new)
+
+
+def main():
+    source = ROOT/'tools/manage_er1_a92_measurement.py'
+    target = ROOT/'tools/manage_er1_a94_measurement.py'
+    assert not target.exists()
+    assert sha(source) == 'e6c6e8a3b997d7b1037f9f9ee0ff04d74a69ca1f44c33f2ba9c44b78af19634c'
+    text = source.read_text(encoding='utf-8')
+    for old,new in [
+        ('Windows A84-A92 characterization.', 'Windows A84-A94 characterization.'),
+        ("CANDIDATE=Path('F:/CPU2026Candidates/tier3_er1_20261005/A92_load_response_source_query')",
+         "CANDIDATE=Path('F:/CPU2026Candidates/tier3_er1_20261005/A94_localparam_dependency_order')"),
+        ("RUN=Path('F:/CPU2026CourseRuns/ER1_A92_tier3_20261006')",
+         "RUN=Path('F:/CPU2026CourseRuns/ER1_A94_tier3_20261006')"),
+        ("REPORT=ROOT/'reports/ER1_A92_pretest_2026-10-06.md'",
+         "REPORT=ROOT/'reports/ER1_A94_pretest_2026-10-06.md'"),
+        ('for number in range(84,93):','for number in range(84,95):'),
+        ("    92:'prepare_er1_load_response_source_query.py',",
+         "    92:'prepare_er1_load_response_source_query.py',\n"
+         "    93:'prepare_er1_fast_store_wb_data.py',\n"
+         "    94:'prepare_er1_localparam_dependency_order.py',"),
+        ("'LSQ_ALLOC_SLOT_PRESELECT','LSQ_HEAD_LOAD_PACKET_PRESELECT','LSQ_RESPONSE_SOURCE_QUERY'):",
+         "'LSQ_ALLOC_SLOT_PRESELECT','LSQ_HEAD_LOAD_PACKET_PRESELECT','LSQ_RESPONSE_SOURCE_QUERY',\n"
+         "        'FAST_STORE_WB_DATA'):"),
+        ("        'er1_a91_a92_source_progress_20261006.json']:",
+         "        'er1_a91_a92_source_progress_20261006.json',\n"
+         "        'er1_a92_failed_a93_a94_progress_20261006.json']:"),
+        ("status='A92_FROZEN_SERIAL_PRETEST_NOT_STARTED'","status='A94_FROZEN_SERIAL_PRETEST_NOT_STARTED'"),
+        ("'PROGRESS_A84_A92_MEASURED_CHAIN_EVENT_IDENTITY_PREPARATION_NATIVE_PRETEST_FROZEN'",
+         "'PROGRESS_A84_A94_CORRECTED_CUMULATIVE_NATIVE_PRETEST_FROZEN'"),
+        ("status='A92_SERIAL_CHARACTERIZATION_IN_PROGRESS'","status='A94_SERIAL_CHARACTERIZATION_IN_PROGRESS'"),
+        ("'PROGRESS_A92_CUMULATIVE_PRETEST_REPORTED_NATIVE_SERIAL_DISPATCH'",
+         "'PROGRESS_A94_CORRECTED_CUMULATIVE_PRETEST_REPORTED_NATIVE_SERIAL_DISPATCH'"),
+    ]:
+        text = once(text,old,new)
+    start = text.index("    REPORT.write_text(f'''")
+    end = text.index('    tool_paths=',start)
+    report = """    REPORT.write_text(f'''# ER1 A94：修正后累计方案测量前汇报
+
+目标不变：频率严格>300MHz、六项课程性能程序IPC几何平均≥1.1、总面积（含SRAM）≤36000μm²；保留完整RV32IM、OoO、顺序提交、MMIO与参数化。
+
+## 已有结果与失败边界
+
+最新完整测量A83：IPC{original['ipc']:.8f}、Fmax{original['fmax_mhz']:.5f}MHz、含SRAM面积{original['area_um2']:.5f}μm²，六项性能答案通过，19项正确性未运行。还需IPC提高{(1.1/original['ipc']-1)*100:.4f}%，最小周期缩短超过{(original['minimum_period_ns']-1000/300)*1000:.3f}ps，面积余量{36000-original['area_um2']:.3f}μm²。已测频率/面积达标且IPC最高仍A55R2：1.01714182、306.86245MHz、35480.53090μm²。
+
+原A92监督PID97984已终止，SERIAL_TIMING_FAILED，timing返回1：课程Yosys无法确定位宽参数HEAD_LOAD_PACKET_ACTIVE，因为新常量被更早的宽度表达式引用。没有PPA/IPC，不能把前端失败当频率下降。失败证据、旧源码、管理器、准备/审阅脚本和结果日志保持冻结。A94是独立修正后新源码、新目录、新监督任务；成功A83仍作工具/依赖/指标参考。
+
+## 整批已完成的修改
+
+| 候选 | 改动与用途 |
+|---|---|
+| A84 | 原退休前缀之后的普通存储授权与前缀退休重叠；存储本身仍等原注册sent，MMIO/error/更老阻塞和单授权口保留。 |
+| A85 | 缓存/MMIO ACK候选身份各自提前作完整LSQ GEN/valid/row/sent/wait核对，真实事件保持缓存优先级。 |
+| A86 | 实际已提交队首存储合法ACK可在原ready边沿正式上报/释放；暂停捕获与其他行原路径保留，省一条ACK捕获后等待机会。 |
+| A87 | 快存储基于保存PRF就绪/地址类别，容量普通/减一项提前计算，晚资格只选bool；保留原真实分配和D替换信用。 |
+| A88 | held/head-fast优先级不变，普通加载排序只依赖保存完成行，消除新响应对未使用全局wrap/prefix的依赖。 |
+| A89 | 保存/held与队首完整ROB身份并行核对当前valid/全部8bit GEN，晚选择只选资格，恢复/cancel/实际事件不变。 |
+| A90 | 保存D稀疏内存需求与tail提前确定LSQ分配槽；整包admit证明任何实际fire时计划等于原fire，原fire门控原状态写入。 |
+| A91 | 保存/held完整报告包和query、队首元数据提前读取选择；实际返回选准备包，原格式器值/error、valid、hold及回收不变。 |
+| A92 | 缓存保存/命中旁路完整LSQ候选票据并行比较，真实源有效位门控匹配；公开响应优先级/数据/错误/状态原样。 |
+| A93 | 数据ready由原保存ready且无WB拓宽为保存ready或合法匹配WB；基址仍须保存ready且无WB，因此不把WB数据值放回地址加法/类别链。 |
+| A94 | 移动原完整常量声明块到宽度/active引用之前，修正A91的HEAD_LOAD_PACKET_ACTIVE与A87的PARALLEL_STORE_ADDRESS前向依赖。纯声明顺序修复，无额外性能收益声明。 |
+
+A93保留原快存储资格（同输入R&&!W蕴含R||W），并覆盖数据当前WB就绪机会。actual LSQ数据继续使用原PRF最高WB优先级；explicit-data非零、MMIO或基址未就绪仍走原RS，完整GEN与顺序存储副作用不变。不能据此保证聚合IPC。
+
+## 可观收益依据
+
+A83最慢五条4.032/4.030ns同链：内存response-ID→cache旁路→公开LSQ票据0.7946ns→匹配/wrap1.260ns→报告ROB query1.597ns→live读取1.785ns→完成选择2.091ns→PRF写回值2.292ns→WB存储地址类别2.755ns→D入队3.319ns→分配槽选择3.626ns→GEN写控制3.830ns→FF4.032ns。
+
+这批同时移走新响应进入普通排序、先选票据再比较、先选报告再核对live、WB值进入快存储地址类别、实际admit后再算分配槽等多个串行依赖，目标是让晚事件只选择提前准备的资格并门控原写入。A84/A86另有真实存储等待机会，A93拓宽数据WB快路径。预计值得一次整批表征；各区间不能直接相加算节省，映射/Fanout/新瓶颈与实际工作负载收益仍未知。
+
+无新增声明FF/SRAM/常规流水边沿/端口容量；FE4/BE2/整数2/CDB2、ROB32/PRF56/RS8/LSQ16、缓存/MSHR/预测表、8ROBGEN/9LSQGEN保持。双身份查询/比较、完整候选包和队首读可能增加组合面积，不以无FF推定面积达标。无false-path、缩GEN、删ISA或越序内存副作用。
+
+源级检查覆盖整包admit/替换信用、容量代数/单快存储、所有WB优先级、地址carry/sign/对齐/RAM界、完整身份/held/head/saved报告与所有包/query位域、ACK暂停/错误、缓存来源优先级、稀疏分配及真实fire、恢复/顺序提交、修正后常量依赖顺序。仅源级推导与哈希冻结；没有逐修改HDL/lint/形式/仿真/综合/STA/单元测试，尚未确认A94编译通过或完整正确性。私有查询/计划输入由core原信号生成，必须与真实包/整包分配一致。
+
+## 其他方向及本次范围
+
+原RS/加载唤醒、取指请求、cache命中同发机制已启用，没有直接待删的新等待边沿。扩容PRF/RS/ROB/缓存或增加大型预测器缺同版本瓶颈与成本依据，当前余量仅352.966μm²；部分D入队、任意非队首正式完成/授权和再次拆流水会修改暂停/提交协议，目前没有新证据支持。cache格式/前递/扇出可能成为下一瓶颈，但需这批映射结果判断。
+
+当前有证据支持的同链修改已落盘，声明顺序修复已检查，没有额外能直接说明可观收益的同链改动待完成。这不代表穷尽长期架构方案或降低目标。运行时继续独立分析新的IPC/面积机会，不改测量快照。
+
+## 测量规范
+
+Windows原生，禁止WSL：框架54fc150ffc290f52aa024209ffb9a29d43856f6d、测试29f980727f7d99a1842a58f34091c7579ba3fe85、Yosys0.63/ABC/OpenSTA3.1/Verilator5.020、课程ASAP7 RVT TT/FakeRAM、latency10。映射clock2ns、原I/O/uncertainty/负载保持，报告真实Fmax和含SRAM总面积。冻结{len(names)}文件，其中{len(dependencies)}课程依赖与成功A83逐字相同。
+
+一次新监督任务：串行--timing-only，然后依据同一manifest/config/toolchain/report --reuse-synth，仅一次综合/STA及一次CPU构建；六项原perf各1000000周期、核对答案、动态指令分子和GEOMEAN。完整19正确性以及M/恢复/GEN/MMIO/参数覆盖在明确改善并采用前集中验证。无并行大型前端、无自动重试、无重启旧PID/覆盖旧结果。主E EU40文件保持快照，运行在F盘。
+
+本报告生成时尚未启动新HDL或构建，先在对话汇报后调度。measurement_plan绑定11份准备脚本/源码审阅、A83参考、A92失败/A93/A94进度证据、主机工具/库/脚本与完整源。候选之间不互借指标。
+
+候选SHA256：{sha(CANDIDATE/'candidate.json')}
+
+源manifest SHA256：{sha(RUN/'source_manifest.json')}
+''',encoding='utf-8')
+"""
+    text = text[:start]+report+text[end:]
+    assert "REFERENCE=Path('F:/CPU2026CourseRuns/ER1_A83_tier3_20261006')" in text
+    assert 'check_a83()' in text and 'a83_reference.json' in text
+    target.write_text(text,encoding='utf-8')
+    print(dict(manager=str(target),manager_sha256=sha(target),source_manager_sha256=sha(source),tests_started=False))
+
+
+if __name__ == '__main__':
+    main()

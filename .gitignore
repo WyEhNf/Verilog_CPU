@@ -52,6 +52,15 @@ synth/help_timing.ys
 !/reports/current_candidate_2026-09-26.md
 !/reports/final_goal_progress_2026-09-23.md
 !/reports/strict_area_status_2026-09-26.md
+!/reports/latest_total_area_2026-09-30.md
+!/reports/dcache_sram_integration_2026-09-30.md
+!/reports/frontend_onehot_2026-10-01.md
+!/reports/dcache_store_query_pipeline_2026-10-01.md
+!/reports/rob_parallel_read_2026-10-01.md
+!/reports/direct_completion_2026-10-01.md
+!/reports/store_admission_2026-10-01.md
+!/reports/direct_branch_target_2026-10-01.md
+!/reports/indexed_history_predictor_2026-10-01.md
 /.deps/*
 !/.deps/.gitkeep
 obj_dir/

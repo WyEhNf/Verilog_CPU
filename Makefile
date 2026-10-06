@@ -1,9 +1,21 @@
 SHELL := cmd.exe
 .SHELLFLAGS := /C
+.DEFAULT_GOAL := gui
 
 .PHONY: gui join02-vlt join02-vlt-fast join02-vlt-build join03 join03-build join04 join05 join06-report reference-trace-build reference-trace-test doctor lint unit matrix join01 join02 join h01 h02 h03 h04 a01 a02 a03 a04 a05 a06 a07 b01 b02 b03 b04 b05 b06 b07 b08 b09 regression asap7-maplib synth synth-bb
 
 ROOT := $(CURDIR)
+# Current course assessment uses only the pinned Windows native toolchain.
+# Legacy research targets below retain their historical tool settings.
+COURSE_PYTHON ?= C:/Users/admin/miniconda3/python.exe
+
+.PHONY: course-standard-measure course-standard-versions
+course-standard-measure:
+	@set "PYTHONUTF8=1" && "$(COURSE_PYTHON)" tools/run_course_standard_windows.py
+
+course-standard-versions:
+	@set "PYTHONUTF8=1" && "$(COURSE_PYTHON)" tools/record_course_windows_toolchain.py
+
 OSS_CAD_ROOT ?= $(ROOT)/.deps/oss-cad-suite-install/oss-cad-suite
 RV_ROOT ?= $(ROOT)/.deps/riscv-toolchain-install/xpack-riscv-none-elf-gcc-15.2.0-1
 OSS_CAD_ROOT_WIN := $(subst /,\,$(OSS_CAD_ROOT))
@@ -64,6 +76,7 @@ SERIAL_BACKEND ?= 0
 CFG ?= fe$(FE_WIDTH)_be$(BE_WIDTH)_p$(PHYS_REGS)_r$(ROB_ENTRIES)
 ASAP7_LIB_DIR ?= $(ROOT)/third_party/asap7/lib
 RTL_FILELIST = rtl/filelist.f
+COURSE_SRAM ?= .deps/RISC-V-CPU-2026/scripts/ram/sram_fakeram.sv
 RTL_FILES := $(strip $(file <$(RTL_FILELIST)))
 CPU_TB_PARAMS = -P cpu_core_image_tb.FE_WIDTH=$(FE_WIDTH) -P cpu_core_image_tb.BE_WIDTH=$(BE_WIDTH) -P cpu_core_image_tb.INT_ISSUE_WIDTH=$(INT_ISSUE_WIDTH) -P cpu_core_image_tb.CDB_WIDTH=$(CDB_WIDTH) -P cpu_core_image_tb.PHYS_REGS=$(PHYS_REGS) -P cpu_core_image_tb.ROB_ENTRIES=$(ROB_ENTRIES) -P cpu_core_image_tb.RS_ENTRIES=$(RS_ENTRIES) -P cpu_core_image_tb.LSQ_ENTRIES=$(LSQ_ENTRIES) -P cpu_core_image_tb.ENABLE_CACHE_STATS=$(ENABLE_CACHE_STATS) -P cpu_core_image_tb.ENABLE_CACHES=$(ENABLE_CACHES) -P cpu_core_image_tb.ICACHE_FAST_HIT=$(ICACHE_FAST_HIT) -P cpu_core_image_tb.ICACHE_COMBINATIONAL_HIT=$(ICACHE_COMBINATIONAL_HIT) -P cpu_core_image_tb.ICACHE_PREFETCH=$(ICACHE_PREFETCH) -P cpu_core_image_tb.ICACHE_MSHRS=$(ICACHE_MSHRS) -P cpu_core_image_tb.DCACHE_MSHRS=$(DCACHE_MSHRS) -P cpu_core_image_tb.DCACHE_LINES=$(DCACHE_LINES) -P cpu_core_image_tb.MEMORY_LATENCY=$(MEMORY_LATENCY) -P cpu_core_image_tb.I_MEMORY_OUTSTANDING=$(I_MEMORY_OUTSTANDING) -P cpu_core_image_tb.D_MEMORY_OUTSTANDING=$(D_MEMORY_OUTSTANDING) -P cpu_core_image_tb.ENABLE_PREDICTOR=$(ENABLE_PREDICTOR) -P cpu_core_image_tb.FETCH_QUEUE_DEPTH=$(FETCH_QUEUE_DEPTH) -P cpu_core_image_tb.COMPLETION_DEPTH=$(COMPLETION_DEPTH) -P cpu_core_image_tb.COMPLETION_BYPASS=$(COMPLETION_BYPASS) -P cpu_core_image_tb.STORE_BUFFERED_RETIRE=$(STORE_BUFFERED_RETIRE) -P cpu_core_image_tb.SERIAL_BACKEND=$(SERIAL_BACKEND) -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -P cpu_core_image_tb.SHIFT_IMPL=$(SHIFT_IMPL) -P cpu_core_image_tb.PHYS_TAG_IMPL=$(PHYS_TAG_IMPL) -P cpu_core_image_tb.GENERATION_WIDTH=$(GENERATION_WIDTH) -P cpu_core_image_tb.CHECKPOINT_IMPL=$(CHECKPOINT_IMPL)
 
@@ -83,16 +96,16 @@ doctor:
 	@echo ASAP7 RVT TT liberty: OK
 
 lint:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core -o build/h00_lint.vvp -c $(RTL_FILELIST)
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32im_defs_tb -o build/h01_defs_lint.vvp -c $(RTL_FILELIST) tb/unit/rv32im_defs_tb.v
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s h01_channel_tb -o build/h01_channel_lint.vvp -c $(RTL_FILELIST) tb/integration/h01_channel_tb.v
-	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Wno-fatal -Irtl --top-module cpu_core -f $(RTL_FILELIST)
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core -o build/h00_lint.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)"
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32im_defs_tb -o build/h01_defs_lint.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_defs_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s h01_channel_tb -o build/h01_channel_lint.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/integration/h01_channel_tb.v
+	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Wno-fatal -Irtl --top-module cpu_core +1800-2017ext+sv -f $(RTL_FILELIST) "$(COURSE_SRAM)"
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_tag_compare.v
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_fifo.v
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_skid_buffer.v
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_prefix_alloc.v
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/common/rv32im_priority_select.v
-	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl $(RTL_FILES); hierarchy -check -top cpu_core; check"
+	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -sv -noblackbox -D SYNTHESIS $(COURSE_SRAM); read_verilog -I rtl $(RTL_FILES); hierarchy -check -top cpu_core; check"
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/common/rv32im_tag_compare.v; hierarchy -check -top rv32im_tag_compare; proc; check"
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/common/rv32im_fifo.v; hierarchy -check -top rv32im_fifo; proc; memory; check"
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/common/rv32im_skid_buffer.v; hierarchy -check -top rv32im_skid_buffer; proc; check"
@@ -101,29 +114,29 @@ lint:
 
 unit:
 	@if not "$(NAME)"=="h00" if not "$(NAME)"=="" (echo Unknown unit NAME=$(NAME) & exit /b 2)
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_h00_tb -o build/cpu_core_h00_tb.vvp -c $(RTL_FILELIST) tb/unit/cpu_core_h00_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_h00_tb -o build/cpu_core_h00_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_h00_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_h00_tb.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_h00_tb.ENABLE_CACHE_STATS=1 -s cpu_core_h00_tb -o build/cpu_core_h00_stats_tb.vvp -c $(RTL_FILELIST) tb/unit/cpu_core_h00_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P cpu_core_h00_tb.ENABLE_CACHE_STATS=1 -s cpu_core_h00_tb -o build/cpu_core_h00_stats_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_h00_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_h00_stats_tb.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.FE_WIDTH=3 -o build/cpu_core_invalid_fe.vvp -c $(RTL_FILELIST) tb/unit/cpu_core_invalid_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.FE_WIDTH=3 -o build/cpu_core_invalid_fe.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_invalid_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_invalid_fe.vvp | findstr /C:"ERROR: invalid FE_WIDTH" >NUL
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.BE_WIDTH=3 -o build/cpu_core_invalid_be.vvp -c $(RTL_FILELIST) tb/unit/cpu_core_invalid_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.BE_WIDTH=3 -o build/cpu_core_invalid_be.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_invalid_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_invalid_be.vvp | findstr /C:"ERROR: invalid BE_WIDTH" >NUL
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.PHYS_REGS=32 -o build/cpu_core_invalid_prf.vvp -c $(RTL_FILELIST) tb/unit/cpu_core_invalid_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.PHYS_REGS=32 -o build/cpu_core_invalid_prf.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_invalid_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_invalid_prf.vvp | findstr /C:"ERROR: invalid PHYS_REGS" >NUL
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.ROB_ENTRIES=3 -o build/cpu_core_invalid_rob.vvp -c $(RTL_FILELIST) tb/unit/cpu_core_invalid_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_invalid_tb -P cpu_core_invalid_tb.ROB_ENTRIES=3 -o build/cpu_core_invalid_rob.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_invalid_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_invalid_rob.vvp | findstr /C:"ERROR: invalid ROB_ENTRIES" >NUL
 
 matrix:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_matrix_tb -o build/cpu_core_matrix_tb.vvp -c $(RTL_FILELIST) tb/unit/cpu_core_matrix_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_matrix_tb -o build/cpu_core_matrix_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/cpu_core_matrix_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_matrix_tb.vvp
 
 join01:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s cpu_core_join01_tb -o build/cpu_core_join01_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/unit/cpu_core_join01_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s cpu_core_join01_tb -o build/cpu_core_join01_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/unit/cpu_core_join01_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/cpu_core_join01_tb.vvp | findstr /C:"PASS: JOIN-01"
 
 join02:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl $(CPU_TB_PARAMS) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl $(CPU_TB_PARAMS) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_join02.ps1 -Vvp "$(VVP)" -Simulation build/cpu_core_image_tb.vvp -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
 
 # Fast full-system regression: Verilator-compiled cpu_core_image_tb.
@@ -145,15 +158,15 @@ join03-build:
 	@python tools/run_join03.py --build-only --report build/join03/build_report.json --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe"
 
 join03:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl $(CPU_TB_PARAMS) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl $(CPU_TB_PARAMS) -s cpu_core_image_tb -o build/cpu_core_image_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb.vvp --config "$(CFG)"
 
 # JOIN-04 proves that the same full-system path executes with real two- and
 # four-wide decode/rename/dispatch/issue/commit configurations.
 join04: join03-build
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=2 -P cpu_core_image_tb.BE_WIDTH=2 -P cpu_core_image_tb.PHYS_REGS=64 -P cpu_core_image_tb.ROB_ENTRIES=32 -P cpu_core_image_tb.RS_ENTRIES=8 -P cpu_core_image_tb.LSQ_ENTRIES=8 -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb_w2.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=2 -P cpu_core_image_tb.BE_WIDTH=2 -P cpu_core_image_tb.PHYS_REGS=64 -P cpu_core_image_tb.ROB_ENTRIES=32 -P cpu_core_image_tb.RS_ENTRIES=8 -P cpu_core_image_tb.LSQ_ENTRIES=8 -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb_w2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb_w2.vvp --report build/join03/report_w2.json --config fe2_be2_p64_r32
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=4 -P cpu_core_image_tb.BE_WIDTH=4 -P cpu_core_image_tb.PHYS_REGS=96 -P cpu_core_image_tb.ROB_ENTRIES=64 -P cpu_core_image_tb.RS_ENTRIES=16 -P cpu_core_image_tb.LSQ_ENTRIES=16 -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb_w4.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P cpu_core_image_tb.FE_WIDTH=4 -P cpu_core_image_tb.BE_WIDTH=4 -P cpu_core_image_tb.PHYS_REGS=96 -P cpu_core_image_tb.ROB_ENTRIES=64 -P cpu_core_image_tb.RS_ENTRIES=16 -P cpu_core_image_tb.LSQ_ENTRIES=16 -P cpu_core_image_tb.MUL_IMPL=$(MUL_IMPL) -s cpu_core_image_tb -o build/cpu_core_image_tb_w4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/cpu_core_image_tb.v
 	@$(OSS_ENV) python tools/run_join03.py --cc "$(RISCV_PREFIX)gcc.exe" --objdump "$(RISCV_PREFIX)objdump.exe" --objcopy "$(RISCV_PREFIX)objcopy.exe" --readelf "$(RISCV_PREFIX)readelf.exe" --vvp "$(VVP)" --simulation build/cpu_core_image_tb_w4.vvp --report build/join03/report_w4.json --config fe4_be4_p96_r64
 
 join05: join03-build
@@ -171,17 +184,17 @@ reference-trace-test:
 join: join01 join02
 
 h01:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32im_defs_tb -o build/rv32im_defs_tb.vvp -c $(RTL_FILELIST) tb/unit/rv32im_defs_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32im_defs_tb -o build/rv32im_defs_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_defs_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/rv32im_defs_tb.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s h01_channel_tb -o build/h01_channel_tb.vvp -c $(RTL_FILELIST) tb/integration/h01_channel_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s h01_channel_tb -o build/h01_channel_tb.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/integration/h01_channel_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/h01_channel_tb.vvp
 
 h02:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32im_common_tb.LANES=1 -s rv32im_common_tb -o build/h02_lanes1.vvp -c $(RTL_FILELIST) tb/unit/rv32im_common_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32im_common_tb.LANES=1 -s rv32im_common_tb -o build/h02_lanes1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_common_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/h02_lanes1.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32im_common_tb.LANES=2 -s rv32im_common_tb -o build/h02_lanes2.vvp -c $(RTL_FILELIST) tb/unit/rv32im_common_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32im_common_tb.LANES=2 -s rv32im_common_tb -o build/h02_lanes2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_common_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/h02_lanes2.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32im_common_tb.LANES=4 -s rv32im_common_tb -o build/h02_lanes4.vvp -c $(RTL_FILELIST) tb/unit/rv32im_common_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32im_common_tb.LANES=4 -s rv32im_common_tb -o build/h02_lanes4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_common_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/h02_lanes4.vvp
 
 h03:
@@ -196,45 +209,45 @@ h04:
 	@powershell -NoProfile -Command "python tools/test_trace_tools.py"
 
 a01:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32im_decoder_tb -o build/a01_decoder.vvp -c $(RTL_FILELIST) tb/unit/rv32im_decoder_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32im_decoder_tb -o build/a01_decoder.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32im_decoder_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a01_decoder.vvp | findstr /C:"PASS: A-01 decoder"
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/rv32im_decoder.v
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/rv32im_decoder.v; hierarchy -check -top rv32im_decoder; proc; check"
 
 a02:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32_branch_predictor_tb -o build/a02_predictor.vvp -c $(RTL_FILELIST) tb/unit/rv32_branch_predictor_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32_branch_predictor_tb -o build/a02_predictor.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_branch_predictor_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a02_predictor.vvp | findstr /C:"PASS: A-02 bimodal predictor and BTB"
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/predictor/rv32_branch_predictor.v
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/predictor/rv32_branch_predictor.v; hierarchy -check -top rv32_branch_predictor; proc; memory; check"
 
 a03:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32_icache_tb -o build/a03_icache.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/unit/rv32_icache_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32_icache_tb -o build/a03_icache.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/unit/rv32_icache_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a03_icache.vvp | findstr /C:"PASS: A-03 I-cache"
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/cache/rv32_icache.v
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/cache/rv32_icache.v; hierarchy -check -top rv32_icache; proc; memory; check"
 
 a04:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=1 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe1.vvp -c $(RTL_FILELIST) tb/unit/rv32_fetch_frontend_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=1 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_fetch_frontend_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a04_frontend_fe1.vvp | findstr /C:"PASS: A-04 frontend FE_WIDTH=1"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=2 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe2.vvp -c $(RTL_FILELIST) tb/unit/rv32_fetch_frontend_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=2 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_fetch_frontend_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a04_frontend_fe2.vvp | findstr /C:"PASS: A-04 frontend FE_WIDTH=2"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=4 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe4.vvp -c $(RTL_FILELIST) tb/unit/rv32_fetch_frontend_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_fetch_frontend_tb.FE_WIDTH=4 -s rv32_fetch_frontend_tb -o build/a04_frontend_fe4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_fetch_frontend_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a04_frontend_fe4.vvp | findstr /C:"PASS: A-04 frontend FE_WIDTH=4"
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/frontend/rv32_fetch_frontend.v
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/frontend/rv32_fetch_frontend.v; hierarchy -check -top rv32_fetch_frontend; proc; memory; check"
 
 a05:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32_dcache_tb -o build/a05_dcache.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/unit/rv32_dcache_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32_dcache_tb -o build/a05_dcache.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/unit/rv32_dcache_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a05_dcache.vvp | findstr /C:"PASS: A-05 D-cache"
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/cache/rv32_dcache.v
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/cache/rv32_dcache.v; hierarchy -check -top rv32_dcache; proc; check"
 
 a06:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32_memory_bridge_tb -o build/a06_memory_bridge.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/unit/rv32_memory_bridge_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32_memory_bridge_tb -o build/a06_memory_bridge.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/unit/rv32_memory_bridge_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a06_memory_bridge.vvp | findstr /C:"PASS: A-06 memory bridge"
 	@$(OSS_ENV) "$(ICARUS)" -g2012 -I rtl -s rv32_memory_bridge_256m_tb -o build/a06_memory_bridge_256m.vvp rtl/memory/rv32_memory_bridge.v tb/unit/rv32_memory_bridge_256m_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a06_memory_bridge_256m.vvp
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32_cache_stats_tb -o build/a06_cache_stats.vvp -c $(RTL_FILELIST) tb/unit/rv32_cache_stats_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32_cache_stats_tb -o build/a06_cache_stats.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_cache_stats_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a06_cache_stats.vvp | findstr /C:"PASS: A-06 cache statistics"
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/memory/rv32_memory_bridge.v
 	@$(OSS_ENV) "$(VERILATOR)" --lint-only --language 1364-2005 -Wall -Irtl rtl/cache/rv32_cache_stats.v
@@ -242,79 +255,79 @@ a06:
 	@$(OSS_ENV) "$(YOSYS)" -q -p "read_verilog -I rtl rtl/cache/rv32_cache_stats.v; hierarchy -check -top rv32_cache_stats; proc; check"
 
 a07:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s a07_frontend_cache_tb -o build/a07_frontend_cache.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/a07_frontend_cache_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s a07_frontend_cache_tb -o build/a07_frontend_cache.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/a07_frontend_cache_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/a07_frontend_cache.vvp | findstr /C:"PASS: A-07 frontend/cache joint gate"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s a07_image_fetch_smoke_tb -o build/a07_image_fetch_smoke.vvp -c $(RTL_FILELIST) tb/models/rv32im_memory_model.v tb/integration/a07_image_fetch_smoke_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s a07_image_fetch_smoke_tb -o build/a07_image_fetch_smoke.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/models/rv32im_memory_model.v tb/integration/a07_image_fetch_smoke_tb.v
 	@$(OSS_ENV) powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_a07_image_smoke.ps1 -Vvp "$(VVP)" -Simulation build/a07_image_fetch_smoke.vvp -Manifest tests/manifest -ImageRoot RISC-V-CPU-Simulator/testcases
 
 b01:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=1 -P rv32_physical_register_file_tb.PHYS_REGS=48 -s rv32_physical_register_file_tb -o build/b01_be1_p48.vvp -c $(RTL_FILELIST) tb/unit/rv32_physical_register_file_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=1 -P rv32_physical_register_file_tb.PHYS_REGS=48 -s rv32_physical_register_file_tb -o build/b01_be1_p48.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_physical_register_file_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b01_be1_p48.vvp | findstr /C:"PASS: B-01 PRF BE_WIDTH=1 PHYS_REGS=48"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=2 -P rv32_physical_register_file_tb.PHYS_REGS=64 -s rv32_physical_register_file_tb -o build/b01_be2_p64.vvp -c $(RTL_FILELIST) tb/unit/rv32_physical_register_file_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=2 -P rv32_physical_register_file_tb.PHYS_REGS=64 -s rv32_physical_register_file_tb -o build/b01_be2_p64.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_physical_register_file_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b01_be2_p64.vvp | findstr /C:"PASS: B-01 PRF BE_WIDTH=2 PHYS_REGS=64"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=4 -P rv32_physical_register_file_tb.PHYS_REGS=96 -s rv32_physical_register_file_tb -o build/b01_be4_p96.vvp -c $(RTL_FILELIST) tb/unit/rv32_physical_register_file_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_physical_register_file_tb.BE_WIDTH=4 -P rv32_physical_register_file_tb.PHYS_REGS=96 -s rv32_physical_register_file_tb -o build/b01_be4_p96.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_physical_register_file_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b01_be4_p96.vvp | findstr /C:"PASS: B-01 PRF BE_WIDTH=4 PHYS_REGS=96"
 
 b02:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=1 -P rv32_rename_unit_tb.PHYS_REGS=48 -s rv32_rename_unit_tb -o build/b02_be1_p48.vvp -c $(RTL_FILELIST) tb/unit/rv32_rename_unit_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=1 -P rv32_rename_unit_tb.PHYS_REGS=48 -s rv32_rename_unit_tb -o build/b02_be1_p48.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rename_unit_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b02_be1_p48.vvp | findstr /C:"PASS: B-02 rename BE_WIDTH=1 PHYS_REGS=48"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=2 -P rv32_rename_unit_tb.PHYS_REGS=64 -s rv32_rename_unit_tb -o build/b02_be2_p64.vvp -c $(RTL_FILELIST) tb/unit/rv32_rename_unit_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=2 -P rv32_rename_unit_tb.PHYS_REGS=64 -s rv32_rename_unit_tb -o build/b02_be2_p64.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rename_unit_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b02_be2_p64.vvp | findstr /C:"PASS: B-02 rename BE_WIDTH=2 PHYS_REGS=64"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=4 -P rv32_rename_unit_tb.PHYS_REGS=96 -s rv32_rename_unit_tb -o build/b02_be4_p96.vvp -c $(RTL_FILELIST) tb/unit/rv32_rename_unit_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rename_unit_tb.BE_WIDTH=4 -P rv32_rename_unit_tb.PHYS_REGS=96 -s rv32_rename_unit_tb -o build/b02_be4_p96.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rename_unit_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b02_be4_p96.vvp | findstr /C:"PASS: B-02 rename BE_WIDTH=4 PHYS_REGS=96"
 
 b03:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=1 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be1.vvp -c $(RTL_FILELIST) tb/unit/rv32_rob_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=1 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rob_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b03_be1.vvp | findstr /C:"PASS: B-03 ROB BE_WIDTH=1"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=2 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be2.vvp -c $(RTL_FILELIST) tb/unit/rv32_rob_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=2 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rob_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b03_be2.vvp | findstr /C:"PASS: B-03 ROB BE_WIDTH=2"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=4 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be4.vvp -c $(RTL_FILELIST) tb/unit/rv32_rob_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_rob_tb.BE_WIDTH=4 -P rv32_rob_tb.ROB_ENTRIES=8 -s rv32_rob_tb -o build/b03_be4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_rob_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b03_be4.vvp | findstr /C:"PASS: B-03 ROB BE_WIDTH=4"
 
 b04:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_reservation_station_tb.BE_WIDTH=1 -P rv32_reservation_station_tb.ENTRIES=4 -s rv32_reservation_station_tb -o build/b04_be1.vvp -c $(RTL_FILELIST) tb/unit/rv32_reservation_station_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_reservation_station_tb.BE_WIDTH=1 -P rv32_reservation_station_tb.ENTRIES=4 -s rv32_reservation_station_tb -o build/b04_be1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_reservation_station_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b04_be1.vvp | findstr /C:"PASS: B-04 RS BE_WIDTH=1 ENTRIES=4"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_reservation_station_tb.BE_WIDTH=2 -P rv32_reservation_station_tb.ENTRIES=4 -s rv32_reservation_station_tb -o build/b04_be2.vvp -c $(RTL_FILELIST) tb/unit/rv32_reservation_station_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_reservation_station_tb.BE_WIDTH=2 -P rv32_reservation_station_tb.ENTRIES=4 -s rv32_reservation_station_tb -o build/b04_be2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_reservation_station_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b04_be2.vvp | findstr /C:"PASS: B-04 RS BE_WIDTH=2 ENTRIES=4"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_reservation_station_tb.BE_WIDTH=4 -P rv32_reservation_station_tb.ENTRIES=4 -s rv32_reservation_station_tb -o build/b04_be4.vvp -c $(RTL_FILELIST) tb/unit/rv32_reservation_station_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_reservation_station_tb.BE_WIDTH=4 -P rv32_reservation_station_tb.ENTRIES=4 -s rv32_reservation_station_tb -o build/b04_be4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_reservation_station_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b04_be4.vvp | findstr /C:"PASS: B-04 RS BE_WIDTH=4 ENTRIES=4"
 
 b05:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32i_alu_tb -o build/b05.vvp -c $(RTL_FILELIST) tb/unit/rv32i_alu_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32i_alu_tb -o build/b05.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32i_alu_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b05.vvp | findstr /C:"PASS: B-05 ALU/branch/AGU"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32i_alu_tb.SHIFT_IMPL=1 -s rv32i_alu_tb -o build/b05_iter_shift.vvp -c $(RTL_FILELIST) tb/unit/rv32i_alu_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32i_alu_tb.SHIFT_IMPL=1 -s rv32i_alu_tb -o build/b05_iter_shift.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32i_alu_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b05_iter_shift.vvp | findstr /C:"PASS: B-05 ALU/branch/AGU"
 	@$(OSS_ENV) "$(ICARUS)" -g2012 -I rtl -s rv32i_alu_compare_tb -o build/b05_compare_add.vvp rtl/rv32i_alu.v tb/unit/rv32i_alu_compare_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b05_compare_add.vvp
 
 b06:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32m_units_tb -o build/b06.vvp -c $(RTL_FILELIST) tb/unit/rv32m_units_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32m_units_tb -o build/b06.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_units_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b06.vvp | findstr /C:"PASS: B-06 multiplier/divider"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32m_units_tb.MUL_IMPL=1 -s rv32m_units_tb -o build/b06_radix4.vvp -c $(RTL_FILELIST) tb/unit/rv32m_units_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32m_units_tb.MUL_IMPL=1 -s rv32m_units_tb -o build/b06_radix4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_units_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b06_radix4.vvp | findstr /C:"PASS: B-06 multiplier/divider"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32m_units_tb.MUL_IMPL=2 -s rv32m_units_tb -o build/b06_unified.vvp -c $(RTL_FILELIST) tb/unit/rv32m_units_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32m_units_tb.MUL_IMPL=2 -s rv32m_units_tb -o build/b06_unified.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_units_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b06_unified.vvp | findstr /C:"PASS: B-06 multiplier/divider"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -s rv32m_mdu_reservation_station_tb -o build/b06_mdu.vvp -c $(RTL_FILELIST) tb/unit/rv32m_mdu_reservation_station_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -s rv32m_mdu_reservation_station_tb -o build/b06_mdu.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_mdu_reservation_station_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu.vvp | findstr /C:"PASS: B-06 MDU RS"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32m_mdu_reservation_station_tb.MUL_IMPL=1 -s rv32m_mdu_reservation_station_tb -o build/b06_mdu_radix4.vvp -c $(RTL_FILELIST) tb/unit/rv32m_mdu_reservation_station_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32m_mdu_reservation_station_tb.MUL_IMPL=1 -s rv32m_mdu_reservation_station_tb -o build/b06_mdu_radix4.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_mdu_reservation_station_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu_radix4.vvp | findstr /C:"PASS: B-06 MDU RS"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32m_mdu_reservation_station_tb.MUL_IMPL=2 -s rv32m_mdu_reservation_station_tb -o build/b06_mdu_unified.vvp -c $(RTL_FILELIST) tb/unit/rv32m_mdu_reservation_station_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32m_mdu_reservation_station_tb.MUL_IMPL=2 -s rv32m_mdu_reservation_station_tb -o build/b06_mdu_unified.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32m_mdu_reservation_station_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b06_mdu_unified.vvp | findstr /C:"PASS: B-06 MDU RS"
 
 b07:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_completion_network_tb.BE_WIDTH=1 -s rv32_completion_network_tb -o build/b07_be1.vvp -c $(RTL_FILELIST) tb/unit/rv32_completion_network_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_completion_network_tb.BE_WIDTH=1 -s rv32_completion_network_tb -o build/b07_be1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_completion_network_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b07_be1.vvp | findstr /C:"PASS: B-07 completion network BE_WIDTH=1"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_completion_network_tb.BE_WIDTH=2 -s rv32_completion_network_tb -o build/b07_be2.vvp -c $(RTL_FILELIST) tb/unit/rv32_completion_network_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_completion_network_tb.BE_WIDTH=2 -s rv32_completion_network_tb -o build/b07_be2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_completion_network_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b07_be2.vvp | findstr /C:"PASS: B-07 completion network BE_WIDTH=2"
 
 b08:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_lsq_tb.BE_WIDTH=1 -s rv32_lsq_tb -o build/b08_be1.vvp -c $(RTL_FILELIST) tb/unit/rv32_lsq_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_lsq_tb.BE_WIDTH=1 -s rv32_lsq_tb -o build/b08_be1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_lsq_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b08_be1.vvp | findstr /C:"PASS: B-08 LSQ BE_WIDTH=1"
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_lsq_tb.BE_WIDTH=2 -s rv32_lsq_tb -o build/b08_be2.vvp -c $(RTL_FILELIST) tb/unit/rv32_lsq_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_lsq_tb.BE_WIDTH=2 -s rv32_lsq_tb -o build/b08_be2.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_lsq_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b08_be2.vvp | findstr /C:"PASS: B-08 LSQ BE_WIDTH=2"
 
 b09:
-	@$(OSS_ENV) "$(ICARUS)" -g2005 -Wall -I rtl -P rv32_backend_joint_tb.BE_WIDTH=1 -s rv32_backend_joint_tb -o build/b09_be1.vvp -c $(RTL_FILELIST) tb/unit/rv32_backend_joint_tb.v
+	@$(OSS_ENV) "$(ICARUS)" -g2012 -Wall -I rtl -P rv32_backend_joint_tb.BE_WIDTH=1 -s rv32_backend_joint_tb -o build/b09_be1.vvp -c $(RTL_FILELIST) "$(COURSE_SRAM)" tb/unit/rv32_backend_joint_tb.v
 	@$(OSS_ENV) "$(VVP)" -N build/b09_be1.vvp | findstr /C:"PASS: B-09 backend joint BE_WIDTH=1"
 
 regression:

@@ -270,7 +270,8 @@ class SimulationManager:
             BUILD_DIR.mkdir(parents=True, exist_ok=True)
             digest = hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()[:12]
             simulation = BUILD_DIR / ("cpu_gui_" + digest + ".vvp")
-            sources = [ROOT / "tb" / "models" / "rv32im_memory_model.v",
+            sources = [ROOT / ".deps/RISC-V-CPU-2026/scripts/ram/sram_fakeram.sv",
+                       ROOT / "tb" / "models" / "rv32im_memory_model.v",
                        ROOT / "tb" / "gui" / "cpu_core_gui_tb.v"]
             rtl_inputs = list((ROOT / "rtl").rglob("*.v"))
             rtl_inputs.extend((ROOT / "rtl").rglob("*.vh"))
@@ -278,11 +279,12 @@ class SimulationManager:
                             [ROOT / "rtl" / "filelist.f", *sources, *rtl_inputs])
             if not simulation.is_file() or simulation.stat().st_mtime < rtl_mtime:
                 self.emit("status", status="building", message="正在编译参数化 RTL…")
-                command = [str(OSS_BIN / "iverilog.exe"), "-g2005", "-Wall",
+                command = [str(OSS_BIN / "iverilog.exe"), "-g2012", "-Wall",
                            "-I", "rtl", "-s", "cpu_core_gui_tb", "-o", str(simulation)]
                 for name, value in params.items():
                     command.extend(["-P", f"cpu_core_gui_tb.{name}={value}"])
                 command.extend(["-c", "rtl/filelist.f",
+                                ".deps/RISC-V-CPU-2026/scripts/ram/sram_fakeram.sv",
                                 "tb/models/rv32im_memory_model.v",
                                 "tb/gui/cpu_core_gui_tb.v"])
                 if self._run_stream(command) != 0:

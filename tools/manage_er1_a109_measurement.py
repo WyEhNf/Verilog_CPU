@@ -1,0 +1,344 @@
+"""Freeze and serialize one course-pinned Windows A95-A109 coherent PPA-gated characterization."""
+import argparse
+from datetime import datetime,timezone
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+
+from manage_frozen_baseline_programs import ROOT,read,sha,write,optional
+from manage_er1_a55_serial_measurement import memory_status
+from manage_er1_a94_measurement import check as check_a94
+from wait_frequency_directed_native import live
+
+REFERENCE=Path('F:/CPU2026CourseRuns/ER1_A94_tier3_20261006')
+CANDIDATE=Path('F:/CPU2026Candidates/tier3_er1_20261005/A109_rob_occupancy_distribution')
+RUN=Path('F:/CPU2026CourseRuns/ER1_A109_tier3_20261006')
+REPORT=ROOT/'reports/ER1_A109_pretest_2026-10-06.md'
+GOAL=ROOT/'build/cpu2026/tier3_er1_optimization_20261005.json'
+HOST_FILES=[ROOT/'tools/run_course_standard_windows.py',ROOT/'tools/prebuild_course_windows.py',
+    ROOT/'tools/verilator_windows_time_zero.cpp',ROOT/'tools/prepare_er1_a109_measurement_manager.py',
+    ROOT/'tools/manage_er1_a105_measurement.py',ROOT/'tools/prepare_er1_a105_measurement_manager.py',Path(__file__)]
+
+PREPARERS={
+    95:'prepare_er1_store_class_compare.py',
+    96:'prepare_er1_fast_store_batch.py',
+    97:'prepare_er1_rs_elastic_skip_capacity.py',
+    98:'prepare_er1_saved_identity_word_mask.py',
+    99:'prepare_er1_balanced_saved_identity.py',
+    100:'prepare_er1_held_report_identity_query.py',
+    101:'prepare_er1_held_identity_row_query.py',
+    102:'prepare_er1_report_recovery_prequalification.py',
+    103:'prepare_er1_report_recovery_age_width.py',
+    104:'prepare_er1_lsq_alloc_fire_distribution.py',
+    105:'prepare_er1_rob_recovery_row_live.py',
+    106:'prepare_er1_report_recovery_circular_compare.py',
+    107:'prepare_er1_allocation_payload_preselect.py',
+    108:'prepare_er1_head_report_word_select.py',
+    109:'prepare_er1_rob_occupancy_distribution.py',
+}
+
+
+
+def check():
+    plan=read(RUN/'measurement_plan.json')
+    for path,key in [(RUN/'source_manifest.json','source_manifest_sha256'),
+        (RUN/'course_windows_config.json','config_sha256'),(REPORT,'pretest_report_sha256'),
+        (CANDIDATE/'candidate.json','candidate_sha256'),(RUN/'a94_reference.json','reference_sha256')]:
+        assert sha(path)==plan[key],path
+    for group in ['host_sha256','tool_sha256','source_reviews_sha256','source_scripts_sha256','source_progress_sha256']:
+        for path,digest in plan[group].items():assert sha(Path(path))==digest,path
+    for name,digest in read(RUN/'source_manifest.json')['snapshot_sha256'].items():
+        assert sha(RUN/'source'/name)==digest,name
+    c=read(RUN/'course_windows_config.json')
+    assert c['environment']=='WINDOWS_NATIVE' and c['wsl_allowed'] is False and c['latency']==10
+    assert c['framework_revision']=='54fc150ffc290f52aa024209ffb9a29d43856f6d'
+    return plan
+
+
+def prepare():
+    assert not RUN.exists() and not REPORT.exists()
+    check_a94()
+    dispatch=read(REFERENCE/'dispatch_identity.json')
+    assert not live(dispatch['process_id'])
+    original=read(REFERENCE/'result/result.json')
+    assert original['status']=='COURSE_STANDARD_WINDOWS_MEASUREMENT_COMPLETE'
+    assert original['official_perf_expected_results_passed']
+    terminal=read(ROOT/'build/cpu2026/er1_a94_complete_result_20261006.json')['metrics']
+    assert terminal['candidate']=='A94_localparam_dependency_order'
+    assert sha(REFERENCE/'result/result.json')==terminal['result_sha256']
+    assert sha(REFERENCE/'result/ipc.json')==terminal['ipc_sha256']
+    assert sha(REFERENCE/'result/synth/opt/report.json')==terminal['ppa_sha256']
+    assert original['ipc']==terminal['ipc'] and original['fmax_mhz']==terminal['fmax_mhz']
+    assert original['area_um2']==terminal['area_um2']
+    goal=read(GOAL)
+    assert goal['current_source_candidate']==CANDIDATE.name and not goal['candidate_tests_started']
+    assert goal['active_measurement_candidate'] is None and not goal['active_measurement_process_ids']
+    candidate=read(CANDIDATE/'candidate.json')
+    assert sha(CANDIDATE/'candidate.json')==goal['pending_source_candidate_sha256']
+    assert not candidate['tests_started'] and not candidate['adopted']
+    reviews={};scripts={}
+    previous=Path('F:/CPU2026Candidates/tier3_er1_20261005/A94_localparam_dependency_order')
+    for number in range(95,110):
+        review_path=CANDIDATE.parent/f'A{number}_source_review.json'
+        review=read(review_path);source=Path(review['candidate']);record=read(source/'candidate.json')
+        assert sha(source/'candidate.json')==review['candidate_sha256']
+        assert Path(record['parent_candidate']).resolve()==previous.resolve()
+        assert sha(previous/'candidate.json')==record['parent_candidate_sha256']
+        assert not record['tests_started'] and not record['adopted']
+        for name,digest in record['source_sha256'].items():assert sha(source/name)==digest,(source.name,name)
+        preparer=ROOT/'tools'/PREPARERS[number]
+        assert sha(preparer)==record['preparation_script_sha256'],preparer
+        scripts[str(preparer)]=sha(preparer)
+        reviews[str(review_path)]=sha(review_path)
+        previous=source
+    assert previous.resolve()==CANDIDATE.resolve()
+    progress={goal['last_source_progress_proof']:goal['last_source_progress_proof_sha256']}
+    for proof_name in ['er1_a94_complete_result_20261006.json',
+        'er1_a95_background_progress_20261006.json',
+        'er1_a96_background_progress_20261006.json',
+        'er1_a94_ppa_a97_a98_progress_20261006.json',
+        'er1_a99_source_progress_20261006.json',
+        'er1_a100_background_progress_20261006.json',
+        'er1_a101_background_progress_20261006.json',
+        'er1_minimal_closing_coverage_20261006.json',
+        'er1_a99_ppa_result_20261006.json',
+        'er1_a102_a104_source_progress_20261006.json',
+        'er1_a105_source_progress_20261006.json',
+        'er1_a106_background_progress_20261006.json',
+        'er1_a107_background_progress_20261006.json',
+        'er1_a105_result_a108_a109_progress_20261006.json']:
+        p=ROOT/'build/cpu2026'/proof_name
+        progress[str(p)]=sha(p)
+    old_a99=Path('F:/CPU2026CourseRuns/ER1_A99_tier3_20261006')
+    assert not live(read(old_a99/'dispatch_identity.json')['process_id'])
+    assert read(old_a99/'serial_phase_identity.json')['status']=='SERIAL_TIMING_COMPLETE_PERFORMANCE_DEFERRED'
+    old_a105=Path('F:/CPU2026CourseRuns/ER1_A105_tier3_20261006')
+    from manage_er1_a105_measurement import check as check_a105
+    check_a105()
+    assert not live(read(old_a105/'dispatch_identity.json')['process_id'])
+    assert read(old_a105/'serial_phase_identity.json')['status']=='SERIAL_TIMING_COMPLETE_PERFORMANCE_DEFERRED'
+    prior=read(ROOT/'build/cpu2026/er1_a105_result_a108_a109_progress_20261006.json')['metrics']
+    assert sha(old_a105/'result/synth/opt/report.json')==prior['ppa_sha256']
+    assert sha(old_a105/'result/timing_only.json')==prior['timing_report_sha256']
+    active_path=ROOT/'build/cpu2026/active_frequency_implementation_20261004.json'
+    active=read(active_path)
+    expected_active=read(Path(goal['last_source_progress_proof']))['main_active_manifest_sha256']
+    assert sha(active_path)==expected_active
+    for name,digest in active['source_sha256'].items():assert sha(ROOT/name)==digest,name
+    top=(CANDIDATE/'rtl/course/student_top.v').read_text(encoding='utf-8')
+    for key,value in candidate['parameter_overrides'].items():
+        m=re.search(r'\b'+key+r'\s*=\s*(\d+)',top)
+        assert m and int(m[1])==value,key
+    effective={}
+    for key in ('FE_WIDTH','BE_WIDTH','INT_ISSUE_WIDTH','CDB_WIDTH','SERIAL_BACKEND',
+        'PREDICTOR_HISTORY_BITS','PREDICTOR_COMPACT_BTB_ENTRIES','DCACHE_WAYS','DCACHE_MSHRS',
+        'ICACHE_MSHRS','ROB_ENTRIES','PHYS_REGS','RS_ENTRIES','LSQ_ENTRIES',
+        'RECOVERY_DIRECT_APPLY','RAT_SUFFIX_BRANCH_MAPPING','ROB_UNIQUE_RECLAIM_COUNT',
+        'RENAME_RETAIN_FREE_POOL','FRONTEND_REDIRECT_REQUEST','RAS_REPEAT_COMPRESSION','RAS_REPEAT_COUNTER_BITS',
+        'RECOVERY_ROB_CREDIT','LSQ_SECOND_REPORT_RECLAIM','BRANCH_CAPTURE_REDIRECT_READY',
+        'RAS_REPEAT_MATCH_PREDECODE','FRONTEND_RAS_PARALLEL_CONTROL','BRANCH_CAPTURE_PHASE_VALID',
+        'LOAD_COMPLETION_BYPASS','LSQ_PICK_LOCAL_VALIDITY','LSQ_FORWARD_ONEHOT','LSQ_PICK_ONEHOT',
+        'FAST_STORE_COMPLETE','FAST_STORE_ADDRESS_PREDECODE','FAST_STORE_IDENTITY_PRESELECT',
+        'ROB_STORE_PREFIX_ADMISSION','LSQ_STORE_ACK_SOURCE_QUERY','LSQ_HEAD_STORE_ACK_BYPASS',
+        'FAST_STORE_SAVED_OPERANDS','LSQ_SAVED_REPORT_PRIORITY','LSQ_HEAD_LOAD_IDENTITY_QUERY',
+        'LSQ_ALLOC_SLOT_PRESELECT','LSQ_HEAD_LOAD_PACKET_PRESELECT','LSQ_RESPONSE_SOURCE_QUERY',
+        'FAST_STORE_WB_DATA','FAST_STORE_CLASS_COMPARE','FAST_STORE_BATCH','RS_ELASTIC_SKIP_CAPACITY',
+        'LSQ_SAVED_IDENTITY_WORD_MASK','LSQ_SAVED_IDENTITY_BALANCED_MERGE','LSQ_HELD_LOAD_IDENTITY_QUERY',
+        'LSQ_REPORT_RECOVERY_PREQUALIFY','LSQ_ALLOC_FIRE_DISTRIBUTE','ROB_RECOVERY_ROW_LIVE_QUALIFY',
+        'LSQ_REPORT_RECOVERY_CIRCULAR_COMPARE','LSQ_ALLOC_PAYLOAD_PRESELECT','ROB_OCCUPANCY_DISTRIBUTE'):
+        m=re.search(r'\b'+key+r'\s*=\s*(\d+)',top);assert m,key;effective[key]=int(m[1])
+    effective.update(gshare_entries=256,bimodal_entries=256,chooser_entries=64,btb_entries=16,
+        predictor_banks=4,predictor_metadata_width=16,rob_generation_bits=8)
+    parent=read(REFERENCE/'source_manifest.json')
+    names=sorted(set(parent['snapshot_sha256'])|set(candidate['source_sha256']))
+    for name in names:
+        source=CANDIDATE/name if name in candidate['source_sha256'] else REFERENCE/'source'/name
+        assert source.exists(),name
+        destination=RUN/'source'/name;destination.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copyfile(source,destination)
+    dependencies=[name for name in names if name.startswith('.deps/')]
+    assert len(names)==157 and len(dependencies)==116
+    for name in dependencies:assert sha(RUN/'source'/name)==parent['snapshot_sha256'][name],name
+    tests=RUN/'source/.deps/RISC-V-CPU-2026/testcases'
+    perf=sorted(p.name for p in tests.glob('perf_*') if p.is_dir())
+    correctness=sorted(p.name for p in tests.glob('correctness_*') if p.is_dir())
+    assert len(perf)==6 and len(correctness)==19
+    frozen=dict(format='er1-tier3-native-source-v1',status='FROZEN_UNTESTED',
+        created_at=datetime.now(timezone.utc).isoformat(),source_root=str(RUN/'source'),
+        reference_manifest_sha256=sha(REFERENCE/'source_manifest.json'),candidate=str(CANDIDATE),
+        candidate_manifest_sha256=sha(CANDIDATE/'candidate.json'),framework_commit=candidate['framework_commit'],
+        testcases_commit=candidate['testcases_commit'],parameter_overrides=candidate['parameter_overrides'],
+        effective_structural_profile=effective,materialized_top_defaults=True,
+        snapshot_sha256={name:sha(RUN/'source'/name) for name in names},tests_started=False)
+    write(RUN/'source_manifest.json',frozen)
+    config=read(REFERENCE/'course_windows_config.json')
+    config.update(source=str(RUN/'source'),source_manifest=str(RUN/'source_manifest.json'),
+        out=str(RUN/'result'),native_build_path=str(RUN/'native_build'),native_ipc_path=str(RUN/'native_ipc'))
+    write(RUN/'course_windows_config.json',config)
+    reference=dict(run=str(REFERENCE),source_manifest_sha256=sha(REFERENCE/'source_manifest.json'),
+        result_sha256=sha(REFERENCE/'result/result.json'),ipc_report_sha256=sha(REFERENCE/'result/ipc.json'),
+        ppa_report_sha256=sha(REFERENCE/'result/synth/opt/report.json'),ipc=original['ipc'],
+        fmax_mhz=original['fmax_mhz'],area_um2=original['area_um2'],
+        official_perf_expected_results_passed=True,full_correctness_not_run=True)
+    write(RUN/'a94_reference.json',reference)
+    REPORT.write_text(f'''# A109：计数负载、报告选择、恢复分类与分配载荷的完整频率批次
+
+目标严格>300MHz、六perf IPC几何平均>=1.1、总面积含SRAM<=36000μm²，完整RV32IM/OoO/顺序提交/MMIO/参数化保持。此报告先于任何新测试。
+
+最新完整三指标仍A94：IPC{original['ipc']:.9f}、Fmax{original['fmax_mhz']:.6f}MHz、面积{original['area_um2']:.6f}μm²，六perf答案通过、原19正确性未跑。最近A105原PID96096已终态：Fmax{prior['fmax_mhz']:.9f}MHz、面积{prior['area_um2']:.6f}μm²、周期{prior['minimum_period_ns']:.9f}ns。PPA未过，未构建CPU或测IPC；频率/面积分别比A99差13.565393MHz/+140.2596μm²，不单独归因于某一修改。
+
+新最慢五条由原ROB countbit3起始，到达3.586/3.573/3.553/3.543/3.536ns：count launch TCQ177.6ps/33.77fF+INV170.6ps→恢复域0.615ns→LSQ/source3 direct payload physbit4 1.808ns→RS物理唤醒/issue 2.427ns→ALU subtract control2.631ns→FF。最大OAI21门529ps、43.73fF、slew1.1ns。需周期缩短超过313.151ps，并至少降低56.018μm²面积。仅取top5，不能声称旧分配/报告链已全部消失。
+
+| 本次已完成源修改 | 作用与原行为约束 |
+|---|---|
+| A106 | 精确原unsigned W-bit age分类改成环形slot比较，共享完整head+occupancy端点。保留2^W回绕、原age/GEN/range与全部rawcount行为，晚head选择仍选原bool。 |
+| A107 | 由既有稀疏plan预选完整LSQ slot/GEN载荷。只在原actual alloc_fire消费者使用，public tag/fire/count/ready和scarce resource/flush/recovery/所有写事件不变，切断载荷对晚fire的依赖。 |
+| A108 | 最后73bit head/saved报告mux用5个<=16bit功能驱动叶选择同样字段；原控制树真实计价，packet/priority/周期不变。新course profile把可选A105每行GEN查询置0，恢复原9bit selected currentGEN reader，控制复制比较成本。 |
+| A109 | 同一真实occupancy_reg按四行分组驱动恢复比较，并分离lane/public/query域，减轻实测count起点高负载。原count状态赋值、unsigned width、所有门槛/事件/队列不变。 |
+
+这批覆盖真实数百ps负载及前一轮串行链，源级可观收益依据足够支持一次整批PPA判断；不能把529ps和348ps直接相加当作节省，新增驱动延迟、映射变化、新瓶颈或组合面积会抵消。529ps内部driver没有head_choice标签，其与最后未分组73bit mux的关联是结构推断；countbit3通过原JSON INV/FF绑定。所有新增FF/SRAM/流水边沿为0，不代表实际面积不增；A105可选结构退出本profile的净面积仍待测。
+
+源推导复查了原年龄位宽、所有环形边界/count0/M/>M/nonpower/entries1、实际plan==fire时完整slot/GEN等值、所有实际写消费者与无credit反馈、分组选择逐bit等值、同一count状态/width/所有比较类型，以及原public/state后缀。没有逐修改HDL/lint/形式/仿真/综合/STA/单元测试。新profile保留FE4/BE2/整数2/CDB2、ROB32/PRF56/RS8/LSQ16/BTB16、缓存/预测规模及8ROBGEN/9LSQGEN；HELD_LOAD_IDENTITY_QUERY0、FAST_STORE_BATCH0，其余纯组合方案继承，不把旧IPC借给新候选。
+
+其余方案已评估：恢复/CDB/issue再加寄存器改变同周期唤醒与等待，A94 IPC仅约1.37%余量，尚无可控周期代价依据；扩大结构违背当前紧面积；删GEN/取消/ISA违背要求；原RS source-before-mux比较需要新的身份/仲裁优先接口及更多比较，在当前明确529ps/348ps控制负载未处理前没有更直接净收益依据；ALU已有分段，当前延迟主要在算术之前。本批已完成当前更有直接证据的源修改，没有另一个有更明确净收益的同批修改待实现；未来架构方向仍可根据本次原数据继续判断。
+
+新独立运行目录{RUN}，冻结{len(names)}文件，其中{len(dependencies)}课程依赖与成功A94逐字相同。Windows native、无WSL；框架54fc150ffc290f52aa024209ffb9a29d43856f6d、测试29f980727f7d99a1842a58f34091c7579ba3fe85；Yosys0.63/ABC/OpenSTA3.1/Verilator5.020/ASAP7RVT TT/FakeRAM，latency10、clock2ns、原I/O/uncertainty/load完整保持。15份95-109准备脚本/源审阅，A102被A103修正的错误位宽记录、旧成功完整指标与原终态/newpath/closingcoverage及工具绑定哈希；不重启或编辑旧成功任务。
+
+对话汇报之后唯一一次综合/STA。只有实际Fmax>300且含SRAM总面积<=36000，才复用同manifest/config/PPA构建一次课程CPU、跑六perf（各1000000周期上限），核对原答案/动态指令/GEOMEAN；PPA不过则终态跳过CPU/IPC。三项达标后另存正确性证据，复用同CPU一次19官方正确性（10000000周期上限）+4份既有冻结边界程序（各200000周期上限、latency10），不重综合/构建/六perf。四程序的独立解释器共8762指令覆盖45类及全8M、除零/溢出/控制/自然对齐/RAM边界；它们还不是当前CPU通过证明。关键参数维度与完整架构源审阅仍须完成。
+
+主E40源不变、未采用，目标尚未达成；准备时未派发新测试。
+
+候选SHA256：{sha(CANDIDATE/'candidate.json')}
+
+源manifest SHA256：{sha(RUN/'source_manifest.json')}
+''',encoding='utf-8')
+    assert effective['FAST_STORE_BATCH']==0 and effective['RS_ELASTIC_SKIP_CAPACITY']==1
+    assert effective['LSQ_SAVED_IDENTITY_WORD_MASK']==effective['LSQ_SAVED_IDENTITY_BALANCED_MERGE']==1
+    assert effective['LSQ_HELD_LOAD_IDENTITY_QUERY']==0
+    assert effective['LSQ_REPORT_RECOVERY_PREQUALIFY']==effective['LSQ_ALLOC_FIRE_DISTRIBUTE']==1
+    assert effective['ROB_RECOVERY_ROW_LIVE_QUALIFY']==0
+    assert effective['LSQ_REPORT_RECOVERY_CIRCULAR_COMPARE']==effective['LSQ_ALLOC_PAYLOAD_PRESELECT']==effective['ROB_OCCUPANCY_DISTRIBUTE']==1
+    tool_paths=[Path(config[key]) for key in ['yosys','abc','sta','verilator','verilator_build_driver']]
+    tool_paths.append(Path(config['tools_root'])/'toolchain_manifest.json')
+    tool_paths.extend(sorted(Path(config['asap7_lib']).glob('*.lib')))
+    plan=dict(status='PREPARED_NOT_STARTED',candidate=str(CANDIDATE),candidate_sha256=sha(CANDIDATE/'candidate.json'),
+        source_manifest_sha256=sha(RUN/'source_manifest.json'),config_sha256=sha(RUN/'course_windows_config.json'),
+        pretest_report=str(REPORT),pretest_report_sha256=sha(REPORT),reference_sha256=sha(RUN/'a94_reference.json'),
+        host_sha256={str(p):sha(p) for p in HOST_FILES},tool_sha256={str(p):sha(p) for p in tool_paths},
+        source_reviews_sha256=reviews,source_scripts_sha256=scripts,source_progress_sha256=progress,perf_cases=perf,correctness_cases=correctness,
+        source_files=len(names),unchanged_course_dependency_files=len(dependencies),effective_structural_profile=effective,
+        serial_tool_phases=True,native_cpu_builds_planned=1,new_synth_runs_planned=1,perf_max_cycles=1000000,
+        performance_only_after_fmax_above300_and_total_area_at_most36000=True,
+        intermediate_a102_signed_age_assumption_superseded_by_a103=True,
+        closing_coverage_plan=goal['closing_coverage_plan'],closing_coverage_plan_sha256=goal['closing_coverage_plan_sha256'],
+        correctness_started_with_characterization=False,full_correctness_and_relevant_coverage_required_before_adoption=True,
+        main_active_manifest_sha256=expected_active,memory_at_preparation=memory_status(),
+        target=dict(ipc=1.1,total_area_um2=36000,strict_minimum_fmax_mhz=300))
+    write(RUN/'measurement_plan.json',plan)
+    goal.update(status='A109_FROZEN_PPA_GATED_PRETEST_NOT_STARTED',prepared_run=str(RUN),
+        prepared_source_manifest_sha256=plan['source_manifest_sha256'],candidate_pretest_report=str(REPORT),
+        candidate_pretest_report_sha256=plan['pretest_report_sha256'],candidate_tests_started=False,
+        pending_source_candidate_tests_started=False,previous_goal_turn_classification=goal['last_goal_turn_classification'],
+        last_goal_turn_classification='PROGRESS_A106_A109_COUNT_REPORT_RECOVERY_ALLOCATION_NATIVE_PRETEST_FROZEN',
+        goal_complete=False,candidates_adopted=False)
+    write(GOAL,goal)
+    check()
+    print({k:plan[k] for k in ['status','candidate','source_files','unchanged_course_dependency_files',
+        'pretest_report','pretest_report_sha256','source_manifest_sha256','serial_tool_phases']})
+
+
+def start():
+    plan=check()
+    assert not (RUN/'dispatch_identity.json').exists() and not (RUN/'result').exists()
+    command=[sys.executable,'-u',str(Path(__file__)),'run-phases']
+    with (RUN/'driver_stdout.log').open('w',encoding='utf-8') as stdout,(RUN/'driver_stderr.log').open('w',encoding='utf-8') as stderr:
+        process=subprocess.Popen(command,cwd=ROOT,stdout=stdout,stderr=stderr,
+            creationflags=subprocess.CREATE_NO_WINDOW|subprocess.CREATE_NEW_PROCESS_GROUP)
+    dispatch=dict(status='SERIAL_BACKGROUND_DISPATCHED',process_id=process.pid,
+        started_at=datetime.now(timezone.utc).isoformat(),command=command,
+        source_manifest_sha256=plan['source_manifest_sha256'],pretest_report_sha256=plan['pretest_report_sha256'],
+        initial_process_alive=process.poll() is None,serial_tool_phases=True,full_correctness_started=False)
+    write(RUN/'dispatch_identity.json',dispatch)
+    goal=read(GOAL)
+    goal.update(status='A109_PPA_GATED_CHARACTERIZATION_IN_PROGRESS',active_measurement_candidate=CANDIDATE.name,
+        measurement_run=str(RUN),measurement_process_id=process.pid,active_measurement_process_ids=[process.pid],
+        measurement_process_alive=dispatch['initial_process_alive'],active_measurement_source_manifest_sha256=plan['source_manifest_sha256'],
+        measurement_dispatch_sha256=sha(RUN/'dispatch_identity.json'),candidate_tests_started=True,
+        pending_source_candidate_tests_started=True,candidate_metrics_belong_to=CANDIDATE.name,
+        candidate_ipc=None,candidate_fmax_mhz=None,candidate_area_um2=None,
+        active_measurement_partial_ppa=None,measurement_last_observation=None,
+        measurement_pretest_report=str(REPORT),measurement_pretest_report_sha256=sha(REPORT),
+        last_goal_turn_classification='PROGRESS_A109_PRETEST_REPORTED_PPA_GATED_NATIVE_SERIAL_DISPATCH')
+    write(GOAL,goal)
+    print(dispatch)
+
+
+def run_phases():
+    plan=check()
+    assert not (RUN/'serial_phase_identity.json').exists()
+    record=dict(status='SERIAL_TIMING_IN_PROGRESS',supervisor_pid=os.getpid(),
+        source_manifest_sha256=plan['source_manifest_sha256'],phases=[])
+    write(RUN/'serial_phase_identity.json',record)
+    for phase,flag in [('timing','--timing-only'),('performance','--reuse-synth')]:
+        if phase=='performance':
+            timing=read(RUN/'result/timing_only.json')
+            assert timing['status']=='COURSE_STANDARD_WINDOWS_TIMING_ONLY_COMPLETE'
+            assert timing['source_manifest_sha256']==plan['source_manifest_sha256']
+            assert timing['config_sha256']==plan['config_sha256']
+            assert sha(RUN/'result/synth/opt/report.json')==timing['official_report_sha256']
+            if not (timing['fmax_mhz']>300 and timing['area_um2']<=36000):
+                record.update(status='SERIAL_TIMING_COMPLETE_PERFORMANCE_DEFERRED',
+                    timing_report_sha256=sha(RUN/'result/timing_only.json'),
+                    performance_deferred_reason='Measured frequency/area gate did not pass; preserve source evidence without an unnecessary CPU build or performance simulation.',
+                    fmax_mhz=timing['fmax_mhz'],area_um2=timing['area_um2'])
+                write(RUN/'serial_phase_identity.json',record)
+                print('DONE SERIAL timing; performance deferred by measured PPA gate',flush=True)
+                return
+            record.update(status='SERIAL_PERFORMANCE_IN_PROGRESS',timing_report_sha256=sha(RUN/'result/timing_only.json'))
+            write(RUN/'serial_phase_identity.json',record);check()
+        command=[sys.executable,'-u',str(ROOT/'tools/run_course_standard_windows.py'),
+            '--config',str(RUN/'course_windows_config.json'),flag]
+        print('START SERIAL '+phase,flush=True)
+        with (RUN/f'{phase}_stdout.log').open('w',encoding='utf-8') as stdout,(RUN/f'{phase}_stderr.log').open('w',encoding='utf-8') as stderr:
+            result=subprocess.run(command,cwd=ROOT,stdout=stdout,stderr=stderr,creationflags=subprocess.CREATE_NO_WINDOW)
+        record['phases'].append(dict(phase=phase,command=command,returncode=result.returncode,
+            completed_at=datetime.now(timezone.utc).isoformat(),memory_after_phase=memory_status()))
+        if result.returncode:
+            record.update(status='SERIAL_'+phase.upper()+'_FAILED');write(RUN/'serial_phase_identity.json',record)
+            raise SystemExit(result.returncode)
+        write(RUN/'serial_phase_identity.json',record);print('DONE SERIAL '+phase,flush=True)
+    record.update(status='SERIAL_CHARACTERIZATION_COMPLETE',result_sha256=sha(RUN/'result/result.json'))
+    write(RUN/'serial_phase_identity.json',record)
+
+
+def observe():
+    check()
+    dispatch=read(RUN/'dispatch_identity.json');alive=live(dispatch['process_id'])
+    result=optional(RUN/'result/result.json');timing=optional(RUN/'result/timing_only.json')
+    phase=optional(RUN/'serial_phase_identity.json');failure=optional(RUN/'result/failure.json')
+    observation=dict(run=str(RUN),process_id=dispatch['process_id'],process_alive=alive,
+        observed_at=datetime.now(timezone.utc).isoformat(),phase=phase['status'] if phase else None,
+        result=({k:result.get(k) for k in ['status','ipc','fmax_mhz','area_um2','official_perf_expected_results_passed',
+            'official_correctness_suite_passed','thread_objective_numeric_requirements_met']} if result else None),
+        timing=({k:timing.get(k) for k in ['status','fmax_mhz','area_um2']} if timing else None),
+        failure_summary=str(failure)[:1000] if failure else None)
+    for phase_name in ['timing','performance']:
+        for stream in ['stdout','stderr']:
+            p=RUN/f'{phase_name}_{stream}.log'
+            if p.exists():observation[p.name]=[line[:260] for line in p.read_text(errors='replace').splitlines()[-3:]]
+    goal=read(GOAL)
+    if goal.get('active_measurement_source_manifest_sha256')==dispatch['source_manifest_sha256']:
+        goal.update(measurement_process_alive=alive,measurement_last_observed_at=observation['observed_at'],measurement_last_observation=observation)
+        write(GOAL,goal)
+    print(observation)
+
+
+if __name__=='__main__':
+    assert os.name=='nt','Native Windows only'
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action',choices=['prepare','start','run-phases','observe'])
+    action=parser.parse_args().action
+    {'prepare':prepare,'start':start,'run-phases':run_phases,'observe':observe}[action]()
