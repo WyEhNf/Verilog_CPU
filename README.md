@@ -4,7 +4,9 @@ The current default RTL is A109: an out-of-order RV32IM core with register renam
 
 ## Course submission entry
 
-The root `Makefile`, `config.mk`, and all files under `scripts/` are unchanged copies of the official course framework at commit `54fc150ffc290f52aa024209ffb9a29d43856f6d`. Their hashes and origin are recorded in [third_party/cpu2026-framework.json](third_party/cpu2026-framework.json). The official `testcases` submodule is pinned to `29f980727f7d99a1842a58f34091c7579ba3fe85` and uses a public HTTPS URL.
+The root `Makefile` and all files under `scripts/` are unchanged copies of the official course framework at commit `54fc150ffc290f52aa024209ffb9a29d43856f6d`. Their hashes and origin are recorded in [third_party/cpu2026-framework.json](third_party/cpu2026-framework.json). `config.mk` adds a portable host compilation profile to the official template. The official `testcases` submodule is pinned to `29f980727f7d99a1842a58f34091c7579ba3fe85` and uses a public HTTPS URL.
+
+Use the OJ's **Git repository** submission mode with the repository URL. According to [ACMOJ's official submission help](https://acm.sjtu.edu.cn/OnlineJudge/help/view-submit-and-judge-problems), it clones the repository, runs its Makefile, and collects the root `code` executable. The standalone Verilog language entry (`iverilog answer.v -o code`) uses a different compilation flow. The course README does not state a problem ID or compilation memory cap; testcase runtime limits do not establish that cap.
 
 ```sh
 git submodule update --init testcases
@@ -33,7 +35,11 @@ ASAP7_LIB = /path/to/asap7/lib
 make CONFIG=config.local.mk
 ```
 
-`config.mk` retains the portable course defaults. The `SIM` override only applies to local run/test/perf; `make` and `make code` always build RTL. The resulting `code` executable accepts the course `CPU2026-OJ` stdin protocol and writes the exit result to stdout.
+The default `config.mk` selects `tools/verilator_low_memory.py`. It runs Verilator generation first and waits for that process to exit before running C++ compilation with one job. Generated files, functions, and trace functions use a split threshold of 2000; the existing verified Verilator 5.020 loop thresholds are retained. This bounds concurrent host memory use and reduces individual compilation units while keeping the official RTL, simulator, assertions, waveform support, C++ optimization level, and test semantics. It does not establish that a particular OJ memory cap is met; generation and C++ compilation can still exceed a sufficiently small cap.
+
+The wrapper selects the configured AppImage or the installed Verilator. `CPU2026_REAL_VERILATOR` can explicitly select the real executable; setting `VERILATOR` itself bypasses the wrapper. Command-line and machine configuration overrides remain supported. No newer-version `--output-groups` option is used. The default `JOBS` is 1; the wrapper always compiles with one job, including when the caller requested more.
+
+The `SIM` override only applies to local run/test/perf; `make` and `make code` always build RTL. The resulting `code` executable accepts the course `CPU2026-OJ` stdin protocol and writes the exit result to stdout.
 
 ## Local course commands
 
