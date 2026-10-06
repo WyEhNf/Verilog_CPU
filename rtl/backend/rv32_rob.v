@@ -775,6 +775,30 @@ module rv32_rob #(
             assign reclaim_eligible[reclaim_entry]=recovery_row_preview[reclaim_entry] &&
                 rd_we_mem[reclaim_entry] && recovery_preview_kill[reclaim_entry];
         end
+`ifdef CPU2026_WORD_SIM
+        // Native word view of the exact destination set. The default geometry
+        // avoids the ROB x physical-register match matrix; other configurations
+        // retain the original decoder below. Zero/illegal IDs contribute no bit,
+        // and duplicate destinations naturally merge in the bitmap.
+        if(ROB_ENTRIES==32 && PHYS_REGS==56 && PHYS_ADDR_WIDTH==6) begin:g_word_reclaim
+            reg [PHYS_REGS-1:0] destinations;
+            integer row;
+            always @* begin
+                destinations=0;
+                row=0;
+                if(|reclaim_eligible)
+                    for(row=0;row<ROB_ENTRIES;row=row+1)
+                        if(reclaim_eligible[row] && new_phys_mem[row]!=0 && new_phys_mem[row]<PHYS_REGS)
+                            destinations=destinations | (PHYS_REGS'(1)<<new_phys_mem[row]);
+            end
+            assign reclaim_bitmap=destinations;
+            for(reclaim_phys=0;reclaim_phys<RECLAIM_LEAVES;reclaim_phys=reclaim_phys+1) begin:g_count
+                if(reclaim_phys<PHYS_REGS)
+                    assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys]=destinations[reclaim_phys];
+                else assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys]=0;
+            end
+        end else begin:g_original_reclaim
+`endif
         // Qualify the small high predecode before the cross-product. With
         // PHYS64 each eligibility source owns eight decode consumers rather
         // than one comparison/qualification gate for every physical register.
@@ -821,6 +845,9 @@ module rv32_rob #(
                 assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys] = 0;
             end
         end
+`ifdef CPU2026_WORD_SIM
+        end
+`endif
         for (reclaim_node = 1; reclaim_node < RECLAIM_LEAVES; reclaim_node = reclaim_node + 1) begin : g_reclaim_sum
             assign reclaim_count_tree[reclaim_node] = reclaim_count_tree[2*reclaim_node] + reclaim_count_tree[2*reclaim_node+1];
         end

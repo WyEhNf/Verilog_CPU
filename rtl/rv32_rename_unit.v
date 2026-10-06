@@ -285,12 +285,31 @@ module rv32_rename_unit #(
     // the instruction-dependent path only chooses candidate[alloc_used].
     localparam integer REFILL_GROUP_LEAVES=(FREE_GROUPS<=1)?1:(1<<$clog2(FREE_GROUPS));
     localparam integer REFILL_PHYS_LEAVES=(PHYS_REGS<=1)?1:(1<<$clog2(PHYS_REGS));
+`ifdef CPU2026_WORD_SIM
+    // The kth lowest free bit is the same row whose prefix rank equals k.
+    // Keep the original pool/register timing and the zero sentinel even when
+    // the input bitmap contains P0. Other geometries retain the rank trees.
+    generate if(PHYS_REGS==56 && PHYS_ADDR_WIDTH==6 && COUNT_WIDTH==6 &&
+                (BE_WIDTH==1 || BE_WIDTH==2 || BE_WIDTH==4)) begin:g_word_refill
+        wire [PHYS_REGS-1:0] remaining [0:BE_WIDTH];
+        assign remaining[0]=free_bitmap;
+        for(genvar candidate=0;candidate<BE_WIDTH;candidate=candidate+1) begin:g_candidate
+            wire [PHYS_REGS-1:0] first=remaining[candidate] &
+                (~remaining[candidate]+PHYS_REGS'(1));
+            assign raw_candidate[candidate]=PHYS_ADDR_WIDTH'($clog2(first));
+            assign remaining[candidate+1]=remaining[candidate] &
+                (remaining[candidate]-PHYS_REGS'(1));
+        end
+    end else begin:g_original_refill
+`endif
     wire [3:0] refill_group_count [0:FREE_GROUPS-1];
     wire [COUNT_WIDTH-1:0] refill_group_before [0:FREE_GROUPS-1];
     wire [2:0] refill_local_before [0:PHYS_REGS-1];
     wire [COUNT_WIDTH-1:0] refill_rank [0:PHYS_REGS-1];
     genvar refill_group,refill_row,refill_bit,refill_node,refill_lane;
+`ifndef CPU2026_WORD_SIM
     generate
+`endif
         for(refill_group=0;refill_group<FREE_GROUPS;refill_group=refill_group+1) begin:g_refill_group
             wire [3:0] group_tree [1:15];
             wire [COUNT_WIDTH-1:0] prefix_tree [1:2*REFILL_GROUP_LEAVES-1];
@@ -345,7 +364,12 @@ module rv32_rename_unit #(
             // it is precisely the kth lowest free bit, as in the old chain.
             assign raw_candidate[refill_lane]=encoded[1];
         end
+`ifndef CPU2026_WORD_SIM
     endgenerate
+`endif
+`ifdef CPU2026_WORD_SIM
+    end endgenerate
+`endif
 
     // Work on a temporary RAT in program order.  Only a contiguous prefix can
     // be accepted, and later lanes see earlier lanes' newly allocated maps.

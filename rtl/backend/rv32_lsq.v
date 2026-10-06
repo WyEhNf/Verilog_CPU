@@ -886,6 +886,59 @@ module rv32_lsq #(
     // Per-entry line masks and an OR reduction avoid a serial hazard scan.
     genvar request_slot, older_slot;
     generate
+`ifdef CPU2026_WORD_SIM
+        // Equivalent word/sparse request qualification. Unknown-address old
+        // stores block immediately; only old stores with unavailable data need
+        // an address/mask comparison. Preserve both load and store alternatives
+        // even for arbitrary metadata with both class bits set.
+        if(LSQ_ENTRIES==16 && SLOT_WIDTH==4 && CIRCULAR_ORDER_POWER2) begin:g_word_requests
+            wire [LSQ_ENTRIES-1:0] stores,wrapped,unresolved,data_pending;
+            for(genvar store_row=0;store_row<LSQ_ENTRIES;store_row=store_row+1) begin:g_store_classes
+                assign stores[store_row]=valid_mem[store_row] && store_mem[store_row];
+                assign wrapped[store_row]=hazard_wrap_views[store_row*HAZARD_WRAP_GROUPS];
+                assign unresolved[store_row]=stores[store_row] && !addr_ready_mem[store_row];
+                assign data_pending[store_row]=stores[store_row] && addr_ready_mem[store_row] && !data_ready_mem[store_row];
+            end
+            for(request_slot=0;request_slot<LSQ_ENTRIES;request_slot=request_slot+1) begin:g_request
+                localparam [LSQ_ENTRIES-1:0] LOWER=(LSQ_ENTRIES'(1)<<request_slot)-LSQ_ENTRIES'(1);
+                wire [LSQ_ENTRIES-1:0] older_stores=
+                    (stores & ~wrapped & (wrapped[request_slot] ? {LSQ_ENTRIES{1'b1}} : LOWER)) |
+                    (stores & wrapped & (wrapped[request_slot] ? LOWER : {LSQ_ENTRIES{1'b0}}));
+                reg eligible,blocked;
+                reg [LSQ_ENTRIES-1:0] remaining,lowest;
+                integer older;
+                always @* begin
+                    eligible=0;
+                    blocked=0;
+                    remaining=0;
+                    lowest=0;
+                    older=0;
+                    if(entry_age[request_slot]<occupancy_reg && valid_mem[request_slot] &&
+                       !(REQUEST_PIPELINE!=0 && selection_valid && selection_slot==request_slot)) begin
+                        if(store_mem[request_slot] && addr_ready_mem[request_slot] &&
+                           data_ready_mem[request_slot] &&
+                           (store_commit_mem[request_slot] ||
+                            (STORE_ADMISSION_BYPASS!=0 && store_admission_fire && commit_slot_select==request_slot)) &&
+                           !request_sent_mem[request_slot]) eligible=1;
+                        if(load_mem[request_slot] && request_addr_ready[request_slot] &&
+                           !request_sent_mem[request_slot] && !complete_mem[request_slot]) begin
+                            blocked=|(older_stores & unresolved);
+                            remaining=older_stores & data_pending;
+                            while(remaining!=0 && !blocked) begin
+                                lowest=remaining & (~remaining+LSQ_ENTRIES'(1));
+                                older=$clog2(lowest);
+                                if(addr_mem[older][31:4]==request_addr[request_slot][31:4] &&
+                                   |(store_line_mask[older] & load_line_mask[request_slot])) blocked=1;
+                                remaining=remaining & (remaining-LSQ_ENTRIES'(1));
+                            end
+                            if(!blocked) eligible=1;
+                        end
+                    end
+                end
+                assign request_eligible[request_slot]=eligible;
+            end
+        end else begin:g_original_requests
+`endif
         for (request_slot = 0; request_slot < LSQ_ENTRIES;
              request_slot = request_slot + 1) begin : g_request_eligible
             wire [LSQ_ENTRIES-1:0] older_hazard;
@@ -925,6 +978,9 @@ module rv32_lsq #(
                     (commit_slot_select == request_slot))) &&
                   !request_sent_mem[request_slot]));
         end
+`ifdef CPU2026_WORD_SIM
+        end
+`endif
     endgenerate
 
     // The oldest eligible operation wins a balanced tournament. This avoids
