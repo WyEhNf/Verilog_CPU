@@ -69,6 +69,16 @@ module rv32_rat_recovery #(
             end
             // The oldest killed writer is the last link applied by a
             // youngest-to-oldest undo. No sequential chain of RAT writes.
+`ifdef CPU2026_WORD_SIM
+            reg [PAW-1:0] recovered_word;
+            integer sim_row;
+            always @* begin
+                recovered_word=0;
+                for(sim_row=0;sim_row<ROB_ENTRIES;sim_row=sim_row+1)
+                    if(first[sim_row]) recovered_word=recovered_word | old_phys_i[sim_row*PAW +: PAW];
+            end
+            assign undo_result[arch*PAW +: PAW]=found?recovered_word:rat_i[arch*PAW +: PAW];
+`else
             for (bit_id = 0; bit_id < PAW; bit_id = bit_id + 1) begin : g_value
                 wire [ROB_ENTRIES-1:0] column;
                 for (row = 0; row < ROB_ENTRIES; row = row + 1) begin : g_row
@@ -76,6 +86,7 @@ module rv32_rat_recovery #(
                 end
                 assign undo_result[arch*PAW + bit_id] = found ? (|column) : rat_i[arch*PAW + bit_id];
             end
+`endif
         end
     end else begin:g_local_oldest
         localparam integer GROUPS=(ROB_ENTRIES+7)/8;
@@ -131,6 +142,20 @@ module rv32_rat_recovery #(
                 assign first_any[row]=row_match_mask[row] && !any_before_row && !any_before_group;
                 assign first_upper[row]=upper_matches[row] && !upper_before_row && !upper_before_group;
             end
+`ifdef CPU2026_WORD_SIM
+            reg [PAW-1:0] sim_any_word,sim_upper_word;
+            integer sim_row;
+            always @* begin
+                sim_any_word=0;
+                sim_upper_word=0;
+                for(sim_row=0;sim_row<ROB_ENTRIES;sim_row=sim_row+1) begin
+                    if(first_any[sim_row]) sim_any_word=sim_any_word | old_phys_i[sim_row*PAW +: PAW];
+                    if(first_upper[sim_row]) sim_upper_word=sim_upper_word | old_phys_i[sim_row*PAW +: PAW];
+                end
+            end
+            assign any_value=sim_any_word;
+            assign upper_value=sim_upper_word;
+`else
             for(bit_id=0;bit_id<PAW;bit_id=bit_id+1) begin:g_payload
                 wire [ROB_ENTRIES-1:0] any_column,upper_column;
                 for(row=0;row<ROB_ENTRIES;row=row+1) begin:g_row
@@ -140,6 +165,7 @@ module rv32_rat_recovery #(
                 assign any_value[bit_id]=|any_column;
                 assign upper_value[bit_id]=|upper_column;
             end
+`endif
             // Select between two completed values, rather than broadcasting
             // upper_found into 64 priority inputs per architectural register.
             assign undo_result[arch*PAW +: PAW]=found?

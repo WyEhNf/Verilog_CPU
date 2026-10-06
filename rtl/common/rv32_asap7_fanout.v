@@ -19,6 +19,11 @@ module rv32_frequency_negative_subtree #(
     input wire [WIDTH-1:0] negative_i,
     output wire [WIDTH*LEAVES-1:0] views_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    assign views_o = {LEAVES{~negative_i}};
+`else
     localparam integer CHILDREN=LEAVES>4?4:LEAVES;
     localparam integer BASE_COUNT=LEAVES/CHILDREN;
     localparam integer EXTRA_COUNT=LEAVES%CHILDREN;
@@ -48,6 +53,7 @@ module rv32_frequency_negative_subtree #(
                 .views_o(views_o[OFFSET*WIDTH +: COUNT*WIDTH]));
         end
     end endgenerate
+`endif
 endmodule
 
 // One inversion produces a negative representation at the root. Negative
@@ -63,6 +69,11 @@ module rv32_frequency_control_tree #(
     input wire [WIDTH-1:0] signal_i,
     output wire [WIDTH*LEAVES-1:0] views_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    assign views_o = {LEAVES{signal_i}};
+`else
     localparam integer CHILDREN=LEAVES>4?4:LEAVES;
     localparam integer BASE_COUNT=LEAVES/CHILDREN;
     localparam integer EXTRA_COUNT=LEAVES%CHILDREN;
@@ -88,6 +99,7 @@ module rv32_frequency_control_tree #(
             end
         end
     endgenerate
+`endif
 endmodule
 
 // Preserve the legacy optional interface without importing external cells.
@@ -119,6 +131,11 @@ module rv32_frequency_word_bank #(parameter integer WIDTH=32) (
     input wire [WIDTH-1:0] data_i,
     output reg [WIDTH-1:0] data_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    always @(posedge clk_i) if (write_i) data_o <= data_i;
+`else
     localparam integer WORDS=(WIDTH+15)/16;
     wire [WORDS-1:0] write_words;
     rv32_frequency_control_tree #(.LEAVES(WORDS)) write_tree (
@@ -130,6 +147,7 @@ module rv32_frequency_word_bank #(parameter integer WIDTH=32) (
         always @(posedge clk_i) if(write_words[word_id])
             data_o[LOW +: BITS]<=data_i[LOW +: BITS];
     end endgenerate
+`endif
 endmodule
 
 
@@ -147,6 +165,22 @@ module rv32_frequency_event_select #(
     output wire write_o,
     output wire [WIDTH-1:0] value_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    reg [WIDTH-1:0] selected;
+    integer event_id;
+    always @* begin
+        selected = 0;
+        for (event_id=0; event_id<EVENTS; event_id=event_id+1)
+            if (events_i[event_id]) begin
+                if (PRIORITY==0) selected = selected | values_i[event_id*WIDTH +: WIDTH];
+                else selected = values_i[event_id*WIDTH +: WIDTH];
+            end
+    end
+    assign write_o = |events_i;
+    assign value_o = selected;
+`else
     wire [EVENTS-1:0] grants;
     wire [WIDTH-1:0] mux_tree [1:2*LEAVES-1];
     assign write_o=|events_i;
@@ -177,6 +211,7 @@ module rv32_frequency_event_select #(
             assign mux_tree[node_id]=mux_tree[2*node_id] | mux_tree[2*node_id+1];
         end
     endgenerate
+`endif
 endmodule
 
 
@@ -191,6 +226,25 @@ module rv32_frequency_first_two #(
     output wire first_valid_o,second_valid_o,
     output wire [INDEX_WIDTH-1:0] first_index_o,second_index_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    reg first_valid,second_valid;
+    reg [INDEX_WIDTH-1:0] first_index,second_index;
+    integer slot;
+    always @* begin
+        first_valid=0; second_valid=0; first_index=0; second_index=0;
+        for (slot=0; slot<ENTRIES; slot=slot+1)
+            if (candidates_i[slot]) begin
+                if (!first_valid) begin first_valid=1; first_index=slot; end
+                else if (!second_valid) begin second_valid=1; second_index=slot; end
+            end
+    end
+    assign first_valid_o=first_valid;
+    assign second_valid_o=second_valid;
+    assign first_index_o=first_index;
+    assign second_index_o=second_index;
+`else
     wire first_valid [1:2*LEAVES-1];
     wire second_valid [1:2*LEAVES-1];
     wire [INDEX_WIDTH-1:0] first_index [1:2*LEAVES-1];
@@ -221,6 +275,7 @@ module rv32_frequency_first_two #(
                 (first_valid[2*node]?first_index[2*node+1]:second_index[2*node+1]);
         end
     endgenerate
+`endif
 endmodule
 
 
@@ -238,6 +293,11 @@ module rv32_frequency_array_read #(
     input wire [INDEX_WIDTH-1:0] index_i,
     output wire [WIDTH-1:0] value_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    assign value_o = (index_i < ENTRIES) ? rows_i[index_i*WIDTH +: WIDTH] : {WIDTH{1'b0}};
+`else
     wire [DOMAINS*INDEX_WIDTH-1:0] query_views;
     wire [WIDTH-1:0] reads [1:2*LEAVES-1];
     rv32_frequency_control_tree #(.WIDTH(INDEX_WIDTH),.LEAVES(DOMAINS)) query_tree (
@@ -265,6 +325,7 @@ module rv32_frequency_array_read #(
             assign reads[node]=reads[2*node] | reads[2*node+1];
         end
     endgenerate
+`endif
 endmodule
 
 
@@ -279,6 +340,14 @@ module rv32_frequency_barrel32 (
     output wire [31:0] left_o,
     output wire [31:0] right_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    assign left_o = value_i << amount_i;
+    // The fill is independent of value_i[31], including for logical shifts.
+    assign right_o = (value_i >> amount_i) |
+        (fill_i ? ~(32'hffffffff >> amount_i) : 32'b0);
+`else
     wire [19:0] amount_views;
     wire [4:0] fill_views;
     wire [31:0] left_stage [0:5];
@@ -310,6 +379,7 @@ module rv32_frequency_barrel32 (
             end
         end
     end endgenerate
+`endif
 endmodule
 
 
@@ -324,6 +394,14 @@ module rv32_frequency_line_extract32 (
     input wire unsigned_i,
     output wire [31:0] value_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    wire [127:0] shifted_line = line_i >> {offset_i,3'b0};
+    wire [31:0] shifted = shifted_line[31:0];
+    assign value_o = (size_i==2'd0) ? {{24{!unsigned_i && shifted[7]}},shifted[7:0]} :
+        ((size_i==2'd1) ? {{16{!unsigned_i && shifted[15]}},shifted[15:0]} : shifted);
+`else
     wire [87:0] shift64;
     wire [55:0] shift32;
     wire [39:0] shift16;
@@ -377,6 +455,7 @@ module rv32_frequency_line_extract32 (
             assign value_o[bit_id]=byte_load?byte_sign:(half_load?half_sign:shifted[bit_id]);
         end
     end endgenerate
+`endif
 endmodule
 
 
@@ -388,6 +467,11 @@ module rv32_frequency_line_insert32 (
     input wire [3:0] offset_i,
     output wire [127:0] line_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    assign line_o = {96'b0,value_i} << {offset_i,3'b0};
+`else
     wire [39:0] shift8;
     wire [55:0] shift16;
     wire [87:0] shift32;
@@ -428,6 +512,7 @@ module rv32_frequency_line_insert32 (
             assign line_o[bit_id]=amount64[bit_id/16]?shifted[3][bit_id]:original[3][bit_id];
         end
     endgenerate
+`endif
 endmodule
 
 
@@ -466,6 +551,11 @@ module rv32_frequency_add64_select (
     input wire [63:0] lhs_i,rhs_i,
     output wire [63:0] sum_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    assign sum_o = lhs_i + rhs_i;
+`else
     wire [15:0] generate_stage [0:4];
     wire [15:0] propagate_stage [0:4];
     wire [3:0] sum_zero [0:15],sum_one [0:15];
@@ -501,6 +591,7 @@ module rv32_frequency_add64_select (
             end
         end
     endgenerate
+`endif
 endmodule
 
 
@@ -512,6 +603,11 @@ module rv32_frequency_add32_select (
     input wire [31:0] lhs_i,rhs_i,
     output wire [31:0] sum_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    assign sum_o = lhs_i + rhs_i;
+`else
     wire [7:0] generate_stage [0:3];
     wire [7:0] propagate_stage [0:3];
     wire [3:0] sum_zero [0:7],sum_one [0:7];
@@ -547,6 +643,7 @@ module rv32_frequency_add32_select (
             end
         end
     endgenerate
+`endif
 endmodule
 
 
@@ -563,6 +660,13 @@ module rv32_frequency_add_simm12 #(
     output wire [31:0] sum_o,
     output wire [2:0] class_flags_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    assign sum_o = base_i + {{20{immediate_i[11]}},immediate_i};
+    assign class_flags_o = CLASS_COMPARE ?
+        {sum_o[1:0]==2'b00,!sum_o[0],sum_o[31:28]==4'b0} : 3'b0;
+`else
     wire [2:0] generate_stage [0:2];
     wire [2:0] propagate_stage [0:2];
     wire [3:0] sum_zero [0:2],sum_one [0:2];
@@ -651,6 +755,7 @@ module rv32_frequency_add_simm12 #(
     end else begin:g_no_class_compare
         assign class_flags_o=3'b0;
     end endgenerate
+`endif
 endmodule
 
 
@@ -671,6 +776,19 @@ module rv32_frequency_array_read_bank_masks #(
     input wire [LOW_ROWS+HIGH_ROWS-1:0] query_i,
     output wire [WIDTH-1:0] value_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    reg [WIDTH-1:0] selected;
+    integer row;
+    always @* begin
+        selected = 0;
+        for (row=0; row<ENTRIES; row=row+1)
+            if (row < (1<<INDEX_WIDTH) && query_i[row%LOW_ROWS] && query_i[LOW_ROWS+row/LOW_ROWS])
+                selected = selected | rows_i[row*WIDTH +: WIDTH];
+    end
+    assign value_o = selected;
+`else
     wire [2*(LOW_ROWS+HIGH_ROWS)-1:0] query_views;
     wire [WIDTH-1:0] reads [1:2*LEAVES-1];
     rv32_frequency_control_tree #(.WIDTH(LOW_ROWS+HIGH_ROWS),.LEAVES(2)) query_tree (
@@ -700,6 +818,7 @@ module rv32_frequency_array_read_bank_masks #(
             assign reads[node]=reads[2*node] | reads[2*node+1];
         end
     endgenerate
+`endif
 endmodule
 
 
@@ -716,6 +835,12 @@ module rv32_frequency_narrow_array_read #(
     input wire [INDEX_WIDTH-1:0] index_i,
     output wire [WIDTH-1:0] value_o
 );
+// Equivalent two-state word form for the cycle-accurate simulator.
+// Synthesis retains the original fanout/carry/ownership structure.
+`ifdef CPU2026_WORD_SIM
+    assign value_o = (index_i < ENTRIES) ? rows_i[index_i*WIDTH +: WIDTH] : {WIDTH{1'b0}};
+    initial if (WIDTH < 1 || WIDTH > 4) $fatal(1,"Narrow array read width must be1..4");
+`else
     wire [DOMAINS*INDEX_WIDTH-1:0] query_views;
     wire [WIDTH-1:0] reads [1:2*LEAVES-1];
     rv32_frequency_control_tree #(.WIDTH(INDEX_WIDTH),.LEAVES(DOMAINS)) query_tree (
@@ -739,4 +864,5 @@ module rv32_frequency_narrow_array_read #(
         if(WIDTH<1 || WIDTH>4)
             $fatal(1,"Narrow array read width must be1..4");
     end
+`endif
 endmodule

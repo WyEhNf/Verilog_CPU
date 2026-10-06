@@ -28,10 +28,22 @@ export CPU2026_COMPACT_IDS
 CPU2026_CPP_GROUP_BYTES ?= 2097152
 export CPU2026_CPP_GROUP_BYTES
 # Set CPU2026_CPP_GROUP_BYTES=0 to compile every generated file separately.
-# Verilator's recommended optimized profile for shorter C++ build times.
-CPU2026_OPT_FAST ?= -O1 -fstrict-aliasing
+# Optimize simulator runtime while retaining bounded compilation jobs.
+CPU2026_OPT_FAST ?= -O3
 export CPU2026_OPT_FAST
 # Set CPU2026_OPT_FAST=-Os to restore the original hot-code optimization level.
+# Split acyclic selector arrays to avoid repeated combinational evaluation.
+CPU2026_SPLIT_SCHEDULE ?= 1
+export CPU2026_SPLIT_SCHEDULE
+# Set CPU2026_SPLIT_SCHEDULE=0 to reproduce the previous generated schedule.
+# Equivalent word expressions retain every original clock/register boundary.
+# This macro is passed only to Verilator; synthesis uses the original structure.
+CPU2026_WORD_SIM ?= 1
+export CPU2026_WORD_SIM
+# Set CPU2026_WORD_SIM=0 for the original structural simulation view.
+CPU2026_UNROLL_STMTS ?= 4096
+export CPU2026_UNROLL_STMTS
+# Larger experimental configurations may require CPU2026_UNROLL_STMTS=1000000.
 # Optional real executable override for the low-memory driver.
 # export CPU2026_REAL_VERILATOR = /path/to/verilator
 YOSYS ?=

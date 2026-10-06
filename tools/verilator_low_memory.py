@@ -12,12 +12,14 @@ import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
-# Keep the verified loop/function limits; larger files reduce repeated compiler
+# Inline the equivalent word model and retain the verified loop/function limits.
+# Larger files reduce repeated compiler
 # startup/PCH loading. Bound expression depth as well: file/function splitting
 # cannot divide a single packed RAT recovery expression. Verilator 5.020's
 # compiler depth pass materializes subexpressions in statement temporaries.
 GENERATION_FLAGS = [
-    "--unroll-count", "1024", "--unroll-stmts", "1000000",
+    "-O3", "--no-trace-params",
+    "--unroll-count", "1024", "--unroll-stmts", "4096",
     "--output-split", "8000", "--output-split-cfuncs", "2000",
     "--output-split-ctrace", "2000", "--comp-limit-parens", "32",
 ]
@@ -85,12 +87,12 @@ def build_plan(arguments):
         raise ValueError("course build requires --Mdir and --top-module")
     prefix = prefix or "V" + module
     make = executable(os.environ.get("MAKE", "make"))
-    # Verilator recommends this optimized fast-path profile when C++ build
-    # time dominates. Keep runtime-library and cold-path flags at their defaults.
+    # Optimize hot model code for runtime; Word4 was measured with GCC -O3.
+    # Keep runtime-library and cold-path flags at their defaults.
     # An explicit make override still wins.
     if not any(flag.startswith("OPT_FAST=") for flag in make_flags):
         make_flags.append("OPT_FAST=" + os.environ.get(
-            "CPU2026_OPT_FAST", "-O1 -fstrict-aliasing"))
+            "CPU2026_OPT_FAST", "-O3"))
     compile_command = [make, "-C", directory, "-f", prefix + ".mk", "-j1",
                        "VM_PARALLEL_BUILDS=1", *make_flags]
     trace_depth = int(os.environ.get("CPU2026_TRACE_DEPTH", "1"))
@@ -104,9 +106,24 @@ def build_plan(arguments):
     # This fixed, public key is for reproducible names, not IP protection.
     id_flags = (["--protect-ids", "--protect-key", "CPU2026-COMPILE-NAMES-V1"]
                 if compact_ids else [])
+    split_schedule = int(os.environ.get("CPU2026_SPLIT_SCHEDULE", "1"))
+    if split_schedule not in (0, 1):
+        raise ValueError("CPU2026_SPLIT_SCHEDULE must be 0 or 1")
+    scheduling_flags = ([str(ROOT / "tools/cpu2026_simulation.vlt")]
+                        if split_schedule else [])
+    word_sim = int(os.environ.get("CPU2026_WORD_SIM", "1"))
+    if word_sim not in (0, 1):
+        raise ValueError("CPU2026_WORD_SIM must be 0 or 1")
+    word_flags = ["+define+CPU2026_WORD_SIM"] if word_sim else []
+    unroll_statements = int(os.environ.get("CPU2026_UNROLL_STMTS", "4096"))
+    if unroll_statements < 1:
+        raise ValueError("CPU2026_UNROLL_STMTS must be positive")
+    limits = GENERATION_FLAGS.copy()
+    limits[limits.index("--unroll-stmts") + 1] = str(unroll_statements)
     if int(os.environ.get("CPU2026_CPP_GROUP_BYTES", "2097152")) < 0:
         raise ValueError("CPU2026_CPP_GROUP_BYTES must be nonnegative")
-    return GENERATION_FLAGS + trace_flags + id_flags + generation, compile_command
+    return (limits + trace_flags + id_flags + scheduling_flags + word_flags + generation,
+            compile_command)
 
 
 def group_cpp_units(directory, prefix):
@@ -198,6 +215,8 @@ def main(arguments=None):
         print("[build] Phase 1: Verilator generation; trace depth="
               + os.environ.get("CPU2026_TRACE_DEPTH", "1")
               + "; compact ids=" + os.environ.get("CPU2026_COMPACT_IDS", "1")
+              + "; split schedule=" + os.environ.get("CPU2026_SPLIT_SCHEDULE", "1")
+              + "; word simulation=" + os.environ.get("CPU2026_WORD_SIM", "1")
               + "; output split=8000; function split=2000; expression depth=32", file=sys.stderr,
               flush=True)
         started = time.monotonic()

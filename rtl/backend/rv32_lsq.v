@@ -1233,8 +1233,37 @@ module rv32_lsq #(
     wire report_valid_tree [1:2*REPORT_ROWS-1];
     wire [SLOT_WIDTH-1:0] report_slot_tree [1:2*REPORT_ROWS-1];
     wire report_wrap_tree [1:2*REPORT_ROWS-1];
+`ifdef CPU2026_WORD_SIM
+    // Separate node scopes express the same selector without an artificial
+    // whole-array dependency in Verilator 5.020. Only the root is an array.
+    wire commit_valid_tree [1:1];
+    wire [SLOT_WIDTH-1:0] commit_slot_tree [1:1];
+    genvar sim_commit_node;
+    generate for(sim_commit_node=1;sim_commit_node<2*REPORT_ROWS;sim_commit_node=sim_commit_node+1) begin:g_sim_commit_node
+        wire valid;
+        wire [SLOT_WIDTH-1:0] slot;
+        if(sim_commit_node>=REPORT_ROWS) begin:g_leaf
+            localparam integer ROW=sim_commit_node-REPORT_ROWS;
+            if(ROW<LSQ_ENTRIES) begin:g_present
+                assign valid=valid_mem[ROW] && store_mem[ROW] && addr_ready_mem[ROW] &&
+                    data_ready_mem[ROW] && !store_commit_mem[ROW] && rob_tag_mem[ROW]==store_commit_rob_tag_i;
+                assign slot=ROW;
+            end else begin:g_padding
+                assign valid=0;
+                assign slot=0;
+            end
+        end else begin:g_merge
+            assign valid=g_sim_commit_node[2*sim_commit_node].valid || g_sim_commit_node[2*sim_commit_node+1].valid;
+            assign slot=g_sim_commit_node[2*sim_commit_node].valid ?
+                g_sim_commit_node[2*sim_commit_node].slot : g_sim_commit_node[2*sim_commit_node+1].slot;
+        end
+    end endgenerate
+    assign commit_valid_tree[1]=g_sim_commit_node[1].valid;
+    assign commit_slot_tree[1]=g_sim_commit_node[1].slot;
+`else
     wire commit_valid_tree [1:2*REPORT_ROWS-1];
     wire [SLOT_WIDTH-1:0] commit_slot_tree [1:2*REPORT_ROWS-1];
+`endif
     wire [REPORT_WIDTH-1:0] report_payload_tree [1:2*REPORT_ROWS-1];
     localparam integer HEAD_STORE_ACK_ACTIVE=(HEAD_STORE_ACK_BYPASS!=0) && (ACK_SOURCE_QUERY!=0);
     // Reuse the existing saved-head ROB tag read; unsupported profiles retain
@@ -1581,10 +1610,12 @@ module rv32_lsq #(
                 end else begin:g_no_saved_identity_candidate
                     assign saved_identity_tree[REPORT_ROWS+report_row]=0;
                 end
+`ifndef CPU2026_WORD_SIM
                 assign commit_valid_tree[REPORT_ROWS+report_row]=valid_mem[report_row] && store_mem[report_row] &&
                     addr_ready_mem[report_row] && data_ready_mem[report_row] && !store_commit_mem[report_row] &&
                     rob_tag_mem[report_row]==store_commit_rob_tag_i;
                 assign commit_slot_tree[REPORT_ROWS+report_row]=report_row;
+`endif
                 assign ack_valid_tree[REPORT_ROWS+report_row]=occupancy_reg!=0 && head_query_views[report_row*SLOT_WIDTH +: SLOT_WIDTH]==report_row &&
                     valid_mem[report_row] && store_mem[report_row] &&
                     (store_ack_mem[report_row] || fast_head_store_acks[report_row]);
@@ -1608,8 +1639,10 @@ module rv32_lsq #(
                 assign report_valid_tree[REPORT_ROWS+report_row]=0;
                 assign report_slot_tree[REPORT_ROWS+report_row]=0;
                 assign report_wrap_tree[REPORT_ROWS+report_row]=0;
+`ifndef CPU2026_WORD_SIM
                 assign commit_valid_tree[REPORT_ROWS+report_row]=0;
                 assign commit_slot_tree[REPORT_ROWS+report_row]=0;
+`endif
                 assign report_payload_tree[REPORT_ROWS+report_row]=0;
                 assign saved_identity_tree[REPORT_ROWS+report_row]=0;
                 assign normal_identity_tree[REPORT_ROWS+report_row]=0;
@@ -1632,9 +1665,11 @@ module rv32_lsq #(
             assign report_valid_tree[report_node]=report_valid_tree[2*report_node] || report_valid_tree[2*report_node+1];
             assign report_slot_tree[report_node]=choose_left?report_slot_tree[2*report_node]:report_slot_tree[2*report_node+1];
             assign report_wrap_tree[report_node]=choose_left?report_wrap_tree[2*report_node]:report_wrap_tree[2*report_node+1];
+`ifndef CPU2026_WORD_SIM
             assign commit_valid_tree[report_node]=commit_valid_tree[2*report_node] || commit_valid_tree[2*report_node+1];
             assign commit_slot_tree[report_node]=commit_valid_tree[2*report_node]?
                 commit_slot_tree[2*report_node]:commit_slot_tree[2*report_node+1];
+`endif
             assign report_payload_tree[report_node]=report_payload_tree[2*report_node] | report_payload_tree[2*report_node+1];
             if((SAVED_IDENTITY_BALANCED_MERGE!=0) && HEAD_LOAD_IDENTITY_ACTIVE) begin:g_saved_identity_pair
                 // Preserve each binary OR level as an independent combinational

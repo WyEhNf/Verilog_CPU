@@ -95,6 +95,56 @@ module rv32_dcache_metadata_bank #(
     wire [RESET_DOMAINS-1:0] reset_views;
     rv32_frequency_control_tree #(.LEAVES(RESET_DOMAINS)) reset_tree (
         .signal_i(reset_i),.views_o(reset_views));
+`ifdef CPU2026_WORD_SIM
+    // Vector masks preserve the per-row nonblocking-write priority. Query
+    // registers above remain unchanged and updates use their pre-edge value.
+    wire [GROUP_ROWS-1:0] sim_refill =
+        (refill_valid_i && refill_entry_i/GROUP_ROWS==GROUP_ID) ?
+        ({{(GROUP_ROWS-1){1'b0}},1'b1} << (refill_entry_i%GROUP_ROWS)) : 0;
+    wire [GROUP_ROWS-1:0] sim_local =
+        (local_valid_i && local_entry_i/GROUP_ROWS==GROUP_ID) ?
+        ({{(GROUP_ROWS-1){1'b0}},1'b1} << (local_entry_i%GROUP_ROWS)) : 0;
+    wire sim_miss_here = miss_action && (LOCAL_QUERY ? query_request_active : miss_entry_i/GROUP_ROWS==GROUP_ID);
+    wire sim_prefetch_here = prefetch_valid_i && (LOCAL_QUERY ? query_prefetch_active : prefetch_entry_i/GROUP_ROWS==GROUP_ID);
+    wire sim_store_here = store_action && (LOCAL_QUERY ? query_request_active : hit_entry_i/GROUP_ROWS==GROUP_ID);
+    wire [LOCAL_SET_WIDTH:0] sim_miss_row = LOCAL_QUERY ?
+        query_request_row*CACHE_WAYS+miss_entry_i%CACHE_WAYS : miss_entry_i%GROUP_ROWS;
+    wire [LOCAL_SET_WIDTH:0] sim_prefetch_row = LOCAL_QUERY ?
+        query_prefetch_row*CACHE_WAYS+prefetch_entry_i%CACHE_WAYS : prefetch_entry_i%GROUP_ROWS;
+    wire [LOCAL_SET_WIDTH:0] sim_store_row = LOCAL_QUERY ?
+        query_request_row*CACHE_WAYS+hit_entry_i%CACHE_WAYS : hit_entry_i%GROUP_ROWS;
+    wire [GROUP_ROWS-1:0] sim_miss = sim_miss_here ? ({{(GROUP_ROWS-1){1'b0}},1'b1} << sim_miss_row) : 0;
+    wire [GROUP_ROWS-1:0] sim_prefetch = sim_prefetch_here ? ({{(GROUP_ROWS-1){1'b0}},1'b1} << sim_prefetch_row) : 0;
+    wire [GROUP_ROWS-1:0] sim_store = sim_store_here ? ({{(GROUP_ROWS-1){1'b0}},1'b1} << sim_store_row) : 0;
+    wire [GROUP_ROWS-1:0] sim_fill = sim_refill | sim_local;
+    wire [GROUP_ROWS-1:0] sim_clear = (sim_miss | sim_prefetch) & ~sim_fill;
+    wire [GROUP_ROWS-1:0] sim_dirty_set =
+        (sim_local & ~sim_refill) | (sim_refill & {GROUP_ROWS{refill_dirty_i}}) |
+        (sim_store & ~(sim_fill | sim_clear));
+    wire [GROUP_SETS-1:0] sim_lru_prefetch =
+        (prefetch_valid_i && (LOCAL_QUERY ? query_prefetch_active : prefetch_set_i/GROUP_SETS==GROUP_ID)) ?
+        ({{(GROUP_SETS-1){1'b0}},1'b1} << (LOCAL_QUERY ? query_prefetch_row : prefetch_set_i%GROUP_SETS)) : 0;
+    wire [GROUP_SETS-1:0] sim_lru_miss =
+        (miss_action && (LOCAL_QUERY ? query_request_active : request_set_i/GROUP_SETS==GROUP_ID)) ?
+        ({{(GROUP_SETS-1){1'b0}},1'b1} << (LOCAL_QUERY ? query_request_row : request_set_i%GROUP_SETS)) : 0;
+    wire [GROUP_SETS-1:0] sim_lru_hit =
+        (hit_action && (LOCAL_QUERY ? query_request_active : request_set_i/GROUP_SETS==GROUP_ID)) ?
+        ({{(GROUP_SETS-1){1'b0}},1'b1} << (LOCAL_QUERY ? query_request_row : request_set_i%GROUP_SETS)) : 0;
+    wire [GROUP_SETS-1:0] sim_lru_write = sim_lru_prefetch | sim_lru_miss | sim_lru_hit;
+    wire [GROUP_SETS-1:0] sim_lru_set =
+        (sim_lru_prefetch & {GROUP_SETS{!prefetch_entry_i[0]}}) |
+        (sim_lru_miss & ~sim_lru_prefetch & {GROUP_SETS{!miss_entry_i[0]}}) |
+        (sim_lru_hit & ~(sim_lru_prefetch | sim_lru_miss) & {GROUP_SETS{!hit_entry_i[0]}});
+    always @(posedge clk_i) begin
+        if(reset_i) begin valid_o<=0; lru_o<=0; end
+        else begin
+            if(|(sim_fill | sim_clear)) valid_o <= (valid_o & ~sim_clear) | sim_fill;
+            if(|(sim_fill | sim_clear | sim_store))
+                dirty_o <= (dirty_o & ~(sim_refill | sim_clear)) | sim_dirty_set;
+            if(CACHE_WAYS==2 && |sim_lru_write) lru_o <= (lru_o & ~sim_lru_write) | sim_lru_set;
+        end
+    end
+`else
     genvar row, set_id;
     generate
         for (row = 0; row < GROUP_ROWS; row = row + 1) begin : g_row
@@ -148,6 +198,7 @@ module rv32_dcache_metadata_bank #(
             end
         end
     endgenerate
+`endif
     initial begin
         if (CACHE_LINES < 16 || (CACHE_LINES & (CACHE_LINES-1)) != 0 ||
             (CACHE_WAYS != 1 && CACHE_WAYS != 2) || GROUP_ROWS < 2 ||

@@ -3,11 +3,11 @@
   "framework_revision": "54fc150ffc290f52aa024209ffb9a29d43856f6d",
   "testcases_repository": "https://github.com/ACMClassCourse-2025/RISC-V-CPU-2026-Testcases",
   "testcases_revision": "29f980727f7d99a1842a58f34091c7579ba3fe85",
-  "vendor_policy": "The listed framework files are unchanged from the pinned course commit. config.mk selects a portable host compilation wrapper; the RTL, official scripts and simulation semantics are unchanged. Machine-specific paths belong in ignored local config files.",
+  "vendor_policy": "The listed framework files are unchanged from the pinned course commit. config.mk selects a portable host compilation wrapper and equivalent two-state word expressions for Verilator. Original structural synthesis branches, official scripts, clock boundaries and simulation protocol remain unchanged. Machine-specific paths belong in ignored local config files.",
   "customized_files": {
     "config.mk": {
       "upstream_sha256": "073551bf208ca7f7e8607757a88c0d01b0f45eb786d291f30c262e7133fbcda1",
-      "purpose": "Select tools/verilator_low_memory.py and default JOBS=1; export the configured AppImage path, CPU2026_TRACE_DEPTH (default 1), CPU2026_COMPACT_IDS (default 1), CPU2026_CPP_GROUP_BYTES (default 2097152), and CPU2026_OPT_FAST (default -O1 -fstrict-aliasing). Diagnostic names, separate-file compilation, and original -Os optimization remain configurable."
+      "purpose": "Select tools/verilator_low_memory.py and JOBS=1; export AppImage selection, TRACE_DEPTH=1, COMPACT_IDS=1, CPP_GROUP_BYTES=2097152, OPT_FAST=-O3, SPLIT_SCHEDULE=1, WORD_SIM=1 and UNROLL_STMTS=4096. Structural simulation, diagnostic names and compiler options remain configurable."
     }
   },
   "vendored_sha256": {
