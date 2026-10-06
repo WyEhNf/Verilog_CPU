@@ -2,7 +2,11 @@
 
 module rv32_rob_tb #(
     parameter integer BE_WIDTH = 1,
-    parameter integer ROB_ENTRIES = 8
+    parameter integer ROB_ENTRIES = 8,
+    parameter integer ASAP7_FANOUT_BUFFERS = 0,
+    parameter integer ROB_CONTROL_REGISTER_BANKS = 0,
+    parameter integer COMMIT_BANKED_READ = 0,
+    parameter integer ALLOC_BANKED_WRITE = 1
 );
     localparam integer PHYS_AW = 6;
     localparam integer SLOT_W = $clog2(ROB_ENTRIES);
@@ -61,8 +65,13 @@ module rv32_rob_tb #(
     integer j;
     reg [TAG_W-1:0] saved_tag0, saved_tag1, saved_store_tag, saved_branch_tag, stale_tag;
     reg [TAG_W-1:0] reused_tag, current_tag;
+    integer rotation, rotation_lane, rotation_checks;
+    reg [ROB_ENTRIES-1:0] visited_heads;
+    reg [(BE_WIDTH*TAG_W)-1:0] rotation_tags;
+    reg [(BE_WIDTH*32)-1:0] held_pc, held_inst, held_value;
+    reg [SLOT_W-1:0] held_head;
 
-    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(1<<PHYS_AW), .PHYS_ADDR_WIDTH(PHYS_AW), .CHECKPOINT_WIDTH(CP_W), .STORE_BUFFERED_RETIRE(0)) dut (
+    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(1<<PHYS_AW), .PHYS_ADDR_WIDTH(PHYS_AW), .CHECKPOINT_WIDTH(CP_W), .STORE_BUFFERED_RETIRE(0), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .COMMIT_BANKED_READ(COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ALLOC_BANKED_WRITE)) dut (
         .clk_i(clk), .reset_i(reset), .alloc_valid_i(alloc_valid), .alloc_pc_i(alloc_pc), .alloc_inst_i(alloc_inst), .alloc_rd_i(alloc_rd), .alloc_rd_we_i(alloc_rd_we),
         .alloc_old_phys_i(alloc_old), .alloc_new_phys_i(alloc_new), .alloc_is_store_i(alloc_store), .alloc_is_branch_i(alloc_branch), .alloc_is_halt_i(alloc_halt), .alloc_is_error_i(alloc_error), .alloc_checkpoint_i(alloc_cp),
         .alloc_ready_o(alloc_ready), .alloc_fire_o(alloc_fire), .alloc_tag_o(alloc_tag), .alloc_count_o(alloc_count),
@@ -157,6 +166,71 @@ module rv32_rob_tb #(
         if (commit_valid != 0) bad = bad + 1;
         @(posedge clk); #1;
         clear_inputs(); complete_one(0, reused_tag, 8'hdd); @(posedge clk); #1; clear_inputs(); @(posedge clk); #1;
+
+        // Exercise every real head position with all commit lanes active,
+        // reversed completion lanes, distinct payloads and stalled retirement.
+        // No hierarchical state injection: allocate, complete and pop normally.
+        reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0; #1;
+        visited_heads = 0; rotation_checks = 0;
+        if (dut.COMMIT_BANKED_READ !== COMMIT_BANKED_READ) bad = bad + 1;
+        if (dut.ALLOC_BANKED_WRITE !== ALLOC_BANKED_WRITE) bad = bad + 1;
+        if (ROB_ENTRIES >= BE_WIDTH) begin
+            for (rotation = 0; rotation < ROB_ENTRIES; rotation = rotation + 1) begin
+                if ((^head === 1'bx) || (^occupancy === 1'bx) ||
+                    visited_heads[head] || occupancy !== 0) bad = bad + 1;
+                visited_heads[head] = 1'b1;
+                held_head = head;
+                commit_ready = 0;
+                clear_inputs();
+                for (rotation_lane = 0; rotation_lane < BE_WIDTH; rotation_lane = rotation_lane + 1) begin
+                    alloc_one(rotation_lane, 32'h4000+rotation*64+rotation_lane*4, rotation_lane+3);
+                    alloc_inst[rotation_lane*32 +: 32] = 32'h01000013+rotation*16+rotation_lane;
+                end
+                #1;
+                if (alloc_count !== BE_WIDTH || alloc_fire !== {BE_WIDTH{1'b1}}) bad = bad + 1;
+                rotation_tags = alloc_tag;
+                @(posedge clk); #1; clear_inputs();
+                for (rotation_lane = 0; rotation_lane < BE_WIDTH; rotation_lane = rotation_lane + 1)
+                    complete_one(BE_WIDTH-1-rotation_lane, rotation_tags[rotation_lane*TAG_W +: TAG_W],
+                                 32'h9000+rotation*16+rotation_lane);
+                @(posedge clk); #1; clear_inputs();
+                if (commit_valid !== {BE_WIDTH{1'b1}} || head !== held_head || occupancy !== BE_WIDTH)
+                    bad = bad + 1;
+                for (rotation_lane = 0; rotation_lane < BE_WIDTH; rotation_lane = rotation_lane + 1) begin
+                    if (commit_pc[rotation_lane*32 +: 32] !== 32'h4000+rotation*64+rotation_lane*4 ||
+                        commit_inst[rotation_lane*32 +: 32] !== 32'h01000013+rotation*16+rotation_lane ||
+                        commit_value[rotation_lane*32 +: 32] !== 32'h9000+rotation*16+rotation_lane ||
+                        commit_tag[rotation_lane*TAG_W +: TAG_W] !== rotation_tags[rotation_lane*TAG_W +: TAG_W] ||
+                        commit_rd_we[rotation_lane] !== 1'b1 || commit_rd[rotation_lane*5 +: 5] !== rotation_lane+3 ||
+                        commit_new_phys[rotation_lane*PHYS_AW +: PHYS_AW] !== rotation_lane+4 ||
+                        commit_old_phys[rotation_lane*PHYS_AW +: PHYS_AW] !== 0 || commit_store[rotation_lane] !== 1'b0)
+                        bad = bad + 1;
+                    rotation_checks = rotation_checks + 1;
+                end
+                held_pc = commit_pc; held_inst = commit_inst; held_value = commit_value;
+                repeat (2) begin
+                    @(posedge clk); #1;
+                    if (commit_valid !== {BE_WIDTH{1'b1}} || commit_pc !== held_pc || commit_inst !== held_inst ||
+                        commit_value !== held_value || commit_tag !== rotation_tags || head !== held_head)
+                        bad = bad + 1;
+                end
+                commit_ready = 1;
+                @(posedge clk); #1;
+                if (occupancy !== 0) bad = bad + 1;
+                // BE2/4 advance by width+1, coprime to power-of-two depth;
+                // BE1 advances by one. Thus every physical head is visited.
+                if (BE_WIDTH > 1) begin
+                    clear_inputs(); alloc_one(0, 32'h7000+rotation*4, 0); #1;
+                    current_tag = alloc_tag[0 +: TAG_W];
+                    @(posedge clk); #1; clear_inputs(); complete_one(0, current_tag, 0);
+                    @(posedge clk); #1; clear_inputs(); @(posedge clk); #1;
+                end
+            end
+            if (visited_heads !== {ROB_ENTRIES{1'b1}} || rotation_checks != ROB_ENTRIES*BE_WIDTH)
+                bad = bad + 1;
+        end
+        $display("PASS: banked commit rotation mode=%0d head_positions=%0d lane_checks=%0d",
+                 COMMIT_BANKED_READ, ROB_ENTRIES, rotation_checks);
 
         // HALT and error become visible only at precise head commit.
         clear_inputs(); alloc_halt[0] = 1; alloc_one(0, 28, 10); alloc_halt[0] = 1; #1; stale_tag = alloc_tag[0 +: TAG_W]; @(posedge clk); #1; clear_inputs(); complete_one(0, stale_tag, 8'h5a); @(posedge clk); #1; clear_inputs();

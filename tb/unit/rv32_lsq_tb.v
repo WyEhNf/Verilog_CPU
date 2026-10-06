@@ -2,7 +2,9 @@
 `include "rv32im_defs.vh"
 
 module rv32_lsq_tb #(
-    parameter integer BE_WIDTH = 1
+    parameter integer BE_WIDTH = 1,
+    parameter integer STORE_ADMISSION_BYPASS = 0,
+    parameter integer STORE_ADDRESS_PROBE = 0
 );
     localparam integer ENTRIES = 8;
     localparam integer TAG_WIDTH = 16;
@@ -26,6 +28,12 @@ module rv32_lsq_tb #(
     reg [BE_WIDTH*32-1:0] addr_up;
     reg [BE_WIDTH*32-1:0] data_up, wake_value;
     reg [BE_WIDTH*4-1:0] data_up_mask;
+    reg early_addr_valid;
+    reg [TAG_WIDTH-1:0] early_addr_tag;
+    reg [31:0] early_addr;
+    wire [ENTRIES-1:0] store_addr_pending;
+    wire [ENTRIES*ROB_TAG_WIDTH-1:0] store_addr_rob_tag;
+    wire [ENTRIES*TAG_WIDTH-1:0] store_addr_lsq_tag;
     reg commit_valid;
     reg [ROB_TAG_WIDTH-1:0] commit_rob;
     reg dreq_ready;
@@ -51,6 +59,9 @@ module rv32_lsq_tb #(
     wire [CW-1:0] occupancy;
     integer bad;
     integer recovery_request_kind;
+    integer admission_round, request_count;
+    integer probe_size, probe_slot;
+    reg [31:0] probe_address, probe_expected;
     reg [15:0] st_tag, st_tag2, st_tag3, st_tag4, st_tag5, st_tag6, unknown_tag;
     reg [TAG_WIDTH-1:0] last_alloc_tag;
     reg seen_load_valid;
@@ -58,7 +69,10 @@ module rv32_lsq_tb #(
     reg [31:0] seen_load_value;
 
     assign alloc_tag0 = alloc_tag[0 +: TAG_WIDTH];
-    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(ENTRIES), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(ROB_TAG_WIDTH)) dut (
+    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(ENTRIES), .STORE_ADMISSION_BYPASS(STORE_ADMISSION_BYPASS), .STORE_ADDRESS_PROBE(STORE_ADDRESS_PROBE), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(ROB_TAG_WIDTH)) dut (
+        .early_addr_valid_i(early_addr_valid), .early_addr_tag_i(early_addr_tag), .early_addr_i(early_addr),
+        .store_addr_pending_o(store_addr_pending), .store_addr_rob_tag_o(store_addr_rob_tag),
+        .store_addr_lsq_tag_o(store_addr_lsq_tag),
         .clk_i(clk), .reset_i(reset), .flush_i(flush), .recovery_valid_i(recovery_valid),
         .recovery_tag_i(recovery_tag), .recovery_head_i(recovery_head), .recovery_occupancy_i(recovery_occupancy),
         .retire_valid_i(retire_valid), .retire_rob_tag_i(retire_rob_tag),
@@ -85,6 +99,11 @@ module rv32_lsq_tb #(
     );
 
     initial begin clk = 0; forever #5 clk = ~clk; end
+
+    always @(posedge clk) begin
+        if (reset) request_count = 0;
+        else if (dreq_valid && dreq_ready) request_count = request_count + 1;
+    end
 
     // Loads may complete past an older committed store before that store's
     // cache acknowledgement.  Remember consumed pulses so the directed
@@ -124,6 +143,7 @@ module rv32_lsq_tb #(
             dresp_word = 0; dresp_line = 0; dack_valid = 0; dack_error = 0; dack_tag = 0; load_ready = 1; store_ack_ready = 1;
             recovery_valid = 0; recovery_tag = 0; recovery_head = 0; recovery_occupancy = 0;
             retire_valid = 0; retire_rob_tag = 0;
+            early_addr_valid = 0; early_addr_tag = 0; early_addr = 0;
         end
     endtask
 
@@ -161,6 +181,64 @@ module rv32_lsq_tb #(
 
     initial begin
         bad = 0; reset = 1; flush = 0; clear_inputs(); #12; reset = 0; #1;
+        // Wrap the LSQ repeatedly. Prove the same-edge offer only after the
+        // EXACT architectural tag is admitted, then hold it under cache
+        // backpressure and consume the request/ACK exactly once.
+        for (admission_round = 0; admission_round < ENTRIES*2+1;
+             admission_round = admission_round + 1) begin
+            alloc_one(0, 1, 16'h0101 + admission_round*8,
+                32'h80000000, 2, 0, 32'h12345678 + admission_round, 4'hf);
+            st_tag = last_alloc_tag;
+            dreq_ready = admission_round % 2;
+            commit_valid = 1;
+            commit_rob = (16'h0101 + admission_round*8) ^ 16'h8000;
+            #1;
+            if (commit_ready || dreq_valid) $fatal(1, "Wrong ROB generation admitted store");
+            commit_rob = 16'h0101 + admission_round*8;
+            #1;
+            if (!commit_ready || dreq_valid !== (STORE_ADMISSION_BYPASS != 0))
+                $fatal(1, "Store admission offer timing incorrect bypass=%0d", STORE_ADMISSION_BYPASS);
+            if (STORE_ADMISSION_BYPASS != 0 &&
+                (!dreq_store || dreq_load || dreq_rob != commit_rob || dreq_lsq != st_tag ||
+                 dreq_addr != 32'h80000000 || dreq_mask != 16'h000f ||
+                 dreq_data != 128'h12345678 + admission_round))
+                $fatal(1, "Same-edge store payload corrupted");
+            @(posedge clk); #1; commit_valid = 0;
+            if (dreq_ready) begin
+                if (STORE_ADMISSION_BYPASS != 0) begin
+                    if (dreq_valid || request_count != admission_round+1)
+                        $fatal(1, "Same-edge admitted request not recorded exactly once");
+                end else begin
+                    if (!dreq_valid || request_count != admission_round)
+                        $fatal(1, "Legacy store admission timing changed");
+                    @(posedge clk); #1;
+                end
+            end else begin
+                repeat (3) begin
+                    if (!dreq_valid || dreq_lsq != st_tag || dut.request_sent_mem[dreq_lsq[3 +: 3]])
+                        $fatal(1, "Backpressured store lost or marked sent early");
+                    @(posedge clk); #1;
+                end
+                // No new request may be accepted on a recovery edge, even if
+                // this committed store survives the branch trim.
+                recovery_valid = 1; recovery_tag = commit_rob + 8;
+                recovery_head = commit_rob[3 +: 5]; recovery_occupancy = 2;
+                dreq_ready = 1; #1;
+                if (dreq_valid) $fatal(1, "Fresh admitted request escaped recovery gate");
+                @(posedge clk); #1; recovery_valid = 0; #1;
+                if (!dreq_valid || dreq_lsq != st_tag) $fatal(1, "Committed store lost in recovery");
+                @(posedge clk); #1;
+            end
+            if (dreq_valid || request_count != admission_round+1)
+                $fatal(1, "Store request duplicated or missing");
+            dack_tag = st_tag; dack_valid = 1;
+            @(posedge clk); #1; dack_valid = 0;
+            if (!store_ack_valid || store_ack_rob != commit_rob || store_ack_lsq != st_tag)
+                $fatal(1, "Admitted store ACK mismatch");
+            @(posedge clk); #1; clear_inputs();
+            if (occupancy != 0 || store_ack_valid) $fatal(1, "Store ACK consumed twice");
+        end
+        reset = 1; clear_inputs(); @(posedge clk); #1; reset = 0;
         // A byte store forwards to all byte/word load forms and retains the
         // store until the ROB grants visibility.
         alloc_one(0, 1, 16'h0101, 32'h00000100, 0, 0, 32'h00000080, 4'h1);
@@ -329,6 +407,106 @@ module rv32_lsq_tb #(
             if (!dreq_valid || dreq_addr != 32'h00000800) bad = bad + 1;
             @(posedge clk); #1;
             if (dreq_valid || !dut.request_sent_mem[0] || !dut.response_wait_mem[0]) bad = bad + 1;
+        end
+        if (STORE_ADDRESS_PROBE != 0) begin
+            for (probe_size = 0; probe_size < 3; probe_size = probe_size + 1) begin
+                probe_address = 32'h100 + ((probe_size == 0) ? 1 : (probe_size == 1) ? 2 : 0);
+                // A same-line but disjoint load becomes eligible before
+                // store data, completion or ROB admission is available.
+                reset=1; clear_inputs(); @(posedge clk); #1; reset=0;
+                alloc_valid[0]=1; alloc_store[0]=1; alloc_rob[15:0]=16'h0001;
+                alloc_size[1:0]=probe_size; #1; st_tag=alloc_tag0;
+                @(posedge clk); #1; clear_inputs();
+                alloc_one(1,0,16'h0009,32'h10c,probe_size,1,0,0);
+                dreq_ready=0; #1;
+                if (dreq_valid || store_addr_pending !== 8'b1 ||
+                    store_addr_rob_tag[0 +: ROB_TAG_WIDTH] !== 16'h0001 ||
+                    store_addr_lsq_tag[0 +: TAG_WIDTH] !== st_tag)
+                    $fatal(1,"probe unknown-store identity/ordering size=%0d",probe_size);
+                commit_valid=1; commit_rob=16'h0001;
+                early_addr_valid=1; early_addr_tag=st_tag; early_addr=probe_address;
+                @(posedge clk); #1; early_addr_valid=0; commit_valid=0; #1;
+                if (!dut.addr_ready_mem[0] || dut.addr_mem[0] !== probe_address ||
+                    dut.data_ready_mem[0] || dut.store_commit_mem[0] || dut.complete_mem[0] ||
+                    dut.mask_mem[0] !== ((probe_size==0)?4'h1:(probe_size==1)?4'h3:4'hf) ||
+                    !dreq_valid || !dreq_load || dreq_addr !== 32'h10c || commit_ready)
+                    $fatal(1,"probe disjoint load or premature store readiness size=%0d",probe_size);
+
+                // An overlapping load must still wait for the actual data;
+                // publishing an address alone cannot forward placeholder bits.
+                reset=1; clear_inputs(); @(posedge clk); #1; reset=0;
+                alloc_valid[0]=1; alloc_store[0]=1; alloc_rob[15:0]=16'h0001;
+                alloc_size[1:0]=probe_size; #1; st_tag=alloc_tag0;
+                @(posedge clk); #1; clear_inputs();
+                alloc_one(1,0,16'h0009,probe_address,probe_size,1,0,0);
+                early_addr_valid=1; early_addr_tag=st_tag; early_addr=probe_address;
+                @(posedge clk); #1; clear_inputs();
+                if (dreq_valid || load_valid || dut.data_ready_mem[0] || dut.store_commit_mem[0])
+                    $fatal(1,"probe overlapping load escaped data hazard size=%0d",probe_size);
+                data_up_valid[0]=1; data_up_tag[15:0]=st_tag; data_up[31:0]=32'h44332211;
+                @(posedge clk); #1; clear_inputs();
+                @(posedge clk); #1;
+                probe_expected=(probe_size==0)?32'h11:(probe_size==1)?32'h2211:32'h44332211;
+                if (!observed_load(16'h0009,probe_expected) || dut.store_commit_mem[0] ||
+                    (dreq_valid && dreq_store))
+                    $fatal(1,"probe forwarding/authorization size=%0d",probe_size);
+            end
+
+            // Flush/reallocation must reject the old full LSQ generation.
+            flush=1; @(posedge clk); #1; flush=0; clear_inputs();
+            alloc_valid[0]=1; alloc_store[0]=1; alloc_rob[15:0]=16'h0021;
+            alloc_size[1:0]=2; #1; st_tag2=alloc_tag0;
+            @(posedge clk); #1; clear_inputs();
+            if (st_tag2 === st_tag) $fatal(1,"probe fixture did not reuse a new generation");
+            early_addr_valid=1; early_addr_tag=st_tag; early_addr=32'hbad;
+            @(posedge clk); #1; clear_inputs();
+            if (dut.addr_ready_mem[0]) $fatal(1,"probe accepted stale LSQ generation");
+            // The original ALU address/data update wins a same-edge conflict.
+            early_addr_valid=1; early_addr_tag=st_tag2; early_addr=32'h300;
+            addr_up_valid[0]=1; addr_up_tag[15:0]=st_tag2; addr_up[31:0]=32'h304;
+            data_up_valid[0]=1; data_up_tag[15:0]=st_tag2; data_up[31:0]=32'h12345678;
+            @(posedge clk); #1; clear_inputs();
+            if (!dut.addr_ready_mem[0] || dut.addr_mem[0] !== 32'h304 ||
+                !dut.data_ready_mem[0] || dut.data_mem[0] !== 32'h12345678 || dut.store_commit_mem[0])
+                $fatal(1,"probe overrode original same-edge ALU update");
+
+            // Ignore probes on a recovery edge, retain the older store,
+            // kill the younger suffix, then allow the retained probe again.
+            reset=1; clear_inputs(); @(posedge clk); #1; reset=0;
+            alloc_valid[0]=1; alloc_store[0]=1; alloc_rob[15:0]=16'h0001;
+            alloc_size[1:0]=2; #1; st_tag=alloc_tag0;
+            @(posedge clk); #1; clear_inputs();
+            alloc_valid[0]=1; alloc_store[0]=1; alloc_rob[15:0]=16'h0019;
+            alloc_size[1:0]=2; #1; st_tag2=alloc_tag0;
+            @(posedge clk); #1; clear_inputs();
+            recovery_valid=1; recovery_tag=16'h0011; recovery_head=0; recovery_occupancy=4;
+            early_addr_valid=1; early_addr_tag=st_tag; early_addr=32'h400;
+            #1; if (store_addr_pending !== 0) $fatal(1,"probe advertised work during recovery");
+            @(posedge clk); #1; clear_inputs();
+            if (occupancy !== 1 || !dut.valid_mem[0] || dut.valid_mem[1] || dut.addr_ready_mem[0])
+                $fatal(1,"probe recovery changed retained state or kept younger store");
+            early_addr_valid=1; early_addr_tag=st_tag; early_addr=32'h400;
+            @(posedge clk); #1; clear_inputs();
+            if (!dut.addr_ready_mem[0] || dut.addr_mem[0] !== 32'h400 || dut.data_ready_mem[0])
+                $fatal(1,"probe retained older store failed after recovery");
+            alloc_valid[0]=1; alloc_store[0]=1; alloc_rob[15:0]=16'h0021;
+            alloc_size[1:0]=2; #1; st_tag3=alloc_tag0;
+            @(posedge clk); #1; clear_inputs();
+            early_addr_valid=1; early_addr_tag=st_tag2; early_addr=32'hbad;
+            @(posedge clk); #1; clear_inputs();
+            if (st_tag3 === st_tag2 || dut.addr_ready_mem[1])
+                $fatal(1,"probe accepted killed/reallocated store generation");
+
+            // A matching LSQ tag is insufficient: this port is store-only.
+            reset=1; clear_inputs(); @(posedge clk); #1; reset=0;
+            alloc_valid[0]=1; alloc_load[0]=1; alloc_rob[15:0]=16'h0001;
+            alloc_size[1:0]=2; #1; st_tag=alloc_tag0;
+            @(posedge clk); #1; clear_inputs();
+            early_addr_valid=1; early_addr_tag=st_tag; early_addr=32'h500;
+            @(posedge clk); #1; clear_inputs();
+            if (store_addr_pending !== 0 || dut.addr_ready_mem[0] || dreq_valid)
+                $fatal(1,"probe changed a load");
+            $display("PASS: shared store-address LSQ directed checks BE_WIDTH=%0d",BE_WIDTH);
         end
         if (bad != 0) begin $display("FAIL: B-08 LSQ BE_WIDTH=%0d checks=%0d", BE_WIDTH, bad); $finish(1); end
         $display("PASS: B-08 LSQ BE_WIDTH=%0d", BE_WIDTH); $finish(0);

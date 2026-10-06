@@ -2,7 +2,8 @@
 `include "rv32im_defs.vh"
 
 module rv32_fetch_frontend_tb #(
-    parameter integer FE_WIDTH = 1
+    parameter integer FE_WIDTH = 1,
+    parameter integer PREDICTOR_META = 0
 );
     localparam integer PW = `RV32IM_FETCH_PACKET_WIDTH;
     reg clk, reset;
@@ -26,6 +27,24 @@ module rv32_fetch_frontend_tb #(
     wire [FE_WIDTH-1:0] fetch_valid;
     reg [FE_WIDTH-1:0] fetch_ready;
     wire [FE_WIDTH*PW-1:0] fetch_packet;
+    wire [FE_WIDTH*16-1:0] response_metadata, fetch_metadata;
+    genvar metadata_lane;
+    function [15:0] expected_metadata;
+        input [31:0] pc;
+        expected_metadata = pc[15:0] ^ 16'he35a;
+    endfunction
+    generate for (metadata_lane = 0; metadata_lane < FE_WIDTH; metadata_lane = metadata_lane+1) begin : g_metadata
+        assign response_metadata[metadata_lane*16 +: 16] =
+            expected_metadata(if_resp_pc + metadata_lane*32'd4);
+    end endgenerate
+    integer metadata_check_lane;
+    always @(negedge clk) if (!reset) begin
+        for (metadata_check_lane = 0; metadata_check_lane < FE_WIDTH; metadata_check_lane = metadata_check_lane+1)
+            if (fetch_valid[metadata_check_lane] &&
+                fetch_metadata[metadata_check_lane*16 +: 16] !== ((PREDICTOR_META != 0) ?
+                    expected_metadata(fetch_packet[metadata_check_lane*PW +: 32]) : 16'b0))
+                $fatal(1, "Frontend metadata lost/reordered under prefix/backpressure/redirect");
+    end
     wire [3:0] current_epoch;
     wire frozen;
     wire event_fetch, event_redirect, event_stall;
@@ -33,7 +52,7 @@ module rv32_fetch_frontend_tb #(
     integer i;
     reg [FE_WIDTH*PW-1:0] held_packet;
 
-    rv32_fetch_frontend #(.FE_WIDTH(FE_WIDTH), .FQ_DEPTH(8)) dut (
+    rv32_fetch_frontend #(.FE_WIDTH(FE_WIDTH), .FQ_DEPTH(8), .PREDICTOR_META(PREDICTOR_META)) dut (
         .clk_i(clk), .reset_i(reset), .redirect_valid_i(redirect_valid),
         .redirect_pc_i(redirect_pc), .redirect_epoch_i(redirect_epoch),
         .stop_i(stop_i), .error_i(error_i), .if_req_valid_o(if_req_valid),
@@ -46,6 +65,7 @@ module rv32_fetch_frontend_tb #(
         .if_resp_pred_target_i(if_resp_pred_target),
         .if_resp_pred_kind_i(if_resp_pred_kind),
         .if_resp_pred_btb_hit_i(if_resp_pred_btb_hit),
+        .if_resp_pred_metadata_i(response_metadata), .fetch_pred_metadata_o(fetch_metadata),
         .fetch_valid_o(fetch_valid), .fetch_ready_i(fetch_ready),
         .fetch_packet_o(fetch_packet), .current_epoch_o(current_epoch),
         .frozen_o(frozen), .event_fetch_o(event_fetch),

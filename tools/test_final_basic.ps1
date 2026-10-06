@@ -23,7 +23,8 @@ try {
         @{ Name = "m_isa_smoke"; Expected = 90 }
     )
     $rtl = @(Get-Content rtl/filelist.f | Where-Object { $_ -and ($_ -notmatch '^\s*#') })
-    $sources = $rtl + @("tb/models/rv32im_memory_model.v", "tb/integration/cpu_core_image_tb.v")
+    $sources = $rtl + @(".deps/RISC-V-CPU-2026/scripts/ram/sram_fakeram.sv",
+                       "tb/models/rv32im_memory_model.v", "tb/integration/cpu_core_image_tb.v")
     $parameters = @(
         "-P", "cpu_core_image_tb.FE_WIDTH=4",
         "-P", "cpu_core_image_tb.BE_WIDTH=4",
