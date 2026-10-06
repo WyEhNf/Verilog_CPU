@@ -47,8 +47,9 @@ struct Accelerate {
   exclude(&r.debug_core_cycles,4);exclude(&r.@ID:__Vdly__debug_core_cycles@,4);
   for(auto c:counters)exclude(c,8);for(auto c:delayed)exclude(c,8);
   std::sort(excluded.begin(),excluded.end());
-  mdusize=reinterpret_cast<unsigned char*>(&m.@ID:__Vfunc_prefix_add32__1__Vfuncout@)+sizeof(m.@ID:__Vfunc_prefix_add32__1__Vfuncout@)-reinterpret_cast<unsigned char*>(&m.@ID:clk_i@);
-  if(mdusize>before_mdu.size())std::abort();
+  mdusize=reinterpret_cast<unsigned char*>(&m.@MDU_LAST_FIELD@)+sizeof(m.@MDU_LAST_FIELD@)-reinterpret_cast<unsigned char*>(&m.@ID:clk_i@);
+  // Unsupported larger state retains the original whole-model evaluator.
+  if(mdusize>before_mdu.size())disabled=true;
  }
  ~Accelerate(){if(std::getenv("CPU2026_STABLE_MDU_DIAGNOSTICS"))print();}
  unsigned char* mdudata(){return reinterpret_cast<unsigned char*>(&m.@ID:clk_i@);}

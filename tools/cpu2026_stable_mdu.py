@@ -14,6 +14,32 @@ MDU_PATH = ("student_top__DOT__core__DOT__g_ooo_backend__DOT__backend"
             "__DOT__mdu__DOT__gen_unified_mdu__DOT__unified")
 
 
+def fixed_state_fields(header):
+    """Require fixed embedded data, including generated unpacked arrays."""
+    section = header.split("// DESIGN SPECIFIC STATE", 1)[1].split(
+        "// INTERNAL VARIABLES", 1)[0]
+    section = re.sub(r"//[^\n]*|/\*.*?\*/", "", section, flags=re.S)
+    fields = []
+    for line in section.splitlines():
+        line = line.strip()
+        if not line or line in ("struct {", "};"):
+            continue
+        port = re.fullmatch(r"VL_(?:IN|OUT|INOUT)(?:8|16|64|W)?"
+                            r"\(\s*(\w+)\s*,[^;]+\);", line)
+        if port:
+            fields.append(port[1])
+            continue
+        member = re.fullmatch(r"(.+)\s+(\w+);", line)
+        if (not member or not re.fullmatch(
+                r"(?:Vl(?:Wide|Unpacked|TriggerVec)|[CISQ]Data|\d+|[\s,<>])+",
+                member[1])):
+            raise ValueError("unsupported MDU state declaration: " + line)
+        fields.append(member[2])
+    if not fields or len(fields) != len(set(fields)):
+        raise ValueError("unrecognized MDU fixed state")
+    return fields
+
+
 def install(directory, prefix):
     directory = Path(directory)
     report = {"enabled": False}
@@ -36,6 +62,9 @@ def install(directory, prefix):
         source = (directory / (prefix + ".cpp")).read_text()
         root_header = (directory / (root + ".h")).read_text()
         mdu_header = (directory / (mdu + ".h")).read_text()
+        mdu_fields = fixed_state_fields(mdu_header)
+        if mdu_fields[0] != mapping["clk_i"]:
+            raise ValueError("unrecognized first MDU state member")
         # The current design has no clock-sensitive combinational logic.
         # Generated trigger state and all functional state remain in the snapshot.
         root_text = "\n".join(p.read_text() for p in
@@ -93,6 +122,7 @@ def install(directory, prefix):
                                      r" = vlSelf->" + re.escape(actual) + r";", root_text)):
                 raise ValueError("counter has an unrecognized reader: " + name)
         values = {"ROOT_CLASS": root, "MDU_CLASS": mdu,
+                  "MDU_LAST_FIELD": mdu_fields[-1],
                   "ROOT_EVAL": root + "__" + mapping["_eval"]}
         values.update({"MDU_FUNC_" + str(i): f for i, f in enumerate(functions)})
 
@@ -134,8 +164,11 @@ def install(directory, prefix):
         report = {"enabled": True, "root_class": root, "mdu_class": mdu,
                   "mdu_to_root_fields": sorted(crossings),
                   "root_to_mdu_fields": sorted(fields),
+                  "mdu_snapshot_first": mdu_fields[0],
+                  "mdu_snapshot_last": mdu_fields[-1],
+                  "mdu_fixed_fields": len(mdu_fields),
                   "stats_preserved": 10, "cpu_cycles_collapsed": False}
-    except (OSError, KeyError, ValueError, ET.ParseError) as error:
+    except (OSError, KeyError, IndexError, ValueError, ET.ParseError) as error:
         report["reason"] = str(error)
     (directory / (prefix + "_stable_mdu.json")).write_text(
         json.dumps(report, indent=2) + "\n", newline="\n")
