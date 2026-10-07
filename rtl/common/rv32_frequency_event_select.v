@@ -28,11 +28,6 @@ module rv32_frequency_event_select #(
     integer event_id;
     localparam integer EVENT_INDEX_WIDTH=(EVENTS<=1)?1:$clog2(EVENTS);
     reg [EVENT_INDEX_WIDTH-1:0] event_index;
-    wire [WIDTH-1:0] event_values [0:EVENTS-1];
-    genvar word_event;
-    generate for(word_event=0;word_event<EVENTS;word_event=word_event+1) begin:g_sim_values
-        assign event_values[word_event]=values_i[word_event*WIDTH +: WIDTH];
-    end endgenerate
     wire [EVENTS-1:0] remaining=events_i & (events_i-EVENTS'(1));
     always @* begin
         selected=0;event_id=0;event_index=0;
@@ -41,11 +36,11 @@ module rv32_frequency_event_select #(
                 // Ceil(log2((events >> 1)+1)) is the highest set-bit index.
                 // Last-event priority and a single-event OR share this path.
                 event_index=EVENT_INDEX_WIDTH'($clog2((events_i>>1)+EVENTS'(1)));
-                selected=event_values[event_index];
+                selected=values_i[(32'(event_index)*WIDTH) +: WIDTH];
             end else begin
                 // Preserve arbitrary simultaneous events in the OR mode.
                 for(event_id=0;event_id<EVENTS;event_id=event_id+1)
-                    if(events_i[event_id]) selected=selected | event_values[event_id];
+                    if(events_i[event_id]) selected=selected | values_i[event_id*WIDTH +: WIDTH];
             end
         end
     end

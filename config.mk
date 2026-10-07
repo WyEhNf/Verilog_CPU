@@ -62,8 +62,8 @@ export CPU2026_STABLE_MDU
 # For Verilator 5.040, the wrapper preserves the MDU module boundary with
 # -fno-dfg-scoped while retaining both within-module DFG optimization passes.
 # Verilator 5.020 keeps its original generation flags.
-# Reuse the input-combinational calculation between a full falling evaluation
-# and its rising evaluation when every non-clock input is unchanged.
+# Reuse input-combinational calculations after a completed full evaluation
+# while every non-clock input remains unchanged.
 CPU2026_ICO_PAIR ?= 1
 export CPU2026_ICO_PAIR
 # Set CPU2026_ICO_PAIR=0 to retain the original input-region scheduling.

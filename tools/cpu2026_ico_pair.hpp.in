@@ -1,5 +1,5 @@
 #pragma once
-// Reuse a settled input-combinational region across one unchanged half-cycle.
+// Reuse settled input-combinational logic while external inputs stay unchanged.
 #include "@ROOT_CLASS@.h"
 #include "@MDU_CLASS@.h"
 #include <array>
@@ -31,7 +31,7 @@ struct State {
     @ROOT_CLASS@& r;
     @MDU_CLASS@& m;
     Inputs prior{};
-    bool falling = false;
+    bool settled = false;
     bool disabled = std::getenv("CPU2026_ICO_PAIR_DISABLE") != nullptr;
     bool verify = std::getenv("CPU2026_ICO_PAIR_VERIFY") != nullptr;
     std::vector<unsigned char> before, proposed;
@@ -52,7 +52,7 @@ struct State {
     unsigned char* data() {
         return reinterpret_cast<unsigned char*>(&m.@MDU_FIRST_FIELD@);
     }
-    void reset() { falling = false; }
+    void reset() { settled = false; }
     void restore(const std::vector<unsigned char>& bytes) {
         auto* base = reinterpret_cast<unsigned char*>(&r);
         const size_t first = reinterpret_cast<unsigned char*>(&r.clock) - base;
@@ -62,10 +62,10 @@ struct State {
     }
     void eval(bool trace) {
         const auto now = inputs(r);
-        // No register edge or input change has occurred since the completed
-        // falling evaluation. Only the clock's generated edge trigger changes.
-        const bool reuse = !disabled && !trace && !r.reset && r.clock
-            && !r.@PREVIOUS_CLOCK@ && falling && now == prior;
+        // Full evaluation restores the combinational invariant after every
+        // register update. The original edge/active/NBA evaluator still runs;
+        // unchanged external inputs need no additional input-combinational pass.
+        const bool reuse = !disabled && !trace && !r.reset && settled && now == prior;
         if (reuse && verify) {
             std::memcpy(before.data(), &r, sizeof(r));
             std::memcpy(old_mdu.data(), data(), mdusize);
@@ -94,7 +94,7 @@ struct State {
                 ++checked;
             }
         }
-        falling = !trace && !r.clock;
+        settled = !trace;
         prior = now;
     }
 };

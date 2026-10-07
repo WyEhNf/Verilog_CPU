@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reuse only the unchanged falling-to-rising input-combinational calculation."""
+"""Reuse settled input-combinational logic while external inputs stay unchanged."""
 import json
 from pathlib import Path
 import re
@@ -131,7 +131,7 @@ def install(directory, prefix):
                   "input_ports": sorted(inputs),
                   "clock_trigger_index": int(edges[0]),
                   "input_region_functions_checked": len(visited),
-                  "reuse_after": "completed full falling evaluation with identical inputs",
+                  "reuse_after": "completed full evaluation with identical inputs",
                   "register_edges_skipped": False,
                   "mdusize_guard_bytes": 1024}
     except (OSError, KeyError, ValueError, ET.ParseError) as error:

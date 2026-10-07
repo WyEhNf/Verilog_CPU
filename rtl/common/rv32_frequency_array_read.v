@@ -24,13 +24,7 @@ module rv32_frequency_array_read #(
 // Equivalent two-state word form for the cycle-accurate simulator.
 // Synthesis retains the original fanout/carry/ownership structure.
 `ifdef CPU2026_WORD_SIM
-    localparam integer ROW_INDEX_WIDTH=(ENTRIES<=1)?1:$clog2(ENTRIES);
-    wire [WIDTH-1:0] word_rows [0:ENTRIES-1];
-    genvar sim_row;
-    generate for(sim_row=0;sim_row<ENTRIES;sim_row=sim_row+1) begin:g_sim_rows
-        assign word_rows[sim_row]=rows_i[sim_row*WIDTH +: WIDTH];
-    end endgenerate
-    assign value_o=(32'(index_i)<ENTRIES)?word_rows[ROW_INDEX_WIDTH'(index_i)]:{WIDTH{1'b0}};
+    assign value_o=(32'(index_i)<ENTRIES)?rows_i[(32'(index_i)*WIDTH) +: WIDTH]:{WIDTH{1'b0}};
 `else
     wire [DOMAINS*INDEX_WIDTH-1:0] query_views;
     wire [WIDTH-1:0] reads [1:2*LEAVES-1];

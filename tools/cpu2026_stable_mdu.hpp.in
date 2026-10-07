@@ -63,7 +63,16 @@ struct Accelerate {
   active=equal;
   if(equal){
    ++stable;
-   for(size_t j=0;j<10;++j){QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(counters[j])-reinterpret_cast<unsigned char*>(&r)),8);delta[j]=*counters[j]-old;}
+   {QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(&r.@ID:student_top__DOT__core__DOT__perf_frontend_empty_cycles@)-reinterpret_cast<unsigned char*>(&r)),8);delta[0]=r.@ID:student_top__DOT__core__DOT__perf_frontend_empty_cycles@-old;}
+   {QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(&r.@ID:student_top__DOT__core__DOT__perf_backend_stall_cycles@)-reinterpret_cast<unsigned char*>(&r)),8);delta[1]=r.@ID:student_top__DOT__core__DOT__perf_backend_stall_cycles@-old;}
+   {QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(&r.@ID:student_top__DOT__core__DOT__perf_no_commit_cycles@)-reinterpret_cast<unsigned char*>(&r)),8);delta[2]=r.@ID:student_top__DOT__core__DOT__perf_no_commit_cycles@-old;}
+   {QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(&r.@ID:student_top__DOT__core__DOT__perf_commit_active_cycles@)-reinterpret_cast<unsigned char*>(&r)),8);delta[3]=r.@ID:student_top__DOT__core__DOT__perf_commit_active_cycles@-old;}
+   {QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(&r.@ID:student_top__DOT__core__DOT__perf_issue_count@)-reinterpret_cast<unsigned char*>(&r)),8);delta[4]=r.@ID:student_top__DOT__core__DOT__perf_issue_count@-old;}
+   {QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(&r.@ID:student_top__DOT__core__DOT__perf_rob_full_cycles@)-reinterpret_cast<unsigned char*>(&r)),8);delta[5]=r.@ID:student_top__DOT__core__DOT__perf_rob_full_cycles@-old;}
+   {QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(&r.@ID:student_top__DOT__core__DOT__perf_rs_full_cycles@)-reinterpret_cast<unsigned char*>(&r)),8);delta[6]=r.@ID:student_top__DOT__core__DOT__perf_rs_full_cycles@-old;}
+   {QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(&r.@ID:student_top__DOT__core__DOT__perf_lsq_full_cycles@)-reinterpret_cast<unsigned char*>(&r)),8);delta[7]=r.@ID:student_top__DOT__core__DOT__perf_lsq_full_cycles@-old;}
+   {QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(&r.@ID:student_top__DOT__core__DOT__perf_branch_pending_cycles@)-reinterpret_cast<unsigned char*>(&r)),8);delta[8]=r.@ID:student_top__DOT__core__DOT__perf_branch_pending_cycles@-old;}
+   {QData old;std::memcpy(&old,previous.data()+(reinterpret_cast<unsigned char*>(&r.@ID:student_top__DOT__core__DOT__perf_mdu_busy_cycles@)-reinterpret_cast<unsigned char*>(&r)),8);delta[9]=r.@ID:student_top__DOT__core__DOT__perf_mdu_busy_cycles@-old;}
   }
   std::memcpy(previous.data(),&r,sizeof(Root));in=ii;cross=c;prior=true;
  }
@@ -78,14 +87,15 @@ struct Accelerate {
   if(disabled || !active)return false;
   if(r.reset || !(inputs(r)==in) || !(crossing(m)==cross)){active=false;++wake;return false;}
   if(verify){std::memcpy(before_root.data(),&r,sizeof(Root));std::memcpy(before_mdu.data(),mdudata(),mdusize);}
-  std::array<unsigned char,1024> saved{};std::memcpy(saved.data(),mdudata(),mdusize);
+  // Only the copied mdusize bytes are read, including on rollback.
+  std::array<unsigned char,1024> saved;std::memcpy(saved.data(),mdudata(),mdusize);
   @MDU_FUNC_0@(&m);
   if(!(crossing(m)==cross)){std::memcpy(mdudata(),saved.data(),mdusize);active=false;++wake;return false;}
   r.@ID:__Vtrigprevexpr___TOP__clock__0@=0;r.@ID:__VactIterCount@=1;skipped_fall=true;++fall;return true;
  }
  bool rising(){
   if(!skipped_fall)return false;
-  std::array<unsigned char,1024> saved{};std::memcpy(saved.data(),mdudata(),mdusize);
+  std::array<unsigned char,1024> saved;std::memcpy(saved.data(),mdudata(),mdusize);
   auto same_cross=[&](){return crossing(m)==cross;};
   @MDU_FUNC_0@(&m);
   // A crossing can change partway through the original NBA sequence. Retry
@@ -94,7 +104,16 @@ struct Accelerate {
 @MDU_NBA_CALLS@
   if(!good){std::memcpy(mdudata(),saved.data(),mdusize);active=false;++wake;return false;}
   ++r.debug_core_cycles;r.@ID:__Vdly__debug_core_cycles@=r.debug_core_cycles;
-  for(size_t j=0;j<10;++j){*counters[j]+=delta[j];*delayed[j]=*counters[j];}
+  r.@ID:student_top__DOT__core__DOT__perf_frontend_empty_cycles@+=delta[0];r.@ID:__Vdly__student_top__DOT__core__DOT__perf_frontend_empty_cycles@=r.@ID:student_top__DOT__core__DOT__perf_frontend_empty_cycles@;
+  r.@ID:student_top__DOT__core__DOT__perf_backend_stall_cycles@+=delta[1];r.@ID:__Vdly__student_top__DOT__core__DOT__perf_backend_stall_cycles@=r.@ID:student_top__DOT__core__DOT__perf_backend_stall_cycles@;
+  r.@ID:student_top__DOT__core__DOT__perf_no_commit_cycles@+=delta[2];r.@ID:__Vdly__student_top__DOT__core__DOT__perf_no_commit_cycles@=r.@ID:student_top__DOT__core__DOT__perf_no_commit_cycles@;
+  r.@ID:student_top__DOT__core__DOT__perf_commit_active_cycles@+=delta[3];r.@ID:__Vdly__student_top__DOT__core__DOT__perf_commit_active_cycles@=r.@ID:student_top__DOT__core__DOT__perf_commit_active_cycles@;
+  r.@ID:student_top__DOT__core__DOT__perf_issue_count@+=delta[4];r.@ID:__Vdly__student_top__DOT__core__DOT__perf_issue_count@=r.@ID:student_top__DOT__core__DOT__perf_issue_count@;
+  r.@ID:student_top__DOT__core__DOT__perf_rob_full_cycles@+=delta[5];r.@ID:__Vdly__student_top__DOT__core__DOT__perf_rob_full_cycles@=r.@ID:student_top__DOT__core__DOT__perf_rob_full_cycles@;
+  r.@ID:student_top__DOT__core__DOT__perf_rs_full_cycles@+=delta[6];r.@ID:__Vdly__student_top__DOT__core__DOT__perf_rs_full_cycles@=r.@ID:student_top__DOT__core__DOT__perf_rs_full_cycles@;
+  r.@ID:student_top__DOT__core__DOT__perf_lsq_full_cycles@+=delta[7];r.@ID:__Vdly__student_top__DOT__core__DOT__perf_lsq_full_cycles@=r.@ID:student_top__DOT__core__DOT__perf_lsq_full_cycles@;
+  r.@ID:student_top__DOT__core__DOT__perf_branch_pending_cycles@+=delta[8];r.@ID:__Vdly__student_top__DOT__core__DOT__perf_branch_pending_cycles@=r.@ID:student_top__DOT__core__DOT__perf_branch_pending_cycles@;
+  r.@ID:student_top__DOT__core__DOT__perf_mdu_busy_cycles@+=delta[9];r.@ID:__Vdly__student_top__DOT__core__DOT__perf_mdu_busy_cycles@=r.@ID:student_top__DOT__core__DOT__perf_mdu_busy_cycles@;
   r.@ID:__Vtrigprevexpr___TOP__clock__0@=1;r.@ID:__VactIterCount@=1;
   if(verify){
    std::memcpy(proposed.data(),&r,sizeof(Root));std::memcpy(proposed_mdu.data(),mdudata(),mdusize);

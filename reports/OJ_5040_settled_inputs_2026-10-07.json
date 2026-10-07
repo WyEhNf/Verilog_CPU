@@ -1,0 +1,711 @@
+{
+  "objective": "Verilator 5.040; full original Pi <=85 seconds; unchanged synthesized IPC/area/frequency",
+  "goal_complete": false,
+  "source_commit_base": "c2b204b12a9635a83f618bfac4c176c8c65923f4",
+  "working_tree_changes": [
+    "README.md",
+    "rtl/common/rv32_frequency_array_read.v",
+    "rtl/common/rv32_frequency_event_select.v",
+    "tools/cpu2026_ico_pair.hpp.in",
+    "tools/cpu2026_ico_pair.py",
+    "tools/cpu2026_stable_mdu.hpp.in"
+  ],
+  "preservation": {
+    "synthesis_defines": "course synth.py sets SYNTHESIS and does not set CPU2026_WORD_SIM",
+    "unchanged_tracked_rtl_except_simulation_branches": true,
+    "branch_proof": [
+      {
+        "file": "rtl/common/rv32_frequency_array_read.v",
+        "all_text_outside_simulation_branch_identical": true
+      },
+      {
+        "file": "rtl/common/rv32_frequency_event_select.v",
+        "all_text_outside_simulation_branch_identical": true
+      }
+    ],
+    "packed_selector_symbolic_proof": {
+      "status": 0,
+      "passed": true,
+      "seconds": 59.392245899987756,
+      "shapes": [
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          2,
+          16
+        ],
+        [
+          3,
+          32
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          16
+        ],
+        [
+          5,
+          16
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          6,
+          16
+        ],
+        [
+          8,
+          2
+        ],
+        [
+          8,
+          16
+        ],
+        [
+          9,
+          32
+        ],
+        [
+          11,
+          2
+        ],
+        [
+          16,
+          2
+        ],
+        [
+          16,
+          4
+        ],
+        [
+          16,
+          16
+        ],
+        [
+          16,
+          32
+        ],
+        [
+          17,
+          3
+        ],
+        [
+          17,
+          16
+        ],
+        [
+          18,
+          2
+        ],
+        [
+          19,
+          2
+        ],
+        [
+          22,
+          16
+        ],
+        [
+          24,
+          16
+        ],
+        [
+          32,
+          1
+        ],
+        [
+          32,
+          2
+        ],
+        [
+          32,
+          3
+        ],
+        [
+          32,
+          4
+        ],
+        [
+          32,
+          5
+        ],
+        [
+          32,
+          6
+        ],
+        [
+          32,
+          8
+        ],
+        [
+          32,
+          9
+        ],
+        [
+          32,
+          16
+        ],
+        [
+          33,
+          16
+        ],
+        [
+          35,
+          4
+        ],
+        [
+          35,
+          8
+        ],
+        [
+          36,
+          3
+        ],
+        [
+          36,
+          16
+        ],
+        [
+          40,
+          4
+        ],
+        [
+          40,
+          16
+        ],
+        [
+          41,
+          2
+        ],
+        [
+          41,
+          4
+        ],
+        [
+          42,
+          2
+        ],
+        [
+          50,
+          5
+        ],
+        [
+          51,
+          4
+        ],
+        [
+          59,
+          4
+        ],
+        [
+          64,
+          1
+        ],
+        [
+          65,
+          2
+        ],
+        [
+          69,
+          2
+        ],
+        [
+          71,
+          16
+        ],
+        [
+          87,
+          2
+        ],
+        [
+          87,
+          8
+        ],
+        [
+          93,
+          2
+        ],
+        [
+          107,
+          16
+        ],
+        [
+          108,
+          2
+        ],
+        [
+          110,
+          2
+        ],
+        [
+          119,
+          1
+        ],
+        [
+          120,
+          2
+        ],
+        [
+          120,
+          4
+        ],
+        [
+          128,
+          2
+        ],
+        [
+          128,
+          3
+        ],
+        [
+          128,
+          4
+        ],
+        [
+          169,
+          2
+        ],
+        [
+          170,
+          8
+        ],
+        [
+          197,
+          2
+        ],
+        [
+          368,
+          4
+        ]
+      ],
+      "all_payload_bits_and_all_indices_symbolic": true,
+      "covers_all_emitted_event_values_and_word_rows_shapes": true,
+      "zero_and_illegal_indices_covered": true,
+      "event_index_computation_unchanged": true,
+      "hardware_branches_byte_identical": true
+    },
+    "core_and_mdu_full_state_comparison_windows": [
+      {
+        "case": "pi",
+        "cycles": 100000,
+        "exact_partial_output_and_status_match": true,
+        "results": [
+          {
+            "case": "pi",
+            "mode": "original",
+            "seconds": 2.2323417000006884,
+            "status": 1,
+            "stdout": "",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          },
+          {
+            "case": "pi",
+            "mode": "verify",
+            "seconds": 4.068968800012954,
+            "status": 1,
+            "stdout": "ACCEL full=33414 fast=66591 fall=69080 stable=2490 wake=2489 verified=69080\nICO_PAIR reused=61711 verified=61711\n",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          }
+        ]
+      },
+      {
+        "case": "qsort",
+        "cycles": 100000,
+        "exact_partial_output_and_status_match": true,
+        "results": [
+          {
+            "case": "qsort",
+            "mode": "original",
+            "seconds": 1.8936650000105146,
+            "status": 1,
+            "stdout": "",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          },
+          {
+            "case": "qsort",
+            "mode": "verify",
+            "seconds": 3.8746115999965696,
+            "status": 1,
+            "stdout": "ACCEL full=100005 fast=0 fall=0 stable=0 wake=0 verified=0\nICO_PAIR reused=188920 verified=188920\n",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          }
+        ]
+      },
+      {
+        "case": "tak",
+        "cycles": 100000,
+        "exact_partial_output_and_status_match": true,
+        "results": [
+          {
+            "case": "tak",
+            "mode": "original",
+            "seconds": 2.0842267999978503,
+            "status": 1,
+            "stdout": "",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          },
+          {
+            "case": "tak",
+            "mode": "verify",
+            "seconds": 4.18179250000685,
+            "status": 1,
+            "stdout": "ACCEL full=100005 fast=0 fall=0 stable=0 wake=0 verified=0\nICO_PAIR reused=199723 verified=199723\n",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          }
+        ]
+      }
+    ],
+    "driver_sha256": "8dc91fce4c30e48b2caa73d62fc2fa89f71b3d938bf53bb622efa5d0572836ec",
+    "driver_and_course_runtime_library_modified": false,
+    "ram_mib": 256,
+    "memory_latency": 10,
+    "no_clocks_collapsed": true
+  },
+  "short_window": {
+    "limited_window_only": true,
+    "cycles": 5000000,
+    "latency": 10,
+    "ram_mib": 256,
+    "results": [
+      {
+        "name": "baseline",
+        "binary": "F:\\CPU2026NativeExperiments\\speed-5040-restore-20261007\\native-adders\\sim.exe",
+        "sha256": "3c188fdfca5f219c4dfce07df0407ef873ec3c0d55b38b053c0bcc8f0289382a",
+        "seconds": 22.35912369999278,
+        "cpu_seconds": 21.359375,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "FAIL: timeout or finish before exit write response; cycles=5000000\r\n"
+      },
+      {
+        "name": "candidate",
+        "binary": "F:\\CPU2026NativeExperiments\\speed85-5040-20261007\\general-ico\\sim.exe",
+        "sha256": "0980122fde438917415c0424235c96e5f45ee7ca11b6e7027884133fae32bbc4",
+        "seconds": 14.12420099999872,
+        "cpu_seconds": 12.84375,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "FAIL: timeout or finish before exit write response; cycles=5000000\r\n"
+      }
+    ]
+  },
+  "current_entry_build": {
+    "generation": {
+      "version": "Verilator 5.040 2025-08-30 rev UNKNOWN.REV",
+      "seconds": 11.49949669999478,
+      "exit_code": 0,
+      "generation_command": [
+        "F:\\CPU2026CourseTools\\win5040\\source_release\\verilator-5.040\\bin\\verilator_bin.exe",
+        "-O3",
+        "--no-trace-params",
+        "--unroll-count",
+        "1024",
+        "--unroll-stmts",
+        "4096",
+        "--output-split",
+        "8000",
+        "--output-split-cfuncs",
+        "2000",
+        "--output-split-ctrace",
+        "2000",
+        "--comp-limit-parens",
+        "32",
+        "-fno-dfg-scoped",
+        "--trace-depth",
+        "1",
+        "E:\\Verilog_cpu\\tools\\cpu2026_simulation.vlt",
+        "+define+CPU2026_WORD_SIM",
+        "E:\\Verilog_cpu\\tools\\cpu2026_mdu_schedule.vlt",
+        "--cc",
+        "--exe",
+        "--trace",
+        "--assert",
+        "-Wall",
+        "-Wno-fatal",
+        "--top-module",
+        "student_top",
+        "--Mdir",
+        "F:\\CPU2026NativeExperiments\\speed85-5040-20261007\\final-entry\\obj",
+        "-o",
+        "F:\\CPU2026NativeExperiments\\speed85-5040-20261007\\final-entry\\sim",
+        "-CFLAGS",
+        "-std=c++17",
+        "E:\\Verilog_cpu\\scripts\\ram\\sram_fakeram.sv",
+        "E:\\Verilog_cpu\\rtl\\rv32im_decoder.v",
+        "E:\\Verilog_cpu\\rtl\\predictor\\rv32_branch_predictor.v",
+        "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_bht_row.v",
+        "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_btb_row.v",
+        "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_indirect_btb_row.v",
+        "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_choice_row.v",
+        "E:\\Verilog_cpu\\rtl\\predictor\\rv32_banked_predictor.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_nonblocking.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_mshr_state_bank.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_query_queue.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_instruction_line_filter.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_control_banks.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_metadata_bank.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_mshr_data_bank.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_metadata_word.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_nonblocking.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_command_word.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_command_line.v",
+        "E:\\Verilog_cpu\\rtl\\cache\\rv32_cache_stats.v",
+        "E:\\Verilog_cpu\\rtl\\memory\\rv32_memory_bridge.v",
+        "E:\\Verilog_cpu\\rtl\\memory\\rv32_uncached_memory.v",
+        "E:\\Verilog_cpu\\rtl\\frontend\\rv32_fetch_frontend.v",
+        "E:\\Verilog_cpu\\rtl\\frontend\\rv32_frontend_queue_payload_bank.v",
+        "E:\\Verilog_cpu\\rtl\\frontend\\rv32_frontend_parallel_bundle_control.v",
+        "E:\\Verilog_cpu\\rtl\\rv32i_alu.v",
+        "E:\\Verilog_cpu\\rtl\\rv32m_multiplier.v",
+        "E:\\Verilog_cpu\\rtl\\rv32m_multiplier_radix4.v",
+        "E:\\Verilog_cpu\\rtl\\rv32m_divider.v",
+        "E:\\Verilog_cpu\\rtl\\rv32m_mdu_iterative.v",
+        "E:\\Verilog_cpu\\rtl\\rv32_physical_register_file.v",
+        "E:\\Verilog_cpu\\rtl\\rv32_prf_value_row.v",
+        "E:\\Verilog_cpu\\rtl\\rv32_rename_unit.v",
+        "E:\\Verilog_cpu\\rtl\\rv32_rename_map_row.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_rob.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_rob_owned_field.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_rob_recovery_live_or.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_reservation_station.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_rs_payload_row.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32m_mdu_reservation_station.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_completion_network.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_owned_field.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_forward_window.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_request_owner.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_identity_pair_or.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_store_address_select.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_store_rs_links.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_rat_recovery.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_rat_recovery_word.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_backend_joint.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_issue_pipeline_slot.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_producer_tag_row.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_reserved_dispatch_packet.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_elastic_dispatch_packet.v",
+        "E:\\Verilog_cpu\\rtl\\backend\\rv32_serial_backend.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32im_tag_compare.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32im_fifo.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32im_skid_buffer.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32im_prefix_alloc.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32im_priority_select.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_asap7_fanout.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_inversion.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_negative_subtree.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_control_tree.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_word_bank.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_event_select.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_first_two.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_array_read.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_barrel32.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_line_extract32.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_line_insert32.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_execution_recovery_cancel.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add64_select.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add32_select.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add_simm12.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_array_read_bank_masks.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_narrow_array_read.v",
+        "E:\\Verilog_cpu\\rtl\\common\\rv32_control_register_bank.v",
+        "E:\\Verilog_cpu\\rtl\\cpu_core.v",
+        "E:\\Verilog_cpu\\rtl\\rv32_decode_bundle_register.v",
+        "E:\\Verilog_cpu\\rtl\\rv32_decode_field_bank.v",
+        "E:\\Verilog_cpu\\rtl\\course\\rv32_axi_lite_bridge.v",
+        "E:\\Verilog_cpu\\rtl\\course\\rv32_axi_response_fifo.v",
+        "E:\\Verilog_cpu\\rtl\\course\\student_top.v",
+        "E:\\Verilog_cpu\\scripts\\sim.cpp"
+      ],
+      "compile_command": [
+        "F:\\c26\\msys64\\usr\\bin\\make.exe",
+        "-C",
+        "F:\\CPU2026NativeExperiments\\speed85-5040-20261007\\final-entry\\obj",
+        "-f",
+        "Vstudent_top.mk",
+        "-j1",
+        "VM_PARALLEL_BUILDS=1",
+        "CXX=F:/c26/msys64/mingw64/bin/g++.exe",
+        "LINK=F:/c26/msys64/mingw64/bin/g++.exe",
+        "AR=F:/c26/msys64/mingw64/bin/ar.exe",
+        "PYTHON3=C:/Users/admin/miniconda3/python.exe",
+        "VM_USER_LDLIBS=F:/CPU2026CourseRuns/A109_readme_interface_no_pi_20261006/windows_time_zero.o",
+        "OPT_FAST=-O3"
+      ],
+      "windows_native": true
+    },
+    "compile": {
+      "seconds": 141.3577823999949,
+      "exit_code": 0,
+      "version": "Verilator 5.040 2025-08-30 rev UNKNOWN.REV",
+      "windows_native": true,
+      "generation_seconds": 11.49949669999478
+    }
+  },
+  "full_pi_current_entry": {
+    "commit": "c2b204b12a9635a83f618bfac4c176c8c65923f4",
+    "version": "Verilator 5.040 2025-08-30 rev UNKNOWN.REV",
+    "compiler": "g++.exe (Rev4, Built by MSYS2 project) 16.2.0",
+    "binary": "F:\\CPU2026NativeExperiments\\speed85-5040-20261007\\final-entry\\sim.exe",
+    "binary_sha256": "d084d7128de6453d599addf7faae714707a353ed8aeec40c43bf85a169bfd9cc",
+    "windows_native": true,
+    "simulations_run_sequentially": true,
+    "latency": 10,
+    "ram_mib": 256,
+    "wave": false,
+    "max_cycles": 1000000000,
+    "results": [
+      {
+        "case": "pi",
+        "oj_point": 16,
+        "seconds": 102.46880010000314,
+        "exit_code": 0,
+        "stdout": "112\n",
+        "stderr": "CPU2026 cycles=38853527\n",
+        "cycles": 38853527,
+        "output_matches": true,
+        "under_100_seconds": false,
+        "timed_out_at_180_seconds": false,
+        "peak_working_set_mib": 265.703125,
+        "input": "E:\\Verilog_cpu\\3201\\3201\\16.in",
+        "input_sha256": "0d1f369931bc5519050a9f1bfd31e914c5080b0c5478e6684dfcb6162feb4d4b"
+      }
+    ]
+  },
+  "measurement_context": {
+    "windows_native": true,
+    "no_wsl": true,
+    "no_overlapping_compiler_or_other_simulator_during_full_pi": true,
+    "concurrent_user_game_observed": true,
+    "game_cpu_seconds_in_three_second_sample": 23.5,
+    "no_user_processes_terminated_or_reconfigured": true
+  },
+  "next_candidate": {
+    "name": "mdu-noico",
+    "rtl_changed": false,
+    "preserves_every_original_mdu_NBA_region": true,
+    "verification": [
+      {
+        "case": "pi",
+        "cycles": 100000,
+        "exact_partial_output_and_status_match": true,
+        "results": [
+          {
+            "case": "pi",
+            "mode": "original",
+            "seconds": 2.2595027000061236,
+            "status": 1,
+            "stdout": "",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          },
+          {
+            "case": "pi",
+            "mode": "verify",
+            "seconds": 3.872873999993317,
+            "status": 1,
+            "stdout": "ACCEL full=33414 fast=66591 fall=69080 stable=2490 wake=2489 verified=69080\nICO_PAIR reused=61711 verified=61711\n",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          }
+        ]
+      },
+      {
+        "case": "qsort",
+        "cycles": 100000,
+        "exact_partial_output_and_status_match": true,
+        "results": [
+          {
+            "case": "qsort",
+            "mode": "original",
+            "seconds": 1.9273719000048004,
+            "status": 1,
+            "stdout": "",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          },
+          {
+            "case": "qsort",
+            "mode": "verify",
+            "seconds": 3.8435874999995576,
+            "status": 1,
+            "stdout": "ACCEL full=100005 fast=0 fall=0 stable=0 wake=0 verified=0\nICO_PAIR reused=188920 verified=188920\n",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          }
+        ]
+      },
+      {
+        "case": "tak",
+        "cycles": 100000,
+        "exact_partial_output_and_status_match": true,
+        "results": [
+          {
+            "case": "tak",
+            "mode": "original",
+            "seconds": 2.139327400000184,
+            "status": 1,
+            "stdout": "",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          },
+          {
+            "case": "tak",
+            "mode": "verify",
+            "seconds": 4.4291086000012,
+            "status": 1,
+            "stdout": "ACCEL full=100005 fast=0 fall=0 stable=0 wake=0 verified=0\nICO_PAIR reused=199723 verified=199723\n",
+            "stderr": "FAIL: timeout or finish before exit write response; cycles=100000\n"
+          }
+        ]
+      }
+    ],
+    "full_pi_not_run": true,
+    "window": {
+      "limited_window_only": true,
+      "cycles": 5000000,
+      "latency": 10,
+      "ram_mib": 256,
+      "results": [
+        {
+          "name": "baseline",
+          "binary": "F:\\CPU2026NativeExperiments\\speed85-5040-20261007\\final-entry\\sim.exe",
+          "sha256": "d084d7128de6453d599addf7faae714707a353ed8aeec40c43bf85a169bfd9cc",
+          "seconds": 12.973284400010016,
+          "cpu_seconds": 11.96875,
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "FAIL: timeout or finish before exit write response; cycles=5000000\r\n"
+        },
+        {
+          "name": "candidate",
+          "binary": "F:\\CPU2026NativeExperiments\\speed85-5040-20261007\\mdu-noico\\sim.exe",
+          "sha256": "e9d53662443f1a0ddadc480a3946ed750f50336cfbf35d0538d8787d6c88f69e",
+          "seconds": 13.128377800007001,
+          "cpu_seconds": 12.21875,
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "FAIL: timeout or finish before exit write response; cycles=5000000\r\n"
+        }
+      ]
+    },
+    "disposition": "rejected: paired short window was 1.195 percent slower; no full Pi run",
+    "adopted": false
+  }
+}
