@@ -128,6 +128,11 @@ module rv32i_alu #(
         input [31:0] lhs;
         input [31:0] adjusted_rhs;
         input carry_in;
+`ifdef CPU2026_WORD_SIM
+        begin
+            fast_add_carry = lhs + adjusted_rhs + {31'b0, carry_in};
+        end
+`else
         reg [7:0] g0, p0, g1, p1, g2, p2, g3, p3;
         reg [8:0] carry;
         reg [4:0] chunk_sum;
@@ -172,6 +177,7 @@ module rv32i_alu #(
                     sum_one[chunk*4 +: 4] : sum_zero[chunk*4 +: 4];
             end
         end
+`endif
     endfunction
 
     wire issue_is_shift = (issue_op_i == `RV32IM_OP_SLLI) ||

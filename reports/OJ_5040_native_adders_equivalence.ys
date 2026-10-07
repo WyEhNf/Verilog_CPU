@@ -1,0 +1,4 @@
+read_verilog -sv -DCPU2026_WORD_SIM reports/OJ_5040_native_adders_equivalence.v
+prep -top verify_adders
+flatten
+sat -verify -prove equal 1 -show-inputs

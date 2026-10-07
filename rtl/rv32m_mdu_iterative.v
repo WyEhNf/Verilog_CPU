@@ -142,6 +142,11 @@ module rv32m_mdu_iterative #(
         input [31:0] lhs;
         input [31:0] adjusted_rhs;
         input carry_in;
+`ifdef CPU2026_WORD_SIM
+        begin
+            prefix_add32 = {1'b0, lhs} + {1'b0, adjusted_rhs} + {32'b0, carry_in};
+        end
+`else
         reg [7:0] g0, p0, g1, p1, g2, p2, g3, p3;
         reg [8:0] carry;
         reg [4:0] chunk_sum;
@@ -187,6 +192,7 @@ module rv32m_mdu_iterative #(
             end
             prefix_add32[32]=carry[8];
         end
+`endif
     endfunction
 
     always @* begin

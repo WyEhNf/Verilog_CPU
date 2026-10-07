@@ -91,10 +91,10 @@ def install(directory, prefix):
         definitions = re.findall(r"^(?:VL_INLINE_OPT )?void (" +
                                  re.escape(mdu) + r"__\w+)\(", mdu_text, re.M)
         # 5.020 emits four NBA regions; 5.040 without scoped DFG emits
-        # three. Require the complete known region set, then preserve the
-        # generated call order and check every crossing after each region.
+        # three (two with native combinational adders). Require the complete
+        # known set, preserve call order, and check crossing after each region.
         nba_count = len(definitions) - 1
-        if nba_count not in (3, 4):
+        if nba_count not in (2, 3, 4):
             raise ValueError("unrecognized MDU evaluation region count")
         functions = [mdu + "__" + mapping[region + "__TOP__" + MDU_PATH +
                      "__" + str(index)] for region, index in
