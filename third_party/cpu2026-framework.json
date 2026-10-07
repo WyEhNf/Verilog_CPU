@@ -3,11 +3,16 @@
   "framework_revision": "54fc150ffc290f52aa024209ffb9a29d43856f6d",
   "testcases_repository": "https://github.com/ACMClassCourse-2025/RISC-V-CPU-2026-Testcases",
   "testcases_revision": "29f980727f7d99a1842a58f34091c7579ba3fe85",
-  "vendor_policy": "The listed framework files are unchanged from the pinned course commit. config.mk selects a portable host compilation wrapper and equivalent two-state word expressions for Verilator. Original structural synthesis branches, official scripts, clock boundaries and simulation protocol remain unchanged. Machine-specific paths belong in ignored local config files.",
+  "vendor_policy": "The listed framework files retain the pinned upstream hashes. config.mk selects the portable host profile. scripts/ram/sram_fakeram.sv has an explicitly recorded local warning cleanup; all other listed framework files are unchanged. Clock boundaries, SRAM parameters, and the simulation protocol are retained. Machine-specific paths belong in ignored local config files.",
   "customized_files": {
     "config.mk": {
       "upstream_sha256": "073551bf208ca7f7e8607757a88c0d01b0f45eb786d291f30c262e7133fbcda1",
-      "purpose": "Select tools/verilator_low_memory.py and JOBS=1; export AppImage selection, TRACE_DEPTH=1, COMPACT_IDS=1, CPP_GROUP_BYTES=2097152, OPT_FAST=-O3, SPLIT_SCHEDULE=1, WORD_SIM=1 and UNROLL_STMTS=4096. Structural simulation, diagnostic names and compiler options remain configurable."
+      "purpose": "Select tools/verilator_low_memory.py and JOBS=1; export AppImage selection, TRACE_DEPTH=1, COMPACT_IDS=0, CPP_GROUP_BYTES=2097152, OPT_FAST=-O3, SPLIT_SCHEDULE=1, WORD_SIM=1 and UNROLL_STMTS=4096. Structural simulation, diagnostic names and compiler options remain configurable. PGO links use at most two LTO workers."
+    },
+    "scripts/ram/sram_fakeram.sv": {
+      "upstream_sha256": "c0a2389d5c3211fbd2fbca22a2e2e86edc38eafa9260407d72a55841274098cc",
+      "local_sha256": "633f573eab26e6f8cfcdde57b844441579540e381d6622bf9684065be3a6d37e",
+      "purpose": "Add timescale and compute masked writes in an automatic function before the original nonblocking memory assignment, removing TIMESCALEMOD and BLKSEQ. SRAM interface, parameters, edge timing and SYNTHESIS branch remain unchanged."
     }
   },
   "vendored_sha256": {

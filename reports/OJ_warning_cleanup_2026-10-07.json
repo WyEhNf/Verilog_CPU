@@ -1,0 +1,1581 @@
+{
+  "date": "2026-10-07",
+  "base_commit": "731d64d44363ee9423f062e2788afe74a46fad2c",
+  "native_windows": true,
+  "wsl_used": false,
+  "baseline_5040_warning_counts": {
+    "BLKSEQ": 41,
+    "CASEINCOMPLETE": 3,
+    "CMPCONST": 8,
+    "DECLFILENAME": 16,
+    "GENUNNAMED": 34,
+    "INSECURE": 1,
+    "MULTIDRIVEN": 73,
+    "PINCONNECTEMPTY": 86,
+    "PINMISSING": 14,
+    "TIMESCALEMOD": 1,
+    "UNUSEDPARAM": 13,
+    "UNUSEDSIGNAL": 321,
+    "VARHIDDEN": 6,
+    "WIDTHEXPAND": 292,
+    "WIDTHTRUNC": 148
+  },
+  "versions": {
+    "5.040": {
+      "generation": {
+        "version": "Verilator 5.040 2025-08-30 rev UNKNOWN.REV",
+        "seconds": 7.880957000001217,
+        "exit_code": 0,
+        "generation_command": [
+          "F:\\CPU2026CourseTools\\win5040\\source_release\\verilator-5.040\\bin\\verilator_bin.exe",
+          "-O3",
+          "--no-trace-params",
+          "--unroll-count",
+          "1024",
+          "--unroll-stmts",
+          "4096",
+          "--output-split",
+          "8000",
+          "--output-split-cfuncs",
+          "2000",
+          "--output-split-ctrace",
+          "2000",
+          "--comp-limit-parens",
+          "32",
+          "--trace-depth",
+          "1",
+          "E:\\Verilog_cpu\\tools\\cpu2026_simulation.vlt",
+          "+define+CPU2026_WORD_SIM",
+          "E:\\Verilog_cpu\\tools\\cpu2026_mdu_schedule.vlt",
+          "--cc",
+          "--exe",
+          "--trace",
+          "--assert",
+          "-Wall",
+          "-Wno-fatal",
+          "--top-module",
+          "student_top",
+          "--Mdir",
+          "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\warning_cleanup\\obj",
+          "-o",
+          "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\warning_cleanup\\sim",
+          "-CFLAGS",
+          "-std=c++17",
+          "E:\\Verilog_cpu\\scripts\\ram\\sram_fakeram.sv",
+          "E:\\Verilog_cpu\\rtl\\rv32im_decoder.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_branch_predictor.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_bht_row.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_btb_row.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_indirect_btb_row.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_choice_row.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_banked_predictor.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_nonblocking.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_mshr_state_bank.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_query_queue.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_instruction_line_filter.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_control_banks.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_metadata_bank.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_mshr_data_bank.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_metadata_word.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_nonblocking.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_command_word.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_command_line.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_cache_stats.v",
+          "E:\\Verilog_cpu\\rtl\\memory\\rv32_memory_bridge.v",
+          "E:\\Verilog_cpu\\rtl\\memory\\rv32_uncached_memory.v",
+          "E:\\Verilog_cpu\\rtl\\frontend\\rv32_fetch_frontend.v",
+          "E:\\Verilog_cpu\\rtl\\frontend\\rv32_frontend_queue_payload_bank.v",
+          "E:\\Verilog_cpu\\rtl\\frontend\\rv32_frontend_parallel_bundle_control.v",
+          "E:\\Verilog_cpu\\rtl\\rv32i_alu.v",
+          "E:\\Verilog_cpu\\rtl\\rv32m_multiplier.v",
+          "E:\\Verilog_cpu\\rtl\\rv32m_multiplier_radix4.v",
+          "E:\\Verilog_cpu\\rtl\\rv32m_divider.v",
+          "E:\\Verilog_cpu\\rtl\\rv32m_mdu_iterative.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_physical_register_file.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_prf_value_row.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_rename_unit.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_rename_map_row.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rob.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rob_owned_field.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rob_recovery_live_or.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_reservation_station.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rs_payload_row.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32m_mdu_reservation_station.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_completion_network.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_owned_field.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_forward_window.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_request_owner.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_identity_pair_or.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_store_address_select.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_store_rs_links.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rat_recovery.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rat_recovery_word.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_backend_joint.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_issue_pipeline_slot.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_producer_tag_row.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_reserved_dispatch_packet.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_elastic_dispatch_packet.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_serial_backend.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32im_tag_compare.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32im_fifo.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32im_skid_buffer.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32im_prefix_alloc.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32im_priority_select.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_asap7_fanout.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_inversion.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_negative_subtree.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_control_tree.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_word_bank.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_event_select.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_first_two.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_array_read.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_barrel32.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_line_extract32.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_line_insert32.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_execution_recovery_cancel.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add64_select.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add32_select.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add_simm12.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_array_read_bank_masks.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_narrow_array_read.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_control_register_bank.v",
+          "E:\\Verilog_cpu\\rtl\\cpu_core.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_decode_bundle_register.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_decode_field_bank.v",
+          "E:\\Verilog_cpu\\rtl\\course\\rv32_axi_lite_bridge.v",
+          "E:\\Verilog_cpu\\rtl\\course\\rv32_axi_response_fifo.v",
+          "E:\\Verilog_cpu\\rtl\\course\\student_top.v",
+          "E:\\Verilog_cpu\\scripts\\sim.cpp"
+        ],
+        "compile_command": [
+          "F:\\c26\\msys64\\usr\\bin\\make.exe",
+          "-C",
+          "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\warning_cleanup\\obj",
+          "-f",
+          "Vstudent_top.mk",
+          "-j1",
+          "VM_PARALLEL_BUILDS=1",
+          "CXX=F:/c26/msys64/mingw64/bin/g++.exe",
+          "LINK=F:/c26/msys64/mingw64/bin/g++.exe",
+          "AR=F:/c26/msys64/mingw64/bin/ar.exe",
+          "PYTHON3=C:/Users/admin/miniconda3/python.exe",
+          "VM_USER_LDLIBS=F:/CPU2026CourseRuns/A109_readme_interface_no_pi_20261006/windows_time_zero.o",
+          "OPT_FAST=-O3"
+        ],
+        "windows_native": true,
+        "warning_count": 0
+      },
+      "post_generation": {
+        "bits": {
+          "enabled": true,
+          "calls": 1420,
+          "records": [
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__1.cpp",
+              "calls": 20
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__10.cpp",
+              "calls": 4
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__10__Slow.cpp",
+              "calls": 127
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__11.cpp",
+              "calls": 13
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__11__Slow.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__12.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__12__Slow.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__13.cpp",
+              "calls": 26
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__14.cpp",
+              "calls": 17
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__14__Slow.cpp",
+              "calls": 2
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__15.cpp",
+              "calls": 18
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__15__Slow.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__16.cpp",
+              "calls": 12
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__16__Slow.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__17.cpp",
+              "calls": 68
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__18.cpp",
+              "calls": 65
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__18__Slow.cpp",
+              "calls": 50
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__19.cpp",
+              "calls": 36
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__2.cpp",
+              "calls": 12
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__21__Slow.cpp",
+              "calls": 12
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__24.cpp",
+              "calls": 2
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__27.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__28.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__29.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__3.cpp",
+              "calls": 13
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__31.cpp",
+              "calls": 19
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__32.cpp",
+              "calls": 50
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__33.cpp",
+              "calls": 35
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__34.cpp",
+              "calls": 127
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__35.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__37.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__38.cpp",
+              "calls": 2
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__39.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__3__Slow.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__4.cpp",
+              "calls": 14
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__40.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__42.cpp",
+              "calls": 34
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__43.cpp",
+              "calls": 8
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__44.cpp",
+              "calls": 7
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__45.cpp",
+              "calls": 19
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__46.cpp",
+              "calls": 35
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__49.cpp",
+              "calls": 14
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__4__Slow.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__5.cpp",
+              "calls": 81
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__50.cpp",
+              "calls": 7
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__51.cpp",
+              "calls": 17
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__52.cpp",
+              "calls": 12
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__53.cpp",
+              "calls": 14
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__54.cpp",
+              "calls": 62
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__55.cpp",
+              "calls": 57
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__58.cpp",
+              "calls": 45
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__5__Slow.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__6.cpp",
+              "calls": 80
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__6__Slow.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__7.cpp",
+              "calls": 15
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__7__Slow.cpp",
+              "calls": 16
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__8.cpp",
+              "calls": 10
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__8__Slow.cpp",
+              "calls": 50
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__9__Slow.cpp",
+              "calls": 35
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h3ec42a3f__0.cpp",
+              "calls": 2
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h3ec42a3f__1.cpp",
+              "calls": 26
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h3ec42a3f__4.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__DepSet_h985348e3__0.cpp",
+              "calls": 2
+            },
+            {
+              "file": "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__DepSet_h985348e3__0__Slow.cpp",
+              "calls": 1
+            }
+          ],
+          "library_files_modified": false,
+          "method": "bit width of value-1; zero/one explicitly return zero"
+        },
+        "mdu": {
+          "enabled": false,
+          "reason": "unrecognized MDU to root boundary"
+        },
+        "ico": {
+          "enabled": false,
+          "reason": "requires the recognized two-object MDU schedule"
+        },
+        "groups": {
+          "enabled": true,
+          "byte_limit": 2097152,
+          "original_units": 100,
+          "compilation_units": 23,
+          "sections": [
+            {
+              "category": "VM_CLASSES_FAST",
+              "original_units": 64,
+              "compilation_units": 14,
+              "groups": [
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_0",
+                  "members": [
+                    "Vstudent_top",
+                    "Vstudent_top___024root__DepSet_h3ec42a3f__0",
+                    "Vstudent_top___024root__DepSet_h3ec42a3f__1",
+                    "Vstudent_top___024root__DepSet_h3ec42a3f__2",
+                    "Vstudent_top___024root__DepSet_h3ec42a3f__3"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_1",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h3ec42a3f__4",
+                    "Vstudent_top___024root__DepSet_h383d3863__0",
+                    "Vstudent_top___024root__DepSet_h383d3863__1",
+                    "Vstudent_top___024root__DepSet_h383d3863__2",
+                    "Vstudent_top___024root__DepSet_h383d3863__3"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_2",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__4",
+                    "Vstudent_top___024root__DepSet_h383d3863__5",
+                    "Vstudent_top___024root__DepSet_h383d3863__6",
+                    "Vstudent_top___024root__DepSet_h383d3863__7"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_3",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__8",
+                    "Vstudent_top___024root__DepSet_h383d3863__9",
+                    "Vstudent_top___024root__DepSet_h383d3863__10",
+                    "Vstudent_top___024root__DepSet_h383d3863__11"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_4",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__12",
+                    "Vstudent_top___024root__DepSet_h383d3863__13",
+                    "Vstudent_top___024root__DepSet_h383d3863__14",
+                    "Vstudent_top___024root__DepSet_h383d3863__15",
+                    "Vstudent_top___024root__DepSet_h383d3863__16",
+                    "Vstudent_top___024root__DepSet_h383d3863__17"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_5",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__18",
+                    "Vstudent_top___024root__DepSet_h383d3863__19",
+                    "Vstudent_top___024root__DepSet_h383d3863__20",
+                    "Vstudent_top___024root__DepSet_h383d3863__21",
+                    "Vstudent_top___024root__DepSet_h383d3863__22"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_6",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__23",
+                    "Vstudent_top___024root__DepSet_h383d3863__24",
+                    "Vstudent_top___024root__DepSet_h383d3863__25",
+                    "Vstudent_top___024root__DepSet_h383d3863__26"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_7",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__27",
+                    "Vstudent_top___024root__DepSet_h383d3863__28",
+                    "Vstudent_top___024root__DepSet_h383d3863__29",
+                    "Vstudent_top___024root__DepSet_h383d3863__30"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_8",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__31",
+                    "Vstudent_top___024root__DepSet_h383d3863__32",
+                    "Vstudent_top___024root__DepSet_h383d3863__33",
+                    "Vstudent_top___024root__DepSet_h383d3863__34",
+                    "Vstudent_top___024root__DepSet_h383d3863__35"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_9",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__36",
+                    "Vstudent_top___024root__DepSet_h383d3863__37",
+                    "Vstudent_top___024root__DepSet_h383d3863__38",
+                    "Vstudent_top___024root__DepSet_h383d3863__39"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_10",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__40",
+                    "Vstudent_top___024root__DepSet_h383d3863__41",
+                    "Vstudent_top___024root__DepSet_h383d3863__42",
+                    "Vstudent_top___024root__DepSet_h383d3863__43",
+                    "Vstudent_top___024root__DepSet_h383d3863__44"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_11",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__45",
+                    "Vstudent_top___024root__DepSet_h383d3863__46",
+                    "Vstudent_top___024root__DepSet_h383d3863__47",
+                    "Vstudent_top___024root__DepSet_h383d3863__48",
+                    "Vstudent_top___024root__DepSet_h383d3863__49"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_12",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__50",
+                    "Vstudent_top___024root__DepSet_h383d3863__51",
+                    "Vstudent_top___024root__DepSet_h383d3863__52",
+                    "Vstudent_top___024root__DepSet_h383d3863__53",
+                    "Vstudent_top___024root__DepSet_h383d3863__54",
+                    "Vstudent_top___024root__DepSet_h383d3863__55",
+                    "Vstudent_top___024root__DepSet_h383d3863__56"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__DepSet_h985348e3__0",
+                  "members": [
+                    "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__DepSet_h985348e3__0"
+                  ]
+                }
+              ]
+            },
+            {
+              "category": "VM_CLASSES_SLOW",
+              "original_units": 32,
+              "compilation_units": 7,
+              "groups": [
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_0",
+                  "members": [
+                    "Vstudent_top__ConstPool_0",
+                    "Vstudent_top___024root__Slow",
+                    "Vstudent_top___024root__DepSet_h3ec42a3f__0__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__0__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__1__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__2__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_1",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__3__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__4__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__5__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__6__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_2",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__7__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__8__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__9__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__10__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__11__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_3",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__12__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__13__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__14__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__15__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_4",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__16__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__17__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__18__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__19__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__20__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_5",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__21__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__22__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_6",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__23__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__24__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__25__Slow",
+                    "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__Slow",
+                    "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__DepSet_h985348e3__0__Slow",
+                    "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__DepSet_hd5c65a97__0__Slow"
+                  ]
+                }
+              ]
+            },
+            {
+              "category": "VM_SUPPORT_FAST",
+              "original_units": 1,
+              "compilation_units": 1,
+              "groups": [
+                {
+                  "unit": "Vstudent_top__Trace__0",
+                  "members": [
+                    "Vstudent_top__Trace__0"
+                  ]
+                }
+              ]
+            },
+            {
+              "category": "VM_SUPPORT_SLOW",
+              "original_units": 3,
+              "compilation_units": 1,
+              "groups": [
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_support_slow_0",
+                  "members": [
+                    "Vstudent_top__Syms",
+                    "Vstudent_top__Trace__0__Slow",
+                    "Vstudent_top__TraceDecls__0__Slow"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "compile": {
+        "seconds": 90.92629080000916,
+        "exit_code": 0,
+        "version": "Verilator 5.040 2025-08-30 rev UNKNOWN.REV",
+        "windows_native": true,
+        "generation_seconds": 7.880957000001217
+      },
+      "pgo": {
+        "compiler": "g++.exe (Rev4, Built by MSYS2 project) 16.2.0",
+        "training_cycles": 100000,
+        "latency": 10,
+        "wave": false,
+        "phases": [
+          {
+            "phase": "GCC profile generation",
+            "seconds": 59.61092479999934,
+            "status": 0,
+            "command": [
+              "F:\\c26\\msys64\\usr\\bin\\make.exe",
+              "-C",
+              "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\warning_cleanup\\obj",
+              "-f",
+              "Vstudent_top.mk",
+              "-j1",
+              "VM_PARALLEL_BUILDS=1",
+              "CXX=F:/c26/msys64/mingw64/bin/g++.exe",
+              "LINK=F:/c26/msys64/mingw64/bin/g++.exe",
+              "AR=F:/c26/msys64/mingw64/bin/ar.exe",
+              "PYTHON3=C:/Users/admin/miniconda3/python.exe",
+              "VM_USER_LDLIBS=F:/CPU2026CourseRuns/A109_readme_interface_no_pi_20261006/windows_time_zero.o",
+              "OPT_FAST=-O3 -fprofile-generate=F:/CPU2026NativeExperiments/oj-verilator-5040-20261007/warning_cleanup/obj/cpu2026_profile -fprofile-update=single",
+              "VM_USER_LDFLAGS=-fprofile-generate=F:/CPU2026NativeExperiments/oj-verilator-5040-20261007/warning_cleanup/obj/cpu2026_profile -fprofile-update=single"
+            ]
+          },
+          {
+            "phase": "limited Pi profile training",
+            "seconds": 2.8700902000127826,
+            "status": 1,
+            "stdout": "FAIL cycles=100000 (timeout or finish before exit write response)\n",
+            "stderr": ""
+          },
+          {
+            "phase": "GCC profile use and bounded LTO",
+            "seconds": 28.33342549999361,
+            "status": 0,
+            "command": [
+              "F:\\c26\\msys64\\usr\\bin\\make.exe",
+              "-C",
+              "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\warning_cleanup\\obj",
+              "-f",
+              "Vstudent_top.mk",
+              "-j1",
+              "VM_PARALLEL_BUILDS=1",
+              "CXX=F:/c26/msys64/mingw64/bin/g++.exe",
+              "LINK=F:/c26/msys64/mingw64/bin/g++.exe",
+              "AR=F:/c26/msys64/mingw64/bin/ar.exe",
+              "PYTHON3=C:/Users/admin/miniconda3/python.exe",
+              "VM_USER_LDLIBS=F:/CPU2026CourseRuns/A109_readme_interface_no_pi_20261006/windows_time_zero.o",
+              "OPT_FAST=-O3 -fprofile-use=F:/CPU2026NativeExperiments/oj-verilator-5040-20261007/warning_cleanup/obj/cpu2026_profile -flto=2",
+              "VM_USER_LDFLAGS=-fprofile-use=F:/CPU2026NativeExperiments/oj-verilator-5040-20261007/warning_cleanup/obj/cpu2026_profile -flto=2"
+            ]
+          }
+        ],
+        "profile_files": 16,
+        "profile_bytes": 141828
+      },
+      "compiler_warning_counts": {
+        "cpu2026_compile_generate.log": 0,
+        "cpu2026_compile_use.log": 0
+      }
+    },
+    "5.020": {
+      "generation": {
+        "version": "Verilator 5.020 2024-01-01 rev UNKNOWN.REV",
+        "seconds": 6.433285399994929,
+        "exit_code": 0,
+        "generation_command": [
+          "F:\\CPU2026CourseTools\\win54fc150\\verilator\\bin\\verilator_bin.exe",
+          "-O3",
+          "--no-trace-params",
+          "--unroll-count",
+          "1024",
+          "--unroll-stmts",
+          "4096",
+          "--output-split",
+          "8000",
+          "--output-split-cfuncs",
+          "2000",
+          "--output-split-ctrace",
+          "2000",
+          "--comp-limit-parens",
+          "32",
+          "--trace-depth",
+          "1",
+          "E:\\Verilog_cpu\\tools\\cpu2026_simulation.vlt",
+          "+define+CPU2026_WORD_SIM",
+          "E:\\Verilog_cpu\\tools\\cpu2026_mdu_schedule.vlt",
+          "--cc",
+          "--exe",
+          "--trace",
+          "--assert",
+          "-Wall",
+          "-Wno-fatal",
+          "--top-module",
+          "student_top",
+          "--Mdir",
+          "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\warning_cleanup\\compat5020\\obj",
+          "-o",
+          "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\warning_cleanup\\compat5020\\sim",
+          "-CFLAGS",
+          "-std=c++17",
+          "E:\\Verilog_cpu\\scripts\\ram\\sram_fakeram.sv",
+          "E:\\Verilog_cpu\\rtl\\rv32im_decoder.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_branch_predictor.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_bht_row.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_btb_row.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_indirect_btb_row.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_choice_row.v",
+          "E:\\Verilog_cpu\\rtl\\predictor\\rv32_banked_predictor.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_nonblocking.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_mshr_state_bank.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_query_queue.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_instruction_line_filter.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_control_banks.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_metadata_bank.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_mshr_data_bank.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_metadata_word.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_nonblocking.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_command_word.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_command_line.v",
+          "E:\\Verilog_cpu\\rtl\\cache\\rv32_cache_stats.v",
+          "E:\\Verilog_cpu\\rtl\\memory\\rv32_memory_bridge.v",
+          "E:\\Verilog_cpu\\rtl\\memory\\rv32_uncached_memory.v",
+          "E:\\Verilog_cpu\\rtl\\frontend\\rv32_fetch_frontend.v",
+          "E:\\Verilog_cpu\\rtl\\frontend\\rv32_frontend_queue_payload_bank.v",
+          "E:\\Verilog_cpu\\rtl\\frontend\\rv32_frontend_parallel_bundle_control.v",
+          "E:\\Verilog_cpu\\rtl\\rv32i_alu.v",
+          "E:\\Verilog_cpu\\rtl\\rv32m_multiplier.v",
+          "E:\\Verilog_cpu\\rtl\\rv32m_multiplier_radix4.v",
+          "E:\\Verilog_cpu\\rtl\\rv32m_divider.v",
+          "E:\\Verilog_cpu\\rtl\\rv32m_mdu_iterative.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_physical_register_file.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_prf_value_row.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_rename_unit.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_rename_map_row.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rob.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rob_owned_field.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rob_recovery_live_or.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_reservation_station.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rs_payload_row.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32m_mdu_reservation_station.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_completion_network.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_owned_field.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_forward_window.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_request_owner.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_identity_pair_or.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_store_address_select.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_store_rs_links.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rat_recovery.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_rat_recovery_word.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_backend_joint.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_issue_pipeline_slot.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_producer_tag_row.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_reserved_dispatch_packet.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_elastic_dispatch_packet.v",
+          "E:\\Verilog_cpu\\rtl\\backend\\rv32_serial_backend.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32im_tag_compare.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32im_fifo.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32im_skid_buffer.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32im_prefix_alloc.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32im_priority_select.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_asap7_fanout.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_inversion.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_negative_subtree.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_control_tree.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_word_bank.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_event_select.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_first_two.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_array_read.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_barrel32.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_line_extract32.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_line_insert32.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_execution_recovery_cancel.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add64_select.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add32_select.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add_simm12.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_array_read_bank_masks.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_narrow_array_read.v",
+          "E:\\Verilog_cpu\\rtl\\common\\rv32_control_register_bank.v",
+          "E:\\Verilog_cpu\\rtl\\cpu_core.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_decode_bundle_register.v",
+          "E:\\Verilog_cpu\\rtl\\rv32_decode_field_bank.v",
+          "E:\\Verilog_cpu\\rtl\\course\\rv32_axi_lite_bridge.v",
+          "E:\\Verilog_cpu\\rtl\\course\\rv32_axi_response_fifo.v",
+          "E:\\Verilog_cpu\\rtl\\course\\student_top.v",
+          "E:\\Verilog_cpu\\scripts\\sim.cpp"
+        ],
+        "compile_command": [
+          "F:\\c26\\msys64\\usr\\bin\\make.exe",
+          "-C",
+          "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\warning_cleanup\\compat5020\\obj",
+          "-f",
+          "Vstudent_top.mk",
+          "-j1",
+          "VM_PARALLEL_BUILDS=1",
+          "CXX=F:/c26/msys64/mingw64/bin/g++.exe",
+          "LINK=F:/c26/msys64/mingw64/bin/g++.exe",
+          "AR=F:/c26/msys64/mingw64/bin/ar.exe",
+          "PYTHON3=C:/Users/admin/miniconda3/python.exe",
+          "VM_USER_LDLIBS=F:/CPU2026CourseRuns/A109_readme_interface_no_pi_20261006/windows_time_zero.o",
+          "OPT_FAST=-O3"
+        ],
+        "windows_native": true,
+        "warning_count": 0
+      },
+      "post_generation": {
+        "bits": {
+          "enabled": true,
+          "calls": 1089,
+          "records": [
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__1.cpp",
+              "calls": 5
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__10__Slow.cpp",
+              "calls": 17
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__11__Slow.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__12.cpp",
+              "calls": 4
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__13.cpp",
+              "calls": 34
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__13__Slow.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__14.cpp",
+              "calls": 5
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__14__Slow.cpp",
+              "calls": 14
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__15.cpp",
+              "calls": 41
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__15__Slow.cpp",
+              "calls": 16
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__16.cpp",
+              "calls": 32
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__16__Slow.cpp",
+              "calls": 112
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__17.cpp",
+              "calls": 25
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__17__Slow.cpp",
+              "calls": 4
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__18.cpp",
+              "calls": 61
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__18__Slow.cpp",
+              "calls": 4
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__19.cpp",
+              "calls": 5
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__2.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__20.cpp",
+              "calls": 18
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__21__Slow.cpp",
+              "calls": 4
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__22__Slow.cpp",
+              "calls": 23
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__23__Slow.cpp",
+              "calls": 35
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__26.cpp",
+              "calls": 2
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__3.cpp",
+              "calls": 13
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__30.cpp",
+              "calls": 5
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__31.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__33.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__34.cpp",
+              "calls": 4
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__35.cpp",
+              "calls": 16
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__36.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__37.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__38.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__39.cpp",
+              "calls": 16
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__4.cpp",
+              "calls": 4
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__40.cpp",
+              "calls": 13
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__41.cpp",
+              "calls": 92
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__42.cpp",
+              "calls": 22
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__43.cpp",
+              "calls": 4
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__44.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__46.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__47.cpp",
+              "calls": 5
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__48.cpp",
+              "calls": 21
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__49.cpp",
+              "calls": 33
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__5.cpp",
+              "calls": 47
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__52.cpp",
+              "calls": 1
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__53.cpp",
+              "calls": 15
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__54.cpp",
+              "calls": 20
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__55.cpp",
+              "calls": 31
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__56.cpp",
+              "calls": 28
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__57.cpp",
+              "calls": 52
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__58.cpp",
+              "calls": 18
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__59.cpp",
+              "calls": 17
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__5__Slow.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__6.cpp",
+              "calls": 32
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__6__Slow.cpp",
+              "calls": 3
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__7.cpp",
+              "calls": 22
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__8__Slow.cpp",
+              "calls": 2
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h383d3863__9__Slow.cpp",
+              "calls": 7
+            },
+            {
+              "file": "Vstudent_top___024root__DepSet_h3ec42a3f__0.cpp",
+              "calls": 51
+            },
+            {
+              "file": "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__DepSet_h985348e3__0.cpp",
+              "calls": 2
+            },
+            {
+              "file": "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__DepSet_h985348e3__0__Slow.cpp",
+              "calls": 1
+            }
+          ],
+          "library_files_modified": false,
+          "method": "bit width of value-1; zero/one explicitly return zero"
+        },
+        "mdu": {
+          "enabled": true,
+          "root_class": "Vstudent_top___024root",
+          "mdu_class": "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1",
+          "mdu_to_root_fields": [
+            "__PVT__out_valid",
+            "__Vcellinp__operation_cancel_guard__active_i",
+            "__Vcellout__output_owner__data_o",
+            "req_ready_o",
+            "resp_valid_o"
+          ],
+          "root_to_mdu_fields": [
+            "reset",
+            "student_top__DOT__core__DOT__g_ooo_backend__DOT__backend__DOT____Vcellinp__g_alu__BRA__0__KET____DOT__alu__recovery_packet_i",
+            "student_top__DOT__core__DOT__g_ooo_backend__DOT__backend__DOT__mdu__DOT____Vcellinp__gen_unified_mdu__DOT__unified__req_valid_i",
+            "student_top__DOT__core__DOT__g_ooo_backend__DOT__backend__DOT__mdu__DOT__launch_payload",
+            "student_top__DOT__core__DOT__g_ooo_backend__DOT__backend__DOT__producer_ready_r"
+          ],
+          "mdu_snapshot_first": "clk_i",
+          "mdu_snapshot_last": "__PVT__shift_selector__DOT__event_values",
+          "mdu_fixed_fields": 83,
+          "stats_preserved": 10,
+          "cpu_cycles_collapsed": false
+        },
+        "ico": {
+          "enabled": true,
+          "root_class": "Vstudent_top___024root",
+          "mdu_class": "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1",
+          "ico_entry": "Vstudent_top___024root___eval_ico",
+          "ico_file": "Vstudent_top___024root__DepSet_h3ec42a3f__0.cpp",
+          "input_ports": [
+            "arready",
+            "awready",
+            "bresp",
+            "bvalid",
+            "clock",
+            "rdata",
+            "reset",
+            "rresp",
+            "rvalid",
+            "wready"
+          ],
+          "clock_trigger_index": 0,
+          "input_region_functions_checked": 80,
+          "reuse_after": "completed full falling evaluation with identical inputs",
+          "register_edges_skipped": false,
+          "mdusize_guard_bytes": 1024
+        },
+        "groups": {
+          "enabled": true,
+          "byte_limit": 2097152,
+          "original_units": 104,
+          "compilation_units": 23,
+          "sections": [
+            {
+              "category": "VM_CLASSES_FAST",
+              "original_units": 66,
+              "compilation_units": 14,
+              "groups": [
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_0",
+                  "members": [
+                    "Vstudent_top",
+                    "Vstudent_top___024root__DepSet_h3ec42a3f__0",
+                    "Vstudent_top___024root__DepSet_h3ec42a3f__1",
+                    "Vstudent_top___024root__DepSet_h3ec42a3f__2",
+                    "Vstudent_top___024root__DepSet_h3ec42a3f__3"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_1",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__0",
+                    "Vstudent_top___024root__DepSet_h383d3863__1",
+                    "Vstudent_top___024root__DepSet_h383d3863__2",
+                    "Vstudent_top___024root__DepSet_h383d3863__3"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_2",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__4",
+                    "Vstudent_top___024root__DepSet_h383d3863__5",
+                    "Vstudent_top___024root__DepSet_h383d3863__6",
+                    "Vstudent_top___024root__DepSet_h383d3863__7"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_3",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__8",
+                    "Vstudent_top___024root__DepSet_h383d3863__9",
+                    "Vstudent_top___024root__DepSet_h383d3863__10",
+                    "Vstudent_top___024root__DepSet_h383d3863__11",
+                    "Vstudent_top___024root__DepSet_h383d3863__12"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_4",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__13",
+                    "Vstudent_top___024root__DepSet_h383d3863__14",
+                    "Vstudent_top___024root__DepSet_h383d3863__15",
+                    "Vstudent_top___024root__DepSet_h383d3863__16",
+                    "Vstudent_top___024root__DepSet_h383d3863__17"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_5",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__18",
+                    "Vstudent_top___024root__DepSet_h383d3863__19",
+                    "Vstudent_top___024root__DepSet_h383d3863__20",
+                    "Vstudent_top___024root__DepSet_h383d3863__21",
+                    "Vstudent_top___024root__DepSet_h383d3863__22",
+                    "Vstudent_top___024root__DepSet_h383d3863__23"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_6",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__24",
+                    "Vstudent_top___024root__DepSet_h383d3863__25",
+                    "Vstudent_top___024root__DepSet_h383d3863__26",
+                    "Vstudent_top___024root__DepSet_h383d3863__27"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_7",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__28",
+                    "Vstudent_top___024root__DepSet_h383d3863__29",
+                    "Vstudent_top___024root__DepSet_h383d3863__30",
+                    "Vstudent_top___024root__DepSet_h383d3863__31"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_8",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__32",
+                    "Vstudent_top___024root__DepSet_h383d3863__33",
+                    "Vstudent_top___024root__DepSet_h383d3863__34",
+                    "Vstudent_top___024root__DepSet_h383d3863__35",
+                    "Vstudent_top___024root__DepSet_h383d3863__36"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_9",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__37",
+                    "Vstudent_top___024root__DepSet_h383d3863__38",
+                    "Vstudent_top___024root__DepSet_h383d3863__39",
+                    "Vstudent_top___024root__DepSet_h383d3863__40",
+                    "Vstudent_top___024root__DepSet_h383d3863__41"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_10",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__42",
+                    "Vstudent_top___024root__DepSet_h383d3863__43",
+                    "Vstudent_top___024root__DepSet_h383d3863__44",
+                    "Vstudent_top___024root__DepSet_h383d3863__45",
+                    "Vstudent_top___024root__DepSet_h383d3863__46"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_11",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__47",
+                    "Vstudent_top___024root__DepSet_h383d3863__48",
+                    "Vstudent_top___024root__DepSet_h383d3863__49",
+                    "Vstudent_top___024root__DepSet_h383d3863__50"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_12",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__51",
+                    "Vstudent_top___024root__DepSet_h383d3863__52",
+                    "Vstudent_top___024root__DepSet_h383d3863__53",
+                    "Vstudent_top___024root__DepSet_h383d3863__54",
+                    "Vstudent_top___024root__DepSet_h383d3863__55"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_fast_13",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__56",
+                    "Vstudent_top___024root__DepSet_h383d3863__57",
+                    "Vstudent_top___024root__DepSet_h383d3863__58",
+                    "Vstudent_top___024root__DepSet_h383d3863__59",
+                    "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__DepSet_h985348e3__0"
+                  ]
+                }
+              ]
+            },
+            {
+              "category": "VM_CLASSES_SLOW",
+              "original_units": 34,
+              "compilation_units": 7,
+              "groups": [
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_0",
+                  "members": [
+                    "Vstudent_top__ConstPool_0",
+                    "Vstudent_top___024root__Slow",
+                    "Vstudent_top___024root__DepSet_h3ec42a3f__0__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__0__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__1__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__2__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__3__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_1",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__4__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__5__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__6__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__7__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__8__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_2",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__9__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__10__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__11__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__12__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__13__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_3",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__14__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__15__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__16__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__17__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_4",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__18__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__19__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__20__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__21__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__22__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_5",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__23__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__24__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__25__Slow"
+                  ]
+                },
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_classes_slow_6",
+                  "members": [
+                    "Vstudent_top___024root__DepSet_h383d3863__26__Slow",
+                    "Vstudent_top___024root__DepSet_h383d3863__27__Slow",
+                    "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__Slow",
+                    "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__DepSet_h985348e3__0__Slow",
+                    "Vstudent_top_rv32m_mdu_iterative__T10_P6_S1__DepSet_hd5c65a97__0__Slow"
+                  ]
+                }
+              ]
+            },
+            {
+              "category": "VM_SUPPORT_FAST",
+              "original_units": 1,
+              "compilation_units": 1,
+              "groups": [
+                {
+                  "unit": "Vstudent_top__Trace__0",
+                  "members": [
+                    "Vstudent_top__Trace__0"
+                  ]
+                }
+              ]
+            },
+            {
+              "category": "VM_SUPPORT_SLOW",
+              "original_units": 3,
+              "compilation_units": 1,
+              "groups": [
+                {
+                  "unit": "Vstudent_top__cpu2026_vm_support_slow_0",
+                  "members": [
+                    "Vstudent_top__Syms",
+                    "Vstudent_top__Trace__0__Slow",
+                    "Vstudent_top__TraceDecls__0__Slow"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "smoke": {
+    "status": 0,
+    "stdout": "5050\r\n",
+    "stderr": "CPU2026 cycles=447\r\n",
+    "seconds": 0.18857470000511967,
+    "testcase": "3201/1.in",
+    "expected": "5050",
+    "binary_sha256": "3c9c15cdd0ba238211f7dcd29ef8ec8040d33f20f0ca87002a901d64ab29ccdc"
+  },
+  "structural_elaboration": {
+    "status": 0,
+    "seconds": 60.495199500001036,
+    "macro_word_sim": false,
+    "script": "read_verilog -sv -defer -noblackbox -IE:\\Verilog_cpu\\rtl\\include E:\\Verilog_cpu\\scripts\\ram\\sram_fakeram.sv E:\\Verilog_cpu\\rtl\\rv32im_decoder.v E:\\Verilog_cpu\\rtl\\predictor\\rv32_branch_predictor.v E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_bht_row.v E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_btb_row.v E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_indirect_btb_row.v E:\\Verilog_cpu\\rtl\\predictor\\rv32_predictor_choice_row.v E:\\Verilog_cpu\\rtl\\predictor\\rv32_banked_predictor.v E:\\Verilog_cpu\\rtl\\cache\\rv32_icache.v E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_nonblocking.v E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_mshr_state_bank.v E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_query_queue.v E:\\Verilog_cpu\\rtl\\cache\\rv32_instruction_line_filter.v E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache.v E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_control_banks.v E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_metadata_bank.v E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_mshr_data_bank.v E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_metadata_word.v E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_nonblocking.v E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_command_word.v E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_command_line.v E:\\Verilog_cpu\\rtl\\cache\\rv32_cache_stats.v E:\\Verilog_cpu\\rtl\\memory\\rv32_memory_bridge.v E:\\Verilog_cpu\\rtl\\memory\\rv32_uncached_memory.v E:\\Verilog_cpu\\rtl\\frontend\\rv32_fetch_frontend.v E:\\Verilog_cpu\\rtl\\frontend\\rv32_frontend_queue_payload_bank.v E:\\Verilog_cpu\\rtl\\frontend\\rv32_frontend_parallel_bundle_control.v E:\\Verilog_cpu\\rtl\\rv32i_alu.v E:\\Verilog_cpu\\rtl\\rv32m_multiplier.v E:\\Verilog_cpu\\rtl\\rv32m_multiplier_radix4.v E:\\Verilog_cpu\\rtl\\rv32m_divider.v E:\\Verilog_cpu\\rtl\\rv32m_mdu_iterative.v E:\\Verilog_cpu\\rtl\\rv32_physical_register_file.v E:\\Verilog_cpu\\rtl\\rv32_prf_value_row.v E:\\Verilog_cpu\\rtl\\rv32_rename_unit.v E:\\Verilog_cpu\\rtl\\rv32_rename_map_row.v E:\\Verilog_cpu\\rtl\\backend\\rv32_rob.v E:\\Verilog_cpu\\rtl\\backend\\rv32_rob_owned_field.v E:\\Verilog_cpu\\rtl\\backend\\rv32_rob_recovery_live_or.v E:\\Verilog_cpu\\rtl\\backend\\rv32_reservation_station.v E:\\Verilog_cpu\\rtl\\backend\\rv32_rs_payload_row.v E:\\Verilog_cpu\\rtl\\backend\\rv32m_mdu_reservation_station.v E:\\Verilog_cpu\\rtl\\backend\\rv32_completion_network.v E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq.v E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_owned_field.v E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_forward_window.v E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_request_owner.v E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq_identity_pair_or.v E:\\Verilog_cpu\\rtl\\backend\\rv32_store_address_select.v E:\\Verilog_cpu\\rtl\\backend\\rv32_store_rs_links.v E:\\Verilog_cpu\\rtl\\backend\\rv32_rat_recovery.v E:\\Verilog_cpu\\rtl\\backend\\rv32_rat_recovery_word.v E:\\Verilog_cpu\\rtl\\backend\\rv32_backend_joint.v E:\\Verilog_cpu\\rtl\\backend\\rv32_issue_pipeline_slot.v E:\\Verilog_cpu\\rtl\\backend\\rv32_producer_tag_row.v E:\\Verilog_cpu\\rtl\\backend\\rv32_reserved_dispatch_packet.v E:\\Verilog_cpu\\rtl\\backend\\rv32_elastic_dispatch_packet.v E:\\Verilog_cpu\\rtl\\backend\\rv32_serial_backend.v E:\\Verilog_cpu\\rtl\\common\\rv32im_tag_compare.v E:\\Verilog_cpu\\rtl\\common\\rv32im_fifo.v E:\\Verilog_cpu\\rtl\\common\\rv32im_skid_buffer.v E:\\Verilog_cpu\\rtl\\common\\rv32im_prefix_alloc.v E:\\Verilog_cpu\\rtl\\common\\rv32im_priority_select.v E:\\Verilog_cpu\\rtl\\common\\rv32_asap7_fanout.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_inversion.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_negative_subtree.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_control_tree.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_word_bank.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_event_select.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_first_two.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_array_read.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_barrel32.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_line_extract32.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_line_insert32.v E:\\Verilog_cpu\\rtl\\common\\rv32_execution_recovery_cancel.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add64_select.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add32_select.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_add_simm12.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_array_read_bank_masks.v E:\\Verilog_cpu\\rtl\\common\\rv32_frequency_narrow_array_read.v E:\\Verilog_cpu\\rtl\\common\\rv32_control_register_bank.v E:\\Verilog_cpu\\rtl\\cpu_core.v E:\\Verilog_cpu\\rtl\\rv32_decode_bundle_register.v E:\\Verilog_cpu\\rtl\\rv32_decode_field_bank.v E:\\Verilog_cpu\\rtl\\course\\rv32_axi_lite_bridge.v E:\\Verilog_cpu\\rtl\\course\\rv32_axi_response_fifo.v E:\\Verilog_cpu\\rtl\\course\\student_top.v\nhierarchy -check -top student_top\n"
+  },
+  "source_sha256": {
+    ".gitattributes": "20d103a16cf198f051cab29976e9d3b4675a6fc5a294925e4fe6ac9ba4d2b9de",
+    "README.md": "d5f913d34e488035db3d90f617192a040607303676a593fe323d3f7121c06edc",
+    "config.mk": "a9c95e02742eb29f7076ecd7fb246c36675f850699039e2de1fe976146d431ba",
+    "rtl/backend/rv32_backend_joint.v": "3e4e56eab42ebda5699ba973f16056b3fb5c5382674ddcbe96d9e8b15887b3e5",
+    "rtl/backend/rv32_completion_network.v": "b39eb09160db395fea326ab3fa693c1d2f16f03f0ef464bcd812c0243e27fdcb",
+    "rtl/backend/rv32_lsq.v": "16e59a2532c5f56eef79c366e9c8bfc62e3c0812732a77ddc13d105edc613c51",
+    "rtl/backend/rv32_rat_recovery.v": "ff6953807a3d98734dd23be40d06474858a3c2932ade93ff71f6489ef61123a0",
+    "rtl/backend/rv32_reservation_station.v": "484c74d10d3c3f89f511d129a7977a9232a4f5fd33b7888e0be2722c27e6e951",
+    "rtl/backend/rv32_rob.v": "50b5ec8bd1ee2093e0b928c1480f08e3b0ec4bd238ecc87c23a405c8c9c0e5c1",
+    "rtl/backend/rv32_serial_backend.v": "7de80ce2a160ec1c30d63b79b83b80c4ba50ffc2fab8365fb3e9b6294106c05e",
+    "rtl/backend/rv32_store_address_select.v": "9a9c0acfa4b7c90ed109c8b325119d5faeab2d546ec04caacf750f3b77057599",
+    "rtl/backend/rv32m_mdu_reservation_station.v": "d26b8dc306072fb86eb317473bc50d142ce63fcbe24698b2155a2f6af3c14273",
+    "rtl/cache/rv32_dcache.v": "552ce891e5a23b7c321c5dbb6138ee8bbc2d6b34b14ed11b0699469dc33ce837",
+    "rtl/cache/rv32_dcache_control_banks.v": "1f6e2670b6f24f3811584ef0408515a367f8bb0d6e9d71f8bd04ab8a4ce5f4df",
+    "rtl/cache/rv32_dcache_nonblocking.v": "2c9784d0d77f8e9064449a6f79157bc0bf977799978d143ed952e4010b00a140",
+    "rtl/cache/rv32_icache_nonblocking.v": "21c7dbe1ce03d3bdfc6ae4c2a84dc23c59c3027d8de09b1a51831fb5fa5a2650",
+    "rtl/common/rv32_asap7_fanout.v": "1cd8bf90cd721f100a01e410dfbc89eb0a428ad361c0f43b3b711380ae3a8b17",
+    "rtl/common/rv32_control_register_bank.v": "1b03645d6917db1a385e55c823c8d4afdd6f04086de1ace890b0d0106a0eb15f",
+    "rtl/course/rv32_axi_lite_bridge.v": "4806a6ccfa979a44397e6c03f84441e682ff04c16b742f6249a4e9eb0ca3ff0a",
+    "rtl/course/student_top.v": "e4f69283b04043a0d4c4c501b6dfe875e8f038f96659c8d428ecdd6bd14b530c",
+    "rtl/cpu_core.v": "a32a36897e8593ec8584ca9547e3c3bb30a46f5415036e1b5cea73389706014f",
+    "rtl/filelist.f": "aa8a1d66e6c4b8f5ef4bac30477cd907b093a23019928aff7b816b97693aa1df",
+    "rtl/frontend/rv32_fetch_frontend.v": "3e2568382e393908c1b973aeebaab88f83404b41d8eb539c53dc055f1b33bb7f",
+    "rtl/memory/rv32_memory_bridge.v": "d82f950723be836472c6a029a25e9b703e38c097a463648248d861e1764ea465",
+    "rtl/memory/rv32_uncached_memory.v": "033ee0c4c29fea8c8ffba3979900ce8a0bf1009a6eb67d6f0b9e8db65d05f3b9",
+    "rtl/predictor/rv32_banked_predictor.v": "89734cb38e10eea4cf4879fa4dfa6f57d59942685ed968dd6cd5f4b918fbf0e7",
+    "rtl/predictor/rv32_branch_predictor.v": "58768b8f096ea9b2d25a1d3a3f2e42c005f78cbf111365cd109c6d56bbd14300",
+    "rtl/rv32_physical_register_file.v": "cad6804a87561036039aefd144ef09a459389cee8de6edff2fca0267f12d4980",
+    "rtl/rv32_rename_unit.v": "c47a94516ff8d38b04b536f6fff8ae5165b7315fd39f317e4fffff8b6f973636",
+    "rtl/rv32i_alu.v": "c823dae526b25475adffc009d60e2fe2372d83a6a486ed311230fea03efe313d",
+    "rtl/rv32m_divider.v": "ed250d3c17f73eb087ef478fe9223fd4cd3d89afa60188732852c370f0ba9dbe",
+    "rtl/rv32m_mdu_iterative.v": "eca7520f1444609e53e569d8bfd79c2b67a4c0398f20ff00d0485cef5e680c34",
+    "rtl/rv32m_multiplier.v": "2a58d1b5a79fd2e80a093309b60e205bc32dc6074a699dc7e101fe8e8d618f7b",
+    "rtl/rv32m_multiplier_radix4.v": "4214619dbcc40bae540b1f4e6a9d3c2abaa2469fe86a9e2e866d149c1b052ca1",
+    "scripts/ram/sram_fakeram.sv": "633f573eab26e6f8cfcdde57b844441579540e381d6622bf9684065be3a6d37e",
+    "third_party/cpu2026-framework.json": "cca11ba54432947eb0563059ce2c5dfaca811a501df2c664aa302640bb3207a2",
+    "tools/cpu2026_ico_pair.py": "76671ec4e4980e9404ac3811e530c7e94f158bcc0331a4b896943b980609521c",
+    "tools/cpu2026_pgo.py": "bb0249e4efb105f789ff066d4bfc71a46cde5c1754f517640563bb5603fdb3ab",
+    "tools/cpu2026_stable_mdu.py": "44893effebf864b783b1c00469772837f0f06df4817638a7705fd2d16bf3636d",
+    "tools/verilator_low_memory.py": "c3154c78396b4e7616e28b1f7f61429bf2ca5a8cd09216e3fbe1caf2c1aabace",
+    "verilog/filelist.f": "ae58fe1a85c528fe1dca94930b33b71d62b4fe923bd39a46ec69017d6aa4cca7",
+    "rtl/backend/rv32_elastic_dispatch_packet.v": "b5ef1266075d93e7416efdd13293e1088423e8f2ca765a3aa80d7f007206af44",
+    "rtl/backend/rv32_issue_pipeline_slot.v": "6dc3f6f14eef735c20688ad650ad885b21b7c42be8eeb8c70d7f1d5254d8c615",
+    "rtl/backend/rv32_lsq_forward_window.v": "ade1e234f7f7b55ec6ad5af9f8a605ff632cbfb38ef4fa19d7810d0ead6398be",
+    "rtl/backend/rv32_lsq_identity_pair_or.v": "e132cd57969cb3ce1787bdffd913b3321b32e47c271816c70b556a1dc74ebe65",
+    "rtl/backend/rv32_lsq_owned_field.v": "324ee00bb104c59d081ba757a9bbaf779695ec774d89ab507996c8cd033dca4d",
+    "rtl/backend/rv32_lsq_request_owner.v": "1a65ae93d3bbf2eb96114c26269e44fb58beebc5bad504ac940e6d44e5b3966a",
+    "rtl/backend/rv32_producer_tag_row.v": "c74dd7835218a661985fb3fd6c9a898563fb43a27a3bfbd2a316f2cc78f002a3",
+    "rtl/backend/rv32_rat_recovery_word.v": "65d2435bff0b3aaacff32db6d6af0aff5646bc3d5b86d1ef0907a66ef00b6400",
+    "rtl/backend/rv32_reserved_dispatch_packet.v": "ac00d2ea18218329444ebbbcc8311535418b5ce660bd9ae8c6ef0209da5c78ca",
+    "rtl/backend/rv32_rob_owned_field.v": "05c18495301c5a63a12cf44af7147b61866162a11c50bb6d8ff069ed9e1e3b0d",
+    "rtl/backend/rv32_rob_recovery_live_or.v": "4790cb0713a1693acd74fa78102a50fa9e27ade2decc2dad49cafe48dae2196b",
+    "rtl/backend/rv32_rs_payload_row.v": "84d7d00fc5d9a2a916b9d5d2e4fe6eb268571ac444b23417b353f377c73ce6a0",
+    "rtl/backend/rv32_store_rs_links.v": "a4de05f32e18a1a61ca0578e5d8cea59562aac166400d57ce05475fb6105cbd8",
+    "rtl/cache/rv32_dcache_command_line.v": "e875860850f580aceedc70cb15f6767e3f7fa3b9b56c3c84750960056594df89",
+    "rtl/cache/rv32_dcache_command_word.v": "360254d5685815d76382e9d1e1c4a859a72cb3908260f8a5855e7700fc93d261",
+    "rtl/cache/rv32_dcache_metadata_bank.v": "dd275c6d9e396dd17ebaae5d3c885f322b20b14742b755207bd0caa03bda5a8c",
+    "rtl/cache/rv32_dcache_metadata_word.v": "e5089ebbf5291632b00664680f116b4e92f764271cb528cb29be044a3074d3f3",
+    "rtl/cache/rv32_dcache_mshr_data_bank.v": "6979826eb366278a43532366a8c9632cebc4a7cb68b39f34d63bdca8fcfc7636",
+    "rtl/cache/rv32_icache_mshr_state_bank.v": "c5142986c53865d6e1cdca84e79ca7352c5f4b553c67af10d891611b71e92ca2",
+    "rtl/cache/rv32_icache_query_queue.v": "d3f8314cdd003f9cb3cbc3b83f595aaeccd2b8722b729c5160d17a0901f425cf",
+    "rtl/cache/rv32_instruction_line_filter.v": "f8f045f5c55fb2220edb8c7cbabee892ee0c0c5fb708d8a5aba5ea4623d8cf64",
+    "rtl/common/rv32_execution_recovery_cancel.v": "2f1d2226bb8d4997207b5d4092bcfb0edfb633e794f864cbdeb625e9943f7f84",
+    "rtl/common/rv32_frequency_add32_select.v": "cf1c2d516d26eefd9b0416339af7489516e4dbbb6388fd3171083698223e0676",
+    "rtl/common/rv32_frequency_add64_select.v": "e78e9acef1b179651c17f296fb35fe1a5b27f5ad9f8c0b4f810001d6cb624fcc",
+    "rtl/common/rv32_frequency_add_simm12.v": "9e5acba80569c4c03f410e53d8fce3e236216727af7bde09ee34c3a891934327",
+    "rtl/common/rv32_frequency_array_read.v": "8257a96c544b998aa7c465ed3b0aec660d2a0bc421d52e589f76079ec25cd13b",
+    "rtl/common/rv32_frequency_array_read_bank_masks.v": "8659e7a0c1bb7b8cc12aa74864261f6cfe8ee2641dbb6b382b6d99ffa3d4ab81",
+    "rtl/common/rv32_frequency_barrel32.v": "62dd16d18975fdd119257532fd3ea6a0a78ec21e811f3590370f695acc520c31",
+    "rtl/common/rv32_frequency_control_tree.v": "ecefe7ad8f03ad7697449fb52b5def9fbd66201ae53190561babd9d93cf28c24",
+    "rtl/common/rv32_frequency_event_select.v": "7e05321d7cb3a68fc527d3d918dc22ee5cbffffd55b90f8bbc1f01d99064aa61",
+    "rtl/common/rv32_frequency_first_two.v": "4accc95ff11053e3b087c2bc73a9426fdc3e91fc9b10e4ce32747772890da0ab",
+    "rtl/common/rv32_frequency_inversion.v": "7342316b6cbbd1d8de73e332004f88640f6ded8d409fa16008dfafc0203f1ffe",
+    "rtl/common/rv32_frequency_line_extract32.v": "4367ec3d87e65c8f7865ed26b47ef6b5d935371c8b4ab62269055fb3d89e0d21",
+    "rtl/common/rv32_frequency_line_insert32.v": "e1b9396b7e0604e104fcca35e91f8478b201755e3c07ec1868ba0d92e2b7f80f",
+    "rtl/common/rv32_frequency_narrow_array_read.v": "f1ef9fc54ba24b1283492f8025695a2fdd612ef7ed7331d627156908b883b02a",
+    "rtl/common/rv32_frequency_negative_subtree.v": "c2f23713812b3b1f611edd0af2c7afdeb99bc914e93aa8dbca59ecbc29c12b49",
+    "rtl/common/rv32_frequency_word_bank.v": "33e7619519d7d6f16ac70701b6fdf03e1e2db92d962f8306ce82932c5d7c3940",
+    "rtl/course/rv32_axi_response_fifo.v": "776010583da209a57f27bf98d6b83d17f2131d062a23ad016d4ba4fac845e3a0",
+    "rtl/frontend/rv32_frontend_parallel_bundle_control.v": "5547bd30c6f41763185560e4c1cc247936f62bc5239f1c0e655b3c1d95e1f76d",
+    "rtl/frontend/rv32_frontend_queue_payload_bank.v": "dce7dede7341989f2171a4886948d6e8ac89d9e6e5866b80375079cffddc87ad",
+    "rtl/predictor/rv32_predictor_bht_row.v": "683f9e84dca28536d82311381fde14a013df64d4ba2a915ba2109b8f2c65a668",
+    "rtl/predictor/rv32_predictor_btb_row.v": "705b4b77d11825bf0842736877253f8f03311f36fd338043dce87b62df61ed68",
+    "rtl/predictor/rv32_predictor_choice_row.v": "7f8c900649c009b507cdc34cbcf9fb694433b083382aa5ec02a80758a4701225",
+    "rtl/predictor/rv32_predictor_indirect_btb_row.v": "61832026324832c104363f0176cd8c61f029c9069e57819cf60090742f7be7ba",
+    "rtl/rv32_decode_bundle_register.v": "4e4b82791c632f5a5b74713fbf0b62cfc796e40232de4b03507cafcb2bf5be8c",
+    "rtl/rv32_decode_field_bank.v": "5dc85b5c32bc90c8493b160988e434202d78dbffc2d85894150a501e01a1d865",
+    "rtl/rv32_prf_value_row.v": "c34006ea26b99caba4e15c4286d4ba1c1e746e8c25f473decfa705a4923a7ffa",
+    "rtl/rv32_rename_map_row.v": "f7610468c28c975e7be8b020f90987c465f29f485b654e7a4cd05d1581f70bab",
+    "tools/cpu2026_generated_names.py": "7057d500ded7500469f5dd2a2bae62a4eb91626e2c00907e40a9040e0bd6179e"
+  },
+  "scope": "5.040 full native compilation and one original basic testcase; 5.020 generation only. No full suite, full Pi, area or timing rerun. Yosys hierarchy check passed; this is not a zero-warning synthesis claim. Remote status-2 cause remains unknown without its error tail."
+}
