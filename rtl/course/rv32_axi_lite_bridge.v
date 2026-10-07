@@ -1,4 +1,6 @@
 `timescale 1ns/1ps
+`include "rv32im_defs.vh"
+
 // Convert the core's tagged 16-byte lines to the course's ONE 32-bit AXI-Lite
 // interface. AR and AW/W can overlap, but I/D reads share the same AR/R queues.
 // AXI-Lite has no IDs; FIFO metadata restores each line/word's core-side ID.
@@ -61,7 +63,15 @@ module rv32_axi_lite_bridge #(
     reg prefer_d_request, prefer_write_reply;
     localparam integer RESPONSE_WIDTH = 32 + 128 + 8 + 1;
     reg legacy_i_resp_valid, legacy_d_resp_valid;
+    wire unused_legacy_i_resp_valid_bits = &{1'b0, legacy_i_resp_valid};
+
+    wire unused_legacy_d_resp_valid_bits = &{1'b0, legacy_d_resp_valid};
+
     wire [RESPONSE_WIDTH-1:0] legacy_i_resp_packet, legacy_d_resp_packet;
+    wire unused_legacy_i_resp_packet_bits = &{1'b0, legacy_i_resp_packet};
+
+    wire unused_legacy_d_resp_packet_bits = &{1'b0, legacy_d_resp_packet};
+
     wire fifo_i_ready, fifo_d_ready;
     // Depth zero preserves the original same-cycle response replacement.
     // A real FIFO admits a line from REGISTERED capacity alone: core READY
@@ -88,42 +98,66 @@ module rv32_axi_lite_bridge #(
         for(candidate_row=0;candidate_row<WRITE_LINES;candidate_row=candidate_row+1) begin:g_write_candidates
             assign write_free_candidates[candidate_row]=!write_valid[candidate_row];
             assign write_send_candidates[candidate_row]=write_valid[candidate_row] && write_sent[candidate_row]<4;
-            assign write_upper_candidates[candidate_row]=write_send_candidates[candidate_row] && candidate_row>=write_cursor;
+            if (candidate_row >= (1<<WPW)-1) begin : g_last_cursor
+                assign write_upper_candidates[candidate_row]=write_send_candidates[candidate_row];
+            end else begin : g_compare_cursor
+                assign write_upper_candidates[candidate_row]=write_send_candidates[candidate_row] && candidate_row>=write_cursor;
+            end
             assign write_reply_candidates[candidate_row]=write_valid[candidate_row] && write_sent[candidate_row]==4 &&
                 write_received[candidate_row]==write_expected[candidate_row] && d_slot_free;
         end
         for(candidate_row=0;candidate_row<READ_LINES;candidate_row=candidate_row+1) begin:g_read_candidates
             assign read_free_candidates[candidate_row]=!read_valid[candidate_row];
             assign read_send_candidates[candidate_row]=read_valid[candidate_row] && read_sent[candidate_row]<4;
-            assign read_upper_candidates[candidate_row]=read_send_candidates[candidate_row] && candidate_row>=read_cursor;
+            if (candidate_row >= (1<<RPW)-1) begin : g_last_cursor
+                assign read_upper_candidates[candidate_row]=read_send_candidates[candidate_row];
+            end else begin : g_compare_cursor
+                assign read_upper_candidates[candidate_row]=read_send_candidates[candidate_row] && candidate_row>=read_cursor;
+            end
             assign read_reply_candidates[candidate_row]=read_valid[candidate_row] && read_received[candidate_row]==4 &&
                 (read_data_side[candidate_row]?(d_slot_free && !(write_reply_found && prefer_write_reply)):i_slot_free);
         end
     endgenerate
+        wire  unused_read_free_selector_second_valid_o;
+    wire [(RPW)-1:0] unused_read_free_selector_second_index_o;
     rv32_frequency_first_two #(.ENTRIES(READ_LINES),.INDEX_WIDTH(RPW)) read_free_selector (
         .candidates_i(read_free_candidates),.first_valid_o(read_free_found),.first_index_o(read_free),
-        .second_valid_o(),.second_index_o());
+        .second_valid_o(unused_read_free_selector_second_valid_o),.second_index_o(unused_read_free_selector_second_index_o));
+        wire  unused_write_free_selector_second_valid_o;
+    wire [(WPW)-1:0] unused_write_free_selector_second_index_o;
     rv32_frequency_first_two #(.ENTRIES(WRITE_LINES),.INDEX_WIDTH(WPW)) write_free_selector (
         .candidates_i(write_free_candidates),.first_valid_o(write_free_found),.first_index_o(write_free),
-        .second_valid_o(),.second_index_o());
+        .second_valid_o(unused_write_free_selector_second_valid_o),.second_index_o(unused_write_free_selector_second_index_o));
+        wire  unused_read_wrap_selector_second_valid_o;
+    wire [(RPW)-1:0] unused_read_wrap_selector_second_index_o;
     rv32_frequency_first_two #(.ENTRIES(READ_LINES),.INDEX_WIDTH(RPW)) read_wrap_selector (
         .candidates_i(read_send_candidates),.first_valid_o(read_wrap_found),.first_index_o(read_wrap),
-        .second_valid_o(),.second_index_o());
+        .second_valid_o(unused_read_wrap_selector_second_valid_o),.second_index_o(unused_read_wrap_selector_second_index_o));
+        wire  unused_read_upper_selector_second_valid_o;
+    wire [(RPW)-1:0] unused_read_upper_selector_second_index_o;
     rv32_frequency_first_two #(.ENTRIES(READ_LINES),.INDEX_WIDTH(RPW)) read_upper_selector (
         .candidates_i(read_upper_candidates),.first_valid_o(read_upper_found),.first_index_o(read_upper),
-        .second_valid_o(),.second_index_o());
+        .second_valid_o(unused_read_upper_selector_second_valid_o),.second_index_o(unused_read_upper_selector_second_index_o));
+        wire  unused_write_wrap_selector_second_valid_o;
+    wire [(WPW)-1:0] unused_write_wrap_selector_second_index_o;
     rv32_frequency_first_two #(.ENTRIES(WRITE_LINES),.INDEX_WIDTH(WPW)) write_wrap_selector (
         .candidates_i(write_send_candidates),.first_valid_o(write_wrap_found),.first_index_o(write_wrap),
-        .second_valid_o(),.second_index_o());
+        .second_valid_o(unused_write_wrap_selector_second_valid_o),.second_index_o(unused_write_wrap_selector_second_index_o));
+        wire  unused_write_upper_selector_second_valid_o;
+    wire [(WPW)-1:0] unused_write_upper_selector_second_index_o;
     rv32_frequency_first_two #(.ENTRIES(WRITE_LINES),.INDEX_WIDTH(WPW)) write_upper_selector (
         .candidates_i(write_upper_candidates),.first_valid_o(write_upper_found),.first_index_o(write_upper),
-        .second_valid_o(),.second_index_o());
+        .second_valid_o(unused_write_upper_selector_second_valid_o),.second_index_o(unused_write_upper_selector_second_index_o));
+        wire  unused_read_reply_selector_second_valid_o;
+    wire [(RPW)-1:0] unused_read_reply_selector_second_index_o;
     rv32_frequency_first_two #(.ENTRIES(READ_LINES),.INDEX_WIDTH(RPW)) read_reply_selector (
         .candidates_i(read_reply_candidates),.first_valid_o(read_reply_found),.first_index_o(read_reply),
-        .second_valid_o(),.second_index_o());
+        .second_valid_o(unused_read_reply_selector_second_valid_o),.second_index_o(unused_read_reply_selector_second_index_o));
+        wire  unused_write_reply_selector_second_valid_o;
+    wire [(WPW)-1:0] unused_write_reply_selector_second_index_o;
     rv32_frequency_first_two #(.ENTRIES(WRITE_LINES),.INDEX_WIDTH(WPW)) write_reply_selector (
         .candidates_i(write_reply_candidates),.first_valid_o(write_reply_found),.first_index_o(write_reply),
-        .second_valid_o(),.second_index_o());
+        .second_valid_o(unused_write_reply_selector_second_valid_o),.second_index_o(unused_write_reply_selector_second_index_o));
     assign read_send_found=read_upper_found || read_wrap_found;
     assign read_send=read_upper_found?read_upper:read_wrap;
     assign write_send_found=write_upper_found || write_wrap_found;
@@ -137,13 +171,13 @@ module rv32_axi_lite_bridge #(
     wire take_d_read = d_read_request && d_req_ready;
     wire take_d_write = d_req_valid && d_req_write && d_req_ready;
 
-    assign arvalid = !reset && read_active && rq_count < WORD_QUEUE;
+    assign arvalid = !reset && read_active && 32'(rq_count) < WORD_QUEUE;
     assign rready = !reset && rq_count != 0;
     wire read_push = arvalid && arready;
     wire read_pop = rvalid && rready;
     wire write_word_present = write_active && current_mask != 0;
-    assign awvalid = !reset && write_word_present && !aw_done && wq_count < WORD_QUEUE;
-    assign wvalid = !reset && write_word_present && !w_done && wq_count < WORD_QUEUE;
+    assign awvalid = !reset && write_word_present && !aw_done && 32'(wq_count) < WORD_QUEUE;
+    assign wvalid = !reset && write_word_present && !w_done && 32'(wq_count) < WORD_QUEUE;
     wire aw_fire = awvalid && awready;
     wire w_fire = wvalid && wready;
     // Pair channels only after BOTH handshakes, including different cycles.
@@ -167,9 +201,10 @@ module rv32_axi_lite_bridge #(
         wire [RESPONSE_WIDTH-1:0] write_packet =
             {query_write_reply_addr, 128'b0, query_write_reply_id, query_write_reply_error};
         wire [RESPONSE_WIDTH-1:0] data_packet;
+        wire  unused_response_data_selector_write_o;
         rv32_frequency_event_select #(.WIDTH(RESPONSE_WIDTH),.EVENTS(2)) response_data_selector (
             .events_i({fill_write,fill_read && query_read_reply_side}),
-            .values_i({write_packet,read_packet}),.write_o(),.value_o(data_packet));
+            .values_i({write_packet,read_packet}),.write_o(unused_response_data_selector_write_o),.value_o(data_packet));
         rv32_axi_response_fifo #(.WIDTH(RESPONSE_WIDTH), .DEPTH(RESPONSE_FIFO_DEPTH)) instruction (
             .clock(clock), .reset(reset),
             .in_valid(fill_read && !query_read_reply_side), .in_ready(fifo_i_ready),
@@ -275,7 +310,7 @@ module rv32_axi_lite_bridge #(
     end endgenerate
     assign wstrb={4{write_output_views[4]}} & current_mask;
 
-    function [2:0] enabled_words;
+    function automatic [2:0] enabled_words;
         input [15:0] mask;
         begin
             enabled_words = {2'd0, |mask[3:0]} + {2'd0, |mask[7:4]} +
@@ -360,7 +395,6 @@ module rv32_axi_lite_bridge #(
         end
     endgenerate
 
-
     localparam integer WRITE_DOMAINS=(WRITE_LINES+3)/4;
     localparam integer READ_LIFECYCLE_WIDTH=6+4*RPW;
     localparam integer WRITE_LIFECYCLE_WIDTH=9+4*WPW;
@@ -437,88 +471,108 @@ module rv32_axi_lite_bridge #(
     endgenerate
 
     always @(posedge clock) begin
-        if (reset) begin
-            rq_head <= 0; rq_tail <= 0; rq_count <= 0;
-            wq_head <= 0; wq_tail <= 0; wq_count <= 0;
-            read_active <= 0; write_active <= 0; aw_done <= 0; w_done <= 0;
-            read_issue_slot <= 0; write_issue_slot <= 0;
-            read_cursor <= 0; write_cursor <= 0;
-            legacy_i_resp_valid <= 0; legacy_d_resp_valid <= 0;
-            prefer_d_request <= 0; prefer_write_reply <= 0;
-        end else begin
-            if (take_i || take_d_read) begin
-                
-                 
-                
+        if (reset)
+        begin
+            rq_head <= 0;
+            rq_tail <= 0;
+            rq_count <= 0;
+            wq_head <= 0;
+            wq_tail <= 0;
+            wq_count <= 0;
+            read_active <= 0;
+            write_active <= 0;
+            aw_done <= 0;
+            w_done <= 0;
+            read_issue_slot <= 0;
+            write_issue_slot <= 0;
+            read_cursor <= 0;
+            write_cursor <= 0;
+            legacy_i_resp_valid <= 0;
+            legacy_d_resp_valid <= 0;
+            prefer_d_request <= 0;
+            prefer_write_reply <= 0;
+        end
+        else
+        begin
+            if (take_i || take_d_read)
+            begin
                 prefer_d_request <= take_i;
             end
-            if (take_d_write) begin
-                
-                
-                
-                
-                
+            if (!read_active && read_send_found)
+            begin
+                read_active <= 1;
+                read_issue_slot <= read_send[RPW-1:0];
             end
-            if (!read_active && read_send_found) begin
-                read_active <= 1; read_issue_slot <= read_send[RPW-1:0];
-            end
-            if (read_push) begin
-                
-                
+            if (read_push)
+            begin
                 rq_tail <= rq_tail + 1'b1;
-                
-                if (query_read_issue_sent == 3) begin
-                    read_active <= 0; read_cursor <= read_issue_slot + 1'b1;
+                if (query_read_issue_sent == 3)
+                begin
+                    read_active <= 0;
+                    read_cursor <= read_issue_slot + 1'b1;
                 end
             end
-            if (read_pop) begin
-                
-                
+            if (read_pop)
+            begin
                 rq_head <= rq_head + 1'b1;
             end
             case ({read_push, read_pop})
-                2'b10: rq_count <= rq_count + 1'b1;
-                2'b01: rq_count <= rq_count - 1'b1;
+            2'b10: rq_count <= rq_count + 1'b1;
+            2'b01: rq_count <= rq_count - 1'b1;
+            default: ; // Both/neither operations leave the count unchanged.
             endcase
-            if (!write_active && write_send_found) begin
-                write_active <= 1; write_issue_slot <= write_send[WPW-1:0];
-                aw_done <= 0; w_done <= 0;
+            if (!write_active && write_send_found)
+            begin
+                write_active <= 1;
+                write_issue_slot <= write_send[WPW-1:0];
+                aw_done <= 0;
+                w_done <= 0;
             end
-            if (aw_fire) aw_done <= 1;
-            if (w_fire) w_done <= 1;
-            if (write_active && (current_mask == 0 || write_push)) begin
-                
-                aw_done <= 0; w_done <= 0;
-                if (query_write_issue_sent == 3) begin
-                    write_active <= 0; write_cursor <= write_issue_slot + 1'b1;
+            if (aw_fire)
+                aw_done <= 1;
+            if (w_fire)
+                w_done <= 1;
+            if (write_active && (current_mask == 0 || write_push))
+            begin
+                aw_done <= 0;
+                w_done <= 0;
+                if (query_write_issue_sent == 3)
+                begin
+                    write_active <= 0;
+                    write_cursor <= write_issue_slot + 1'b1;
                 end
             end
-            if (write_push) begin
-                
+            if (write_push)
+            begin
                 wq_tail <= wq_tail + 1'b1;
             end
-            if (write_pop) begin
-                
-                
+            if (write_pop)
+            begin
                 wq_head <= wq_head + 1'b1;
             end
             case ({write_push, write_pop})
-                2'b10: wq_count <= wq_count + 1'b1;
-                2'b01: wq_count <= wq_count - 1'b1;
+            2'b10: wq_count <= wq_count + 1'b1;
+            2'b01: wq_count <= wq_count - 1'b1;
+            default: ; // Both/neither operations leave the count unchanged.
             endcase
-            if (i_resp_valid && i_resp_ready) legacy_i_resp_valid <= 0;
-            if (d_resp_valid && d_resp_ready) legacy_d_resp_valid <= 0;
-            if (fill_read) begin
-                
-                if (query_read_reply_side) begin
+            if (i_resp_valid && i_resp_ready)
+                legacy_i_resp_valid <= 0;
+            if (d_resp_valid && d_resp_ready)
+                legacy_d_resp_valid <= 0;
+            if (fill_read)
+            begin
+                if (query_read_reply_side)
+                begin
                     legacy_d_resp_valid <= 1;
                     prefer_write_reply <= 1;
-                end else begin
+                end
+                else
+                begin
                     legacy_i_resp_valid <= 1;
                 end
             end
-            if (fill_write) begin
-                
+            if (fill_write)
+            begin
                 legacy_d_resp_valid <= 1;
                 prefer_write_reply <= 0;
             end
@@ -531,59 +585,6 @@ module rv32_axi_lite_bridge #(
             (RESPONSE_FIFO_DEPTH != 0 && (RESPONSE_FIFO_DEPTH < 2 ||
              (RESPONSE_FIFO_DEPTH & (RESPONSE_FIFO_DEPTH-1)) != 0))) begin
             $display("ERROR: AXI bridge capacities must be powers of two"); $finish;
-        end
-    end
-endmodule
-
-// Registered-credit FIFO for completed line responses, not a cache or RAM
-// replacement. A nonempty queue has no fall-through input-to-output path.
-// Concurrent push/pop sustains one line/cycle when a slot is already free;
-// a full queue releases credit on the following cycle, never through READY.
-module rv32_axi_response_fifo #(
-    parameter integer WIDTH = 169,
-    parameter integer DEPTH = 2,
-    parameter integer PTR_WIDTH = $clog2(DEPTH),
-    parameter integer COUNT_WIDTH = $clog2(DEPTH + 1)
-) (
-    input wire clock, reset,
-    input wire in_valid, output wire in_ready,
-    input wire [WIDTH-1:0] in_packet,
-    output wire out_valid, input wire out_ready,
-    output wire [WIDTH-1:0] out_packet
-);
-    wire [DEPTH*WIDTH-1:0] packets;
-    reg [PTR_WIDTH-1:0] head, tail;
-    reg [COUNT_WIDTH-1:0] count;
-    assign in_ready = !reset && count < DEPTH;
-    assign out_valid = !reset && count != 0;
-    rv32_frequency_array_read #(.WIDTH(WIDTH),.ENTRIES(DEPTH),.INDEX_WIDTH(PTR_WIDTH)) output_reader (
-        .rows_i(packets),.index_i(head),.value_o(out_packet));
-    genvar packet_row;
-    generate for(packet_row=0;packet_row<DEPTH;packet_row=packet_row+1) begin:g_packet_owner
-        rv32_frequency_word_bank #(.WIDTH(WIDTH)) owner (
-            .clk_i(clock),.write_i(push && tail==packet_row),.data_i(in_packet),
-            .data_o(packets[packet_row*WIDTH +: WIDTH]));
-    end endgenerate
-    wire push = in_valid && in_ready;
-    wire pop = out_valid && out_ready;
-    always @(posedge clock) begin
-        if (reset) begin
-            head <= 0; tail <= 0; count <= 0;
-        end else begin
-            if (push) begin
-                tail <= tail + 1'b1;
-            end
-            if (pop) head <= head + 1'b1;
-            case ({push, pop})
-                2'b10: count <= count + 1'b1;
-                2'b01: count <= count - 1'b1;
-            endcase
-        end
-    end
-    initial begin
-        if (WIDTH < 1 || DEPTH < 2 || (DEPTH & (DEPTH-1)) != 0) begin
-            $display("ERROR: response FIFO needs positive width and power-of-two depth >= 2");
-            $finish;
         end
     end
 endmodule

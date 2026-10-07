@@ -76,8 +76,8 @@ module rv32_backend_joint #(
     parameter integer ROB_MMIO_PREDECODE = 0,
     parameter integer ROB_ALLOC_BANKED_WRITE = 0,
     parameter integer ROB_UNIQUE_RECLAIM_COUNT = 0,
-    parameter integer PREDICTOR_META = 0,
-    parameter integer COMPACT_PRED_TARGET = 0,
+    parameter PREDICTOR_META = 0,
+    parameter COMPACT_PRED_TARGET = 0,
     parameter integer INT_ISSUE_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer CDB_WIDTH = (BE_WIDTH < 2) ? BE_WIDTH : 2,
     parameter integer MUL_IMPL = 0,
@@ -216,11 +216,13 @@ module rv32_backend_joint #(
     output wire                         perf_branch_pending_o,
     output wire                         perf_mdu_busy_o
 );
+    wire unused_trace_store_data_i_bits = &{1'b0, trace_store_data_i};
+
     localparam integer PAW = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS);
     localparam integer ROB_SLOT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES);
     localparam integer ROB_COUNT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1);
     localparam integer ROB_GENERATION_WIDTH = TAG_WIDTH - ROB_SLOT_WIDTH - 3;
-    localparam integer LSQ_SLOT_WIDTH = (LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES);
+
     localparam integer FREE_COUNT_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS + 1);
     localparam integer CHECK_RAT_WIDTH = 32 * PAW;
     // The checkpoint only needs the speculative RAT snapshot: the free bitmap is
@@ -270,7 +272,11 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*PAW-1:0] d_src2_phys;
 
     wire [((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))-1:0] rename_count;
+    wire unused_rename_count_bits = &{1'b0, rename_count};
+
     wire [(32*PAW)-1:0] rat_state, rrat_state;
+    wire unused_rrat_state_bits = &{1'b0, rrat_state};
+
     wire [PHYS_REGS-1:0] free_bitmap_state;
     wire [FREE_COUNT_WIDTH-1:0] free_count;
 
@@ -278,7 +284,11 @@ module rv32_backend_joint #(
     wire [BE_WIDTH-1:0] rob_alloc_fire;
     wire [(BE_WIDTH*TAG_WIDTH)-1:0] rob_alloc_tag;
     wire [((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))-1:0] rob_alloc_count;
+    wire unused_rob_alloc_count_bits = &{1'b0, rob_alloc_count};
+
     wire rob_alloc_ready;
+    wire unused_rob_alloc_ready_bits = &{1'b0, rob_alloc_ready};
+
     wire [BE_WIDTH-1:0] rob_completion_valid;
     wire [(BE_WIDTH*TAG_WIDTH)-1:0] rob_completion_tag;
     wire [(BE_WIDTH*32)-1:0] rob_completion_value;
@@ -297,13 +307,25 @@ module rv32_backend_joint #(
     wire rob_store_commit_valid, rob_store_commit_ready, rob_store_ack_valid;
     wire [TAG_WIDTH-1:0] rob_store_commit_tag, rob_store_ack_tag;
     wire [31:0] rob_store_commit_addr;
+    wire unused_rob_store_commit_addr_bits = &{1'b0, rob_store_commit_addr};
+
     wire [15:0] rob_store_commit_mask;
+    wire unused_rob_store_commit_mask_bits = &{1'b0, rob_store_commit_mask};
+
     wire [127:0] rob_store_commit_data;
+    wire unused_rob_store_commit_data_bits = &{1'b0, rob_store_commit_data};
+
     wire rob_recovery_accept_source, rob_redirect_valid, rob_checkpoint_restore_valid;
+    wire unused_rob_redirect_valid_bits = &{1'b0, rob_redirect_valid};
+
     wire [7:0] recovery_domains;
+    wire unused_recovery_domains_bits = &{1'b0, recovery_domains};
+
     rv32_frequency_control_tree #(.LEAVES(8)) recovery_tree (
         .signal_i(rob_recovery_accept_source),.views_o(recovery_domains));
     wire [31:0] rob_redirect_pc;
+    wire unused_rob_redirect_pc_bits = &{1'b0, rob_redirect_pc};
+
     wire [3:0] rob_redirect_epoch;
     wire [CHECKPOINT_WIDTH-1:0] rob_checkpoint_restore;
     wire rob_recovery_rd_we;
@@ -312,8 +334,14 @@ module rv32_backend_joint #(
     wire [PHYS_REGS-1:0] rob_recovery_reclaim_bitmap;
     wire [FREE_COUNT_WIDTH-1:0] rob_recovery_reclaim_count;
     wire [ROB_SLOT_WIDTH-1:0] rob_head, rob_head_source, rob_tail;
+    wire unused_rob_tail_bits = &{1'b0, rob_tail};
+
     wire [6*ROB_SLOT_WIDTH-1:0] rob_head_views;
+    wire unused_rob_head_views_bits = &{1'b0, rob_head_views};
+
     wire [6*ROB_SLOT_WIDTH-1:0] rob_registered_head_views;
+    wire unused_rob_registered_head_views_bits = &{1'b0, rob_registered_head_views};
+
     assign rob_head = rob_head_views[3*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
     generate
         if (ROB_CONTROL_REGISTER_BANKS != 0) begin : g_registered_heads
@@ -333,7 +361,7 @@ module rv32_backend_joint #(
     wire [ROB_ENTRIES-1:0] rob_entry_rd_we;
     wire [ROB_ENTRIES*5-1:0] rob_entry_rd;
     wire [ROB_ENTRIES*PAW-1:0] rob_entry_old_phys;
-    wire [15:0] rob_free_count = (rob_occupancy < ROB_ENTRIES) ? ROB_ENTRIES - rob_occupancy : 16'd0;
+    wire [15:0] rob_free_count = 16'((32'(rob_occupancy) < ROB_ENTRIES) ? ROB_ENTRIES - 32'(rob_occupancy) : 32'(16'd0));
 
     wire [(2*BE_WIDTH*PAW)-1:0] prf_read_phys;
     wire [(2*BE_WIDTH*32)-1:0] prf_read_data;
@@ -350,8 +378,12 @@ module rv32_backend_joint #(
 
     wire [BE_WIDTH-1:0] rs_alloc_valid;
     wire rs_alloc_ready;
+    wire unused_rs_alloc_ready_bits = &{1'b0, rs_alloc_ready};
+
     wire [BE_WIDTH-1:0] rs_alloc_fire;
     wire [((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))-1:0] rs_alloc_count;
+    wire unused_rs_alloc_count_bits = &{1'b0, rs_alloc_count};
+
     wire [BE_WIDTH-1:0] rs_issue_valid;
     wire [BE_WIDTH*`RV32IM_OP_WIDTH-1:0] rs_issue_op;
     wire [BE_WIDTH*32-1:0] rs_issue_pc, rs_issue_src1, rs_issue_src2;
@@ -360,33 +392,39 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] rs_issue_store;
     wire [BE_WIDTH*32-1:0] trace_store_data_relative;
     wire [BE_WIDTH*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))-1:0] rs_issue_slot;
+    wire unused_rs_issue_slot_bits = &{1'b0, rs_issue_slot};
+
     wire [((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES + 1))-1:0] rs_occupancy;
-    wire [15:0] rs_free_count = (rs_occupancy < RS_ENTRIES) ? RS_ENTRIES - rs_occupancy : 16'd0;
+    wire [15:0] rs_free_count = 16'((32'(rs_occupancy) < RS_ENTRIES) ? RS_ENTRIES - 32'(rs_occupancy) : 32'(16'd0));
     wire [BE_WIDTH-1:0] rs_issue_ready;
     wire [BE_WIDTH-1:0] rs_issue_allowed;
-    localparam integer RS_ROW_QUALIFICATION_ACTIVE=(RS_ROW_RECOVERY_QUALIFICATION!=0) &&
+    localparam RS_ROW_QUALIFICATION_ACTIVE=(RS_ROW_RECOVERY_QUALIFICATION!=0) &&
         (LOCAL_EXEC_RECOVERY!=0) && (ISSUE_PIPELINE==0);
-    localparam integer RS_ROW_LIVE_MEMBERSHIP_ACTIVE=(RS_ROW_LIVE_MEMBERSHIP!=0) &&
+    localparam RS_ROW_LIVE_MEMBERSHIP_ACTIVE=(RS_ROW_LIVE_MEMBERSHIP!=0) &&
         RS_ROW_QUALIFICATION_ACTIVE && (RECOVERY_APPLY_OLDER_ISSUE!=0);
-    localparam integer RS_ISSUE_CANCEL_PREDECODE_ACTIVE=(RS_PREDECODE_ISSUE_CANCEL!=0) &&
+    localparam RS_ISSUE_CANCEL_PREDECODE_ACTIVE=(RS_PREDECODE_ISSUE_CANCEL!=0) &&
         RS_ROW_QUALIFICATION_ACTIVE && (RECOVERY_APPLY_OLDER_ISSUE!=0);
     wire [RS_ENTRIES-1:0] rs_entry_issue_cancel;
     wire [BE_WIDTH-1:0] raw_rs_issue_cancel;
     wire mdu_issue_cancel;
     wire [RS_ENTRIES-1:0] rs_entry_current_live_match;
+    wire unused_rs_entry_current_live_match_bits = &{1'b0, rs_entry_current_live_match};
+
     wire [RS_ENTRIES-1:0] rs_entry_recovery_qualified;
     wire [BE_WIDTH-1:0] raw_rs_issue_recovery_qualified;
     // In direct completion modes every CDB packet is a view of a
     // still-valid held producer. That producer already broadcasts to RS.
-    localparam integer RS_DIRECT_WAKE=(RS_PHYSICAL_WAKEUP!=0) &&
+    localparam RS_DIRECT_WAKE=(RS_PHYSICAL_WAKEUP!=0) &&
         ((COMPLETION_BYPASS==1) || (COMPLETION_BYPASS==2));
     localparam integer RS_BASE_WAKE_WIDTH=RS_DIRECT_WAKE?PRODUCERS:BE_WIDTH+PRODUCERS;
-    localparam integer RS_LOAD_RETURN_WAKE=(LOAD_WAKE_BYPASS!=0) && RS_DIRECT_WAKE && (LOCAL_EXEC_RECOVERY!=0);
-    localparam integer RS_WAKE_WIDTH=RS_BASE_WAKE_WIDTH+RS_LOAD_RETURN_WAKE;
+    localparam RS_LOAD_RETURN_WAKE=(LOAD_WAKE_BYPASS!=0) && RS_DIRECT_WAKE && (LOCAL_EXEC_RECOVERY!=0);
+    localparam integer RS_WAKE_WIDTH=RS_BASE_WAKE_WIDTH+32'(RS_LOAD_RETURN_WAKE);
     wire [RS_BASE_WAKE_WIDTH-1:0] rs_base_wake_valid;
     wire [RS_BASE_WAKE_WIDTH*32-1:0] rs_base_wake_value;
     wire lsq_return_wake_valid;
     wire [TAG_WIDTH-1:0] lsq_return_wake_tag;
+    wire unused_lsq_return_wake_tag_bits = &{1'b0, lsq_return_wake_tag};
+
     wire [PAW-1:0] lsq_return_wake_phys;
     wire [31:0] lsq_return_wake_value;
     wire [RS_WAKE_WIDTH-1:0] rs_wake_valid;
@@ -395,7 +433,7 @@ module rv32_backend_joint #(
     wire [RS_ENTRIES-1:0] rs_entry_valid;
     wire [RS_ENTRIES*TAG_WIDTH-1:0] rs_entry_rob_tag;
     wire [RS_ENTRIES-1:0] rs_entry_base_ready;
-    localparam integer STORE_RS_LINKS=(EARLY_STORE_ADDRESS==2) && (RS_ALLOC_STATIC_WRITE!=0);
+    localparam STORE_RS_LINKS=(EARLY_STORE_ADDRESS==2) && (RS_ALLOC_STATIC_WRITE!=0);
     localparam integer STORE_RS_SW=(RS_ENTRIES<=1)?1:$clog2(RS_ENTRIES);
     wire [BE_WIDTH*STORE_RS_SW-1:0] rs_alloc_slot;
     wire [RS_ENTRIES-1:0] rs_entry_release;
@@ -405,6 +443,8 @@ module rv32_backend_joint #(
     localparam integer RS_METADATA_WIDTH = (RS_ISSUE_METADATA != 0) ? 70 : 1;
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] rs_alloc_metadata, rs_issue_metadata;
     wire [RS_ENTRIES*RS_METADATA_WIDTH-1:0] rs_entry_metadata;
+    wire unused_rs_entry_metadata_bits = &{1'b0, rs_entry_metadata};
+
     reg [RS_ENTRIES-1:0] rs_flush_kill_mask;
     reg [RS_ENTRIES-1:0] rs_preview_kill_mask;
 
@@ -413,8 +453,12 @@ module rv32_backend_joint #(
     wire [BE_WIDTH-1:0] alu_exec_rd_we, alu_exec_is_branch;
     wire [BE_WIDTH-1:0] alu_exec_branch_taken, alu_exec_redirect_valid, alu_exec_is_memory;
     wire [BE_WIDTH-1:0] alu_exec_is_load, alu_exec_is_store, alu_exec_mem_unsigned;
+    wire unused_alu_exec_mem_unsigned_bits = &{1'b0, alu_exec_mem_unsigned};
+
     wire [BE_WIDTH*32-1:0] alu_exec_value, alu_exec_branch_target, alu_exec_redirect_pc, alu_exec_mem_addr;
     wire [BE_WIDTH*2-1:0] alu_exec_mem_size;
+    wire unused_alu_exec_mem_size_bits = &{1'b0, alu_exec_mem_size};
+
     wire [BE_WIDTH*32-1:0] alu_exec_store_data;
     wire [BE_WIDTH*32-1:0] alu_exec_source_pc, alu_exec_pred_target;
     wire [BE_WIDTH-1:0] alu_exec_pred_taken;
@@ -435,11 +479,29 @@ module rv32_backend_joint #(
     wire [PAW-1:0] mdu_completion_phys;
 
     wire [BE_WIDTH-1:0] cdb_valid, cdb_rd_we, cdb_is_store, cdb_is_branch;
+    wire unused_cdb_valid_bits = &{1'b0, cdb_valid};
+
+    wire unused_cdb_rd_we_bits = &{1'b0, cdb_rd_we};
+
+    wire unused_cdb_is_branch_bits = &{1'b0, cdb_is_branch};
+
     wire [BE_WIDTH*TAG_WIDTH-1:0] cdb_tag;
     wire [BE_WIDTH*PAW-1:0] cdb_phys;
+    wire unused_cdb_phys_bits = &{1'b0, cdb_phys};
+
     wire [BE_WIDTH*32-1:0] cdb_value, cdb_addr, cdb_branch_target;
+    wire unused_cdb_value_bits = &{1'b0, cdb_value};
+
+    wire unused_cdb_branch_target_bits = &{1'b0, cdb_branch_target};
+
     wire [BE_WIDTH*32-1:0] cdb_store_data;
     wire [BE_WIDTH-1:0] cdb_branch_taken, cdb_redirect_valid, cdb_is_memory, cdb_is_load;
+    wire unused_cdb_branch_taken_bits = &{1'b0, cdb_branch_taken};
+
+    wire unused_cdb_redirect_valid_bits = &{1'b0, cdb_redirect_valid};
+
+    wire unused_cdb_is_memory_bits = &{1'b0, cdb_is_memory};
+
     wire [PRODUCERS-1:0] producer_valid, producer_ready;
     wire [PRODUCERS*TAG_WIDTH-1:0] producer_tag;
     wire [PRODUCERS*PAW-1:0] producer_phys;
@@ -452,20 +514,32 @@ module rv32_backend_joint #(
     wire [BE_WIDTH-1:0] cdb_ready;
     wire [COMPLETION_DEPTH-1:0] completion_entry_valid;
     wire [COMPLETION_DEPTH*TAG_WIDTH-1:0] completion_entry_tag;
-    wire [BE_WIDTH-1:0] prf_wb_valid, rob_wb_valid, wake_wb_valid;
+    wire [BE_WIDTH-1:0] rob_wb_valid, wake_wb_valid;
+    wire unused_wake_wb_valid_bits = &{1'b0, wake_wb_valid};
+
     wire [BE_WIDTH*TAG_WIDTH-1:0] prf_wb_tag, rob_wb_tag, wake_wb_tag;
-    wire [BE_WIDTH*PAW-1:0] prf_wb_phys;
-    wire [BE_WIDTH*32-1:0] prf_wb_value, rob_wb_value, wake_wb_value;
+    wire unused_prf_wb_tag_bits = &{1'b0, prf_wb_tag};
+
+    wire unused_wake_wb_tag_bits = &{1'b0, wake_wb_tag};
+
+    wire [BE_WIDTH*32-1:0] rob_wb_value, wake_wb_value;
+    wire unused_wake_wb_value_bits = &{1'b0, wake_wb_value};
 
     wire [BE_WIDTH-1:0] lsq_alloc_valid;
     wire lsq_alloc_ready;
+    wire unused_lsq_alloc_ready_bits = &{1'b0, lsq_alloc_ready};
+
     wire [BE_WIDTH-1:0] lsq_alloc_fire;
     wire [((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))-1:0] lsq_alloc_count;
+    wire unused_lsq_alloc_count_bits = &{1'b0, lsq_alloc_count};
+
     wire [BE_WIDTH*TAG_WIDTH-1:0] lsq_alloc_tag;
+    wire unused_lsq_alloc_tag_bits = &{1'b0, lsq_alloc_tag};
+
     wire [BE_WIDTH*TAG_WIDTH-1:0] lsq_alloc_payload_tag;
     wire [BE_WIDTH-1:0] lsq_alloc_addr_valid;
     wire [BE_WIDTH*32-1:0] lsq_alloc_addr;
-    localparam integer ALLOC_STORE_DATA_ACTIVE=(STORE_ALLOC_EARLY_DATA!=0) && (EARLY_STORE_ADDRESS!=0);
+    localparam ALLOC_STORE_DATA_ACTIVE=(STORE_ALLOC_EARLY_DATA!=0) && (EARLY_STORE_ADDRESS!=0);
     // D owns renamed physical sources. A ready src2 value is authoritative
     // even before this store reaches RS issue. Unknown sources retain the
     // original execution update and never advertise allocation data ready.
@@ -484,8 +558,9 @@ module rv32_backend_joint #(
     wire shared_store_addr_valid;
     wire [TAG_WIDTH-1:0] shared_store_addr_tag;
     wire [31:0] shared_store_addr;
-    wire [15:0] lsq_free_count = (lsq_occupancy < LSQ_ENTRIES) ? LSQ_ENTRIES - lsq_occupancy : 16'd0;
-    wire lsq_store_commit_ready, lsq_load_complete_valid, lsq_load_complete_ready;
+    wire [15:0] lsq_free_count = 16'((32'(lsq_occupancy) < LSQ_ENTRIES) ? LSQ_ENTRIES - 32'(lsq_occupancy) : 32'(16'd0));
+    wire lsq_load_complete_valid, lsq_load_complete_ready;
+
     wire [TAG_WIDTH-1:0] lsq_load_complete_tag;
     localparam integer LSQ_ROB_LOW_BITS=(ROB_SLOT_WIDTH+1)/2;
     localparam integer LSQ_ROB_HIGH_BITS=ROB_SLOT_WIDTH-LSQ_ROB_LOW_BITS;
@@ -495,17 +570,25 @@ module rv32_backend_joint #(
     wire [2*LSQ_ROB_QUERY_WIDTH-1:0] lsq_report_identity_queries;
     wire lsq_report_identity_head,lsq_report_identity_live;
     wire [TAG_WIDTH-1:0] lsq_report_held_identity_tag;
+    wire unused_lsq_report_held_identity_tag_bits = &{1'b0, lsq_report_held_identity_tag};
+
     wire [LSQ_ROB_QUERY_WIDTH-1:0] lsq_report_held_identity_query;
+    wire unused_lsq_report_held_identity_query_bits = &{1'b0, lsq_report_held_identity_query};
+
     wire lsq_report_identity_held;
-    localparam integer LSQ_HEAD_LOAD_IDENTITY_ACTIVE=(LSQ_HEAD_LOAD_IDENTITY_QUERY!=0) &&
+    wire unused_lsq_report_identity_held_bits = &{1'b0, lsq_report_identity_held};
+
+    localparam LSQ_HEAD_LOAD_IDENTITY_ACTIVE=(LSQ_HEAD_LOAD_IDENTITY_QUERY!=0) &&
         (LSQ_SAVED_REPORT_PRIORITY!=0) && (LOAD_COMPLETION_BYPASS==2) &&
         (LSQ_ROB_QUERY_PREDECODE!=0) && (LSQ_HEAD_STORE_ACK_BYPASS!=0) &&
         (LSQ_STORE_ACK_SOURCE_QUERY!=0);
-    localparam integer LSQ_HELD_LOAD_IDENTITY_ACTIVE=(LSQ_HELD_LOAD_IDENTITY_QUERY!=0) && LSQ_HEAD_LOAD_IDENTITY_ACTIVE;
+    localparam LSQ_HELD_LOAD_IDENTITY_ACTIVE=(LSQ_HELD_LOAD_IDENTITY_QUERY!=0) && LSQ_HEAD_LOAD_IDENTITY_ACTIVE;
     localparam integer LSQ_REPORT_IDENTITY_CANDIDATES=(LSQ_HELD_LOAD_IDENTITY_ACTIVE!=0)?3:2;
-    localparam integer LSQ_REPORT_RECOVERY_PREQUALIFY_ACTIVE=(LSQ_REPORT_RECOVERY_PREQUALIFY!=0) && LSQ_HEAD_LOAD_IDENTITY_ACTIVE;
+    localparam LSQ_REPORT_RECOVERY_PREQUALIFY_ACTIVE=(LSQ_REPORT_RECOVERY_PREQUALIFY!=0) && LSQ_HEAD_LOAD_IDENTITY_ACTIVE;
     wire lsq_report_identity_recovery_kill;
     wire [TAG_WIDTH-1:0] lsq_load_complete_lsq_tag;
+    wire unused_lsq_load_complete_lsq_tag_bits = &{1'b0, lsq_load_complete_lsq_tag};
+
     wire [31:0] lsq_load_complete_value;
     wire [PAW-1:0] lsq_load_complete_phys;
     wire lsq_load_complete_unretired;
@@ -513,6 +596,8 @@ module rv32_backend_joint #(
     wire lsq_load_complete_error;
     wire lsq_store_ack_valid;
     wire [TAG_WIDTH-1:0] lsq_store_ack_lsq_tag;
+    wire unused_lsq_store_ack_lsq_tag_bits = &{1'b0, lsq_store_ack_lsq_tag};
+
     wire [TAG_WIDTH-1:0] lsq_store_ack_rob_tag;
     wire [TAG_WIDTH-1:0] lsq_store_ack_rob_query_tag;
     wire lsq_store_ack_error;
@@ -562,16 +647,17 @@ module rv32_backend_joint #(
     endgenerate
 
     wire [TAG_WIDTH-1:0] phys_tag_mem [0:PHYS_REGS-1];
+    for (genvar unused_phys_tag_mem_row=0; unused_phys_tag_mem_row<=PHYS_REGS-1; unused_phys_tag_mem_row=unused_phys_tag_mem_row+1) begin : g_unused_phys_tag_mem
+        wire unused_phys_tag_mem_bits = &{1'b0, phys_tag_mem[unused_phys_tag_mem_row]};
+    end
 
     localparam integer TAG_READ_PORTS=2*BE_WIDTH;
     localparam integer TAG_ROWS=(PHYS_REGS<=1)?1:(1<<$clog2(PHYS_REGS));
     wire [TAG_READ_PORTS*PAW-1:0] tag_read_queries;
+    wire unused_tag_read_queries_bits = &{1'b0, tag_read_queries};
+
     wire [TAG_READ_PORTS*TAG_WIDTH-1:0] tag_read_values;
-    wire [4*TAG_READ_PORTS*PAW-1:0] tag_query_views;
-    wire [4*BE_WIDTH*PAW-1:0] tag_write_address_views;
-    wire [4*BE_WIDTH*TAG_WIDTH-1:0] tag_write_value_views;
-    wire [4*BE_WIDTH-1:0] tag_write_valid_views;
-    wire [PHYS_REGS-1:0] tag_reset_views;
+
     genvar tag_lane,tag_row,tag_port,tag_node;
     generate
         for(tag_lane=0;tag_lane<BE_WIDTH;tag_lane=tag_lane+1) begin:g_tag_query
@@ -579,15 +665,26 @@ module rv32_backend_joint #(
             assign tag_read_queries[(2*tag_lane+1)*PAW +: PAW]=d_src2_phys[tag_lane*PAW +: PAW];
         end
         if(PHYS_TAG_IMPL==0 && RS_PHYSICAL_WAKEUP==0) begin:g_owned_producer_tags
+    wire [4*TAG_READ_PORTS*PAW-1:0] tag_query_views;
+    wire [4*BE_WIDTH*PAW-1:0] tag_write_address_views;
+    wire [4*BE_WIDTH*TAG_WIDTH-1:0] tag_write_value_views;
+    wire [4*BE_WIDTH-1:0] tag_write_valid_views;
+    wire [PHYS_REGS-1:0] tag_reset_views;
+
             rv32_frequency_control_tree #(.WIDTH(TAG_READ_PORTS*PAW),.LEAVES(4)) query_tree (
+
                 .signal_i(tag_read_queries),.views_o(tag_query_views));
             rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*PAW),.LEAVES(4)) address_tree (
+
                 .signal_i(rename_new_phys),.views_o(tag_write_address_views));
             rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*TAG_WIDTH),.LEAVES(4)) value_tree (
+
                 .signal_i(rob_alloc_tag),.views_o(tag_write_value_views));
             rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(4)) valid_tree (
+
                 .signal_i(dispatch_valid & rob_alloc_fire & rename_rd_we),.views_o(tag_write_valid_views));
             rv32_frequency_control_tree #(.LEAVES(PHYS_REGS)) reset_tree (
+
                 .signal_i(reset_i),.views_o(tag_reset_views));
             for(tag_row=0;tag_row<PHYS_REGS;tag_row=tag_row+1) begin:g_row
                 localparam integer DOMAIN=(tag_row*4)/PHYS_REGS;
@@ -629,8 +726,16 @@ module rv32_backend_joint #(
     endgenerate
 
     wire [31:0] rob_pc_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_rob_pc_mem_row=0; unused_rob_pc_mem_row<=ROB_ENTRIES-1; unused_rob_pc_mem_row=unused_rob_pc_mem_row+1) begin : g_unused_rob_pc_mem
+        wire unused_rob_pc_mem_bits = &{1'b0, rob_pc_mem[unused_rob_pc_mem_row]};
+    end
+
     wire load_error_mem [0:ROB_ENTRIES-1];
     wire [31:0] rob_imm_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_rob_imm_mem_row=0; unused_rob_imm_mem_row<=ROB_ENTRIES-1; unused_rob_imm_mem_row=unused_rob_imm_mem_row+1) begin : g_unused_rob_imm_mem
+        wire unused_rob_imm_mem_bits = &{1'b0, rob_imm_mem[unused_rob_imm_mem_row]};
+    end
+
     // Mode 1 probes only at allocation; mode 2 also follows existing RS
     // base wakeups with a single shared adder and ROB immediate read port.
     // Store data, execution completion and in-order commit remain unchanged.
@@ -650,8 +755,12 @@ module rv32_backend_joint #(
     generate if (EARLY_STORE_ADDRESS == 2) begin : g_shared_store_address
         wire selected;
         wire [TAG_WIDTH-1:0] selected_rob_tag;
+        wire unused_selected_rob_tag_bits = &{1'b0, selected_rob_tag};
+
         wire [31:0] selected_base;
         wire [31:0] selected_imm;
+        wire unused_selected_imm_bits = &{1'b0, selected_imm};
+
         wire [RS_ENTRIES-1:0] selected_rs;
         wire [ROB_SLOT_WIDTH-1:0] selected_slot = selected_rob_tag[3 +: ROB_SLOT_WIDTH];
         wire [ROB_LIVE_WIDTH-1:0] selected_live;
@@ -677,8 +786,9 @@ module rv32_backend_joint #(
             for(meta_slot=0;meta_slot<RS_ENTRIES;meta_slot=meta_slot+1) begin:g_immediate_row
                 assign immediate_rows[meta_slot*32 +: 32]=rs_entry_metadata[meta_slot*RS_METADATA_WIDTH +: 32];
             end
+            wire  unused_immediate_selector_write_o;
             rv32_frequency_event_select #(.WIDTH(32),.EVENTS(RS_ENTRIES),.PRIORITY(0)) immediate_selector (
-                .events_i(selected_rs),.values_i(immediate_rows),.write_o(),.value_o(selected_imm));
+                .events_i(selected_rs),.values_i(immediate_rows),.write_o(unused_immediate_selector_write_o),.value_o(selected_imm));
         end else begin : g_rob_imm
             assign selected_imm = rob_imm_mem[selected_slot];
         end
@@ -686,9 +796,10 @@ module rv32_backend_joint #(
             // The CPU enables this signed-12-bit contract for all decoded
             // stores, including the shared probe. Standalone trace backends
             // retain full-width arithmetic with the default-disabled option.
-            rv32_frequency_add_simm12 address_adder (
+                    wire [2:0] unused_address_adder_class_flags_o;
+                    rv32_frequency_add_simm12 address_adder (
                 .base_i(selected_base),.immediate_i(selected_imm[11:0]),
-                .sum_o(shared_store_addr));
+                .sum_o(shared_store_addr), .class_flags_o(unused_address_adder_class_flags_o));
         end else begin:g_generic_store_offset
             rv32_frequency_add32_select address_adder (
                 .lhs_i(selected_base),.rhs_i(selected_imm),.sum_o(shared_store_addr));
@@ -714,10 +825,21 @@ module rv32_backend_joint #(
         end
     end
     wire rob_pred_taken_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_rob_pred_taken_mem_row=0; unused_rob_pred_taken_mem_row<=ROB_ENTRIES-1; unused_rob_pred_taken_mem_row=unused_rob_pred_taken_mem_row+1) begin : g_unused_rob_pred_taken_mem
+        wire unused_rob_pred_taken_mem_bits = &{1'b0, rob_pred_taken_mem[unused_rob_pred_taken_mem_row]};
+    end
+
     wire [31:0] rob_pred_target_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_rob_pred_target_mem_row=0; unused_rob_pred_target_mem_row<=ROB_ENTRIES-1; unused_rob_pred_target_mem_row=unused_rob_pred_target_mem_row+1) begin : g_unused_rob_pred_target_mem
+        wire unused_rob_pred_target_mem_bits = &{1'b0, rob_pred_target_mem[unused_rob_pred_target_mem_row]};
+    end
+
     wire [1:0] rob_pred_kind_mem [0:ROB_ENTRIES-1];
     wire [1:0] rob_mem_size_mem [0:ROB_ENTRIES-1];
     wire rob_mem_unsigned_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_rob_mem_unsigned_mem_row=0; unused_rob_mem_unsigned_mem_row<=ROB_ENTRIES-1; unused_rob_mem_unsigned_mem_row=unused_rob_mem_unsigned_mem_row+1) begin : g_unused_rob_mem_unsigned_mem
+        wire unused_rob_mem_unsigned_mem_bits = &{1'b0, rob_mem_unsigned_mem[unused_rob_mem_unsigned_mem_row]};
+    end
 
     // Raw registered producer tags form the query independently of the
     // producer qualification process. Never feed that process's result
@@ -727,6 +849,8 @@ module rv32_backend_joint #(
     wire [ROB_ENTRIES*3-1:0] rob_completion_state_rows;
     wire [PRODUCERS*TAG_WIDTH-1:0] producer_query_tags={
         lsq_load_complete_tag,mdu_completion_tag,alu_exec_tag};
+    wire unused_producer_query_tags_bits = &{1'b0, producer_query_tags};
+
     wire [PRODUCERS*ROB_LIVE_WIDTH-1:0] producer_live_reads;
     wire [BE_WIDTH*3-1:0] completion_state_reads;
     // Saved, head and optional held identities perform the full live/GEN
@@ -752,6 +876,8 @@ module rv32_backend_joint #(
         wire end_second_turn = range_end[ROB_SLOT_WIDTH +: RECOVERY_RANGE_WIDTH-ROB_SLOT_WIDTH]==1;
         for(genvar identity_candidate=0;identity_candidate<LSQ_REPORT_IDENTITY_CANDIDATES;identity_candidate=identity_candidate+1) begin:g_candidate
             wire [TAG_WIDTH-1:0] tag;
+            wire unused_tag_bits = &{1'b0, tag};
+
             wire [LSQ_ROB_QUERY_WIDTH-1:0] query;
             if(identity_candidate==2) begin:g_held
                 assign tag=lsq_report_held_identity_tag;
@@ -795,7 +921,7 @@ module rv32_backend_joint #(
                 .query_i(query),
                 .value_o(live_state));
             assign candidate_live[identity_candidate]=tag[0] &&
-                tag[3 +: ROB_SLOT_WIDTH]<ROB_ENTRIES && live_state[ROB_GENERATION_WIDTH] &&
+                32'(tag[3 +: ROB_SLOT_WIDTH])<ROB_ENTRIES && live_state[ROB_GENERATION_WIDTH] &&
                 tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]==live_state[0 +: ROB_GENERATION_WIDTH];
         end
         if(LSQ_HELD_LOAD_IDENTITY_ACTIVE!=0) begin:g_choose_recovery_held
@@ -856,7 +982,7 @@ module rv32_backend_joint #(
     wire branch_capture_write;
     wire [BRANCH_CAPTURE_WIDTH-1:0] branch_capture_next,branch_capture_saved;
     reg branch_pending;
-    localparam integer RECOVERY_DIRECT_ACTIVE=(RECOVERY_DIRECT_APPLY!=0) &&
+    localparam RECOVERY_DIRECT_ACTIVE=(RECOVERY_DIRECT_APPLY!=0) &&
         (EARLY_FRONT_REDIRECT!=0) && (LOCAL_EXEC_RECOVERY!=0) &&
         (CHECKPOINT_IMPL!=0) && (RAT_RECOVERY_IMPL!=0);
     wire recovery_descriptor_valid;
@@ -872,18 +998,26 @@ module rv32_backend_joint #(
     wire recovery_preview_fire = branch_pending && rob_recovery_preview &&
         ((RECOVERY_DIRECT_ACTIVE!=0) || !recovery_descriptor_valid) && !flush_i;
     wire [3:0] branch_busy_domains;
+    wire unused_branch_busy_domains_bits = &{1'b0, branch_busy_domains};
+
     wire [3:0] recovery_capture_domains;
+    wire unused_recovery_capture_domains_bits = &{1'b0, recovery_capture_domains};
+
     rv32_frequency_control_tree #(.LEAVES(4)) branch_busy_tree (
         .signal_i(branch_pending),.views_o(branch_busy_domains));
     rv32_frequency_control_tree #(.LEAVES(4)) recovery_capture_tree (
         .signal_i(recovery_preview_fire),.views_o(recovery_capture_domains));
     wire [6*ROB_SLOT_WIDTH-1:0] recovery_head_views;
+    wire unused_recovery_head_views_bits = &{1'b0, recovery_head_views};
+
     rv32_frequency_control_tree #(.WIDTH(ROB_SLOT_WIDTH),.LEAVES(6)) recovery_head_tree (
         .signal_i(recovery_descriptor_head),.views_o(recovery_head_views));
     wire [TAG_WIDTH-1:0] branch_pending_tag;
     // Registered descriptors still need electrical separation at their
     // consumers. These are priced course-library cells, without new cycles.
     wire [8*TAG_WIDTH-1:0] recovery_tag_views;
+    wire unused_recovery_tag_views_bits = &{1'b0, recovery_tag_views};
+
     rv32_frequency_control_tree #(.WIDTH(TAG_WIDTH),.LEAVES(8)) recovery_tag_tree (
         .signal_i(branch_pending_tag),.views_o(recovery_tag_views));
     // Recovery guards are independent from the optional issue queue.
@@ -947,19 +1081,22 @@ module rv32_backend_joint #(
     reg [COMPLETION_DEPTH-1:0] completion_kill_mask;
     wire [BE_WIDTH-1:0] dispatch_valid = rename_valid;
     reg [BE_WIDTH*TAG_WIDTH-1:0] rs_src1_tag, rs_src2_tag;
+    wire unused_rs_src1_tag_bits = &{1'b0, rs_src1_tag};
+
+    wire unused_rs_src2_tag_bits = &{1'b0, rs_src2_tag};
 
     // ROB tags still guard producer ownership before wake_valid. RS source
     // identity is physical-register identity while that allocation is live.
     // P0/out-of-range source IDs never claim a wake dependency.
-    localparam integer RS_SOURCE_TAG_WIDTH=RS_PHYSICAL_WAKEUP?(PAW+1):TAG_WIDTH;
+    localparam integer RS_SOURCE_TAG_WIDTH=(RS_PHYSICAL_WAKEUP != 0)?(PAW+1):TAG_WIDTH;
     wire [BE_WIDTH*RS_SOURCE_TAG_WIDTH-1:0] rs_source1_identity,rs_source2_identity;
     genvar source_identity_lane;
     generate if(RS_PHYSICAL_WAKEUP!=0) begin:g_physical_source_identity
         for(source_identity_lane=0;source_identity_lane<BE_WIDTH;source_identity_lane=source_identity_lane+1) begin:g_lane
             wire [PAW-1:0] phys1=d_src1_phys[source_identity_lane*PAW +: PAW];
             wire [PAW-1:0] phys2=d_src2_phys[source_identity_lane*PAW +: PAW];
-            assign rs_source1_identity[source_identity_lane*RS_SOURCE_TAG_WIDTH +: RS_SOURCE_TAG_WIDTH]={phys1,(phys1!=0 && phys1<PHYS_REGS)};
-            assign rs_source2_identity[source_identity_lane*RS_SOURCE_TAG_WIDTH +: RS_SOURCE_TAG_WIDTH]={phys2,(phys2!=0 && phys2<PHYS_REGS)};
+            assign rs_source1_identity[source_identity_lane*RS_SOURCE_TAG_WIDTH +: RS_SOURCE_TAG_WIDTH]={phys1,(phys1!=0 && 32'(phys1)<PHYS_REGS)};
+            assign rs_source2_identity[source_identity_lane*RS_SOURCE_TAG_WIDTH +: RS_SOURCE_TAG_WIDTH]={phys2,(phys2!=0 && 32'(phys2)<PHYS_REGS)};
         end
     end else begin:g_rob_source_identity
         assign rs_source1_identity=rs_src1_tag;
@@ -1019,21 +1156,22 @@ module rv32_backend_joint #(
             end
             assign credit_values[(credit_class-1)*CREDIT_WIDTH +: CREDIT_WIDTH]=CREDIT_WIDTH'(credit_class);
         end
+        wire  unused_select_credit_write_o;
         rv32_frequency_event_select #(.WIDTH(CREDIT_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) select_credit (
-            .events_i(credit_events),.values_i(credit_values),.write_o(),.value_o(recovery_rob_credit));
+            .events_i(credit_events),.values_i(credit_values),.write_o(unused_select_credit_write_o),.value_o(recovery_rob_credit));
     end else begin:g_original_recovery_credit
         assign recovery_rob_credit=0;
     end endgenerate
-    function [CREDIT_WIDTH-1:0] bounded_credit;
+    function automatic [CREDIT_WIDTH-1:0] bounded_credit;
         input [15:0] available;
         input [CREDIT_WIDTH-1:0] consumed;
         reg [15:0] remaining;
         begin
-            remaining=(available>=consumed)?available-consumed:16'b0;
-            bounded_credit=(remaining>=BE_WIDTH)?BE_WIDTH:remaining;
+            remaining=(available>=16'(consumed))?available-16'(consumed):16'b0;
+            bounded_credit=CREDIT_WIDTH'((32'(remaining)>=BE_WIDTH)?BE_WIDTH:32'(remaining));
         end
     endfunction
-    function [CREDIT_WIDTH-1:0] reserved_credit;
+    function automatic [CREDIT_WIDTH-1:0] reserved_credit;
         input [15:0] available,reserved;
         input [CREDIT_WIDTH-1:0] newly_reserved;
         reg [15:0] unreserved;
@@ -1115,10 +1253,11 @@ module rv32_backend_joint #(
                 end else if(STORE_ALLOC_IMM12!=0) begin:g_store_alloc_simm12
                     // Ready loads may use the same allocation address when enabled.
                     // Ordinary AGU issue and full-tag LSQ updates remain active.
+                    wire [2:0] unused_address_adder_class_flags_o;
                     rv32_frequency_add_simm12 address_adder (
                         .base_i(rs_src1_value[io_lane*32 +: 32]),
                         .immediate_i(d_imm[io_lane*32 +: 12]),
-                        .sum_o(lsq_alloc_addr[io_lane*32 +: 32]));
+                        .sum_o(lsq_alloc_addr[io_lane*32 +: 32]), .class_flags_o(unused_address_adder_class_flags_o));
                 end else begin:g_store_alloc_generic
                     assign lsq_alloc_addr[io_lane*32 +: 32] =
                         rs_src1_value[io_lane*32 +: 32] + d_imm[io_lane*32 +: 32];
@@ -1346,25 +1485,26 @@ module rv32_backend_joint #(
     wire [BE_WIDTH-1:0] load_without_agu = (EARLY_LOAD_ADDRESS>=2) ?
         (d_is_load & ~d_is_store & lsq_alloc_addr_valid) : {BE_WIDTH{1'b0}};
 
-    localparam integer PARALLEL_STORE_ADDRESS=(STORE_ALLOC_EARLY_ADDRESS==2) &&
+    localparam PARALLEL_STORE_ADDRESS=(STORE_ALLOC_EARLY_ADDRESS==2) &&
         (STORE_ALLOC_IMM12!=0) && (PRF_READ_MUX_IMPL!=0);
-    localparam integer FAST_STORE_COMPLETE_ACTIVE=(FAST_STORE_COMPLETE!=0) &&
+    localparam FAST_STORE_COMPLETE_ACTIVE=(FAST_STORE_COMPLETE!=0) &&
         (DISPATCH_PIPELINE!=0) && (DISPATCH_ELASTIC!=0) &&
         (STORE_ALLOC_EARLY_ADDRESS!=0) && (EARLY_STORE_ADDRESS!=0) &&
         (STORE_ALLOC_EARLY_DATA!=0) && (ROB_ALLOC_BANKED_WRITE!=0) &&
         (ROB_ENTRIES>=BE_WIDTH) && (LIGHT_RETIRE_PAYLOAD!=0) &&
         (ROB_MMIO_PREDECODE!=0) && (ROB_LEGACY_HALT_PAYLOAD==0) &&
         (ROB_RETURN_VALUE_ENABLE==0);
-    localparam integer FAST_STORE_SAVED_ACTIVE=(FAST_STORE_SAVED_OPERANDS!=0) &&
+    localparam FAST_STORE_SAVED_ACTIVE=(FAST_STORE_SAVED_OPERANDS!=0) &&
         FAST_STORE_COMPLETE_ACTIVE && PARALLEL_STORE_ADDRESS;
-    localparam integer FAST_STORE_BATCH_ACTIVE=(FAST_STORE_BATCH!=0) && FAST_STORE_SAVED_ACTIVE;
+    localparam FAST_STORE_BATCH_ACTIVE=(FAST_STORE_BATCH!=0) && FAST_STORE_SAVED_ACTIVE;
     wire [BE_WIDTH-1:0] ready_store_candidates,store_without_agu,rob_fast_store_valid;
     wire [BE_WIDTH-1:0] potential_store_candidates,potential_store_grants;
     wire [TAG_WIDTH-1:0] preselected_store_tag;
     // Identity selection depends only on the already saved D packet. It
     // intentionally precedes PRF readiness and address-class qualification.
+    wire  unused_store_identity_selector_write_o;
     rv32_frequency_event_select #(.WIDTH(TAG_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) store_identity_selector (
-        .events_i(potential_store_grants),.values_i(d_tag),.write_o(),.value_o(preselected_store_tag));
+        .events_i(potential_store_grants),.values_i(d_tag),.write_o(unused_store_identity_selector_write_o),.value_o(preselected_store_tag));
     wire [BE_WIDTH-1:0] rob_fast_store_publish_valid=((FAST_STORE_IDENTITY_PRESELECT!=0) && !FAST_STORE_BATCH_ACTIVE) ?
         {{(BE_WIDTH-1){1'b0}},(|rob_fast_store_valid)} : rob_fast_store_valid;
     wire [BE_WIDTH*TAG_WIDTH-1:0] rob_fast_store_publish_tag=((FAST_STORE_IDENTITY_PRESELECT!=0) && !FAST_STORE_BATCH_ACTIVE) ?
@@ -1372,7 +1512,11 @@ module rv32_backend_joint #(
     generate if(FAST_STORE_COMPLETE_ACTIVE!=0) begin:g_ready_ram_store_complete
         for(genvar ready_store_lane=0;ready_store_lane<BE_WIDTH;ready_store_lane=ready_store_lane+1) begin:g_lane
             wire [31:0] address=lsq_alloc_addr[ready_store_lane*32 +: 32];
+            wire unused_address_bits = &{1'b0, address};
+
             wire [31:0] immediate=d_imm[ready_store_lane*32 +: 32];
+            wire unused_immediate_bits = &{1'b0, immediate};
+
             wire [`RV32IM_OP_WIDTH-1:0] op=d_op[ready_store_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH];
             wire [1:0] size=d_mem_size[ready_store_lane*2 +: 2];
             wire [2:0] address_flags=(FAST_STORE_SAVED_ACTIVE!=0) ?
@@ -1447,11 +1591,11 @@ module rv32_backend_joint #(
     // Only saved occupancy/free counts determine atomic acceptance.
     wire [BE_WIDTH-1:0] d_rs_need=d_valid & ~(load_without_agu | store_without_agu);
     wire [BE_WIDTH-1:0] d_lsq_need=d_valid & (d_is_load | d_is_store);
-    localparam integer LSQ_ALLOC_SLOT_PRESELECT_ACTIVE=(LSQ_ALLOC_SLOT_PRESELECT!=0) &&
+    localparam LSQ_ALLOC_SLOT_PRESELECT_ACTIVE=(LSQ_ALLOC_SLOT_PRESELECT!=0) &&
         (DISPATCH_PIPELINE!=0) && (DISPATCH_ELASTIC!=0);
-    localparam integer LSQ_ALLOC_PAYLOAD_PRESELECT_ACTIVE=(LSQ_ALLOC_PAYLOAD_PRESELECT!=0) &&
+    localparam LSQ_ALLOC_PAYLOAD_PRESELECT_ACTIVE=(LSQ_ALLOC_PAYLOAD_PRESELECT!=0) &&
         LSQ_ALLOC_SLOT_PRESELECT_ACTIVE;
-    localparam integer RS_ELASTIC_SKIP_CAPACITY_ACTIVE=(RS_ELASTIC_SKIP_CAPACITY!=0) &&
+    localparam RS_ELASTIC_SKIP_CAPACITY_ACTIVE=(RS_ELASTIC_SKIP_CAPACITY!=0) &&
         (DISPATCH_PIPELINE!=0) && (DISPATCH_ELASTIC!=0);
     // Default mode lets one store skip RS. Its two capacity cases
     // precede late qualification; batch mode prepares every threshold below.
@@ -1483,11 +1627,11 @@ module rv32_backend_joint #(
     end
     wire d_replace_credit=(DISPATCH_FULL_REPLACE!=0) && (|d_valid) &&
         !reset_i && !flush_i && !branch_busy_domains[3] &&
-        d_replace_rs_demand<=rs_free_count && d_replace_lsq_demand<=lsq_free_count;
-    wire d_rs_room_ordinary=(d_rs_base_demand<=rs_free_count);
+        16'(d_replace_rs_demand)<=rs_free_count && 16'(d_replace_lsq_demand)<=lsq_free_count;
+    wire d_rs_room_ordinary=(16'(d_rs_base_demand)<=rs_free_count);
     // Extend the original 16-bit free count before adding one: no wrap at
     // 16'hffff. F=1 implies base demand>=1, so no subtraction underflows.
-    wire d_rs_room_with_fast=(d_rs_base_demand<=({1'b0,rs_free_count}+17'd1));
+    wire d_rs_room_with_fast=(17'(d_rs_base_demand)<=({1'b0,rs_free_count}+17'd1));
     // Preselect mode counts ALL saved D lanes before PRF/early-load
     // readiness. A valid load/store that skips RS contributes only a late
     // bool. Original batch-store mode still uses B excluding ready loads.
@@ -1497,7 +1641,7 @@ module rv32_backend_joint #(
         d_replace_rs_demand : d_rs_base_demand;
     wire [BE_WIDTH-1:0] d_rs_capacity_skip=(RS_ELASTIC_SKIP_CAPACITY_ACTIVE!=0) ?
         (d_valid & (load_without_agu | store_without_agu)) : store_without_agu;
-    function integer fast_store_subset_count;
+    function automatic integer fast_store_subset_count;
         input integer mask;
         integer subset_bit;
         begin
@@ -1513,7 +1657,7 @@ module rv32_backend_joint #(
         wire [SUBSETS-1:0] qualifying_subsets;
         for(genvar capacity_case=0;capacity_case<=BE_WIDTH;capacity_case=capacity_case+1) begin:g_room
             localparam [16:0] CREDIT=capacity_case;
-            assign room[capacity_case]=d_rs_prepared_demand<=({1'b0,rs_free_count}+CREDIT);
+            assign room[capacity_case]=17'(d_rs_prepared_demand)<=({1'b0,rs_free_count}+CREDIT);
         end
         for(genvar capacity_subset=0;capacity_subset<SUBSETS;capacity_subset=capacity_subset+1) begin:g_subset
             localparam [BE_WIDTH-1:0] MASK=capacity_subset+1;
@@ -1528,17 +1672,17 @@ module rv32_backend_joint #(
     wire d_rs_capacity_ok=((FAST_STORE_BATCH_ACTIVE!=0) || (RS_ELASTIC_SKIP_CAPACITY_ACTIVE!=0)) ? d_rs_batch_capacity_ok :
         (FAST_STORE_SAVED_ACTIVE!=0) ?
         (d_rs_room_ordinary || ((|store_without_agu) && d_rs_room_with_fast)) :
-        (d_rs_demand<=rs_free_count);
+        (16'(d_rs_demand)<=rs_free_count);
     assign d_admit=(DISPATCH_ELASTIC==0) ||
         (!reset_i && !flush_i && !branch_busy_domains[3] &&
-         d_rs_capacity_ok && (d_lsq_demand<=lsq_free_count));
+         d_rs_capacity_ok && (16'(d_lsq_demand)<=lsq_free_count));
     assign rs_alloc_valid=d_rs_need & {BE_WIDTH{d_admit}};
     assign lsq_alloc_valid=d_lsq_need & {BE_WIDTH{d_admit}};
 
     assign commit_valid_o = rob_commit_valid;
     assign perf_rob_occupancy_o = {{(16-ROB_COUNT_WIDTH){1'b0}}, rob_occupancy};
-    assign perf_rs_occupancy_o = rs_occupancy;
-    assign perf_lsq_occupancy_o = lsq_occupancy;
+    assign perf_rs_occupancy_o = 16'(rs_occupancy);
+    assign perf_lsq_occupancy_o = 16'(lsq_occupancy);
     assign perf_issue_valid_o = rs_issue_valid & rs_issue_ready;
     assign perf_branch_pending_o = branch_pending;
     assign perf_mdu_busy_o = mdu_busy;
@@ -1593,11 +1737,14 @@ module rv32_backend_joint #(
     wire [FEEDBACK_LANE_WIDTH-1:0] feedback_lane;
     wire [BE_WIDTH*FEEDBACK_PACKET_WIDTH-1:0] feedback_values;
     wire [FEEDBACK_PACKET_WIDTH-1:0] feedback_packet;
+    wire  unused_feedback_selector_second_valid_o;
+    wire [(FEEDBACK_LANE_WIDTH)-1:0] unused_feedback_selector_second_index_o;
     rv32_frequency_first_two #(.ENTRIES(BE_WIDTH),.INDEX_WIDTH(FEEDBACK_LANE_WIDTH)) feedback_selector (
         .candidates_i(feedback_candidates),.first_valid_o(branch_feedback_valid_r),.first_index_o(feedback_lane),
-        .second_valid_o(),.second_index_o());
+        .second_valid_o(unused_feedback_selector_second_valid_o),.second_index_o(unused_feedback_selector_second_index_o));
+    wire  unused_feedback_payload_selector_write_o;
     rv32_frequency_event_select #(.WIDTH(FEEDBACK_PACKET_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) feedback_payload_selector (
-        .events_i(feedback_grants),.values_i(feedback_values),.write_o(),.value_o(feedback_packet));
+        .events_i(feedback_grants),.values_i(feedback_values),.write_o(unused_feedback_payload_selector_write_o),.value_o(feedback_packet));
     assign {branch_feedback_slot,branch_feedback_pc_r,branch_feedback_kind_r,branch_feedback_taken_r,
         branch_feedback_target_r,branch_feedback_pred_taken_r,branch_feedback_pred_target_r}=feedback_packet;
     genvar feedback_source,feedback_row;
@@ -1660,8 +1807,9 @@ module rv32_backend_joint #(
             end
             rv32_frequency_array_read #(.WIDTH(16),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(ROB_SLOT_WIDTH)) history_read (
                 .rows_i(history_rows),.index_i(branch_feedback_slot),.value_o(history));
+            wire  unused_valid_selector_write_o;
             rv32_frequency_event_select #(.WIDTH(16),.EVENTS(1)) valid_selector (
-                .events_i(branch_feedback_valid_r),.values_i(history),.write_o(),.value_o(branch_feedback_metadata_o));
+                .events_i(branch_feedback_valid_r),.values_i(history),.write_o(unused_valid_selector_write_o),.value_o(branch_feedback_metadata_o));
         end else begin:g_no_feedback_history
             assign branch_feedback_metadata_o=0;
         end
@@ -1678,9 +1826,11 @@ module rv32_backend_joint #(
     wire mdu_found;
     wire [MDU_LANE_WIDTH-1:0] mdu_lane;
     wire [BE_WIDTH*MDU_ISSUE_PAYLOAD_WIDTH-1:0] mdu_values;
+    wire  unused_mdu_first_selector_second_valid_o;
+    wire [(MDU_LANE_WIDTH)-1:0] unused_mdu_first_selector_second_index_o;
     rv32_frequency_first_two #(.ENTRIES(BE_WIDTH),.INDEX_WIDTH(MDU_LANE_WIDTH)) mdu_first_selector (
         .candidates_i(mdu_candidates),.first_valid_o(mdu_found),.first_index_o(mdu_lane),
-        .second_valid_o(),.second_index_o());
+        .second_valid_o(unused_mdu_first_selector_second_valid_o),.second_index_o(unused_mdu_first_selector_second_index_o));
     genvar mdu_route_lane;
     generate for(mdu_route_lane=0;mdu_route_lane<BE_WIDTH;mdu_route_lane=mdu_route_lane+1) begin:g_mdu_route
         assign mdu_select[mdu_route_lane]=mdu_found && mdu_lane==mdu_route_lane;
@@ -1696,8 +1846,9 @@ module rv32_backend_joint #(
         end
     end endgenerate
     wire [MDU_ISSUE_PAYLOAD_WIDTH-1:0] mdu_selected_payload;
+    wire  unused_mdu_payload_selector_write_o;
     rv32_frequency_event_select #(.WIDTH(MDU_ISSUE_PAYLOAD_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) mdu_payload_selector (
-        .events_i(mdu_select),.values_i(mdu_values),.write_o(),.value_o(mdu_selected_payload));
+        .events_i(mdu_select),.values_i(mdu_values),.write_o(unused_mdu_payload_selector_write_o),.value_o(mdu_selected_payload));
     assign {mdu_issue_op,mdu_issue_src1,mdu_issue_src2,mdu_issue_tag,mdu_issue_phys}=
         mdu_selected_payload[0 +: MDU_ISSUE_BASE_PAYLOAD_WIDTH];
     generate if(RS_ISSUE_CANCEL_PREDECODE_ACTIVE!=0) begin:g_mdu_selected_cancel
@@ -1754,7 +1905,7 @@ module rv32_backend_joint #(
             // collapse correctly without a full RAT snapshot per ROB entry.
             for (recovery_rat_age = ROB_ENTRIES - 1; recovery_rat_age >= 0;
                  recovery_rat_age = recovery_rat_age - 1) begin
-                recovery_rat_slot = rob_head_views[0 +: ROB_SLOT_WIDTH] + recovery_rat_age;
+                recovery_rat_slot = 32'(rob_head_views[0 +: ROB_SLOT_WIDTH]) + recovery_rat_age;
                 if (recovery_rat_slot >= ROB_ENTRIES)
                     recovery_rat_slot = recovery_rat_slot - ROB_ENTRIES;
                 if ((recovery_rat_age > recovery_rat_branch_age) &&
@@ -1782,19 +1933,19 @@ module rv32_backend_joint #(
         recovery_rs_index = 0;
         rs_preview_kill_mask = {RS_ENTRIES{1'b0}};
         recovery_rs_rob_slot = 0;
-        recovery_rs_branch_slot = recovery_tag_views[2*TAG_WIDTH+3 +: ROB_SLOT_WIDTH];
+        recovery_rs_branch_slot = 32'(recovery_tag_views[2*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]);
         recovery_rs_age = 0;
-        recovery_rs_branch_age = recovery_rs_branch_slot - rob_head_views[ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+        recovery_rs_branch_age = ROB_SLOT_WIDTH'(recovery_rs_branch_slot - 32'(rob_head_views[ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]));
         if (flush_i) begin
             rs_preview_kill_mask = {RS_ENTRIES{1'b1}};
         end else if (rob_recovery_preview) begin
             for (recovery_rs_index = 0; recovery_rs_index < RS_ENTRIES; recovery_rs_index = recovery_rs_index + 1) begin
-                recovery_rs_rob_slot = rs_entry_rob_tag[(recovery_rs_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH];
-                recovery_rs_age = recovery_rs_rob_slot - rob_head_views[ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+                recovery_rs_rob_slot = 32'(rs_entry_rob_tag[(recovery_rs_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH]);
+                recovery_rs_age = ROB_SLOT_WIDTH'(recovery_rs_rob_slot - 32'(rob_head_views[ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]));
                 if (rs_entry_valid[recovery_rs_index] &&
                     (!rs_entry_rob_tag[recovery_rs_index*TAG_WIDTH] ||
                      (recovery_rs_age > recovery_rs_branch_age) ||
-                     (recovery_rs_age >= rob_occupancy)))
+                     (ROB_COUNT_WIDTH'(recovery_rs_age) >= rob_occupancy)))
                     rs_preview_kill_mask[recovery_rs_index] = 1'b1;
             end
         end
@@ -1818,12 +1969,12 @@ module rv32_backend_joint #(
             for (recovery_completion_index = 0; recovery_completion_index < COMPLETION_DEPTH;
                  recovery_completion_index = recovery_completion_index + 1) begin
                 recovery_completion_rob_slot =
-                    completion_entry_tag[(recovery_completion_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH];
-                recovery_completion_age = recovery_completion_rob_slot - recovery_head_views[2*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+                    32'(completion_entry_tag[(recovery_completion_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH]);
+                recovery_completion_age = ROB_SLOT_WIDTH'(recovery_completion_rob_slot - 32'(recovery_head_views[2*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]));
                 if (completion_entry_valid[recovery_completion_index] &&
                     (!completion_entry_tag[recovery_completion_index*TAG_WIDTH] ||
                      (recovery_completion_age > recovery_completion_branch_age) ||
-                     (recovery_completion_age >= recovery_descriptor_occupancy)))
+                     (ROB_COUNT_WIDTH'(recovery_completion_age) >= recovery_descriptor_occupancy)))
                     completion_kill_mask[recovery_completion_index] = 1'b1;
             end
         end
@@ -1842,11 +1993,11 @@ module rv32_backend_joint #(
                 prf_read_data[(2*source_lane)*32 +: 32];
             rs_src2_value[source_lane*32 +: 32] =
                 prf_read_data[(2*source_lane+1)*32 +: 32];
-            if (d_src1_phys[source_lane*PAW +: PAW] < PHYS_REGS)
+            if (32'(d_src1_phys[source_lane*PAW +: PAW]) < PHYS_REGS)
                 if (PHYS_TAG_IMPL == 0)
                     rs_src1_tag[source_lane*TAG_WIDTH +: TAG_WIDTH] =
                         tag_read_values[(2*source_lane+0)*TAG_WIDTH +: TAG_WIDTH];
-            if (d_src2_phys[source_lane*PAW +: PAW] < PHYS_REGS)
+            if (32'(d_src2_phys[source_lane*PAW +: PAW]) < PHYS_REGS)
                 if (PHYS_TAG_IMPL == 0)
                     rs_src2_tag[source_lane*TAG_WIDTH +: TAG_WIDTH] =
                         tag_read_values[(2*source_lane+1)*TAG_WIDTH +: TAG_WIDTH];
@@ -1967,10 +2118,9 @@ module rv32_backend_joint #(
         .recovery_preview_valid_o(rob_recovery_preview), .recovery_accept_o(rob_recovery_accept_source), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head_source), .head_domains_o(rob_registered_head_views), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation), .entry_new_phys_o(rob_entry_new_phys), .entry_rd_we_o(rob_entry_rd_we), .entry_rd_o(rob_entry_rd), .entry_old_phys_o(rob_entry_old_phys)
     );
 
-
     // The new edge uses the direct RS contract and selective execution
     // cancellation together. Other pipeline/recovery modes retain old gating.
-    localparam integer RECOVERY_APPLY_ISSUE_ACTIVE=(RECOVERY_APPLY_OLDER_ISSUE!=0) &&
+    localparam RECOVERY_APPLY_ISSUE_ACTIVE=(RECOVERY_APPLY_OLDER_ISSUE!=0) &&
         (LOCAL_EXEC_RECOVERY!=0) && (ISSUE_PIPELINE==0);
 
     // Evaluate the same preview/apply predicates from saved RS row tags.
@@ -1989,7 +2139,7 @@ module rv32_backend_joint #(
             wire older_preview=(RECOVERY_PREVIEW_OLDER_ISSUE!=0) && branch_pending &&
                 rob_recovery_preview && !recovery_descriptor_valid && !reset_i && !flush_i &&
                 rs_entry_valid[qualification_row] && row_tag[0] &&
-                row_age<pending_age && row_age<rob_occupancy;
+                row_age<pending_age && ROB_COUNT_WIDTH'(row_age)<rob_occupancy;
             wire older_apply;
             if(RECOVERY_APPLY_ISSUE_ACTIVE!=0) begin:g_apply
                 wire row_live_match;
@@ -2107,6 +2257,7 @@ module rv32_backend_joint #(
     genvar alu_lane;
     generate
         for (alu_lane = 0; alu_lane < BE_WIDTH; alu_lane = alu_lane + 1) begin : g_alu
+            wire [(`RV32IM_EPOCH_WIDTH)-1:0] unused_alu_exec_epoch_o;
             rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .COMPACT_PRED_TARGET(COMPACT_PRED_TARGET), .FORWARD_METADATA(RS_ISSUE_METADATA), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY), .RECOVERY_OLDER_ISSUE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_PREDECODE(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) alu (
                 .exec_source_pc_o(alu_exec_source_pc[alu_lane*32 +: 32]),
                 .exec_pred_taken_o(alu_exec_pred_taken[alu_lane]),
@@ -2139,7 +2290,7 @@ module rv32_backend_joint #(
                 .exec_value_o(alu_exec_value[alu_lane*32 +: 32]),
                 .exec_phys_rd_o(alu_exec_phys[alu_lane*PAW +: PAW]),
                 .exec_rob_tag_o(alu_exec_tag[alu_lane*TAG_WIDTH +: TAG_WIDTH]),
-                .exec_epoch_o(), .exec_rd_we_o(alu_exec_rd_we[alu_lane]),
+                .exec_epoch_o(unused_alu_exec_epoch_o), .exec_rd_we_o(alu_exec_rd_we[alu_lane]),
                 .exec_is_branch_o(alu_exec_is_branch[alu_lane]),
                 .exec_branch_taken_o(alu_exec_branch_taken[alu_lane]),
                 .exec_branch_target_o(alu_exec_branch_target[alu_lane*32 +: 32]),
@@ -2161,6 +2312,7 @@ module rv32_backend_joint #(
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(execution_recovery_views[BE_WIDTH*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .issue_valid_i(mdu_issue_valid), .issue_cancel_i(mdu_issue_cancel), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
+    wire [(((LSQ_ENTRIES) <= 1) ? 1 : $clog2((LSQ_ENTRIES)))-1:0] unused_lsq_tail_o;
     rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .ACK_SOURCE_QUERY(LSQ_STORE_ACK_SOURCE_QUERY), .HEAD_STORE_ACK_BYPASS(LSQ_HEAD_STORE_ACK_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .SAVED_REPORT_PRIORITY(LSQ_SAVED_REPORT_PRIORITY), .HEAD_LOAD_IDENTITY_QUERY(LSQ_HEAD_LOAD_IDENTITY_QUERY), .HELD_LOAD_IDENTITY_QUERY(LSQ_HELD_LOAD_IDENTITY_QUERY), .HEAD_LOAD_PACKET_PRESELECT(LSQ_HEAD_LOAD_PACKET_PRESELECT), .SAVED_IDENTITY_WORD_MASK(LSQ_SAVED_IDENTITY_WORD_MASK), .SAVED_IDENTITY_BALANCED_MERGE(LSQ_SAVED_IDENTITY_BALANCED_MERGE), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .ALLOC_SLOT_PRESELECT(LSQ_ALLOC_SLOT_PRESELECT_ACTIVE), .ALLOC_PAYLOAD_PRESELECT(LSQ_ALLOC_PAYLOAD_PRESELECT_ACTIVE), .ALLOC_FIRE_DISTRIBUTE(LSQ_ALLOC_FIRE_DISTRIBUTE), .RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .SECOND_REPORT_RECLAIM(LSQ_SECOND_REPORT_RECLAIM), .EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .PICK_LOCAL_VALIDITY(LSQ_PICK_LOCAL_VALIDITY), .FORWARD_ONEHOT(LSQ_FORWARD_ONEHOT), .PICK_ONEHOT(LSQ_PICK_ONEHOT), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .RESPONSE_SOURCE_QUERY(LSQ_RESPONSE_SOURCE_QUERY), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
         .early_addr_valid_i(shared_store_addr_valid), .early_addr_tag_i(shared_store_addr_tag),
         .early_addr_i(shared_store_addr), .store_addr_pending_o(lsq_store_addr_pending),
@@ -2175,7 +2327,7 @@ module rv32_backend_joint #(
         .load_report_held_identity_tag_o(lsq_report_held_identity_tag),
         .load_report_held_identity_query_o(lsq_report_held_identity_query),
         .load_report_identity_held_o(lsq_report_identity_held),
-        .load_report_identity_head_o(lsq_report_identity_head), .load_complete_lsq_tag_o(lsq_load_complete_lsq_tag), .load_complete_value_o(lsq_load_complete_value), .load_complete_phys_rd_o(lsq_load_complete_phys), .load_complete_unretired_o(lsq_load_complete_unretired), .load_complete_cancel_o(lsq_load_complete_cancel), .report_recovery_packet_i(execution_recovery_views[(BE_WIDTH+1)*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .load_complete_error_o(lsq_load_complete_error), .dcache_store_ack_valid_i(dcache_store_ack_valid_i), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag_i), .dcache_store_ack_error_i(dcache_store_ack_error_i), .store_ack_valid_o(lsq_store_ack_valid), .store_ack_ready_i(1'b1), .store_ack_query_valid_i(store_ack_query_valid_i), .store_ack_query_tag_i(store_ack_query_tag_i), .store_ack_rob_tag_o(lsq_store_ack_rob_tag), .store_ack_rob_query_tag_o(lsq_store_ack_rob_query_tag), .store_ack_lsq_tag_o(lsq_store_ack_lsq_tag), .store_ack_error_o(lsq_store_ack_error), .occupancy_o(lsq_occupancy), .tail_o()
+        .load_report_identity_head_o(lsq_report_identity_head), .load_complete_lsq_tag_o(lsq_load_complete_lsq_tag), .load_complete_value_o(lsq_load_complete_value), .load_complete_phys_rd_o(lsq_load_complete_phys), .load_complete_unretired_o(lsq_load_complete_unretired), .load_complete_cancel_o(lsq_load_complete_cancel), .report_recovery_packet_i(execution_recovery_views[(BE_WIDTH+1)*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .load_complete_error_o(lsq_load_complete_error), .dcache_store_ack_valid_i(dcache_store_ack_valid_i), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag_i), .dcache_store_ack_error_i(dcache_store_ack_error_i), .store_ack_valid_o(lsq_store_ack_valid), .store_ack_ready_i(1'b1), .store_ack_query_valid_i(store_ack_query_valid_i), .store_ack_query_tag_i(store_ack_query_tag_i), .store_ack_rob_tag_o(lsq_store_ack_rob_tag), .store_ack_rob_query_tag_o(lsq_store_ack_rob_query_tag), .store_ack_lsq_tag_o(lsq_store_ack_lsq_tag), .store_ack_error_o(lsq_store_ack_error), .occupancy_o(lsq_occupancy), .tail_o(unused_lsq_tail_o)
     );
 
     // Keep producer positions fixed.  The completion network already skips
@@ -2259,12 +2411,12 @@ module rv32_backend_joint #(
                         producer_target_live_r[producer_recovery_index]=1'b0;
                 end else begin:g_original_selected_tag_recovery
                 producer_recovery_rob_slot =
-                    producer_tag_r[(producer_recovery_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH];
-                producer_recovery_age = producer_recovery_rob_slot - recovery_head_views[4*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+                    32'(producer_tag_r[(producer_recovery_index*TAG_WIDTH) + 3 +: ROB_SLOT_WIDTH]);
+                producer_recovery_age = ROB_SLOT_WIDTH'(producer_recovery_rob_slot - 32'(recovery_head_views[4*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]));
                 if (producer_valid_r[producer_recovery_index] &&
                     (!producer_tag_r[producer_recovery_index*TAG_WIDTH] ||
                      (producer_recovery_age > producer_recovery_branch_age) ||
-                     (producer_recovery_age >= recovery_descriptor_occupancy)))
+                     (ROB_COUNT_WIDTH'(producer_recovery_age) >= recovery_descriptor_occupancy)))
                     producer_target_live_r[producer_recovery_index] = 1'b0;
                 end
             end
@@ -2299,8 +2451,8 @@ module rv32_backend_joint #(
             for (alu_recovery_lane = 0; alu_recovery_lane < BE_WIDTH;
                  alu_recovery_lane = alu_recovery_lane + 1) begin
                 alu_recovery_slot =
-                    alu_exec_tag[alu_recovery_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH];
-                alu_recovery_age = alu_recovery_slot - recovery_head_views[5*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
+                    32'(alu_exec_tag[alu_recovery_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]);
+                alu_recovery_age = ROB_SLOT_WIDTH'(alu_recovery_slot - 32'(recovery_head_views[5*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]));
                 if (alu_exec_valid[alu_recovery_lane] &&
                     (alu_recovery_age >= alu_recovery_branch_age))
                     alu_flush_r[alu_recovery_lane] = 1'b1;
@@ -2322,7 +2474,7 @@ module rv32_backend_joint #(
                 // the redirect that can actually claim it; any other redirect
                 // must remain stable in its ALU until the pending recovery
                 // completes or explicitly flushes that younger result.
-                if (!branch_pending && !redirect_ready_found) begin
+                if (!branch_pending && !(redirect_ready_found != 0)) begin
                     alu_exec_ready_r[alu_ready_lane] = 1'b1;
                     redirect_ready_found = 1;
                 end
@@ -2333,9 +2485,10 @@ module rv32_backend_joint #(
     end
     assign alu_exec_ready = alu_exec_ready_r;
 
+    wire [(((COMPLETION_DEPTH) <= 1) ? 1 : $clog2((COMPLETION_DEPTH) + 1))-1:0] unused_completion_occupancy_o;
     rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .SOURCES(PRODUCERS), .FIFO_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .BYPASS(COMPLETION_BYPASS), .DIRECT_BRANCH_PAYLOAD(0),
         .DIRECT_STORE_PAYLOAD((LIGHT_RETIRE_PAYLOAD==0) || (ROB_RETURN_VALUE_ENABLE!=0))) completion (
-        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .kill_valid_i(recovery_domains[6]), .kill_mask_i(completion_kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready_r), .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live_r), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}}), .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect_valid), .cdb_is_memory_o(cdb_is_memory), .cdb_is_load_o(cdb_is_load), .prf_write_valid_o(completion_prf_write_valid), .prf_write_tag_o(prf_wb_tag), .prf_write_phys_rd_o(completion_prf_write_phys), .prf_write_value_o(completion_prf_write_data), .rob_ready_valid_o(rob_wb_valid), .rob_ready_tag_o(rob_wb_tag), .rob_ready_value_o(rob_wb_value), .wakeup_valid_o(wake_wb_valid), .wakeup_tag_o(wake_wb_tag), .wakeup_value_o(wake_wb_value), .entry_valid_o(completion_entry_valid), .entry_tag_o(completion_entry_tag), .occupancy_o()
+        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .kill_valid_i(recovery_domains[6]), .kill_mask_i(completion_kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready_r), .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live_r), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}}), .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect_valid), .cdb_is_memory_o(cdb_is_memory), .cdb_is_load_o(cdb_is_load), .prf_write_valid_o(completion_prf_write_valid), .prf_write_tag_o(prf_wb_tag), .prf_write_phys_rd_o(completion_prf_write_phys), .prf_write_value_o(completion_prf_write_data), .rob_ready_valid_o(rob_wb_valid), .rob_ready_tag_o(rob_wb_tag), .rob_ready_value_o(rob_wb_value), .wakeup_valid_o(wake_wb_valid), .wakeup_tag_o(wake_wb_tag), .wakeup_value_o(wake_wb_value), .entry_valid_o(completion_entry_valid), .entry_tag_o(completion_entry_tag), .occupancy_o(unused_completion_occupancy_o)
     );
     // A valid producer holds its result until the completion network accepts
     // it.  Its value can therefore wake a dependent RS entry even when the
@@ -2404,13 +2557,11 @@ module rv32_backend_joint #(
             end else begin:g_held_producer
                 assign phys=producer_phys[(wake_identity_lane-BE_WIDTH)*PAW +: PAW];
             end
-            assign rs_wake_tag[wake_identity_lane*RS_SOURCE_TAG_WIDTH +: RS_SOURCE_TAG_WIDTH]={phys,(phys!=0 && phys<PHYS_REGS)};
+            assign rs_wake_tag[wake_identity_lane*RS_SOURCE_TAG_WIDTH +: RS_SOURCE_TAG_WIDTH]={phys,(phys!=0 && 32'(phys)<PHYS_REGS)};
         end
     end else begin:g_rob_wake_identity
         assign rs_wake_tag={producer_tag,wake_wb_tag};
     end endgenerate
-
-
 
     localparam integer ROB_COMPLETION_PACKET_WIDTH=TAG_WIDTH+103;
     localparam integer ROB_COMPLETION_PACKET_WORDS=(ROB_COMPLETION_PACKET_WIDTH+15)/16;
@@ -2420,7 +2571,7 @@ module rv32_backend_joint #(
     genvar routed_lane,routed_word;
     generate for(routed_lane=0;routed_lane<BE_WIDTH;routed_lane=routed_lane+1) begin:g_rob_completion_route
         wire [ROB_SLOT_WIDTH-1:0] normal_slot=rob_wb_tag[routed_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH];
-        wire normal_in_range=normal_slot<ROB_ENTRIES;
+        wire normal_in_range=32'(normal_slot)<ROB_ENTRIES;
         wire normal_error=rob_wb_valid[routed_lane] && normal_in_range &&
             (completion_state_reads[routed_lane*3+2] || completion_live_load_error[routed_lane]);
         wire [1:0] normal_size=completion_state_reads[routed_lane*3 +: 2];
@@ -2438,19 +2589,21 @@ module rv32_backend_joint #(
             localparam integer SOURCE=routed_lane-1;
             wire accepted=rob_wb_valid[SOURCE] && cdb_ready[SOURCE];
             wire [ROB_SLOT_WIDTH-1:0] slot=rob_wb_tag[SOURCE*TAG_WIDTH+3 +: ROB_SLOT_WIDTH];
-            wire in_range=slot<ROB_ENTRIES;
+            wire in_range=32'(slot)<ROB_ENTRIES;
             wire error=(completion_state_reads[SOURCE*3+2] || completion_live_load_error[SOURCE]) && in_range;
             wire [1:0] size=completion_state_reads[SOURCE*3 +: 2];
             wire [3:0] mask=(in_range && cdb_is_store[SOURCE])?
                 ((size==`RV32IM_MEM_BYTE)?4'b0001:((size==`RV32IM_MEM_HALF)?4'b0011:4'b1111)):4'b0;
             wire [63:0] store_payload;
+            wire  unused_store_selector_write_o;
             rv32_frequency_event_select #(.WIDTH(64),.EVENTS(1)) store_selector (
                 .events_i(in_range),.values_i({cdb_addr[SOURCE*32 +: 32],cdb_store_data[SOURCE*32 +: 32]}),
-                .write_o(),.value_o(store_payload));
+                .write_o(unused_store_selector_write_o),.value_o(store_payload));
+            wire  unused_accepted_selector_write_o;
             rv32_frequency_event_select #(.WIDTH(ROB_COMPLETION_PACKET_WIDTH),.EVENTS(1)) accepted_selector (
                 .events_i(accepted),
                 .values_i({1'b1,1'b1,error,rob_wb_tag[SOURCE*TAG_WIDTH +: TAG_WIDTH],rob_wb_value[SOURCE*32 +: 32],
-                    store_payload[63:32],mask,store_payload[31:0]}),.write_o(),.value_o(recovery_packet));
+                    store_payload[63:32],mask,store_payload[31:0]}),.write_o(unused_accepted_selector_write_o),.value_o(recovery_packet));
         end else begin:g_unavailable
             assign recovery_packet=0;
         end
@@ -2485,7 +2638,7 @@ module rv32_backend_joint #(
     wire [MAP_DOMAINS*ROB_SLOT_WIDTH-1:0] error_slot_views;
     wire error_response=lsq_load_complete_valid && lsq_load_complete_ready &&
         lsq_load_complete_error && lsq_load_complete_tag[0] &&
-        lsq_load_complete_tag[3 +: ROB_SLOT_WIDTH]<ROB_ENTRIES &&
+        32'(lsq_load_complete_tag[3 +: ROB_SLOT_WIDTH])<ROB_ENTRIES &&
         ((LSQ_HEAD_LOAD_IDENTITY_ACTIVE!=0) ? lsq_report_identity_live :
          (producer_live_reads[LSQ_SOURCE*ROB_LIVE_WIDTH+ROB_GENERATION_WIDTH] &&
           lsq_load_complete_tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]==
@@ -2629,12 +2782,14 @@ module rv32_backend_joint #(
     // Direct ROB apply is sourced only by branch_pending. Capture
     // requires !branch_pending, so selective apply cancellation is zero in
     // its whole acceptance domain. All real execution ports keep cancel.
-    localparam integer CAPTURE_PHASE_VALID_ACTIVE=(BRANCH_CAPTURE_PHASE_VALID!=0) &&
+    localparam CAPTURE_PHASE_VALID_ACTIVE=(BRANCH_CAPTURE_PHASE_VALID!=0) &&
         (BRANCH_CAPTURE_REDIRECT_READY!=0) && (RECOVERY_DIRECT_ACTIVE!=0);
     wire [BE_WIDTH-1:0] branch_capture_valid=(CAPTURE_PHASE_VALID_ACTIVE!=0)?
         alu_exec_saved_valid:alu_exec_valid;
     wire [BE_WIDTH-1:0] capture_redirect_claim=
         branch_capture_valid & alu_exec_redirect_valid & ~alu_exec_is_load;
+    wire unused_capture_redirect_claim_bits = &{1'b0, capture_redirect_claim};
+
     wire [BE_WIDTH-1:0] capture_redirect_ready;
     genvar capture_lane;
     generate for(capture_lane=0;capture_lane<BE_WIDTH;capture_lane=capture_lane+1) begin:g_branch_capture
@@ -2706,297 +2861,4 @@ module rv32_backend_joint #(
             branch_pending<=1'b0;
     end
 
-endmodule
-
-// Two retained entries break the functional-unit ready -> RS ready path.
-// Unstalled first-result latency is still one registered selection stage.
-module rv32_issue_pipeline_slot #(
-    parameter integer PAYLOAD_WIDTH=192, TAG_WIDTH=17, ROB_ENTRIES=64,
-    parameter integer SW=(ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES)
-) (
-    input wire clk_i, reset_i, flush_i, recovery_i,
-    input wire [SW-1:0] head_i,
-    input wire [TAG_WIDTH-1:0] recovery_tag_i,
-    input wire valid_i, eligible_i,
-    output wire ready_o,
-    input wire [PAYLOAD_WIDTH-1:0] data_i,
-    input wire [TAG_WIDTH-1:0] tag_i,
-    output wire valid_o,
-    input wire ready_i,
-    output wire [PAYLOAD_WIDTH-1:0] data_o
-);
-    localparam integer CHUNKS=(PAYLOAD_WIDTH+15)/16;
-    reg [1:0] count,entry_valid;
-    reg read_slot,write_slot;
-    reg [PAYLOAD_WIDTH-1:0] payload [0:1];
-    reg [TAG_WIDTH-1:0] saved_tag [0:1];
-    wire [1:0] recovery_keep;
-    wire [SW-1:0] branch_age=recovery_tag_i[3 +: SW]-head_i;
-    wire push=valid_i && ready_o;
-    wire pop=valid_o && ready_i;
-    wire [CHUNKS-1:0] read_views;
-    rv32_frequency_control_tree #(.LEAVES(CHUNKS)) read_tree (
-        .signal_i(read_slot),.views_o(read_views));
-    // Ready depends only on registered occupancy, with one spare entry to
-    // absorb backpressure. A full queue advertises space after its pop edge.
-    assign ready_o=(count<2) && eligible_i && !reset_i && !flush_i && !recovery_i;
-    assign valid_o=(count!=0) && !reset_i && !flush_i && !recovery_i;
-    genvar queue_row,chunk;
-    generate for(queue_row=0;queue_row<2;queue_row=queue_row+1) begin:g_row
-        wire [SW-1:0] age=saved_tag[queue_row][3 +: SW]-head_i;
-        assign recovery_keep[queue_row]=entry_valid[queue_row] &&
-            saved_tag[queue_row][0] && age<branch_age;
-        wire [CHUNKS:0] write_views;
-        rv32_frequency_control_tree #(.LEAVES(CHUNKS+1)) write_tree (
-            .signal_i(push && write_slot==queue_row),.views_o(write_views));
-        always @(posedge clk_i) if(write_views[CHUNKS]) saved_tag[queue_row]<=tag_i;
-        for(chunk=0;chunk<CHUNKS;chunk=chunk+1) begin:g_chunk
-            localparam integer LOW=chunk*16;
-            localparam integer BITS=(PAYLOAD_WIDTH-LOW>=16)?16:PAYLOAD_WIDTH-LOW;
-            always @(posedge clk_i) if(write_views[chunk])
-                payload[queue_row][LOW +: BITS]<=data_i[LOW +: BITS];
-        end
-    end
-    for(chunk=0;chunk<CHUNKS;chunk=chunk+1) begin:g_read
-        localparam integer LOW=chunk*16;
-        localparam integer BITS=(PAYLOAD_WIDTH-LOW>=16)?16:PAYLOAD_WIDTH-LOW;
-        assign data_o[LOW +: BITS]=read_views[chunk]?
-            payload[1][LOW +: BITS]:payload[0][LOW +: BITS];
-    end endgenerate
-    always @(posedge clk_i) begin
-        if(reset_i || flush_i) begin
-            count<=0;entry_valid<=0;read_slot<=0;write_slot<=0;
-        end else if(recovery_i) begin
-            entry_valid<=recovery_keep;
-            case(recovery_keep)
-                2'b11: count<=2;
-                2'b01: begin count<=1;read_slot<=0;write_slot<=1;end
-                2'b10: begin count<=1;read_slot<=1;write_slot<=0;end
-                default: begin count<=0;read_slot<=0;write_slot<=0;end
-            endcase
-        end else begin
-            count<=count+push-pop;
-            if(pop) begin entry_valid[read_slot]<=1'b0;read_slot<=!read_slot;end
-            if(push) begin entry_valid[write_slot]<=1'b1;write_slot<=!write_slot;end
-        end
-    end
-endmodule
-
-
-module rv32_producer_tag_row #(parameter integer LANES=4,TAG_WIDTH=17) (
-    input wire clk_i,reset_i,
-    input wire [LANES-1:0] match_i,
-    input wire [LANES*TAG_WIDTH-1:0] tag_i,
-    output wire [TAG_WIDTH-1:0] tag_o
-);
-    reg stored_valid;
-    reg [TAG_WIDTH-1:0] stored_tag;
-    wire [LANES-1:0] grants,local_grants;
-    wire write_local;
-    genvar lane;
-    generate for(lane=0;lane<LANES;lane=lane+1) begin:g_grant
-        if(lane==LANES-1) assign grants[lane]=match_i[lane];
-        else assign grants[lane]=match_i[lane] && !(|match_i[LANES-1:lane+1]);
-    end endgenerate
-    rv32_frequency_control_tree #(.WIDTH(LANES),.LEAVES(1)) grant_tree (
-        .signal_i(grants),.views_o(local_grants));
-    rv32_frequency_control_tree #(.LEAVES(1)) write_tree (
-        .signal_i(!reset_i && (|match_i)),.views_o(write_local));
-    reg [TAG_WIDTH-1:0] next_tag;
-    integer writer;
-    always @* begin
-        next_tag=0;
-        for(writer=0;writer<LANES;writer=writer+1)
-            next_tag=next_tag | ({TAG_WIDTH{local_grants[writer]}} &
-                               tag_i[writer*TAG_WIDTH +: TAG_WIDTH]);
-    end
-    always @(posedge clk_i) if(write_local) stored_tag<=next_tag;
-    always @(posedge clk_i) begin
-        if(reset_i) stored_valid<=0;
-        else if(|match_i) stored_valid<=1;
-    end
-    // Before the first write after reset, the visible tag is exactly zero,
-    // matching the former full-word reset. A write replaces all tag bits.
-    assign tag_o={TAG_WIDTH{stored_valid}} & stored_tag;
-endmodule
-
-
-// A deterministic one-bundle pipeline. Its resource reservations guarantee
-// complete D admission, so no RS/LSQ admission signal feeds back into R.
-module rv32_reserved_dispatch_packet #(
-    parameter integer LANES=4,PAYLOAD_WIDTH=160,TAG_WIDTH=17,ROB_ENTRIES=64,
-    parameter integer SW=(ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES),
-    parameter integer GW=TAG_WIDTH-SW-3
-) (
-    input wire clk_i,reset_i,flush_i,hold_i,recovery_i,
-    input wire [SW-1:0] recovery_head_i,
-    input wire [TAG_WIDTH-1:0] recovery_tag_i,
-    input wire [15:0] recovery_occupancy_i,
-    input wire [ROB_ENTRIES-1:0] rob_valid_i,
-    input wire [ROB_ENTRIES*GW-1:0] rob_generation_i,
-    input wire [LANES-1:0] valid_i,
-    input wire [LANES*TAG_WIDTH-1:0] tag_i,
-    input wire [LANES*PAYLOAD_WIDTH-1:0] data_i,
-    input wire [LANES-1:0] saved_is_memory_i,
-    output wire [LANES-1:0] valid_o,
-    output wire [LANES*TAG_WIDTH-1:0] tag_o,
-    output wire [LANES*PAYLOAD_WIDTH-1:0] data_o,
-    output reg [15:0] reserved_rs_o,reserved_lsq_o
-);
-    reg [LANES-1:0] valid_q;
-    wire [TAG_WIDTH-1:0] tag_q [0:LANES-1];
-    wire [ROB_ENTRIES*(GW+1)-1:0] live_rows;
-    genvar live_row;
-    generate for(live_row=0;live_row<ROB_ENTRIES;live_row=live_row+1) begin:g_live_row
-        assign live_rows[live_row*(GW+1) +: GW+1]={rob_valid_i[live_row],rob_generation_i[live_row*GW +: GW]};
-    end endgenerate
-    wire [LANES-1:0] recovery_keep;
-    wire normal=!reset_i && !flush_i && !hold_i && !recovery_i;
-    wire [SW-1:0] branch_age=recovery_tag_i[3 +: SW]-recovery_head_i;
-    genvar lane;
-    generate for(lane=0;lane<LANES;lane=lane+1) begin:g_lane
-        wire [SW-1:0] slot=tag_q[lane][3 +: SW];
-        wire [SW-1:0] age=slot-recovery_head_i;
-        wire [GW:0] live;
-        rv32_frequency_array_read #(.WIDTH(GW+1),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SW)) live_reader (
-            .rows_i(live_rows),.index_i(slot),.value_o(live));
-        wire generation_live=live[GW] && tag_q[lane][3+SW +: GW]==live[0 +: GW];
-        assign recovery_keep[lane]=valid_q[lane] && tag_q[lane][0] &&
-            generation_live && age<branch_age && age<recovery_occupancy_i;
-        assign valid_o[lane]=normal && valid_q[lane];
-        assign tag_o[lane*TAG_WIDTH +: TAG_WIDTH]=tag_q[lane];
-        rv32_frequency_word_bank #(.WIDTH(TAG_WIDTH)) tag_owner (
-            .clk_i(clk_i),.write_i(normal && valid_i[lane]),
-            .data_i(tag_i[lane*TAG_WIDTH +: TAG_WIDTH]),.data_o(tag_q[lane]));
-        rv32_frequency_word_bank #(.WIDTH(PAYLOAD_WIDTH)) payload_owner (
-            .clk_i(clk_i),.write_i(normal && valid_i[lane]),
-            .data_i(data_i[lane*PAYLOAD_WIDTH +: PAYLOAD_WIDTH]),
-            .data_o(data_o[lane*PAYLOAD_WIDTH +: PAYLOAD_WIDTH]));
-    end endgenerate
-    integer count_lane;
-    always @* begin
-        reserved_rs_o=0;reserved_lsq_o=0;
-        for(count_lane=0;count_lane<LANES;count_lane=count_lane+1) begin
-            if(valid_q[count_lane]) reserved_rs_o=reserved_rs_o+1'b1;
-            if(valid_q[count_lane] && saved_is_memory_i[count_lane])
-                reserved_lsq_o=reserved_lsq_o+1'b1;
-        end
-    end
-    always @(posedge clk_i) begin
-        if(reset_i || flush_i) valid_q<=0;
-        else if(recovery_i) valid_q<=recovery_keep;
-        else if(!hold_i) valid_q<=valid_i;
-    end
-endmodule
-
-// Two bundle entries break the D-resource/PRF path from R acceptance.
-// R allocates ROB/physical destinations once. D emits the entire oldest
-// bundle only when both its actual RS and LSQ demands fit the saved free
-// counts. Recovery retains only full-generation-live, older ROB tags.
-module rv32_elastic_dispatch_packet #(
-    parameter integer FULL_REPLACE=0,
-    parameter integer LANES=2,PAYLOAD_WIDTH=160,TAG_WIDTH=16,ROB_ENTRIES=32,
-    parameter integer SW=(ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES),
-    parameter integer GW=TAG_WIDTH-SW-3
-) (
-    input wire clk_i,reset_i,flush_i,hold_i,recovery_i,
-    input wire [SW-1:0] recovery_head_i,
-    input wire [TAG_WIDTH-1:0] recovery_tag_i,
-    input wire [15:0] recovery_occupancy_i,
-    input wire [ROB_ENTRIES-1:0] rob_valid_i,
-    input wire [ROB_ENTRIES*GW-1:0] rob_generation_i,
-    input wire [LANES-1:0] valid_i,
-    input wire [LANES*TAG_WIDTH-1:0] tag_i,
-    input wire [LANES*PAYLOAD_WIDTH-1:0] data_i,
-    output wire ready_o,
-    output wire [LANES-1:0] valid_o,
-    output wire [LANES*TAG_WIDTH-1:0] tag_o,
-    output wire [LANES*PAYLOAD_WIDTH-1:0] data_o,
-    // Caller guarantees consume_i when this credit is asserted. It is a
-    // saved-capacity proof, not a late consume/PRF combinational ready path.
-    input wire replace_credit_i,
-    input wire consume_i
-);
-    reg [1:0] count;
-    reg read_slot,write_slot;
-    reg [LANES-1:0] valids [0:1];
-    wire [TAG_WIDTH-1:0] tags [0:2*LANES-1];
-    wire [PAYLOAD_WIDTH-1:0] payloads [0:2*LANES-1];
-    wire [LANES-1:0] recovery_keep [0:1];
-    wire [ROB_ENTRIES*(GW+1)-1:0] live_rows;
-    wire normal=!reset_i && !flush_i && !hold_i && !recovery_i;
-    // At full occupancy read_slot==write_slot. The old head is consumed
-    // before this edge; nonblocking writes replace it as the new tail. The
-    // existing pop-then-push validity priority deliberately makes push win.
-    assign ready_o=normal && (count<2 ||
-        ((FULL_REPLACE!=0) && count==2 && replace_credit_i));
-    wire push=(|valid_i) && ready_o;
-    wire pop=normal && count!=0 && consume_i;
-    wire [SW-1:0] branch_age=recovery_tag_i[3 +: SW]-recovery_head_i;
-    genvar rob_row,row,lane,word;
-    generate for(rob_row=0;rob_row<ROB_ENTRIES;rob_row=rob_row+1) begin:g_live_row
-        assign live_rows[rob_row*(GW+1) +: GW+1]={rob_valid_i[rob_row],rob_generation_i[rob_row*GW +: GW]};
-    end endgenerate
-    localparam integer OUTPUT_WORDS=(PAYLOAD_WIDTH+TAG_WIDTH+15)/16;
-    wire [LANES*OUTPUT_WORDS-1:0] read_views;
-    rv32_frequency_control_tree #(.LEAVES(LANES*OUTPUT_WORDS)) read_tree (
-        .signal_i(read_slot),.views_o(read_views));
-    generate
-        for(row=0;row<2;row=row+1) begin:g_row
-            for(lane=0;lane<LANES;lane=lane+1) begin:g_lane
-                wire [TAG_WIDTH-1:0] tag=tags[row*LANES+lane];
-                wire [SW-1:0] slot=tag[3 +: SW];
-                wire [SW-1:0] age=slot-recovery_head_i;
-                wire [GW:0] live;
-                rv32_frequency_array_read #(.WIDTH(GW+1),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SW)) live_reader (
-                    .rows_i(live_rows),.index_i(slot),.value_o(live));
-                assign recovery_keep[row][lane]=valids[row][lane] && tag[0] &&
-                    live[GW] && tag[3+SW +: GW]==live[0 +: GW] &&
-                    age<branch_age && age<recovery_occupancy_i;
-                rv32_frequency_word_bank #(.WIDTH(TAG_WIDTH+PAYLOAD_WIDTH)) packet_owner (
-                    .clk_i(clk_i),.write_i(push && write_slot==row && valid_i[lane]),
-                    .data_i({tag_i[lane*TAG_WIDTH +: TAG_WIDTH],data_i[lane*PAYLOAD_WIDTH +: PAYLOAD_WIDTH]}),
-                    .data_o({tags[row*LANES+lane],payloads[row*LANES+lane]}));
-            end
-        end
-        for(lane=0;lane<LANES;lane=lane+1) begin:g_output
-            wire [TAG_WIDTH+PAYLOAD_WIDTH-1:0] selected;
-            wire [TAG_WIDTH+PAYLOAD_WIDTH-1:0] first={tags[lane],payloads[lane]};
-            wire [TAG_WIDTH+PAYLOAD_WIDTH-1:0] second={tags[LANES+lane],payloads[LANES+lane]};
-            for(word=0;word<OUTPUT_WORDS;word=word+1) begin:g_word
-                localparam integer LOW=16*word;
-                localparam integer BITS=TAG_WIDTH+PAYLOAD_WIDTH-LOW>=16?16:TAG_WIDTH+PAYLOAD_WIDTH-LOW;
-                assign selected[LOW +: BITS]=read_views[lane*OUTPUT_WORDS+word]?
-                    second[LOW +: BITS]:first[LOW +: BITS];
-            end
-            assign {tag_o[lane*TAG_WIDTH +: TAG_WIDTH],data_o[lane*PAYLOAD_WIDTH +: PAYLOAD_WIDTH]}=selected;
-            assign valid_o[lane]=normal && count!=0 && (read_slot?valids[1][lane]:valids[0][lane]);
-        end
-    endgenerate
-    wire keep_first=|recovery_keep[read_slot];
-    wire keep_second=(count==2) && (|recovery_keep[!read_slot]);
-    always @(posedge clk_i) begin
-        if(reset_i || flush_i) begin
-            count<=0;read_slot<=0;write_slot<=0;valids[0]<=0;valids[1]<=0;
-        end else if(recovery_i) begin
-            valids[0]<=recovery_keep[0];valids[1]<=recovery_keep[1];
-            if(count==0 || (!keep_first && !keep_second)) begin
-                count<=0;read_slot<=0;write_slot<=0;valids[0]<=0;valids[1]<=0;
-            end else if(keep_first && keep_second) begin
-                count<=2;
-            end else if(keep_first) begin
-                count<=1;write_slot<=!read_slot;valids[!read_slot]<=0;
-            end else begin
-                count<=1;read_slot<=!read_slot;write_slot<=read_slot;valids[read_slot]<=0;
-            end
-        end else if(!hold_i) begin
-            case({push,pop})
-                2'b10:count<=count+1'b1;
-                2'b01:count<=count-1'b1;
-                default:count<=count;
-            endcase
-            if(pop) begin valids[read_slot]<=0;read_slot<=!read_slot;end
-            if(push) begin valids[write_slot]<=valid_i;write_slot<=!write_slot;end
-        end
-    end
 endmodule

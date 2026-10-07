@@ -29,7 +29,7 @@ module rv32_rob #(
     parameter integer RECLAIM_UNIQUE_DESTINATIONS = 0,
     // Preview captures a recovery transaction; apply is a later clock edge.
     // Default 0 preserves the standalone legacy interface behavior.
-    parameter integer STAGED_RECOVERY = 0,
+    parameter STAGED_RECOVERY = 0,
     parameter integer ASAP7_FANOUT_BUFFERS = 0,
     parameter integer ROB_CONTROL_REGISTER_BANKS = 0,
     // One read per physical modulo-BE bank, then rotate into strict commit order.
@@ -40,9 +40,9 @@ module rv32_rob #(
     parameter integer ALLOC_BANKED_WRITE = 0,
     // Caller offers at most one already-allocated ordinary RAM store event.
     // Only light local-row command profiles can consume this extra event.
-    parameter integer FAST_STORE_COMPLETE = 0,
+    parameter FAST_STORE_COMPLETE = 0,
     parameter integer FAST_STORE_IDENTITY_PRESELECT = 0,
-    parameter integer FAST_STORE_BATCH = 0,
+    parameter FAST_STORE_BATCH = 0,
     // Publish at most one following ordinary store when every older lane
     // actually retires on this edge; its own retirement still uses saved sent.
     parameter integer STORE_PREFIX_ADMISSION = 0,
@@ -139,10 +139,20 @@ module rv32_rob #(
     output wire [(ROB_ENTRIES*5)-1:0] entry_rd_o,
     output wire [(ROB_ENTRIES*PHYS_ADDR_WIDTH)-1:0] entry_old_phys_o
 );
+    wire unused_fast_store_valid_i_bits = &{1'b0, fast_store_valid_i};
+
+    wire unused_fast_store_tag_i_bits = &{1'b0, fast_store_tag_i};
+
+    wire unused_completion_value_i_bits = &{1'b0, completion_value_i};
+
+    wire unused_completion_store_data_i_bits = &{1'b0, completion_store_data_i};
+
+    wire unused_recovery_pc_i_bits = &{1'b0, recovery_pc_i};
+
     localparam integer COUNT_WIDTH = (ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES + 1);
     localparam integer ALLOC_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
     localparam integer VALID_LSB = 0;
-    localparam integer KIND_LSB = 1;
+
     localparam integer SLOT_LSB = 3;
     localparam integer GEN_LSB = SLOT_LSB + SLOT_WIDTH;
 
@@ -177,11 +187,35 @@ module rv32_rob #(
     reg [GENERATION_WIDTH-1:0] generation_next_mem_write_data [0:ROB_ENTRIES-1];
     reg generation_next_mem_write_enable [0:ROB_ENTRIES-1];
     wire [31:0] pc_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_pc_mem_row=0; unused_pc_mem_row<=ROB_ENTRIES-1; unused_pc_mem_row=unused_pc_mem_row+1) begin : g_unused_pc_mem
+        wire unused_pc_mem_bits = &{1'b0, pc_mem[unused_pc_mem_row]};
+    end
+
     reg [31:0] pc_mem_write_data [0:ROB_ENTRIES-1];
+    for (genvar unused_pc_mem_write_data_row=0; unused_pc_mem_write_data_row<=ROB_ENTRIES-1; unused_pc_mem_write_data_row=unused_pc_mem_write_data_row+1) begin : g_unused_pc_mem_write_data
+        wire unused_pc_mem_write_data_bits = &{1'b0, pc_mem_write_data[unused_pc_mem_write_data_row]};
+    end
+
     reg pc_mem_write_enable [0:ROB_ENTRIES-1];
+    for (genvar unused_pc_mem_write_enable_row=0; unused_pc_mem_write_enable_row<=ROB_ENTRIES-1; unused_pc_mem_write_enable_row=unused_pc_mem_write_enable_row+1) begin : g_unused_pc_mem_write_enable
+        wire unused_pc_mem_write_enable_bits = &{1'b0, pc_mem_write_enable[unused_pc_mem_write_enable_row]};
+    end
+
     wire [31:0] inst_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_inst_mem_row=0; unused_inst_mem_row<=ROB_ENTRIES-1; unused_inst_mem_row=unused_inst_mem_row+1) begin : g_unused_inst_mem
+        wire unused_inst_mem_bits = &{1'b0, inst_mem[unused_inst_mem_row]};
+    end
+
     reg [31:0] inst_mem_write_data [0:ROB_ENTRIES-1];
+    for (genvar unused_inst_mem_write_data_row=0; unused_inst_mem_write_data_row<=ROB_ENTRIES-1; unused_inst_mem_write_data_row=unused_inst_mem_write_data_row+1) begin : g_unused_inst_mem_write_data
+        wire unused_inst_mem_write_data_bits = &{1'b0, inst_mem_write_data[unused_inst_mem_write_data_row]};
+    end
+
     reg inst_mem_write_enable [0:ROB_ENTRIES-1];
+    for (genvar unused_inst_mem_write_enable_row=0; unused_inst_mem_write_enable_row<=ROB_ENTRIES-1; unused_inst_mem_write_enable_row=unused_inst_mem_write_enable_row+1) begin : g_unused_inst_mem_write_enable
+        wire unused_inst_mem_write_enable_bits = &{1'b0, inst_mem_write_enable[unused_inst_mem_write_enable_row]};
+    end
+
     wire [4:0] rd_mem [0:ROB_ENTRIES-1];
     reg [4:0] rd_mem_write_data [0:ROB_ENTRIES-1];
     reg rd_mem_write_enable [0:ROB_ENTRIES-1];
@@ -195,11 +229,35 @@ module rv32_rob #(
     reg [PHYS_ADDR_WIDTH-1:0] new_phys_mem_write_data [0:ROB_ENTRIES-1];
     reg new_phys_mem_write_enable [0:ROB_ENTRIES-1];
     wire [31:0] value_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_value_mem_row=0; unused_value_mem_row<=ROB_ENTRIES-1; unused_value_mem_row=unused_value_mem_row+1) begin : g_unused_value_mem
+        wire unused_value_mem_bits = &{1'b0, value_mem[unused_value_mem_row]};
+    end
+
     reg [31:0] value_mem_write_data [0:ROB_ENTRIES-1];
+    for (genvar unused_value_mem_write_data_row=0; unused_value_mem_write_data_row<=ROB_ENTRIES-1; unused_value_mem_write_data_row=unused_value_mem_write_data_row+1) begin : g_unused_value_mem_write_data
+        wire unused_value_mem_write_data_bits = &{1'b0, value_mem_write_data[unused_value_mem_write_data_row]};
+    end
+
     reg value_mem_write_enable [0:ROB_ENTRIES-1];
+    for (genvar unused_value_mem_write_enable_row=0; unused_value_mem_write_enable_row<=ROB_ENTRIES-1; unused_value_mem_write_enable_row=unused_value_mem_write_enable_row+1) begin : g_unused_value_mem_write_enable
+        wire unused_value_mem_write_enable_bits = &{1'b0, value_mem_write_enable[unused_value_mem_write_enable_row]};
+    end
+
     wire [31:0] store_addr_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_store_addr_mem_row=0; unused_store_addr_mem_row<=ROB_ENTRIES-1; unused_store_addr_mem_row=unused_store_addr_mem_row+1) begin : g_unused_store_addr_mem
+        wire unused_store_addr_mem_bits = &{1'b0, store_addr_mem[unused_store_addr_mem_row]};
+    end
+
     reg [31:0] store_addr_mem_write_data [0:ROB_ENTRIES-1];
+    for (genvar unused_store_addr_mem_write_data_row=0; unused_store_addr_mem_write_data_row<=ROB_ENTRIES-1; unused_store_addr_mem_write_data_row=unused_store_addr_mem_write_data_row+1) begin : g_unused_store_addr_mem_write_data
+        wire unused_store_addr_mem_write_data_bits = &{1'b0, store_addr_mem_write_data[unused_store_addr_mem_write_data_row]};
+    end
+
     reg store_addr_mem_write_enable [0:ROB_ENTRIES-1];
+    for (genvar unused_store_addr_mem_write_enable_row=0; unused_store_addr_mem_write_enable_row<=ROB_ENTRIES-1; unused_store_addr_mem_write_enable_row=unused_store_addr_mem_write_enable_row+1) begin : g_unused_store_addr_mem_write_enable
+        wire unused_store_addr_mem_write_enable_bits = &{1'b0, store_addr_mem_write_enable[unused_store_addr_mem_write_enable_row]};
+    end
+
     // Updated with exactly the same completion enable/priority as address and
     // mask. Payload remains observable; only retirement classification moves.
     wire mmio_word_mem [0:ROB_ENTRIES-1];
@@ -208,14 +266,49 @@ module rv32_rob #(
     // Store payloads stay access-relative in the ROB.  Expand to the
     // cache-line representation only on the external commit interface.
     wire [3:0] store_mask_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_store_mask_mem_row=0; unused_store_mask_mem_row<=ROB_ENTRIES-1; unused_store_mask_mem_row=unused_store_mask_mem_row+1) begin : g_unused_store_mask_mem
+        wire unused_store_mask_mem_bits = &{1'b0, store_mask_mem[unused_store_mask_mem_row]};
+    end
+
     reg [3:0] store_mask_mem_write_data [0:ROB_ENTRIES-1];
+    for (genvar unused_store_mask_mem_write_data_row=0; unused_store_mask_mem_write_data_row<=ROB_ENTRIES-1; unused_store_mask_mem_write_data_row=unused_store_mask_mem_write_data_row+1) begin : g_unused_store_mask_mem_write_data
+        wire unused_store_mask_mem_write_data_bits = &{1'b0, store_mask_mem_write_data[unused_store_mask_mem_write_data_row]};
+    end
+
     reg store_mask_mem_write_enable [0:ROB_ENTRIES-1];
+    for (genvar unused_store_mask_mem_write_enable_row=0; unused_store_mask_mem_write_enable_row<=ROB_ENTRIES-1; unused_store_mask_mem_write_enable_row=unused_store_mask_mem_write_enable_row+1) begin : g_unused_store_mask_mem_write_enable
+        wire unused_store_mask_mem_write_enable_bits = &{1'b0, store_mask_mem_write_enable[unused_store_mask_mem_write_enable_row]};
+    end
+
     wire [31:0] store_data_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_store_data_mem_row=0; unused_store_data_mem_row<=ROB_ENTRIES-1; unused_store_data_mem_row=unused_store_data_mem_row+1) begin : g_unused_store_data_mem
+        wire unused_store_data_mem_bits = &{1'b0, store_data_mem[unused_store_data_mem_row]};
+    end
+
     reg [31:0] store_data_mem_write_data [0:ROB_ENTRIES-1];
+    for (genvar unused_store_data_mem_write_data_row=0; unused_store_data_mem_write_data_row<=ROB_ENTRIES-1; unused_store_data_mem_write_data_row=unused_store_data_mem_write_data_row+1) begin : g_unused_store_data_mem_write_data
+        wire unused_store_data_mem_write_data_bits = &{1'b0, store_data_mem_write_data[unused_store_data_mem_write_data_row]};
+    end
+
     reg store_data_mem_write_enable [0:ROB_ENTRIES-1];
+    for (genvar unused_store_data_mem_write_enable_row=0; unused_store_data_mem_write_enable_row<=ROB_ENTRIES-1; unused_store_data_mem_write_enable_row=unused_store_data_mem_write_enable_row+1) begin : g_unused_store_data_mem_write_enable
+        wire unused_store_data_mem_write_enable_bits = &{1'b0, store_data_mem_write_enable[unused_store_data_mem_write_enable_row]};
+    end
+
     wire [CHECKPOINT_WIDTH-1:0] checkpoint_mem [0:ROB_ENTRIES-1];
+    for (genvar unused_checkpoint_mem_row=0; unused_checkpoint_mem_row<=ROB_ENTRIES-1; unused_checkpoint_mem_row=unused_checkpoint_mem_row+1) begin : g_unused_checkpoint_mem
+        wire unused_checkpoint_mem_bits = &{1'b0, checkpoint_mem[unused_checkpoint_mem_row]};
+    end
+
     reg [CHECKPOINT_WIDTH-1:0] checkpoint_mem_write_data [0:ROB_ENTRIES-1];
+    for (genvar unused_checkpoint_mem_write_data_row=0; unused_checkpoint_mem_write_data_row<=ROB_ENTRIES-1; unused_checkpoint_mem_write_data_row=unused_checkpoint_mem_write_data_row+1) begin : g_unused_checkpoint_mem_write_data
+        wire unused_checkpoint_mem_write_data_bits = &{1'b0, checkpoint_mem_write_data[unused_checkpoint_mem_write_data_row]};
+    end
+
     reg checkpoint_mem_write_enable [0:ROB_ENTRIES-1];
+    for (genvar unused_checkpoint_mem_write_enable_row=0; unused_checkpoint_mem_write_enable_row<=ROB_ENTRIES-1; unused_checkpoint_mem_write_enable_row=unused_checkpoint_mem_write_enable_row+1) begin : g_unused_checkpoint_mem_write_enable
+        wire unused_checkpoint_mem_write_enable_bits = &{1'b0, checkpoint_mem_write_enable[unused_checkpoint_mem_write_enable_row]};
+    end
 
     reg [SLOT_WIDTH-1:0] head_reg;
     wire [SLOT_WIDTH-1:0] head_next;
@@ -257,42 +350,44 @@ module rv32_rob #(
     end endgenerate
     reg [3:0] epoch_reg;
     integer alloc_lane;
-    integer complete_lane;
+
     integer commit_lane;
     integer recovery_lane;
-    integer reset_slot;
-    integer slot_index;
+
     reg [SLOT_WIDTH-1:0] age;
     integer chosen_age;
     integer chosen_slot;
-    integer branch_age;
+    wire [31:0] branch_age = 32'(apply_age);
     integer pop_count;
     integer allocation_count;
     integer free_entries;
     integer alloc_slot;
     integer commit_slot;
-    reg [SLOT_WIDTH-1:0] younger_age;
+
     integer recovery_slot;
+
     // Procedural scratch belongs to one process. Sharing these integers with
     // the combinational allocation/commit decoder creates multiple RTL drivers
     // when the complete ROB is synthesized as an observable component.
     integer update_alloc_lane;
     integer update_alloc_slot;
     integer update_commit_lane;
-    integer update_commit_slot;
-    reg [SLOT_WIDTH-1:0] update_completion_age;
+
     integer update_alloc_entry;
+
     reg recovery_found;
     reg recovery_saved_valid;
     wire [SLOT_WIDTH-1:0] recovery_saved_slot, recovery_saved_age;
     wire [ROB_ENTRIES-1:0] recovery_saved_kill;
     wire [ROB_ENTRIES-1:0] recovery_preview_kill;
-    wire [SLOT_WIDTH-1:0] apply_slot = STAGED_RECOVERY ? recovery_saved_slot : chosen_slot;
-    wire [SLOT_WIDTH-1:0] apply_age = STAGED_RECOVERY ? recovery_saved_age : chosen_age;
-    wire recovery_apply = STAGED_RECOVERY ?
+    wire [SLOT_WIDTH-1:0] apply_slot = SLOT_WIDTH'((STAGED_RECOVERY != 0) ? 32'(recovery_saved_slot) : chosen_slot);
+    wire [SLOT_WIDTH-1:0] apply_age = SLOT_WIDTH'((STAGED_RECOVERY != 0) ? 32'(recovery_saved_age) : chosen_age);
+    wire recovery_apply = (STAGED_RECOVERY != 0) ?
         (recovery_apply_i && recovery_saved_valid) : recovery_found;
-    wire recovery_hold = STAGED_RECOVERY && recovery_hold_i;
+    wire recovery_hold = (STAGED_RECOVERY != 0) && recovery_hold_i;
     wire [5:0] recovery_domains;
+    wire unused_recovery_domains_bits = &{1'b0, recovery_domains};
+
     wire [2:0] recovery_preview_domains;
     rv32_frequency_control_tree #(.LEAVES(6)) recovery_tree (
         .signal_i(recovery_apply),.views_o(recovery_domains));
@@ -300,7 +395,7 @@ module rv32_rob #(
         .signal_i(recovery_found),.views_o(recovery_preview_domains));
     assign recovery_preview_valid_o=recovery_preview_domains[0];
     assign recovery_accept_o=recovery_domains[0];
-    assign redirect_valid_o=STAGED_RECOVERY ? recovery_preview_domains[1] : recovery_domains[1];
+    assign redirect_valid_o=(STAGED_RECOVERY != 0) ? recovery_preview_domains[1] : recovery_domains[1];
     assign checkpoint_restore_valid_o=recovery_domains[2];
     // chosen_age is either a slot distance or ROB_ENTRIES+1 (no match).
     // COUNT_WIDTH retains that sentinel; SLOT_WIDTH alone would truncate it.
@@ -320,7 +415,7 @@ module rv32_rob #(
             recovery_query_views[(recovery_row/4)*RECOVERY_QUERY_WIDTH +: RECOVERY_QUERY_WIDTH];
         wire [SLOT_WIDTH-1:0] relative_age=recovery_row-local_head;
         assign recovery_preview_kill[recovery_row]=valid_mem[recovery_row] &&
-            relative_age>local_branch_age && relative_age<local_occupancy;
+            COUNT_WIDTH'(relative_age)>local_branch_age && COUNT_WIDTH'(relative_age)<local_occupancy;
         assign recovery_row_preview[recovery_row]=preview;
     end endgenerate
     localparam integer RECOVERY_SAVED_WIDTH=ROB_ENTRIES+2*SLOT_WIDTH;
@@ -348,7 +443,7 @@ module rv32_rob #(
     reg [GENERATION_WIDTH-1:0] next_generation;
     // This scratch is evaluated in physical-row order, not legacy lane order.
     // Do not conflate the two nonarchitectural temporaries in name-based proof.
-    reg [GENERATION_WIDTH-1:0] bank_next_generation;
+
     initial begin
         if ((COMMIT_BANKED_READ != 0 && COMMIT_BANKED_READ != 1) ||
             (ALLOC_BANKED_WRITE != 0 && ALLOC_BANKED_WRITE != 1) ||
@@ -370,8 +465,12 @@ module rv32_rob #(
     localparam integer READ_GROUPS = 4;
     localparam integer READ_GROUP_WIDTH = (COMMIT_READ_WIDTH + READ_GROUPS - 1) / READ_GROUPS;
     wire [ROB_ENTRIES*BE_WIDTH*READ_GROUPS-1:0] head_read_select;
+    wire unused_head_read_select_bits = &{1'b0, head_read_select};
+
     wire [ROB_ENTRIES-1:0] next_head_row_select;
-    function [COMMIT_READ_WIDTH-1:0] read_mask;
+    wire unused_next_head_row_select_bits = &{1'b0, next_head_row_select};
+
+    function automatic [COMMIT_READ_WIDTH-1:0] read_mask;
         input [READ_GROUPS-1:0] selections;
         integer bit_id;
         begin
@@ -395,8 +494,10 @@ module rv32_rob #(
     wire [BE_WIDTH-1:0] head_mmio_word;
     genvar mmio_lane;
     generate for (mmio_lane=0; mmio_lane<BE_WIDTH; mmio_lane=mmio_lane+1) begin:g_mmio_read
-        wire [31:0] raw_slot = head_commit_index + mmio_lane;
+        wire [31:0] raw_slot = 32'(head_commit_index) + mmio_lane;
         wire [31:0] selected_slot = (raw_slot >= ROB_ENTRIES) ? raw_slot - ROB_ENTRIES : raw_slot;
+        wire unused_selected_slot_bits = &{1'b0, selected_slot};
+
         assign head_mmio_word[mmio_lane] = (MMIO_PREDECODE != 0) ?
             mmio_word_mem[selected_slot] :
             ((head_store_addr[mmio_lane] == 32'h80000000) &&
@@ -471,8 +572,9 @@ module rv32_rob #(
                 // PRIORITY=0 is the same bitwise OR of masked row packets
                 // as the old loop, even for multiple asserted row_select bits.
                 // Its existing control trees bound each final data group.
+                wire  unused_packet_selector_write_o;
                 rv32_frequency_event_select #(.WIDTH(COMMIT_READ_WIDTH),.EVENTS(BANK_ROWS),.PRIORITY(0)) packet_selector (
-                    .events_i(row_select),.values_i(row_packets),.write_o(),
+                    .events_i(row_select),.values_i(row_packets),.write_o(unused_packet_selector_write_o),
                     .value_o(bank_packet[commit_bank]));
             end
         end
@@ -512,7 +614,7 @@ module rv32_rob #(
         for (read_lane = 0; read_lane < BE_WIDTH; read_lane = read_lane + 1) begin : g_commit_read
             if (COMMIT_BANKED_READ != 0 && ROB_ENTRIES >= BE_WIDTH &&
                 ROB_CONTROL_REGISTER_BANKS == 0 && ASAP7_FANOUT_BUFFERS == 0) begin : g_bank_rotation
-                assign head_packet[read_lane] = bank_packet[(head_read_index+read_lane)%BE_WIDTH];
+                assign head_packet[read_lane] = bank_packet[(32'(head_read_index)+read_lane)%BE_WIDTH];
             end else if (ROB_ENTRIES >= BE_WIDTH) begin : g_parallel
                 reg [COMMIT_READ_WIDTH-1:0] packet;
                 integer row;
@@ -614,6 +716,8 @@ module rv32_rob #(
                             alloc_old_phys_i[alloc_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
                             alloc_new_phys_i[alloc_source*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
                             alloc_checkpoint_i[alloc_source*CHECKPOINT_WIDTH +: CHECKPOINT_WIDTH]};
+    wire unused_full_payload_bits = &{1'b0, full_payload};
+
                         wire [ALLOC_DATA_WIDTH-1:0] active_payload;
                         wire [ALLOC_DATA_WORDS-1:0] selected_words;
                         if(LIGHT_RETIRE_PAYLOAD!=0) begin:g_light_payload
@@ -630,7 +734,7 @@ module rv32_rob #(
                             assign active_payload=full_payload[CHECKPOINT_WIDTH +: ALLOC_PACKET_WIDTH-CHECKPOINT_WIDTH];
                         end
                         assign row_match_mask[alloc_source]=alloc_fire_o[alloc_source] &&
-                            ((tail_reg+alloc_source)%BE_WIDTH)==alloc_bank;
+                            ((32'(tail_reg)+alloc_source)%BE_WIDTH)==alloc_bank;
                         if(alloc_source==BE_WIDTH-1) begin:g_last
                             assign grants[alloc_source]=row_match_mask[alloc_source];
                         end else begin:g_priority
@@ -680,7 +784,7 @@ module rv32_rob #(
         end
     endgenerate
 
-    function [SLOT_WIDTH-1:0] advance_slot;
+    function automatic [SLOT_WIDTH-1:0] advance_slot;
         input [SLOT_WIDTH-1:0] start;
         input integer amount;
         begin
@@ -691,7 +795,7 @@ module rv32_rob #(
             if (amount <= 0 || amount >= ROB_ENTRIES)
                 advance_slot = start;
             else
-                advance_slot = start + amount;
+                advance_slot = SLOT_WIDTH'(32'(start) + amount);
         end
     endfunction
 
@@ -700,34 +804,42 @@ module rv32_rob #(
     assign head_next = (recovery_domains[3] || recovery_hold) ? head_reg :
         advance_slot(head_update_index, (commit_ready_i ? pop_count : 0));
 
-    function [TAG_WIDTH-1:0] make_tag;
+    function automatic [TAG_WIDTH-1:0] make_tag;
         input integer slot;
         input [GENERATION_WIDTH-1:0] generation;
+        reg unused_slot;
         begin
+            unused_slot = &{1'b0, slot};
             make_tag = {generation, slot[SLOT_WIDTH-1:0], 2'b00, 1'b1};
         end
     endfunction
 
-    function [15:0] line_mask_from_relative;
+    function automatic [15:0] line_mask_from_relative;
         input [3:0] relative_mask;
         input [31:0] address;
+        reg unused_address;
         begin
+            unused_address = &{1'b0, address};
             line_mask_from_relative = {12'b0, relative_mask} << address[3:0];
         end
     endfunction
 
-    function [127:0] line_data_from_relative;
+    function automatic [127:0] line_data_from_relative;
         input [31:0] relative_data;
         input [31:0] address;
+        reg unused_address;
         begin
+            unused_address = &{1'b0, address};
             line_data_from_relative = {96'b0, relative_data} << (address[3:0] * 8);
         end
     endfunction
 
-    function tag_matches;
+    function automatic tag_matches;
         input [TAG_WIDTH-1:0] tag;
         input integer slot;
+        reg unused_slot;
         begin
+            unused_slot = &{1'b0, slot};
             tag_matches = tag[VALID_LSB] && valid_mem[slot] &&
                 (tag[SLOT_LSB +: SLOT_WIDTH] == slot[SLOT_WIDTH-1:0]) &&
                 (tag[GEN_LSB +: GENERATION_WIDTH] == generation_mem[slot]);
@@ -766,7 +878,7 @@ module rv32_rob #(
     localparam integer RECLAIM_HIGH_SLICE_WIDTH=(RECLAIM_HIGH_WIDTH<1)?1:RECLAIM_HIGH_WIDTH;
     localparam integer RECLAIM_LOW_CODES=1<<RECLAIM_LOW_WIDTH;
     localparam integer RECLAIM_HIGH_CODES=1<<RECLAIM_HIGH_WIDTH;
-    wire [ROB_ENTRIES*PHYS_REGS-1:0] reclaim_row_destinations;
+
     wire [RECLAIM_COUNT_WIDTH-1:0] reclaim_count_tree [1:2*RECLAIM_LEAVES-1];
     genvar reclaim_entry, reclaim_phys, reclaim_match, reclaim_node;
     generate
@@ -788,17 +900,22 @@ module rv32_rob #(
                 row=0;
                 if(|reclaim_eligible)
                     for(row=0;row<ROB_ENTRIES;row=row+1)
-                        if(reclaim_eligible[row] && new_phys_mem[row]!=0 && new_phys_mem[row]<PHYS_REGS)
+                        if(reclaim_eligible[row] && new_phys_mem[row]!=0 && 32'(new_phys_mem[row])<PHYS_REGS)
                             destinations=destinations | (PHYS_REGS'(1)<<new_phys_mem[row]);
             end
             assign reclaim_bitmap=destinations;
             for(reclaim_phys=0;reclaim_phys<RECLAIM_LEAVES;reclaim_phys=reclaim_phys+1) begin:g_count
                 if(reclaim_phys<PHYS_REGS)
-                    assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys]=destinations[reclaim_phys];
-                else assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys]=0;
+                    begin : g_named_798_20
+assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys]=RECLAIM_COUNT_WIDTH'(destinations[reclaim_phys]);
+end
+                else begin : g_named_799_21
+assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys]=0;
+end
             end
         end else begin:g_original_reclaim
 `endif
+    wire [ROB_ENTRIES*PHYS_REGS-1:0] reclaim_row_destinations;
         // Qualify the small high predecode before the cross-product. With
         // PHYS64 each eligibility source owns eight decode consumers rather
         // than one comparison/qualification gate for every physical register.
@@ -824,6 +941,7 @@ module rv32_rob #(
                 .signal_i(high_decode),.views_o(high_views));
             for(genvar destination_phys=0;destination_phys<PHYS_REGS;destination_phys=destination_phys+1) begin:g_destination
                 if(destination_phys==0) begin:g_zero
+
                     assign reclaim_row_destinations[reclaim_decode_row*PHYS_REGS+destination_phys]=1'b0;
                 end else begin:g_register
                     assign reclaim_row_destinations[reclaim_decode_row*PHYS_REGS+destination_phys]=
@@ -841,7 +959,9 @@ module rv32_rob #(
                 assign reclaim_bitmap[reclaim_phys] = |destination_matches;
                 assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys] = |destination_matches;
             end else begin : g_zero
-                if (reclaim_phys == 0) assign reclaim_bitmap[0] = 1'b0;
+                if (reclaim_phys == 0) begin : g_named_845_39
+assign reclaim_bitmap[0] = 1'b0;
+end
                 assign reclaim_count_tree[RECLAIM_LEAVES+reclaim_phys] = 0;
             end
         end
@@ -862,8 +982,8 @@ module rv32_rob #(
         for(genvar row=0;row<ROW_LEAVES;row=row+1) begin:g_leaf
             if(row<ROB_ENTRIES) begin:g_present
                 wire [PHYS_ADDR_WIDTH-1:0] destination=new_phys_mem[row];
-                assign counts[ROW_LEAVES+row]=reclaim_eligible[row] &&
-                    destination!=0 && destination<PHYS_REGS;
+                assign counts[ROW_LEAVES+row]=RECLAIM_COUNT_WIDTH'(reclaim_eligible[row] &&
+                    destination!=0 && 32'(destination)<PHYS_REGS);
             end else begin:g_padding
                 assign counts[ROW_LEAVES+row]=0;
             end
@@ -955,7 +1075,7 @@ module rv32_rob #(
     rv32_frequency_array_read #(.WIDTH(RECOVERY_DEST_WIDTH),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) recovery_dest_reader (
         .rows_i(recovery_dest_rows),.index_i(SLOT_WIDTH'(chosen_slot)),.value_o(recovery_selected_dest));
 
-    localparam integer STORE_PREFIX_ADMISSION_ACTIVE=(STORE_PREFIX_ADMISSION!=0) &&
+    localparam STORE_PREFIX_ADMISSION_ACTIVE=(STORE_PREFIX_ADMISSION!=0) &&
         (BE_WIDTH>1) && (ROB_ENTRIES>=BE_WIDTH) && (ALLOC_BANKED_WRITE!=0) &&
         (STORE_BUFFERED_RETIRE!=0) && (LIGHT_RETIRE_PAYLOAD!=0) &&
         (MMIO_PREDECODE!=0) && (LEGACY_HALT_PAYLOAD==0) && (RETURN_VALUE_ENABLE==0);
@@ -964,7 +1084,7 @@ module rv32_rob #(
         wire [BE_WIDTH-1:0] potential,grants;
         wire [BE_WIDTH*TAG_WIDTH-1:0] tags;
         for(genvar admission_lane=0;admission_lane<BE_WIDTH;admission_lane=admission_lane+1) begin:g_lane
-            wire [31:0] raw_slot=head_commit_index+admission_lane;
+            wire [31:0] raw_slot=32'(head_commit_index)+admission_lane;
             wire [31:0] slot=(raw_slot>=ROB_ENTRIES) ? raw_slot-ROB_ENTRIES : raw_slot;
             // Identity depends only on saved head fields, before the late
             // true-retirement prefix and LSQ admission-ready qualification.
@@ -977,8 +1097,9 @@ module rv32_rob #(
             end
             assign tags[admission_lane*TAG_WIDTH +: TAG_WIDTH]=make_tag(slot,head_generation[admission_lane]);
         end
+        wire  unused_identity_selector_write_o;
         rv32_frequency_event_select #(.WIDTH(TAG_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) identity_selector (
-            .events_i(grants),.values_i(tags),.write_o(),.value_o(prefix_admission_tag));
+            .events_i(grants),.values_i(tags),.write_o(unused_identity_selector_write_o),.value_o(prefix_admission_tag));
     end else begin:g_original_store_identity
         assign prefix_admission_tag=0;
     end endgenerate
@@ -991,16 +1112,16 @@ module rv32_rob #(
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
         prefix_open = !recovery_hold;
         allocation_count = 0;
-        free_entries = ROB_ENTRIES - occupancy_reg;
+        free_entries = ROB_ENTRIES - 32'(occupancy_reg);
         alloc_slot = 0;
         for (alloc_lane = 0; alloc_lane < BE_WIDTH; alloc_lane = alloc_lane + 1) begin
             if (prefix_open && alloc_valid_i[alloc_lane] && (allocation_count < free_entries)) begin
                 alloc_fire_o[alloc_lane] = 1'b1;
-                alloc_slot = tail_reg + allocation_count;
+                alloc_slot = 32'(tail_reg) + allocation_count;
                 if (alloc_slot >= ROB_ENTRIES) alloc_slot = alloc_slot - ROB_ENTRIES;
                 alloc_tag_o[(alloc_lane*TAG_WIDTH) +: TAG_WIDTH] = make_tag(alloc_slot, generation_next_mem[alloc_slot]);
                 allocation_count = allocation_count + 1;
-                alloc_count_o = allocation_count;
+                alloc_count_o = ((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))'(allocation_count);
             end else if (alloc_valid_i[alloc_lane]) begin
                 prefix_open = 1'b0;
             end
@@ -1013,13 +1134,13 @@ module rv32_rob #(
         for (recovery_lane = 0; recovery_lane < BE_WIDTH; recovery_lane = recovery_lane + 1) begin
             // A generation-qualified ROB tag already carries its slot.  Use
             // that slot directly and compare only the BE_WIDTH candidates.
-            recovery_slot = recovery_tag_i[(recovery_lane*TAG_WIDTH) + SLOT_LSB +: SLOT_WIDTH];
-            age = recovery_slot - head_recovery_index;
+            recovery_slot = 32'(recovery_tag_i[(recovery_lane*TAG_WIDTH) + SLOT_LSB +: SLOT_WIDTH]);
+            age = SLOT_WIDTH'(recovery_slot - 32'(head_recovery_index));
             if (recovery_valid_i[recovery_lane] &&
                 recovery_lane_live[recovery_lane] &&
-                (age < occupancy_views[OCCUPANCY_ROW_DOMAINS*COUNT_WIDTH +: COUNT_WIDTH]) && (!recovery_found || age < chosen_age)) begin
+                (COUNT_WIDTH'(age) < occupancy_views[OCCUPANCY_ROW_DOMAINS*COUNT_WIDTH +: COUNT_WIDTH]) && (!recovery_found || 32'(age) < chosen_age)) begin
                 recovery_found = 1'b1;
-                chosen_age = age;
+                chosen_age = 32'(age);
                 chosen_slot = recovery_slot;
             end
         end
@@ -1064,7 +1185,7 @@ module rv32_rob #(
         if (!recovery_domains[5] && !recovery_hold && !halted_o && !error_o) begin
             for (commit_lane = 0; commit_lane < BE_WIDTH; commit_lane = commit_lane + 1) begin
                 if (!commit_break) begin
-                    commit_slot = head_commit_index + commit_lane;
+                    commit_slot = 32'(head_commit_index) + commit_lane;
                     if (commit_slot >= ROB_ENTRIES) commit_slot = commit_slot - ROB_ENTRIES;
                     if (head_valid[commit_lane] && head_ready[commit_lane]) begin
                         commit_valid_o[commit_lane] = 1'b1;
@@ -1135,14 +1256,13 @@ module rv32_rob #(
         end
     end
 
-
     // Broadcast small metadata and data through bounded domains. Every row
     // qualifies its own updates before the final payload selection drivers.
     localparam integer WRITE_DOMAINS=4;
     // Removed field owners must also leave their broadcast/mux lanes.
-    localparam integer COMPLETION_KEEP_VALUE=(LIGHT_RETIRE_PAYLOAD==0) || (LEGACY_HALT_PAYLOAD!=0);
-    localparam integer COMPLETION_KEEP_ADDRESS=(LIGHT_RETIRE_PAYLOAD==0) || (MMIO_PREDECODE==0);
-    localparam integer COMPLETION_KEEP_DATA=(LIGHT_RETIRE_PAYLOAD==0) || (RETURN_VALUE_ENABLE!=0);
+    localparam COMPLETION_KEEP_VALUE=(LIGHT_RETIRE_PAYLOAD==0) || (LEGACY_HALT_PAYLOAD!=0);
+    localparam COMPLETION_KEEP_ADDRESS=(LIGHT_RETIRE_PAYLOAD==0) || (MMIO_PREDECODE==0);
+    localparam COMPLETION_KEEP_DATA=(LIGHT_RETIRE_PAYLOAD==0) || (RETURN_VALUE_ENABLE!=0);
     localparam integer LOCAL_COMPLETION_DATA_WIDTH=1+
         (COMPLETION_KEEP_VALUE?32:0)+(COMPLETION_KEEP_ADDRESS?36:0)+(COMPLETION_KEEP_DATA?32:0);
     localparam integer LOCAL_COMPLETION_WIDTH=3+TAG_WIDTH+LOCAL_COMPLETION_DATA_WIDTH;
@@ -1161,7 +1281,7 @@ module rv32_rob #(
         assign local_store_send_slots=0;
     end endgenerate
     wire [WRITE_DOMAINS*(TAG_WIDTH+2)-1:0] local_acks;
-    localparam integer FAST_STORE_OWNER_ACTIVE=(FAST_STORE_COMPLETE!=0) &&
+    localparam FAST_STORE_OWNER_ACTIVE=(FAST_STORE_COMPLETE!=0) &&
         (ALLOC_BANKED_WRITE!=0) && (ROB_ENTRIES>=BE_WIDTH) &&
         (LIGHT_RETIRE_PAYLOAD!=0) && (MMIO_PREDECODE!=0) &&
         (LEGACY_HALT_PAYLOAD==0) && (RETURN_VALUE_ENABLE==0);
@@ -1255,8 +1375,8 @@ module rv32_rob #(
                 local_indexes[DOMAIN*3*SLOT_WIDTH +: 3*SLOT_WIDTH];
             wire [SLOT_WIDTH-1:0] row_age=command_row-row_head;
             wire killed=!row_reset && row_recovery &&
-                (STAGED_RECOVERY ? recovery_saved_kill[command_row] :
-                 (valid_mem[command_row] && row_age>row_branch_age && row_age<occupancy_views[(command_row/4)*COUNT_WIDTH +: COUNT_WIDTH]));
+                ((STAGED_RECOVERY != 0) ? recovery_saved_kill[command_row] :
+                 (valid_mem[command_row] && row_age>row_branch_age && COUNT_WIDTH'(row_age)<occupancy_views[(command_row/4)*COUNT_WIDTH +: COUNT_WIDTH]));
             wire allocate=normal && bank_alloc_fire[command_row%BE_WIDTH] &&
                 bank_alloc_slot[command_row%BE_WIDTH]==command_row;
             wire [BE_WIDTH-1:0] completion_match,completion_grant,completion_errors,retire_match;
@@ -1287,10 +1407,10 @@ module rv32_rob #(
                         assign completion_mux[LOCAL_COMPLETION_LEAVES+command_lane][LOW +: BITS]=
                             {BITS{c_select[completion_word]}} & c_data[LOW +: BITS];
                     end
-                    wire [31:0] commit_offset=row_commit_head+command_lane;
-                    wire [31:0] commit_slot=(commit_offset>=ROB_ENTRIES)?commit_offset-ROB_ENTRIES:commit_offset;
+                    wire [31:0] commit_offset=32'(row_commit_head)+command_lane;
+                    wire [31:0] local_commit_slot=(commit_offset>=ROB_ENTRIES)?commit_offset-ROB_ENTRIES:commit_offset;
                     assign retire_match[command_lane]=normal &&
-                        local_commits[DOMAIN*BE_WIDTH+command_lane] && commit_slot==command_row;
+                        local_commits[DOMAIN*BE_WIDTH+command_lane] && local_commit_slot==command_row;
                 end else begin:g_padding
                     assign completion_mux[LOCAL_COMPLETION_LEAVES+command_lane]=0;
                 end
@@ -1445,7 +1565,7 @@ module rv32_rob #(
         reg [GENERATION_WIDTH-1:0] bank_bank_next_generation;
         integer bank_branch_age;
         integer bank_complete_lane;
-        reg [GENERATION_WIDTH-1:0] bank_next_generation;
+        reg [GENERATION_WIDTH-1:0] local_bank_next_generation;
         integer bank_reset_slot;
         integer bank_slot_index;
         integer bank_update_alloc_entry;
@@ -1483,7 +1603,7 @@ module rv32_rob #(
         bank_bank_next_generation=0;
         bank_branch_age=0;
         bank_complete_lane=0;
-        bank_next_generation=0;
+        local_bank_next_generation=0;
         bank_reset_slot=0;
         bank_slot_index=0;
         bank_update_alloc_entry=0;
@@ -1512,7 +1632,7 @@ module rv32_rob #(
                 begin generation_next_mem_write_data[bank_reset_slot] = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1}; generation_next_mem_write_enable[bank_reset_slot] = 1'b1; end
             end
         end else if (recovery_domains[5]) begin
-            
+
             bank_branch_age = apply_age;
             for (bank_reset_slot = 0; bank_reset_slot < ROB_ENTRIES; bank_reset_slot = bank_reset_slot + 1) begin
                 bank_younger_age = bank_reset_slot - head_update_index;
@@ -1524,10 +1644,7 @@ module rv32_rob #(
                     begin store_sent_mem_write_data[bank_reset_slot] = 1'b0; store_sent_mem_write_enable[bank_reset_slot] = 1'b1; end
                 end
             end
-            
-            
-            
-            
+
             for (bank_complete_lane = 0; bank_complete_lane < BE_WIDTH; bank_complete_lane = bank_complete_lane + 1) begin
                 if (completion_valid_i[bank_complete_lane] && completion_done_i[bank_complete_lane]) begin
                     for (bank_slot_index = 0; bank_slot_index < ROB_ENTRIES; bank_slot_index = bank_slot_index + 1) begin
@@ -1551,7 +1668,7 @@ module rv32_rob #(
             ;
             ;
         end else begin
-            
+
             for (bank_complete_lane = 0; bank_complete_lane < BE_WIDTH; bank_complete_lane = bank_complete_lane + 1) begin
                 if (completion_valid_i[bank_complete_lane] && completion_done_i[bank_complete_lane]) begin
                     for (bank_slot_index = 0; bank_slot_index < ROB_ENTRIES; bank_slot_index = bank_slot_index + 1) begin
@@ -1578,7 +1695,7 @@ module rv32_rob #(
             if (store_commit_valid_o && store_commit_ready_i) begin
                 begin store_sent_mem_write_data[head_commit_index] = 1'b1; store_sent_mem_write_enable[head_commit_index] = 1'b1; end
             end
-            
+
             for (bank_update_commit_lane = 0; bank_update_commit_lane < BE_WIDTH; bank_update_commit_lane = bank_update_commit_lane + 1) begin
                 if (commit_valid_o[bank_update_commit_lane] && commit_ready_i) begin
                     bank_update_commit_slot = head_commit_index + bank_update_commit_lane;
@@ -1599,7 +1716,7 @@ module rv32_rob #(
                     begin store_sent_mem_write_data[bank_update_commit_slot] = 1'b0; store_sent_mem_write_enable[bank_update_commit_slot] = 1'b1; end
                 end
             end
-            
+
             if ((ALLOC_BANKED_WRITE != 0) && (ROB_ENTRIES >= BE_WIDTH)) begin
                 for (bank_update_alloc_entry = 0; bank_update_alloc_entry < ROB_ENTRIES;
                      bank_update_alloc_entry = bank_update_alloc_entry + 1) begin
@@ -1631,11 +1748,11 @@ module rv32_rob #(
                     bank_update_alloc_slot = tail_reg + bank_update_alloc_lane;
                     if (bank_update_alloc_slot >= ROB_ENTRIES)
                         bank_update_alloc_slot = bank_update_alloc_slot - ROB_ENTRIES;
-                    bank_next_generation = generation_next_mem[bank_update_alloc_slot];
-                    if (bank_next_generation == {GENERATION_WIDTH{1'b0}})
-                        bank_next_generation = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
-                    begin generation_mem_write_data[bank_update_alloc_slot] = bank_next_generation; generation_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
-                    begin generation_next_mem_write_data[bank_update_alloc_slot] = (bank_next_generation == {GENERATION_WIDTH{1'b1}}) ? {{(GENERATION_WIDTH-1){1'b0}}, 1'b1} : bank_next_generation + 1'b1; generation_next_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    local_bank_next_generation = generation_next_mem[bank_update_alloc_slot];
+                    if (local_bank_next_generation == {GENERATION_WIDTH{1'b0}})
+                        local_bank_next_generation = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
+                    begin generation_mem_write_data[bank_update_alloc_slot] = local_bank_next_generation; generation_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
+                    begin generation_next_mem_write_data[bank_update_alloc_slot] = (local_bank_next_generation == {GENERATION_WIDTH{1'b1}}) ? {{(GENERATION_WIDTH-1){1'b0}}, 1'b1} : local_bank_next_generation + 1'b1; generation_next_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
                     begin valid_mem_write_data[bank_update_alloc_slot] = 1'b1; valid_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
                     begin ready_mem_write_data[bank_update_alloc_slot] = 1'b0; ready_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
                     begin store_wait_mem_write_data[bank_update_alloc_slot] = 1'b0; store_wait_mem_write_enable[bank_update_alloc_slot] = 1'b1; end
@@ -1664,7 +1781,8 @@ module rv32_rob #(
     endgenerate
 
     always @(posedge clk_i) begin
-        if (reset_i) begin
+        if (reset_i)
+        begin
             head_reg <= 0;
             tail_reg <= 0;
             occupancy_reg <= 0;
@@ -1672,155 +1790,67 @@ module rv32_rob #(
             halted_o <= 1'b0;
             error_o <= 1'b0;
             return_value_o <= 0;
-            for (reset_slot = 0; reset_slot < ROB_ENTRIES; reset_slot = reset_slot + 1) begin
-                ;
-                ;
-                ;
-                ;
-                ;
-                ;
-                ;
-            end
-        end else if (recovery_domains[5]) begin
-            
-            branch_age = apply_age;
-            for (reset_slot = 0; reset_slot < ROB_ENTRIES; reset_slot = reset_slot + 1) begin
-                younger_age = reset_slot - head_update_index;
-                if (STAGED_RECOVERY ? recovery_saved_kill[reset_slot] :
-                    (valid_mem[reset_slot] && (younger_age > branch_age) && (younger_age < occupancy_views[(reset_slot/4)*COUNT_WIDTH +: COUNT_WIDTH]))) begin
-                    ;
-                    ;
-                    ;
-                    ;
-                end
-            end
-            
-            
-            
-            
-            for (complete_lane = 0; complete_lane < BE_WIDTH; complete_lane = complete_lane + 1) begin
-                if (completion_valid_i[complete_lane] && completion_done_i[complete_lane]) begin
-                    for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
-                        update_completion_age = slot_index - head_update_index;
-                        if ((update_completion_age <= branch_age) &&
-                            tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index)) begin
-                            ;
-                            ;
-                            if (completion_error_i[complete_lane]) ;
-                            ;
-                            if (MMIO_PREDECODE != 0)
-                                ;
-                            ;
-                            ;
-                        end
-                    end
-                end
-            end
-            tail_reg <= advance_slot(apply_slot, 1);
-            occupancy_reg <= branch_age + 1;
-            epoch_reg <= epoch_reg + 1'b1;
-        end else begin
-            
-            for (complete_lane = 0; complete_lane < BE_WIDTH; complete_lane = complete_lane + 1) begin
-                if (completion_valid_i[complete_lane] && completion_done_i[complete_lane]) begin
-                    for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
-                        if (tag_matches(completion_tag_i[(complete_lane*TAG_WIDTH) +: TAG_WIDTH], slot_index)) begin
-                            ;
-                            ;
-                            if (completion_error_i[complete_lane]) ;
-                            ;
-                            if (MMIO_PREDECODE != 0)
-                                ;
-                            ;
-                            ;
-                        end
-                    end
-                end
-            end
-            for (slot_index = 0; slot_index < ROB_ENTRIES; slot_index = slot_index + 1) begin
-                if (store_ack_valid_i && tag_matches(store_ack_tag_i, slot_index)) begin
-                    ;
-                    if (store_ack_error_i) ;
-                end
-            end
-            if (store_commit_valid_o && store_commit_ready_i) begin
-                ;
-            end
-            
-            for (update_commit_lane = 0; update_commit_lane < BE_WIDTH; update_commit_lane = update_commit_lane + 1) begin
-                if (commit_valid_o[update_commit_lane] && commit_ready_i) begin
-                    update_commit_slot = head_commit_index + update_commit_lane;
-                    if (update_commit_slot >= ROB_ENTRIES)
-                        update_commit_slot = update_commit_slot - ROB_ENTRIES;
-                    if (head_store[update_commit_lane] &&
-                        head_mmio_word[update_commit_lane]) begin
-                        halted_o <= 1'b1;
-                        return_value_o <= head_store_data[update_commit_lane];
-                    end else if (head_halt[update_commit_lane]) begin
-                        halted_o <= 1'b1;
-                        return_value_o <= head_value[update_commit_lane];
-                    end
-                    if (head_error[update_commit_lane]) error_o <= 1'b1;
-                    ;
-                    ;
-                    ;
-                    ;
-                end
-            end
-            
-            if ((ALLOC_BANKED_WRITE != 0) && (ROB_ENTRIES >= BE_WIDTH)) begin
-                for (update_alloc_entry = 0; update_alloc_entry < ROB_ENTRIES;
-                     update_alloc_entry = update_alloc_entry + 1) begin
-                    if (bank_alloc_fire[update_alloc_entry % BE_WIDTH] &&
-                        bank_alloc_slot[update_alloc_entry % BE_WIDTH] == update_alloc_entry) begin
-                        bank_next_generation = generation_next_mem[update_alloc_entry];
-                        if (bank_next_generation == {GENERATION_WIDTH{1'b0}})
-                            bank_next_generation = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
-                        ;
-                        ;
-                        ;
-                        ;
-                        ;
-                        ;
-                        ;
-                        if (CHECKPOINT_IMPL == 0)
-                            ;
-                    end
-                end
-            end else begin
-            for (update_alloc_lane = 0; update_alloc_lane < BE_WIDTH; update_alloc_lane = update_alloc_lane + 1) begin
-                if (alloc_fire_o[update_alloc_lane]) begin
-                    update_alloc_slot = tail_reg + update_alloc_lane;
-                    if (update_alloc_slot >= ROB_ENTRIES)
-                        update_alloc_slot = update_alloc_slot - ROB_ENTRIES;
-                    next_generation = generation_next_mem[update_alloc_slot];
-                    if (next_generation == {GENERATION_WIDTH{1'b0}})
-                        next_generation = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    ;
-                    if (CHECKPOINT_IMPL == 0)
-                        ;
-                end
-            end
-            end
-            head_reg <= head_next;
-            tail_reg <= advance_slot(tail_reg, allocation_count);
-            occupancy_reg <= occupancy_reg - (commit_ready_i ? pop_count : 0) + allocation_count;
         end
+        else
+            if (recovery_domains[5])
+            begin
+                tail_reg <= advance_slot(apply_slot, 1);
+                occupancy_reg <= COUNT_WIDTH'(branch_age + 1);
+                epoch_reg <= epoch_reg + 1'b1;
+            end
+            else
+            begin
+                for (update_commit_lane = 0; update_commit_lane < BE_WIDTH; update_commit_lane = update_commit_lane + 1)
+                begin
+                    if (commit_valid_o[update_commit_lane] && commit_ready_i)
+                    begin
+                        if (head_store[update_commit_lane] &&
+                        head_mmio_word[update_commit_lane])
+                        begin
+                            halted_o <= 1'b1;
+                            return_value_o <= head_store_data[update_commit_lane];
+                        end
+                        else
+                            if (head_halt[update_commit_lane])
+                            begin
+                                halted_o <= 1'b1;
+                                return_value_o <= head_value[update_commit_lane];
+                            end
+                        if (head_error[update_commit_lane])
+                            error_o <= 1'b1;
+                    end
+                end
+                if ((ALLOC_BANKED_WRITE != 0) && (ROB_ENTRIES >= BE_WIDTH))
+                begin
+                    for (update_alloc_entry = 0; update_alloc_entry < ROB_ENTRIES;
+                    update_alloc_entry = update_alloc_entry + 1)
+                    begin
+                        if (bank_alloc_fire[update_alloc_entry % BE_WIDTH] &&
+                        32'(bank_alloc_slot[update_alloc_entry % BE_WIDTH]) == update_alloc_entry)
+                        begin
+
+                        end
+                    end
+                end
+                else
+                begin
+                    for (update_alloc_lane = 0; update_alloc_lane < BE_WIDTH; update_alloc_lane = update_alloc_lane + 1)
+                    begin
+                        if (alloc_fire_o[update_alloc_lane])
+                        begin
+                            update_alloc_slot = 32'(tail_reg) + update_alloc_lane;
+                            if (update_alloc_slot >= ROB_ENTRIES)
+                                update_alloc_slot = update_alloc_slot - ROB_ENTRIES;
+                            next_generation = generation_next_mem[update_alloc_slot];
+                            if (next_generation == {GENERATION_WIDTH{1'b0}})
+                                next_generation = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1};
+                        end
+                    end
+                end
+                head_reg <= head_next;
+                tail_reg <= advance_slot(tail_reg, allocation_count);
+                occupancy_reg <= COUNT_WIDTH'(32'(occupancy_reg) - (commit_ready_i ? pop_count : 0) + allocation_count);
+            end
     end
     genvar storage_row;
     generate for(storage_row=0;storage_row<ROB_ENTRIES;storage_row=storage_row+1) begin:g_state_row
@@ -1920,28 +1950,4 @@ module rv32_rob #(
         end
     end endgenerate
 
-endmodule
-
-// Owns actual architectural queue fields. The enable/hold mux is local,
-// so a shared write decision drives one input rather than every data bit.
-// State logic may flatten and prune unused bits. Kept inversion
-// modules inside the write trees retain the electrical domains.
-module rv32_rob_owned_field #(parameter integer WIDTH=32) (
-    input wire clk_i,write_i,
-    input wire [WIDTH-1:0] data_i,
-    output wire [WIDTH-1:0] data_o
-);
-    rv32_frequency_word_bank #(.WIDTH(WIDTH)) payload_owner (
-        .clk_i(clk_i),.write_i(write_i),.data_i(data_i),.data_o(data_o));
-endmodule
-
-
-// Pure single-bit OR. Keep binary reduction levels separate from GEN/slot
-// predicates; all functional cells remain priced by the original course flow.
-(* keep_hierarchy = 1 *)
-module rv32_rob_recovery_live_or (
-    input wire left_i,right_i,
-    output wire value_o
-);
-    assign value_o=left_i | right_i;
 endmodule

@@ -189,7 +189,7 @@ module cpu_core #(
 );
     localparam integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH;
     localparam integer PACKET_WIDTH = `RV32IM_FETCH_PACKET_WIDTH;
-    localparam integer DISPATCH_LANES = (FE_WIDTH < BE_WIDTH) ? FE_WIDTH : BE_WIDTH;
+
     localparam integer ROB_TAG_WIDTH = 1 + 2 +
         ((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES)) +
         GENERATION_WIDTH;
@@ -238,9 +238,19 @@ module cpu_core #(
     wire [EPOCH_WIDTH-1:0] if_resp_epoch;
     wire [FE_WIDTH-1:0] fetch_valid, fetch_ready;
     wire [FE_WIDTH*PACKET_WIDTH-1:0] fetch_packet;
+    wire unused_fetch_packet_bits = &{1'b0, fetch_packet};
+
     wire [EPOCH_WIDTH-1:0] frontend_epoch;
     wire frontend_frozen, frontend_event_fetch, frontend_event_redirect, frontend_event_stall;
-    localparam integer COMPACT_TARGET_ACTIVE=(PREDICTOR_COMPACT_TARGET!=0) &&
+    wire unused_frontend_frozen_bits = &{1'b0, frontend_frozen};
+
+    wire unused_frontend_event_fetch_bits = &{1'b0, frontend_event_fetch};
+
+    wire unused_frontend_event_redirect_bits = &{1'b0, frontend_event_redirect};
+
+    wire unused_frontend_event_stall_bits = &{1'b0, frontend_event_stall};
+
+    localparam COMPACT_TARGET_ACTIVE=(PREDICTOR_COMPACT_TARGET!=0) &&
         (SERIAL_BACKEND==0) && (PREDICTOR_DIRECT_BRANCH_TARGET!=0);
     wire redirect_valid;
     wire [2:0] redirect_domains;
@@ -251,7 +261,7 @@ module cpu_core #(
     // Only the cached nonblocking registered-response profile can accept a
     // redirect request on this edge. Other cache/serial profiles retain the
     // original registered epoch and original frontend request contract.
-    localparam integer REDIRECT_REQUEST_ACTIVE=(FRONTEND_REDIRECT_REQUEST!=0) &&
+    localparam REDIRECT_REQUEST_ACTIVE=(FRONTEND_REDIRECT_REQUEST!=0) &&
         (ENABLE_CACHES!=0) && (ICACHE_MSHRS>1) &&
         (ICACHE_COMBINATIONAL_HIT==0) && (DECODE_PIPELINE!=0) && (SERIAL_BACKEND==0);
     wire [EPOCH_WIDTH-1:0] icache_effective_epoch=
@@ -264,6 +274,8 @@ module cpu_core #(
     wire [BE_WIDTH*16-1:0] branch_feedback_lane_metadata;
     wire [7:0] branch_recovery_history;
     wire [FE_WIDTH*16-1:0] pred_metadata_bus, fetch_pred_metadata;
+    wire unused_fetch_pred_metadata_bits = &{1'b0, fetch_pred_metadata};
+
     wire [BE_WIDTH*16-1:0] trace_pred_metadata;
     wire [1:0] branch_feedback_kind;
 
@@ -274,9 +286,19 @@ module cpu_core #(
     wire [FE_WIDTH*32-1:0] pred_target_raw_bus;
     wire [FE_WIDTH*2-1:0] pred_kind_raw_bus;
     wire [FE_WIDTH*6-1:0] pred_bht_index_bus;
+    wire unused_pred_bht_index_bus_bits = &{1'b0, pred_bht_index_bus};
+
     wire [FE_WIDTH*4-1:0] pred_btb_index_bus;
+    wire unused_pred_btb_index_bus_bits = &{1'b0, pred_btb_index_bus};
+
     wire [FE_WIDTH*2-1:0] pred_counter_bus;
+    wire unused_pred_counter_bus_bits = &{1'b0, pred_counter_bus};
+
     wire [FE_WIDTH*32-1:0] pred_count_bus, pred_correct_bus;
+    wire unused_pred_count_bus_bits = &{1'b0, pred_count_bus};
+
+    wire unused_pred_correct_bus_bits = &{1'b0, pred_correct_bus};
+
     wire [31:0] pred_count, pred_correct;
     assign pred_count_bus = {FE_WIDTH{pred_count}};
     assign pred_correct_bus = {FE_WIDTH{pred_correct}};
@@ -294,9 +316,7 @@ module cpu_core #(
     wire [31:0] ras_push_address;
     reg [FE_WIDTH-1:0] ras_push_lanes;
     wire [FE_WIDTH*32-1:0] ras_return_addresses;
-    integer ras_lane;
-    integer ras_word_index;
-    integer ras_event_found;
+
     wire [1:0] ras_top_index = ras_sp - 1'b1;
     wire [127:0] ras_rows;
     wire [31:0] ras_target;
@@ -352,9 +372,10 @@ module cpu_core #(
             end
             // The original first-call rule makes ras_push_lanes one-hot.
             // Late predictor/response acceptance now selects one bit only.
+            wire  unused_match_select_write_o;
             rv32_frequency_event_select #(.WIDTH(1),.EVENTS(FE_WIDTH),.PRIORITY(0)) match_select (
                 .events_i(ras_push_lanes),.values_i(lane_matches),
-                .write_o(),.value_o(selected_repeat_match));
+                .write_o(unused_match_select_write_o),.value_o(selected_repeat_match));
         end else begin:g_selected_address_match
             assign selected_repeat_match=ras_target==ras_push_address;
         end
@@ -389,11 +410,11 @@ module cpu_core #(
     generate
         if (ENABLE_PREDICTOR != 0) begin : g_banked_predictor
             rv32_banked_predictor #(.FE_WIDTH(FE_WIDTH), .DIRECT_BRANCH_TARGET(PREDICTOR_DIRECT_BRANCH_TARGET),
-                .FEEDBACK_LANES(BE_WIDTH), .MULTI_FEEDBACK(PREDICTOR_MULTI_FEEDBACK && !SERIAL_BACKEND), .COMPACT_INDIRECT_BTB(PREDICTOR_COMPACT_BTB), .COMPACT_BTB_ENTRIES(PREDICTOR_COMPACT_BTB_ENTRIES), .HISTORY_BITS(PREDICTOR_HISTORY_BITS), .HYBRID_DIRECTION(PREDICTOR_HYBRID_DIRECTION && !SERIAL_BACKEND),
-                .DIRECTION_INDEPENDENT_TARGET(PREDICTOR_DIRECTION_INDEPENDENT_TARGET && COMPACT_TARGET_ACTIVE),
+                .FEEDBACK_LANES(BE_WIDTH), .MULTI_FEEDBACK((PREDICTOR_MULTI_FEEDBACK != 0) && !(SERIAL_BACKEND != 0)), .COMPACT_INDIRECT_BTB(PREDICTOR_COMPACT_BTB), .COMPACT_BTB_ENTRIES(PREDICTOR_COMPACT_BTB_ENTRIES), .HISTORY_BITS(PREDICTOR_HISTORY_BITS), .HYBRID_DIRECTION((PREDICTOR_HYBRID_DIRECTION != 0) && !(SERIAL_BACKEND != 0)),
+                .DIRECTION_INDEPENDENT_TARGET((PREDICTOR_DIRECTION_INDEPENDENT_TARGET != 0) && COMPACT_TARGET_ACTIVE),
                 .NARROW_DIRECTION_READ(PREDICTOR_NARROW_DIRECTION_READ),
                 .BANK_PC_CARRY_SELECT(PREDICTOR_BANK_PC_CARRY_SELECT),
-                .PREFIX_QUERY_HISTORY(PREDICTOR_PREFIX_QUERY_HISTORY && !SERIAL_BACKEND),
+                .PREFIX_QUERY_HISTORY((PREDICTOR_PREFIX_QUERY_HISTORY != 0) && !(SERIAL_BACKEND != 0)),
                 .BANK_LOCAL_INSTRUCTION_READ(PREDICTOR_BANK_LOCAL_INSTRUCTION_READ),
                 .BANK_LOCAL_PREFIX_HISTORY(PREDICTOR_BANK_LOCAL_PREFIX_HISTORY),
                 .BANK_DIRECT_WORD_INDEX(PREDICTOR_BANK_DIRECT_WORD_INDEX), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) predictor (
@@ -434,8 +455,15 @@ module cpu_core #(
              predictor_lane = predictor_lane + 1) begin : g_predictor
             wire [2:0] query_word_index =
                 {1'b0, response_base_pc[3:2]} + predictor_lane;
-            wire query_valid = if_resp_valid && ((FRONTEND_RAS_PREDECODE==2) ?
-                (response_base_pc[3:2]<=(3-predictor_lane)) : (query_word_index<3'd4));
+    wire unused_query_word_index_bits = &{1'b0, query_word_index};
+
+            wire query_valid;
+            if (FRONTEND_RAS_PREDECODE==2 && predictor_lane==0) begin : g_first_query
+                assign query_valid=if_resp_valid;
+            end else begin : g_remaining_query
+                assign query_valid=if_resp_valid && ((FRONTEND_RAS_PREDECODE==2) ?
+                    (response_base_pc[3:2]<=(3-predictor_lane)) : (query_word_index<3'd4));
+            end
             wire [1:0] query_ras_flags;
             if(FRONTEND_RAS_PREDECODE==2) begin:g_offset_ras_query
                 // Constant lane shift pads the unavailable final words with00.
@@ -483,7 +511,11 @@ module cpu_core #(
             wire within_line;
             if(event_lane<4) begin:g_present
                 // W+L<4 is W<=3-L, with a constant per-lane bound.
-                assign within_line=response_base_pc[3:2]<=2'(3-event_lane);
+                if (event_lane==0) begin : g_first_line_word
+                    assign within_line=1'b1;
+                end else begin : g_later_line_word
+                    assign within_line=response_base_pc[3:2]<=2'(3-event_lane);
+                end
             end else begin:g_outside_line
                 assign within_line=1'b0;
             end
@@ -507,6 +539,10 @@ module cpu_core #(
             ras_pop=(|ras_return_grants) && ras_count!=0;
         end
     end else begin:g_original_ras_events
+    integer ras_lane;
+    integer ras_word_index;
+    integer ras_event_found;
+
     always @* begin
         ras_push = 1'b0;
         ras_pop = 1'b0;
@@ -535,13 +571,13 @@ module cpu_core #(
         end
     end
 
-
     end endgenerate
 
     // The first accepted call wins; return/taken events close the
     // prefix even when they do not push. Each payload mask drives <=16 bits.
+    wire  unused_ras_return_address_selector_write_o;
     rv32_frequency_event_select #(.WIDTH(32),.EVENTS(FE_WIDTH),.PRIORITY(0)) ras_return_address_selector (
-        .events_i(ras_push_lanes),.values_i(ras_return_addresses),.write_o(),.value_o(ras_push_address));
+        .events_i(ras_push_lanes),.values_i(ras_return_addresses),.write_o(unused_ras_return_address_selector_write_o),.value_o(ras_push_address));
     genvar ras_row;
     generate for(ras_row=0;ras_row<4;ras_row=ras_row+1) begin:g_ras_row
         // count=0 suppresses all observable RAS predictions after reset.
@@ -563,12 +599,12 @@ module cpu_core #(
     end
 
     rv32_fetch_frontend #(.QUEUE_PAYLOAD_BANKS(FRONTEND_QUEUE_PAYLOAD_BANKS), .FE_WIDTH(FE_WIDTH), .FQ_DEPTH(FETCH_QUEUE_DEPTH), .NARROW_OCCUPANCY(FRONTEND_NARROW_OCCUPANCY),
-        .RESPONSE_BYPASS(FRONTEND_RESPONSE_BYPASS && (DECODE_PIPELINE!=0) && !SERIAL_BACKEND),
+        .RESPONSE_BYPASS((FRONTEND_RESPONSE_BYPASS != 0) && (DECODE_PIPELINE!=0) && !(SERIAL_BACKEND != 0)),
         .PARALLEL_BUNDLE_CONTROL(FRONTEND_PARALLEL_BUNDLE_CONTROL), .REDIRECT_REQUEST(REDIRECT_REQUEST_ACTIVE),
         .RESPONSE_WORD_OFFSET_READ(FRONTEND_RESPONSE_WORD_OFFSET_READ),
         .DIRECT_WORD_BOUNDS(FRONTEND_DIRECT_WORD_BOUNDS),
-        .RESPONSE_LOCAL_PC(FRONTEND_RESPONSE_LOCAL_PC && (ENABLE_CACHES!=0) &&
-            (ICACHE_MSHRS>1) && (ICACHE_COMBINATIONAL_HIT==0) && !SERIAL_BACKEND), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) frontend (
+        .RESPONSE_LOCAL_PC((FRONTEND_RESPONSE_LOCAL_PC != 0) && (ENABLE_CACHES!=0) &&
+            (ICACHE_MSHRS>1) && (ICACHE_COMBINATIONAL_HIT==0) && !(SERIAL_BACKEND != 0)), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) frontend (
         .clk_i(clk), .reset_i(reset), .redirect_valid_i(redirect_domains[0]),
         .redirect_pc_i(redirect_pc), .redirect_epoch_i(redirect_epoch),
         .stop_i(halted), .error_i(error), .if_req_valid_o(if_req_valid),
@@ -699,7 +735,7 @@ module cpu_core #(
     assign normal_mem_d_req_ready = mem_d_req_ready && !mmio_exit_views[4];
     genvar mmio_word;
     generate for(mmio_word=0;mmio_word<2;mmio_word=mmio_word+1) begin:g_mmio_request_word
-        localparam [15:0] EXIT_ADDRESS_WORD=32'h80000000 >> (16*mmio_word);
+        localparam [15:0] EXIT_ADDRESS_WORD=16'(32'h80000000 >> (16*mmio_word));
         assign mem_d_req_line_addr[mmio_word*16 +: 16]=mmio_exit_views[5+mmio_word] ?
             EXIT_ADDRESS_WORD : normal_mem_d_req_line_addr[mmio_word*16 +: 16];
         assign mem_d_req_wdata[mmio_word*16 +: 16]=mmio_exit_views[7+mmio_word] ?
@@ -718,13 +754,33 @@ module cpu_core #(
                               normal_mem_d_resp_ready;
     wire dc_event_request, dc_event_hit, dc_event_miss, dc_event_refill, dc_event_writeback, dc_event_stall;
     wire dcache_debug_s0_valid, dcache_debug_s0_store;
+    wire unused_dcache_debug_s0_valid_bits = &{1'b0, dcache_debug_s0_valid};
+
+    wire unused_dcache_debug_s0_store_bits = &{1'b0, dcache_debug_s0_store};
+
     wire dcache_debug_s1_valid, dcache_debug_s1_store;
+    wire unused_dcache_debug_s1_valid_bits = &{1'b0, dcache_debug_s1_valid};
+
+    wire unused_dcache_debug_s1_store_bits = &{1'b0, dcache_debug_s1_store};
+
     wire dcache_debug_s2_valid, dcache_debug_s2_store, dcache_debug_s2_hit;
+    wire unused_dcache_debug_s2_valid_bits = &{1'b0, dcache_debug_s2_valid};
+
+    wire unused_dcache_debug_s2_store_bits = &{1'b0, dcache_debug_s2_store};
+
+    wire unused_dcache_debug_s2_hit_bits = &{1'b0, dcache_debug_s2_hit};
+
     wire dcache_debug_mshr_valid, dcache_debug_ack_valid, dcache_debug_resp_valid;
+    wire unused_dcache_debug_mshr_valid_bits = &{1'b0, dcache_debug_mshr_valid};
+
+    wire unused_dcache_debug_ack_valid_bits = &{1'b0, dcache_debug_ack_valid};
+
+    wire unused_dcache_debug_resp_valid_bits = &{1'b0, dcache_debug_resp_valid};
+
     generate
     if (ENABLE_CACHES != 0) begin : g_cached_memory
     if (ICACHE_MSHRS > 1) begin : g_nonblocking_icache
-    rv32_icache_nonblocking #(.MSHR_STATIC_WRITES(ICACHE_MSHR_STATIC_WRITES), .MSHR_STATE_BANKS(ICACHE_MSHR_STATE_BANKS), 
+    rv32_icache_nonblocking #(.MSHR_STATIC_WRITES(ICACHE_MSHR_STATIC_WRITES), .MSHR_STATE_BANKS(ICACHE_MSHR_STATE_BANKS),
         .MSHR_ENTRIES(ICACHE_MSHRS), .TAG_REGION_BITS(ICACHE_TAG_REGION_BITS), .TAG_MATCH_PARALLEL(ICACHE_TAG_MATCH_PARALLEL), .LOCAL_RESPONSE_READY(ICACHE_LOCAL_RESPONSE_READY), .REQUEST_PIPELINE(1),
         .LOOP_BUFFER_LINES(ICACHE_LOOP_LINES), .LOOP_BUFFER_SRAM(ICACHE_LOOP_SRAM),
         .CACHE_LINES(ICACHE_LINES), .CACHE_WAYS(ICACHE_WAYS),
@@ -771,7 +827,7 @@ module cpu_core #(
     end
 
     if (DCACHE_MSHRS > 1) begin : g_nonblocking_dcache
-    rv32_dcache_nonblocking #(.WORD_RESPONSE((DCACHE_WORD_RESPONSE!=0) && (SERIAL_BACKEND==0)), .HIT_BYPASS(1), .LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), .WAY_PARALLEL_QUERY(DCACHE_WAY_PARALLEL_QUERY), .HIT_RESPONSE_COISSUE(DCACHE_HIT_RESPONSE_COISSUE), 
+    rv32_dcache_nonblocking #(.WORD_RESPONSE((DCACHE_WORD_RESPONSE!=0) && (SERIAL_BACKEND==0)), .HIT_BYPASS(1), .LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), .WAY_PARALLEL_QUERY(DCACHE_WAY_PARALLEL_QUERY), .HIT_RESPONSE_COISSUE(DCACHE_HIT_RESPONSE_COISSUE),
         .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS),
         .CACHE_LINES(DCACHE_LINES), .CACHE_WAYS(DCACHE_WAYS),
         .INDEX_HASH(DCACHE_INDEX_HASH), .STORE_MERGE_DELAY(DCACHE_STORE_MERGE_DELAY),
@@ -830,6 +886,9 @@ module cpu_core #(
     );
     end
 
+        wire  unused_memory_bridge_event_i_mem_request_o;
+        wire  unused_memory_bridge_event_d_mem_read_o;
+    wire  unused_memory_bridge_event_d_mem_write_o;
     rv32_memory_bridge #(.MEMORY_SIZE(RAM_SIZE_BYTES)) memory_bridge (
         .clk_i(clk), .reset_i(reset), .cache_i_req_valid_i(ic_mem_req_valid),
         .cache_i_req_ready_o(ic_mem_req_ready), .cache_i_req_line_addr_i(ic_mem_req_line_addr),
@@ -854,8 +913,8 @@ module cpu_core #(
         .mem_d_req_id_o(normal_mem_d_req_id), .mem_d_resp_valid_i(normal_mem_d_resp_valid),
         .mem_d_resp_ready_o(normal_mem_d_resp_ready), .mem_d_resp_line_addr_i(mem_d_resp_line_addr),
         .mem_d_resp_data_i(mem_d_resp_data), .mem_d_resp_id_i(mem_d_resp_id),
-        .mem_d_resp_error_i(mem_d_resp_error), .event_i_mem_request_o(),
-        .event_d_mem_read_o(), .event_d_mem_write_o()
+        .mem_d_resp_error_i(mem_d_resp_error), .event_i_mem_request_o(unused_memory_bridge_event_i_mem_request_o),
+        .event_d_mem_read_o(unused_memory_bridge_event_d_mem_read_o), .event_d_mem_write_o(unused_memory_bridge_event_d_mem_write_o)
     );
     // Stable diagnostic aliases avoid testbench dependence on generate paths.
     assign dcache_debug_s0_valid = 1'b0;
@@ -951,14 +1010,20 @@ module cpu_core #(
     wire [BE_WIDTH-1:0] dec_legal, dec_rd_we, dec_rs1_used, dec_rs2_used;
     wire [BE_WIDTH*`RV32IM_OP_WIDTH-1:0] dec_op, backend_op;
     wire [BE_WIDTH*4-1:0] dec_class;
+    wire unused_dec_class_bits = &{1'b0, dec_class};
+
     wire [BE_WIDTH*5-1:0] dec_rd, dec_rs1, dec_rs2, backend_rs1, backend_rs2;
     wire [BE_WIDTH*32-1:0] dec_imm;
     wire [BE_WIDTH-1:0] dec_load, dec_store, dec_branch, dec_jump, dec_serialize;
+    wire unused_dec_serialize_bits = &{1'b0, dec_serialize};
+
     wire [BE_WIDTH*2-1:0] dec_mem_size;
     wire [BE_WIDTH-1:0] dec_mem_unsigned;
     wire [BE_WIDTH*4-1:0] dec_mem_base_mask;
-    wire [BE_WIDTH-1:0] dec_jalr_clear_lsb, is_halt_trace, backend_rs1_used;
+    wire unused_dec_mem_base_mask_bits = &{1'b0, dec_mem_base_mask};
 
+    wire [BE_WIDTH-1:0] dec_jalr_clear_lsb, is_halt_trace, backend_rs1_used;
+    wire unused_dec_jalr_clear_lsb_bits = &{1'b0, dec_jalr_clear_lsb};
 
     // Decode output is registered before rename/PRF access.
     localparam integer DECODE_PAYLOAD_WIDTH = PACKET_WIDTH + 16 + 1 + `RV32IM_OP_WIDTH + 4 + 5 + 5 + 5 + 1 + 1 + 1 + 32 + 1 + 1 + 1 + 1 + 1 + 2 + 1 + 4 + 1;
@@ -990,9 +1055,13 @@ module cpu_core #(
     generate
         for (frontend_lane = 0; frontend_lane < FE_WIDTH; frontend_lane = frontend_lane + 1) begin : g_frontend_ready
             if (frontend_lane < BE_WIDTH)
-                assign fetch_ready[frontend_lane] = raw_trace_ready[frontend_lane];
+                begin : g_named_998_16
+assign fetch_ready[frontend_lane] = raw_trace_ready[frontend_lane];
+end
             else
-                assign fetch_ready[frontend_lane] = 1'b0;
+                begin : g_named_1000_16
+assign fetch_ready[frontend_lane] = 1'b0;
+end
         end
     endgenerate
 
@@ -1064,7 +1133,6 @@ module cpu_core #(
         end
     endgenerate
 
-
     generate if (DECODE_PIPELINE != 0) begin : g_decode_pipeline
         rv32_decode_bundle_register #(.LANES(BE_WIDTH), .PAYLOAD_WIDTH(DECODE_PAYLOAD_WIDTH)) pipe (
             .clk_i(clk), .reset_i(reset), .flush_i(redirect_domains[2] || halted || error),
@@ -1077,12 +1145,32 @@ module cpu_core #(
     end endgenerate
 
     wire [BE_WIDTH-1:0] commit_valid, commit_rd_we, commit_is_store;
+    wire unused_commit_rd_we_bits = &{1'b0, commit_rd_we};
+
+    wire unused_commit_is_store_bits = &{1'b0, commit_is_store};
+
     wire commit_ready;
     wire [BE_WIDTH*32-1:0] commit_pc, commit_inst, commit_value, commit_store_addr;
+    wire unused_commit_pc_bits = &{1'b0, commit_pc};
+
+    wire unused_commit_inst_bits = &{1'b0, commit_inst};
+
+    wire unused_commit_value_bits = &{1'b0, commit_value};
+
+    wire unused_commit_store_addr_bits = &{1'b0, commit_store_addr};
+
     wire [BE_WIDTH*5-1:0] commit_rd;
+    wire unused_commit_rd_bits = &{1'b0, commit_rd};
+
     wire [BE_WIDTH*16-1:0] commit_store_mask;
+    wire unused_commit_store_mask_bits = &{1'b0, commit_store_mask};
+
     wire [BE_WIDTH*ROB_TAG_WIDTH-1:0] commit_tag;
+    wire unused_commit_tag_bits = &{1'b0, commit_tag};
+
     wire [BE_WIDTH*128-1:0] commit_store_data;
+    wire unused_commit_store_data_bits = &{1'b0, commit_store_data};
+
     wire [15:0] perf_rob_occupancy, perf_rs_occupancy, perf_lsq_occupancy;
     wire [BE_WIDTH-1:0] perf_issue_valid;
     wire perf_branch_pending, perf_mdu_busy;
@@ -1180,9 +1268,37 @@ module cpu_core #(
     end endgenerate
 
     wire [63:0] perf_i_requests, perf_i_hits, perf_i_misses, perf_i_refills, perf_i_stalls;
+    wire unused_perf_i_requests_bits = &{1'b0, perf_i_requests};
+
+    wire unused_perf_i_hits_bits = &{1'b0, perf_i_hits};
+
+    wire unused_perf_i_misses_bits = &{1'b0, perf_i_misses};
+
+    wire unused_perf_i_refills_bits = &{1'b0, perf_i_refills};
+
+    wire unused_perf_i_stalls_bits = &{1'b0, perf_i_stalls};
+
     wire [63:0] perf_d_requests, perf_d_hits, perf_d_misses, perf_d_refills;
+    wire unused_perf_d_requests_bits = &{1'b0, perf_d_requests};
+
+    wire unused_perf_d_hits_bits = &{1'b0, perf_d_hits};
+
+    wire unused_perf_d_misses_bits = &{1'b0, perf_d_misses};
+
+    wire unused_perf_d_refills_bits = &{1'b0, perf_d_refills};
+
     wire [63:0] perf_d_writebacks, perf_d_stalls, perf_i_mem_requests;
+    wire unused_perf_d_writebacks_bits = &{1'b0, perf_d_writebacks};
+
+    wire unused_perf_d_stalls_bits = &{1'b0, perf_d_stalls};
+
+    wire unused_perf_i_mem_requests_bits = &{1'b0, perf_i_mem_requests};
+
     wire [63:0] perf_d_mem_reads, perf_d_mem_writes;
+    wire unused_perf_d_mem_reads_bits = &{1'b0, perf_d_mem_reads};
+
+    wire unused_perf_d_mem_writes_bits = &{1'b0, perf_d_mem_writes};
+
     generate
         if (ENABLE_CACHE_STATS != 0) begin : gen_cache_stats
             rv32_cache_stats stats (
@@ -1223,7 +1339,7 @@ module cpu_core #(
     reg [63:0] perf_branch_pending_cycles;
     reg [63:0] perf_mdu_busy_cycles;
 
-    function [31:0] commit_popcount;
+    function automatic [31:0] commit_popcount;
         input [BE_WIDTH-1:0] bits;
         integer lane;
         begin
@@ -1234,7 +1350,8 @@ module cpu_core #(
     endfunction
 
     always @(posedge clk) begin
-        if (reset) begin
+        if (reset)
+        begin
             cycles <= 32'd0;
             instret <= 32'd0;
             perf_frontend_empty_cycles <= 64'd0;
@@ -1247,170 +1364,34 @@ module cpu_core #(
             perf_lsq_full_cycles <= 64'd0;
             perf_branch_pending_cycles <= 64'd0;
             perf_mdu_busy_cycles <= 64'd0;
-        end else begin
+        end
+        else
+        begin
             cycles <= cycles + 32'd1;
             if ((|commit_valid) && commit_ready)
                 instret <= instret + commit_popcount(commit_valid);
-            if (ENABLE_CACHE_STATS != 0) begin
-                if (!(|fetch_valid)) perf_frontend_empty_cycles <= perf_frontend_empty_cycles + 1'b1;
-                if ((|trace_valid) && !(|trace_ready)) perf_backend_stall_cycles <= perf_backend_stall_cycles + 1'b1;
-                if (!(|commit_valid)) perf_no_commit_cycles <= perf_no_commit_cycles + 1'b1;
-                else perf_commit_active_cycles <= perf_commit_active_cycles + 1'b1;
-                perf_issue_count <= perf_issue_count + commit_popcount(perf_issue_valid);
-                if (perf_rob_occupancy >= ROB_ENTRIES) perf_rob_full_cycles <= perf_rob_full_cycles + 1'b1;
-                if (perf_rs_occupancy >= RS_ENTRIES) perf_rs_full_cycles <= perf_rs_full_cycles + 1'b1;
-                if (perf_lsq_occupancy >= LSQ_ENTRIES) perf_lsq_full_cycles <= perf_lsq_full_cycles + 1'b1;
-                if (perf_branch_pending) perf_branch_pending_cycles <= perf_branch_pending_cycles + 1'b1;
-                if (perf_mdu_busy) perf_mdu_busy_cycles <= perf_mdu_busy_cycles + 1'b1;
+            if (ENABLE_CACHE_STATS != 0)
+            begin
+                if (!(|fetch_valid))
+                    perf_frontend_empty_cycles <= perf_frontend_empty_cycles + 1'b1;
+                if ((|trace_valid) && !(|trace_ready))
+                    perf_backend_stall_cycles <= perf_backend_stall_cycles + 1'b1;
+                if (!(|commit_valid))
+                    perf_no_commit_cycles <= perf_no_commit_cycles + 1'b1;
+                else
+                    perf_commit_active_cycles <= perf_commit_active_cycles + 1'b1;
+                perf_issue_count <= perf_issue_count + 64'(commit_popcount(perf_issue_valid));
+                if (32'(perf_rob_occupancy) >= ROB_ENTRIES)
+                    perf_rob_full_cycles <= perf_rob_full_cycles + 1'b1;
+                if (32'(perf_rs_occupancy) >= RS_ENTRIES)
+                    perf_rs_full_cycles <= perf_rs_full_cycles + 1'b1;
+                if (32'(perf_lsq_occupancy) >= LSQ_ENTRIES)
+                    perf_lsq_full_cycles <= perf_lsq_full_cycles + 1'b1;
+                if (perf_branch_pending)
+                    perf_branch_pending_cycles <= perf_branch_pending_cycles + 1'b1;
+                if (perf_mdu_busy)
+                    perf_mdu_busy_cycles <= perf_mdu_busy_cycles + 1'b1;
             end
         end
-    end
-endmodule
-
-// Ordered elastic bundle implemented as a ring: dequeue changes a pointer,
-// never shifts the entire decoded payload through a recovery/ready mux.
-module rv32_decode_bundle_register #(
-    parameter integer LANES=4, PAYLOAD_WIDTH=194, CAPACITY=2*LANES,
-    parameter integer CW=(CAPACITY<2)?1:$clog2(CAPACITY+1),
-    parameter integer PW=(CAPACITY<2)?1:$clog2(CAPACITY)
-) (
-    input wire clk_i,reset_i,flush_i,
-    input wire [LANES-1:0] valid_i,
-    output reg [LANES-1:0] ready_o,
-    input wire [LANES*PAYLOAD_WIDTH-1:0] data_i,
-    output reg [LANES-1:0] valid_o,
-    input wire [LANES-1:0] ready_i,
-    output wire [LANES*PAYLOAD_WIDTH-1:0] data_o
-);
-    localparam integer WORDS=(PAYLOAD_WIDTH+15)/16;
-    reg [CW-1:0] count;
-    reg [PW-1:0] head,tail;
-    reg [CW-1:0] consumed,accepted;
-    integer lane,capacity;
-    reg prefix;
-    // Raw storage writes agree with public acceptance on ordinary cycles.
-    // During invalidation arbitrary payload writes are harmless: count=0 wins.
-    reg [LANES-1:0] storage_push;
-    reg [LANES-1:0] storage_ready;
-    reg [CW-1:0] storage_consumed;
-    wire invalidate = reset_i || flush_i;
-    wire [1:0] invalidate_domains;
-    rv32_frequency_control_tree #(.LEAVES(2)) invalidate_tree (
-        .signal_i(invalidate),.views_o(invalidate_domains));
-    wire [CAPACITY*PAYLOAD_WIDTH-1:0] rows;
-    always @* begin
-        consumed=0;accepted=0;valid_o=0;ready_o=0;prefix=1;
-        storage_consumed=0;storage_push=0;storage_ready=0;
-        for(lane=0;lane<LANES;lane=lane+1) begin
-            valid_o[lane]=(lane<count) && !invalidate_domains[0];
-            if(prefix && (lane<count) && ready_i[lane])
-                storage_consumed=storage_consumed+1'b1;
-            else prefix=0;
-        end
-        // Upstream space is determined solely by registered occupancy.
-        capacity=CAPACITY-count;
-        prefix=1;
-        for(lane=0;lane<LANES;lane=lane+1) begin
-            storage_ready[lane]=prefix && (lane<capacity);
-            storage_push[lane]=storage_ready[lane] && valid_i[lane];
-            ready_o[lane]=storage_ready[lane] && !invalidate_domains[0];
-            if(ready_o[lane] && valid_i[lane]) accepted=accepted+1'b1;
-            if(!storage_push[lane]) prefix=0;
-        end
-        if(!invalidate_domains[0]) consumed=storage_consumed;
-    end
-    always @(posedge clk_i) begin
-        if(invalidate_domains[1]) begin count<=0;head<=0;tail<=0;end
-        else begin
-            count<=count-consumed+accepted;
-            head<=(head+consumed)%CAPACITY;
-            tail<=(tail+accepted)%CAPACITY;
-        end
-    end
-    genvar slot,word_id,read_lane;
-    generate for(slot=0;slot<CAPACITY;slot=slot+1) begin:g_slot
-        for(word_id=0;word_id<WORDS;word_id=word_id+1) begin:g_field
-            localparam integer W=((PAYLOAD_WIDTH-word_id*16)<16)?(PAYLOAD_WIDTH-word_id*16):16;
-            wire [LANES*W-1:0] inputs;
-            for(genvar writer=0;writer<LANES;writer=writer+1) begin:g_input
-                assign inputs[writer*W +: W]=data_i[writer*PAYLOAD_WIDTH+word_id*16 +: W];
-            end
-            rv32_decode_field_bank #(.LANES(LANES),.WIDTH(W),.ROW(slot),.PW(PW),.CAPACITY(CAPACITY)) bank (
-                .clk_i(clk_i),.reset_i(1'b0),.flush_i(1'b0),.tail_i(tail),
-                .push_i(storage_push),.data_i(inputs),.data_o(rows[slot*PAYLOAD_WIDTH+word_id*16 +: W]));
-        end
-    end
-
-    localparam integer READ_LEAVES=1<<$clog2(CAPACITY);
-    wire [CAPACITY*LANES*WORDS-1:0] read_selections;
-    genvar read_row,read_word,read_node;
-    for(read_row=0;read_row<CAPACITY;read_row=read_row+1) begin:g_head_selection
-        wire selected=head==read_row;
-        rv32_frequency_control_tree #(.LEAVES(LANES*WORDS)) selection_tree (
-            .signal_i(selected),.views_o(read_selections[read_row*LANES*WORDS +: LANES*WORDS]));
-    end
-    for(read_lane=0;read_lane<LANES;read_lane=read_lane+1) begin:g_read
-        wire [PAYLOAD_WIDTH-1:0] payload_tree [1:2*READ_LEAVES-1];
-        for(read_row=0;read_row<READ_LEAVES;read_row=read_row+1) begin:g_row
-            if(read_row<CAPACITY) begin:g_present
-                localparam integer HEAD_ROW=(read_row+CAPACITY-read_lane)%CAPACITY;
-                for(read_word=0;read_word<WORDS;read_word=read_word+1) begin:g_word
-                    localparam integer LOW=read_word*16;
-                    localparam integer BITS=PAYLOAD_WIDTH-LOW>=16 ? 16 : PAYLOAD_WIDTH-LOW;
-                    assign payload_tree[READ_LEAVES+read_row][LOW +: BITS]=
-                        {BITS{read_selections[(HEAD_ROW*LANES+read_lane)*WORDS+read_word]}} &
-                        rows[read_row*PAYLOAD_WIDTH+LOW +: BITS];
-                end
-            end else begin:g_padding
-                assign payload_tree[READ_LEAVES+read_row]=0;
-            end
-        end
-        for(read_node=1;read_node<READ_LEAVES;read_node=read_node+1) begin:g_or
-            assign payload_tree[read_node]=payload_tree[2*read_node] | payload_tree[2*read_node+1];
-        end
-        assign data_o[read_lane*PAYLOAD_WIDTH +: PAYLOAD_WIDTH]=payload_tree[1];
-    end
-    endgenerate
-    initial begin
-        if(CAPACITY<LANES || (CAPACITY & (CAPACITY-1))!=0)
-            $fatal(1,"Decode queue capacity must be a power of two >= LANES");
-    end
-
-endmodule
-
-// Functional state owner, not a buffer-only hierarchy boundary.
-// State logic may flatten and prune unused bits. Kept inversion
-// modules inside the write trees retain the electrical domains.
-module rv32_decode_field_bank #(
-    parameter integer LANES=4,WIDTH=32,ROW=0,CAPACITY=LANES,PW=(CAPACITY<2)?1:$clog2(CAPACITY)
-) (
-    input wire clk_i,reset_i,flush_i,
-    input wire [PW-1:0] tail_i,
-    input wire [LANES-1:0] push_i,
-    input wire [LANES*WIDTH-1:0] data_i,
-    output reg [WIDTH-1:0] data_o
-);
-    wire [LANES-1:0] selected;
-    wire [LANES-1:0] selected_local;
-    rv32_frequency_control_tree #(.WIDTH(LANES),.LEAVES(1)) select_tree (
-        .signal_i(selected),.views_o(selected_local));
-    genvar writer;
-    generate for(writer=0;writer<LANES;writer=writer+1) begin:g_select
-        assign selected[writer]=push_i[writer] && (((tail_i+writer)%CAPACITY)==ROW);
-    end endgenerate
-    wire write_local;
-    rv32_frequency_control_tree #(.LEAVES(1)) write_enable_tree (
-        .signal_i(|selected_local),.views_o(write_local));
-    reg [WIDTH-1:0] next_data;
-    integer lane;
-    always @* begin
-        next_data=0;
-        for(lane=0;lane<LANES;lane=lane+1)
-            next_data=next_data | ({WIDTH{selected_local[lane]}} & data_i[lane*WIDTH +: WIDTH]);
-    end
-    always @(posedge clk_i) begin
-        // Count/head/tail invalidate the queue on the same edge. Every row
-        // is fully rewritten before it becomes valid again.
-        if(write_local) data_o<=next_data;
     end
 endmodule

@@ -131,7 +131,7 @@ module rv32_uncached_memory #(
     wire _unused_ids = ^{mem_i_resp_id_i, mem_d_resp_id_i,
                          mem_d_resp_line_addr_i};
 
-    function [31:0] extract_value;
+    function automatic [31:0] extract_value;
         input [127:0] line_data;
         input [31:0] address;
         input [1:0] size;

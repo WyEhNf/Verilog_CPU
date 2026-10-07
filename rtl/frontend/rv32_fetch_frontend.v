@@ -82,20 +82,51 @@ module rv32_fetch_frontend #(
 
     wire [31:0] fq_pc [0:FQ_DEPTH-1];
     reg [31:0] legacy_fq_pc [0:FQ_DEPTH-1];
+    for (genvar unused_legacy_fq_pc_row=0; unused_legacy_fq_pc_row<=FQ_DEPTH-1; unused_legacy_fq_pc_row=unused_legacy_fq_pc_row+1) begin : g_unused_legacy_fq_pc
+        wire unused_legacy_fq_pc_bits = &{1'b0, legacy_fq_pc[unused_legacy_fq_pc_row]};
+    end
+
     wire [31:0] fq_inst [0:FQ_DEPTH-1];
     reg [31:0] legacy_fq_inst [0:FQ_DEPTH-1];
+    for (genvar unused_legacy_fq_inst_row=0; unused_legacy_fq_inst_row<=FQ_DEPTH-1; unused_legacy_fq_inst_row=unused_legacy_fq_inst_row+1) begin : g_unused_legacy_fq_inst
+        wire unused_legacy_fq_inst_bits = &{1'b0, legacy_fq_inst[unused_legacy_fq_inst_row]};
+    end
+
     wire fq_pred_taken [0:FQ_DEPTH-1];
     reg legacy_fq_pred_taken [0:FQ_DEPTH-1];
+    for (genvar unused_legacy_fq_pred_taken_row=0; unused_legacy_fq_pred_taken_row<=FQ_DEPTH-1; unused_legacy_fq_pred_taken_row=unused_legacy_fq_pred_taken_row+1) begin : g_unused_legacy_fq_pred_taken
+        wire unused_legacy_fq_pred_taken_bits = &{1'b0, legacy_fq_pred_taken[unused_legacy_fq_pred_taken_row]};
+    end
+
     wire [31:0] fq_pred_target [0:FQ_DEPTH-1];
     reg [31:0] legacy_fq_pred_target [0:FQ_DEPTH-1];
+    for (genvar unused_legacy_fq_pred_target_row=0; unused_legacy_fq_pred_target_row<=FQ_DEPTH-1; unused_legacy_fq_pred_target_row=unused_legacy_fq_pred_target_row+1) begin : g_unused_legacy_fq_pred_target
+        wire unused_legacy_fq_pred_target_bits = &{1'b0, legacy_fq_pred_target[unused_legacy_fq_pred_target_row]};
+    end
+
     wire [1:0] fq_pred_kind [0:FQ_DEPTH-1];
     reg [1:0] legacy_fq_pred_kind [0:FQ_DEPTH-1];
+    for (genvar unused_legacy_fq_pred_kind_row=0; unused_legacy_fq_pred_kind_row<=FQ_DEPTH-1; unused_legacy_fq_pred_kind_row=unused_legacy_fq_pred_kind_row+1) begin : g_unused_legacy_fq_pred_kind
+        wire unused_legacy_fq_pred_kind_bits = &{1'b0, legacy_fq_pred_kind[unused_legacy_fq_pred_kind_row]};
+    end
+
     wire fq_pred_btb_hit [0:FQ_DEPTH-1];
     reg legacy_fq_pred_btb_hit [0:FQ_DEPTH-1];
+    for (genvar unused_legacy_fq_pred_btb_hit_row=0; unused_legacy_fq_pred_btb_hit_row<=FQ_DEPTH-1; unused_legacy_fq_pred_btb_hit_row=unused_legacy_fq_pred_btb_hit_row+1) begin : g_unused_legacy_fq_pred_btb_hit
+        wire unused_legacy_fq_pred_btb_hit_bits = &{1'b0, legacy_fq_pred_btb_hit[unused_legacy_fq_pred_btb_hit_row]};
+    end
+
     wire [EPOCH_WIDTH-1:0] fq_epoch [0:FQ_DEPTH-1];
     reg [EPOCH_WIDTH-1:0] legacy_fq_epoch [0:FQ_DEPTH-1];
+    for (genvar unused_legacy_fq_epoch_row=0; unused_legacy_fq_epoch_row<=FQ_DEPTH-1; unused_legacy_fq_epoch_row=unused_legacy_fq_epoch_row+1) begin : g_unused_legacy_fq_epoch
+        wire unused_legacy_fq_epoch_bits = &{1'b0, legacy_fq_epoch[unused_legacy_fq_epoch_row]};
+    end
+
     wire [15:0] fq_pred_metadata [0:FQ_DEPTH-1];
     reg [15:0] legacy_fq_pred_metadata [0:FQ_DEPTH-1];
+    for (genvar unused_legacy_fq_pred_metadata_row=0; unused_legacy_fq_pred_metadata_row<=FQ_DEPTH-1; unused_legacy_fq_pred_metadata_row=unused_legacy_fq_pred_metadata_row+1) begin : g_unused_legacy_fq_pred_metadata
+        wire unused_legacy_fq_pred_metadata_bits = &{1'b0, legacy_fq_pred_metadata[unused_legacy_fq_pred_metadata_row]};
+    end
 
     wire [FE_WIDTH-1:0] bundle_pred_taken;
     wire [FE_WIDTH-1:0] bundle_pred_btb_hit;
@@ -225,13 +256,18 @@ module rv32_fetch_frontend #(
         end
     endgenerate
 
-
     // Only bundle_count authorizes enqueue; computing unused later lanes
     // cannot publish them. Keep all public empty queue outputs zero below.
     wire [FE_WIDTH-1:0] next_pc_classes;
+    wire unused_next_pc_classes_bits = &{1'b0, next_pc_classes};
+
     wire [FE_WIDTH*32-1:0] next_pc_values;
+    wire unused_next_pc_values_bits = &{1'b0, next_pc_values};
+
     wire [FE_WIDTH*32-1:0] response_words;
     wire [31:0] default_next_pc=response_base_pc+32'd4;
+    wire unused_default_next_pc_bits = &{1'b0, default_next_pc};
+
     genvar response_lane,response_half,public_lane,bypass_lane;
     generate
         for(bypass_lane=0;bypass_lane<FE_WIDTH;bypass_lane=bypass_lane+1) begin:g_bypass_prefix
@@ -244,12 +280,20 @@ module rv32_fetch_frontend #(
                       response_words[(bypass_lane-1)*32 +: 32]==32'h0ff00513);
             end
             wire [2:0] word_number={1'b0,response_base_pc[3:2]}+3'(bypass_lane);
-            assign bypass_lane_valid[bypass_lane]=response_bypass && bypass_prefix[bypass_lane] &&
-                ((DIRECT_WORD_BOUNDS!=0) ?
-                    (response_base_pc[3:2]<=(3-bypass_lane)) : (word_number<3'd4));
+            wire unused_word_number_bits = &{1'b0, word_number};
+
+            if (DIRECT_WORD_BOUNDS!=0 && bypass_lane==0) begin : g_first_bound
+                assign bypass_lane_valid[bypass_lane]=response_bypass && bypass_prefix[bypass_lane];
+            end else begin : g_remaining_bound
+                assign bypass_lane_valid[bypass_lane]=response_bypass && bypass_prefix[bypass_lane] &&
+                    ((DIRECT_WORD_BOUNDS!=0) ?
+                        (response_base_pc[3:2]<=(3-bypass_lane)) : (word_number<3'd4));
+            end
         end
         for(response_lane=0;response_lane<FE_WIDTH;response_lane=response_lane+1) begin:g_response_lane
             wire [2:0] index={1'b0,response_base_pc[3:2]}+response_lane;
+            wire unused_index_bits = &{1'b0, index};
+
             assign bundle_pc[response_lane*32 +: 32]=response_base_pc+(response_lane*32'd4);
             assign bundle_inst[response_lane*32 +: 32]=response_words[response_lane*32 +: 32];
             // Raw full-target prediction still controls fetch and bundle
@@ -304,19 +348,21 @@ module rv32_fetch_frontend #(
                         bundle_pred_btb_hit[public_lane],bundle_epoch);
                 wire [15:0] response_metadata=(PREDICTOR_META!=0)?
                     if_resp_pred_metadata_i[public_lane*16 +: 16]:16'b0;
+                wire  unused_packet_selector_write_o;
                 rv32_frequency_event_select #(.WIDTH(READ_DATA_WIDTH),.EVENTS(2),.PRIORITY(0)) packet_selector (
                     .events_i({bypass_lane_valid[public_lane],
                         !response_bypass && public_lane<count_reg}),
                     .values_i({response_packet,response_metadata,
                         queue_read_packets[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
-                        queue_read_metadata[public_lane*16 +: 16]}),.write_o(),
+                        queue_read_metadata[public_lane*16 +: 16]}),.write_o(unused_packet_selector_write_o),
                     .value_o({fetch_packet_o[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
                         fetch_pred_metadata_o[public_lane*16 +: 16]}));
             end else begin:g_queued
+                wire  unused_packet_selector_write_o;
                 rv32_frequency_event_select #(.WIDTH(READ_DATA_WIDTH),.EVENTS(1)) packet_selector (
                     .events_i(public_lane<count_reg),
                     .values_i({queue_read_packets[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
-                               queue_read_metadata[public_lane*16 +: 16]}),.write_o(),
+                               queue_read_metadata[public_lane*16 +: 16]}),.write_o(unused_packet_selector_write_o),
                     .value_o({fetch_packet_o[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
                               fetch_pred_metadata_o[public_lane*16 +: 16]}));
             end
@@ -331,9 +377,10 @@ module rv32_fetch_frontend #(
             .queue_space_o(parallel_queue_space),.next_pc_o(next_pc_comb));
     end else begin:g_legacy_bundle_control
         assign parallel_queue_space=1'b0;
+        wire  unused_next_pc_selector_write_o;
         rv32_frequency_event_select #(.WIDTH(32),.EVENTS(FE_WIDTH+1),.PRIORITY(0)) next_pc_selector (
             .events_i({(bundle_count==0),next_pc_classes}),
-            .values_i({default_next_pc,next_pc_values}),.write_o(),.value_o(next_pc_comb));
+            .values_i({default_next_pc,next_pc_values}),.write_o(unused_next_pc_selector_write_o),.value_o(next_pc_comb));
     end endgenerate
 
     assign current_epoch_o = epoch_reg;
@@ -509,93 +556,4 @@ module rv32_fetch_frontend #(
             $finish;
         end
     end
-endmodule
-
-// Each bank owns an actual queue field and its local write selection.
-// State logic may flatten and prune unused bits. Kept inversion
-// modules inside the write trees retain the electrical domains.
-
-// Functional payload state remains visible to pruning. Local event selection
-// and word ownership bound the actual payload consumers of every control leaf.
-module rv32_frontend_queue_payload_bank #(
-    parameter integer WIDTH=32,FE_WIDTH=4,PTR_WIDTH=4,ROW_ID=0
-) (
-    input wire clk_i,reset_i,redirect_i,
-    input wire [FE_WIDTH-1:0] write_valid_i,
-    input wire [FE_WIDTH*PTR_WIDTH-1:0] write_slots_i,
-    input wire [FE_WIDTH*WIDTH-1:0] write_data_i,
-    output wire [WIDTH-1:0] data_o
-);
-    wire [FE_WIDTH-1:0] selected;
-    wire write_qualified;
-    wire [WIDTH-1:0] payload;
-    genvar lane;
-    generate for(lane=0;lane<FE_WIDTH;lane=lane+1) begin:g_lane
-        assign selected[lane]=write_valid_i[lane] && write_slots_i[lane*PTR_WIDTH +: PTR_WIDTH]==ROW_ID;
-    end endgenerate
-    rv32_frequency_event_select #(.WIDTH(WIDTH),.EVENTS(FE_WIDTH)) selector (
-        .events_i(selected),.values_i(write_data_i),.write_o(write_qualified),.value_o(payload));
-    // Occupancy owns reset/redirect invalidation. Each newly valid row has
-    // a complete payload write, matching the existing frontend contract.
-    rv32_frequency_word_bank #(.WIDTH(WIDTH)) state_owner (
-        .clk_i(clk_i),.write_i(write_qualified),.data_i(payload),.data_o(data_o));
-endmodule
-
-
-// Same accepted prefix as bundle_count, without count encoding/decoding on
-// next-PC or response-capacity paths. No new state or acceptance boundary.
-module rv32_frontend_parallel_bundle_control #(
-    parameter integer FE_WIDTH=4,FQ_DEPTH=16,LEGACY_SENTINEL_HALT=0,
-    parameter integer DIRECT_WORD_BOUNDS=0
-) (
-    input wire [31:0] base_pc_i,
-    input wire [FE_WIDTH*32-1:0] words_i,targets_i,
-    input wire [FE_WIDTH-1:0] taken_i,
-    input wire signed [31:0] queue_count_i,
-    input wire response_error_i,
-    output wire queue_space_o,
-    output wire [31:0] next_pc_o
-);
-    wire [FE_WIDTH-1:0] stops,lane_live,capacity_violation;
-    wire [2*FE_WIDTH:0] events;
-    wire [(2*FE_WIDTH+1)*32-1:0] values;
-    genvar lane;
-    generate for(lane=0;lane<FE_WIDTH;lane=lane+1) begin:g_lane
-        wire [2:0] word_number={1'b0,base_pc_i[3:2]}+3'(lane);
-        wire word_in_line,word_is_last;
-        if(DIRECT_WORD_BOUNDS!=0) begin:g_direct_bound
-            localparam [1:0] LAST_START=3-lane;
-            assign word_in_line=base_pc_i[3:2]<=LAST_START;
-            assign word_is_last=base_pc_i[3:2]==LAST_START;
-        end else begin:g_original_bound
-            assign word_in_line=word_number<3'd4;
-            assign word_is_last=word_number==3'd3;
-        end
-        wire prior_prefix_live;
-        assign stops[lane]=taken_i[lane] || ((LEGACY_SENTINEL_HALT!=0) &&
-            words_i[lane*32 +: 32]==32'h0ff00513);
-        if(lane==0) begin:g_first
-            assign prior_prefix_live=1'b1;
-        end else begin:g_later
-            assign prior_prefix_live=!(|stops[lane-1:0]);
-        end
-        assign lane_live[lane]=!response_error_i && prior_prefix_live && word_in_line;
-        wire ends_bundle=lane_live[lane] &&
-            (stops[lane] || (lane==FE_WIDTH-1) || word_is_last);
-        // An error has no bundle. Otherwise exactly one live lane ends it.
-        // Target/sequential events are disjoint and directly select data.
-        assign events[2*lane]=ends_bundle && taken_i[lane];
-        assign events[2*lane+1]=ends_bundle && !taken_i[lane];
-        assign values[2*lane*32 +: 32]=targets_i[lane*32 +: 32];
-        assign values[(2*lane+1)*32 +: 32]=base_pc_i+((lane+1)*32'd4);
-        // Every live lane must fit. Parallel constant comparisons avoid the
-        // bundle_count + occupancy adder, and preserve no dequeue credit.
-        assign capacity_violation[lane]=lane_live[lane] &&
-            queue_count_i>(FQ_DEPTH-(lane+1));
-    end endgenerate
-    assign events[2*FE_WIDTH]=response_error_i;
-    assign values[2*FE_WIDTH*32 +: 32]=base_pc_i+32'd4;
-    assign queue_space_o=(queue_count_i<=FQ_DEPTH) && !(|capacity_violation);
-    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(2*FE_WIDTH+1),.PRIORITY(0)) next_pc_selector (
-        .events_i(events),.values_i(values),.write_o(),.value_o(next_pc_o));
 endmodule

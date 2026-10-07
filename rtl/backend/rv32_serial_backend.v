@@ -143,9 +143,18 @@ module rv32_serial_backend #(
     wire alu_exec_ready = (state == S_WAIT_EXEC) && alu_exec_valid &&
         (!alu_exec_is_memory || dcache_req_ready_i);
 
+        wire  unused_alu_exec_saved_valid_o;
+        wire [(5)-1:0] unused_alu_exec_phys_rd_o;
+        wire [(TAG_WIDTH)-1:0] unused_alu_exec_rob_tag_o;
+        wire [(`RV32IM_EPOCH_WIDTH)-1:0] unused_alu_exec_epoch_o;
+        wire [31:0] unused_alu_exec_source_pc_o;
+        wire  unused_alu_exec_pred_taken_o;
+        wire [31:0] unused_alu_exec_pred_target_o;
+    wire [1:0] unused_alu_exec_pred_kind_o;
     rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(5),
                 .SHIFT_IMPL(SHIFT_IMPL)) alu (
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i),
+        .recovery_packet_i('0), .issue_cancel_i(1'b0),
         .issue_valid_i((state == S_ISSUE) && !op_is_mdu),
         .issue_ready_o(alu_issue_ready), .issue_op_i(op_reg),
         .issue_pc_i(pc_reg), .issue_imm_i(imm_reg),
@@ -156,8 +165,8 @@ module rv32_serial_backend #(
         .issue_pred_target_i(pred_target_reg), .issue_pred_kind_i(pred_kind_reg),
         .issue_mem_size_i(mem_size_reg), .issue_mem_unsigned_i(mem_unsigned_reg),
         .exec_valid_o(alu_exec_valid), .exec_ready_i(alu_exec_ready),
-        .exec_value_o(alu_exec_value), .exec_phys_rd_o(), .exec_rob_tag_o(),
-        .exec_epoch_o(), .exec_rd_we_o(alu_exec_rd_we),
+        .exec_value_o(alu_exec_value), .exec_phys_rd_o(unused_alu_exec_phys_rd_o), .exec_rob_tag_o(unused_alu_exec_rob_tag_o),
+        .exec_epoch_o(unused_alu_exec_epoch_o), .exec_rd_we_o(alu_exec_rd_we),
         .exec_is_branch_o(alu_exec_is_branch),
         .exec_branch_taken_o(alu_exec_branch_taken),
         .exec_branch_target_o(alu_exec_branch_target),
@@ -169,21 +178,26 @@ module rv32_serial_backend #(
         .exec_mem_unsigned_o(alu_exec_mem_unsigned),
         .exec_store_data_o(alu_exec_store_data),
         .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
-    );
+    , .exec_saved_valid_o(unused_alu_exec_saved_valid_o), .exec_source_pc_o(unused_alu_exec_source_pc_o), .exec_pred_taken_o(unused_alu_exec_pred_taken_o), .exec_pred_target_o(unused_alu_exec_pred_target_o), .exec_pred_kind_o(unused_alu_exec_pred_kind_o));
 
     wire mdu_req_ready, mdu_resp_valid;
     wire [31:0] mdu_resp_value;
+    wire  unused_mdu_occupied_o;
+    wire [(TAG_WIDTH)-1:0] unused_mdu_resp_rob_tag_o;
+    wire [(5)-1:0] unused_mdu_resp_phys_rd_o;
+    wire  unused_mdu_resp_rd_we_o;
     rv32m_mdu_iterative #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(5)) mdu (
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i),
+        .recovery_packet_i('0),
         .req_valid_i((state == S_ISSUE) && op_is_mdu),
         .req_ready_o(mdu_req_ready), .req_op_i(op_reg),
         .req_src1_i(src1_reg), .req_src2_i(src2_reg),
         .req_rob_tag_i(serial_tag), .req_phys_rd_i(rd_reg),
         .req_target_live_i(1'b1), .resp_valid_o(mdu_resp_valid),
         .resp_ready_i(state == S_WAIT_EXEC), .resp_value_o(mdu_resp_value),
-        .resp_rob_tag_o(), .resp_phys_rd_o(), .resp_rd_we_o(),
+        .resp_rob_tag_o(unused_mdu_resp_rob_tag_o), .resp_phys_rd_o(unused_mdu_resp_phys_rd_o), .resp_rd_we_o(unused_mdu_resp_rd_we_o),
         .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
-    );
+    , .occupied_o(unused_mdu_occupied_o));
 
     wire [15:0] store_base_mask =
         (alu_exec_mem_size == `RV32IM_MEM_BYTE) ? 16'h0001 :

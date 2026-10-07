@@ -11,11 +11,11 @@ module rv32_branch_predictor #(
     parameter integer DIRECT_BRANCH_TARGET = 0,
     parameter integer COMPACT_INDIRECT_BTB = 0,
     parameter integer COMPACT_BTB_ENTRIES = 64,
-    parameter integer HYBRID_DIRECTION = 0,
+    parameter HYBRID_DIRECTION = 0,
     // Optional candidate-target contract: a conditional direct target can be
     // meaningful even when not taken. Caller selects it only when taken, and
     // omits unused direct targets from saved resolution metadata.
-    parameter integer DIRECTION_INDEPENDENT_TARGET = 0,
+    parameter DIRECTION_INDEPENDENT_TARGET = 0,
     parameter integer NARROW_DIRECTION_READ = 0,
     parameter integer HISTORY_BITS = 6
 ) (
@@ -52,9 +52,9 @@ module rv32_branch_predictor #(
     localparam integer BHT_ENTRIES = 256 >> BANK_BITS;
     // Two high metadata bits are available only with <=6 history bits.
     // Other modes retain the original predictor and full history encoding.
-    localparam integer HYBRID_ACTIVE=(HYBRID_DIRECTION!=0) &&
+    localparam HYBRID_ACTIVE=(HYBRID_DIRECTION!=0) &&
         (DIRECT_BRANCH_TARGET==2) && (HISTORY_BITS<=6);
-    localparam integer BTB_COMPACT_ACTIVE=(COMPACT_INDIRECT_BTB!=0) && (DIRECT_BRANCH_TARGET!=0);
+    localparam BTB_COMPACT_ACTIVE=(COMPACT_INDIRECT_BTB!=0) && (DIRECT_BRANCH_TARGET!=0);
     localparam integer BTB_TOTAL_ENTRIES=BTB_COMPACT_ACTIVE?COMPACT_BTB_ENTRIES:64;
     localparam integer BTB_ENTRIES=BTB_TOTAL_ENTRIES >> BANK_BITS;
     localparam integer BTB_TOTAL_INDEX_WIDTH=$clog2(BTB_TOTAL_ENTRIES);
@@ -66,7 +66,7 @@ module rv32_branch_predictor #(
     // A predictor tag may alias; execution still compares the full resolved
     // target before retirement. Keep all entries, with an eight-bit folded
     // identity instead of twenty-four exact bits in indirect-only mode.
-    function [7:0] folded_btb_tag;
+    function automatic [7:0] folded_btb_tag;
         input [31:0] pc;
         reg [31:0] identity;
         begin
@@ -77,9 +77,9 @@ module rv32_branch_predictor #(
                 identity[23:16] ^ identity[31:24];
         end
     endfunction
-    wire [BTB_PAYLOAD_WIDTH-1:0] btb_update_payload=BTB_COMPACT_ACTIVE?
-        {folded_btb_tag(feedback_pc_i),feedback_btb_target[31:1]}:
-        {feedback_pc_i[31:8],feedback_btb_target,feedback_kind_i};
+    wire [BTB_PAYLOAD_WIDTH-1:0] btb_update_payload=BTB_PAYLOAD_WIDTH'(BTB_COMPACT_ACTIVE?
+        58'({folded_btb_tag(feedback_pc_i),feedback_btb_target[31:1]}):
+        {feedback_pc_i[31:8],feedback_btb_target,feedback_kind_i});
     wire [23:0] query_btb_identity=BTB_COMPACT_ACTIVE?
         {16'b0,folded_btb_tag(query_pc_i)}:query_pc_i[31:8];
 
@@ -313,8 +313,6 @@ module rv32_branch_predictor #(
         end
     end
 
-
-
     wire [3:0] target_classes;
     wire [127:0] target_values;
     wire [31:0] default_next_pc=query_pc_i+32'd4;
@@ -339,8 +337,9 @@ module rv32_branch_predictor #(
     end endgenerate
     assign target_values={query_btb_word[33:2],direct_jal_pc,direct_branch_pc,default_next_pc};
     // The four legal target classes are exhaustive and mutually exclusive.
+    wire  unused_target_selector_write_o;
     rv32_frequency_event_select #(.WIDTH(32),.EVENTS(4),.PRIORITY(0)) target_selector (
-        .events_i(target_classes),.values_i(target_values),.write_o(),.value_o(pred_target_o));
+        .events_i(target_classes),.values_i(target_values),.write_o(unused_target_selector_write_o),.value_o(pred_target_o));
 
     wire prediction_write=reset_i || feedback_valid_i;
     wire correct_event=feedback_valid_i && (feedback_pred_taken_i==feedback_taken_i) &&
@@ -361,82 +360,4 @@ module rv32_branch_predictor #(
     rv32_frequency_word_bank #(.WIDTH(32)) correct_count_owner (
         .clk_i(clk_i),.write_i(correct_write),.data_i(correct_next),.data_o(correct_count_o));
 
-endmodule
-/* verilator lint_on UNUSEDSIGNAL */
-
-
-// Saturating direction counter preserves weakly-taken reset and first
-// training behavior. Every row owns three reset/update state bits.
-module rv32_predictor_bht_row (
-    input wire clk_i,reset_i,update_i,taken_i,
-    output reg [1:0] counter_o,
-    output reg trained_o
-);
-    always @(posedge clk_i) begin
-        if(reset_i) begin counter_o<=2'b10;trained_o<=0;end
-        else if(update_i) begin
-            trained_o<=1;
-            if(taken_i) begin
-                if(counter_o!=2'b11) counter_o<=counter_o+2'b01;
-            end else if(counter_o!=2'b00) counter_o<=counter_o-2'b01;
-        end
-    end
-endmodule
-
-// BTB payload is meaningful only while valid and tag/kind match. Reset
-// invalidates it; the original single accepted feedback owns every write.
-module rv32_predictor_btb_row (
-    input wire clk_i,reset_i,update_i,
-    input wire [57:0] payload_i,
-    output reg valid_o,
-    output wire [23:0] tag_o,
-    output wire [31:0] target_o,
-    output wire [1:0] kind_o
-);
-    wire [57:0] payload;
-    rv32_frequency_word_bank #(.WIDTH(58)) payload_owner (
-        .clk_i(clk_i),.write_i(!reset_i && update_i),.data_i(payload_i),.data_o(payload));
-    assign {tag_o,target_o,kind_o}=payload;
-    always @(posedge clk_i) begin
-        if(reset_i) valid_o<=0;
-        else if(update_i) valid_o<=1;
-    end
-endmodule
-
-
-// In direct-target mode only JALR allocates the BTB. Its kind and target bit0
-// are constants; the hash is predictor metadata, never architectural identity.
-module rv32_predictor_indirect_btb_row (
-    input wire clk_i,reset_i,update_i,
-    input wire [38:0] payload_i,
-    output reg valid_o,
-    output wire [7:0] tag_o,
-    output wire [31:0] target_o
-);
-    wire [38:0] payload;
-    rv32_frequency_word_bank #(.WIDTH(39)) payload_owner (
-        .clk_i(clk_i),.write_i(!reset_i && update_i),.data_i(payload_i),.data_o(payload));
-    assign tag_o=payload[38:31];
-    assign target_o={payload[30:0],1'b0};
-    always @(posedge clk_i) begin
-        if(reset_i) valid_o<=0;
-        else if(update_i) valid_o<=1;
-    end
-endmodule
-
-// Preference saturates toward the predictor that was actually right at fetch.
-// With equal predictions, the parent never updates this row. Cold preference
-// is weakly bimodal; both direction tables still learn every accepted branch.
-module rv32_predictor_choice_row (
-    input wire clk_i,reset_i,update_i,global_correct_i,
-    output reg [1:0] counter_o
-);
-    always @(posedge clk_i) begin
-        if(reset_i) counter_o<=2'b01;
-        else if(update_i) begin
-            if(global_correct_i) begin
-                if(counter_o!=2'b11) counter_o<=counter_o+2'b01;
-            end else if(counter_o!=2'b00) counter_o<=counter_o-2'b01;
-        end
-    end
 endmodule

@@ -131,10 +131,12 @@ module rv32_icache_nonblocking #(
     wire [CACHE_WAYS*REGION_STORAGE_WIDTH-1:0] tag_regions;
     wire [CACHE_LINES-1:0] region_invalidate;
     wire [CACHE_LINES*3-1:0] region_match_views;
+    wire unused_region_match_views_bits = &{1'b0, region_match_views};
+
     genvar region_way;
     generate if(TAG_REGION_BITS!=0) begin:g_region_owners
         for(region_way=0;region_way<CACHE_WAYS;region_way=region_way+1) begin:g_way
-            wire region_write=refill_array_write && ((refill_entry%CACHE_WAYS)==region_way);
+            wire region_write=refill_array_write && ((32'(refill_entry)%CACHE_WAYS)==region_way);
             wire [REGION_STORAGE_WIDTH-1:0] prefix;
             wire region_change=region_write && prefix!=mem_resp_line_addr_i[31 -: REGION_STORAGE_WIDTH];
             wire [CACHE_SETS-1:0] invalidations;
@@ -154,11 +156,11 @@ module rv32_icache_nonblocking #(
     end endgenerate
     wire lru_mem [0:CACHE_SETS-1];
 
-    function [CACHE_ENTRY_WIDTH-1:0] cache_entry;
+    function automatic [CACHE_ENTRY_WIDTH-1:0] cache_entry;
         input [CACHE_SET_WIDTH-1:0] set_index;
         input integer way;
         begin
-            cache_entry = set_index * CACHE_WAYS + way;
+            cache_entry = CACHE_ENTRY_WIDTH'(set_index * CACHE_WAYS + way);
         end
     endfunction
 
@@ -220,6 +222,8 @@ module rv32_icache_nonblocking #(
     integer send_index;
     integer response_index;
     integer prefetch_match_index;
+    wire unused_prefetch_match_index_bits = &{1'b0, prefetch_match_index};
+
     integer control_check;
     integer control_way;
     reg request_match_found;
@@ -282,7 +286,7 @@ module rv32_icache_nonblocking #(
             end
         end
 
-        response_index = mem_resp_id_i >> EPOCH_WIDTH;
+        response_index = 32'(mem_resp_id_i) >> EPOCH_WIDTH;
         response_target_found = (response_index >= 0) &&
                                 (response_index < MSHR_ENTRIES) &&
                                 mshr_valid[response_index] &&
@@ -328,6 +332,8 @@ module rv32_icache_nonblocking #(
         .signal_i(mem_resp_line_addr_i),.views_o(control_base_views));
     generate for(genvar control_lane=0;control_lane<4;control_lane=control_lane+1) begin:g_control_candidate
         wire [31:0] inst=mem_resp_data_i[control_lane*32 +: 32];
+        wire unused_inst_bits = &{1'b0, inst};
+
         wire [31:0] base=control_base_views[control_lane*32 +: 32];
         // A J-immediate is signed21 bits with bit0=0. Adding 0/4/8/12
         // fits signed22 bits, including the positive-limit carry. This moves
@@ -413,8 +419,14 @@ module rv32_icache_nonblocking #(
             for(genvar query_domain=0;query_domain<4;query_domain=query_domain+1) begin:g_domain
                 wire [REGION_STORAGE_WIDTH-1:0] prefix=prefixes[query_domain*REGION_STORAGE_WIDTH +: REGION_STORAGE_WIDTH];
                 wire [31:0] demand=demand_pc_views[query_domain*32 +: 32];
+                wire unused_demand_bits = &{1'b0, demand};
+
                 wire [31:0] prefetch=prefetch_pc_views[query_domain*32 +: 32];
+                wire unused_prefetch_bits = &{1'b0, prefetch};
+
                 wire [31:0] control=control_pc_views[query_domain*32 +: 32];
+                wire unused_control_bits = &{1'b0, control};
+
                 wire [DOMAIN_SETS*3-1:0] region_query_matches;
                 rv32_frequency_control_tree #(.WIDTH(3),.LEAVES(DOMAIN_SETS)) match_tree (
                     .signal_i({prefix==control[31 -: REGION_STORAGE_WIDTH],
@@ -509,8 +521,8 @@ module rv32_icache_nonblocking #(
                               (!valid_bits[refill_way0] ? refill_way0 :
                               (!valid_bits[refill_way1] ? refill_way1 :
                                (refill_conflicts_with_hit ?
-                                cache_entry(refill_set, !request_entry[0]) :
-                                cache_entry(refill_set, lru_mem[refill_set]))));
+                                cache_entry(refill_set, 32'(!request_entry[0])) :
+                                cache_entry(refill_set, 32'(lru_mem[refill_set])))));
 
     // Do not derive arbitration from mem_resp_ready_o: response-slot logic
     // itself uses request_fire for same-cycle prefetch promotion.
@@ -545,8 +557,8 @@ module rv32_icache_nonblocking #(
 
     assign mem_req_valid_o = send_found;
     assign mem_req_line_addr_o = send_found ? mshr_line[send_index] : 32'd0;
-    assign mem_req_id_o = send_found ?
-        ((send_index << EPOCH_WIDTH) | mshr_txn_epoch[send_index]) : 8'd0;
+    assign mem_req_id_o = 8'(send_found ?
+        ((send_index << EPOCH_WIDTH) | 32'(mshr_txn_epoch[send_index])) : 32'(8'd0));
     // Responses from a cancelled epoch have no live MSHR.  Consume and drop
     // them so a stale transaction cannot block the memory response channel.
     // request_fire implies response_slot_free through lookup_req_ready.
@@ -578,10 +590,17 @@ module rv32_icache_nonblocking #(
                 mem_resp_data_i[response_word*16 +: 16]:data_rdata[response_word*16 +: 16];
     end endgenerate
 
-
     wire [CACHE_LINES+CACHE_SETS-1:0] metadata_reset;
+    wire unused_metadata_reset_bits = &{1'b0, metadata_reset};
+
     wire [CACHE_LINES-1:0] metadata_refill;
+    wire unused_metadata_refill_bits = &{1'b0, metadata_refill};
+
     wire [CACHE_SETS-1:0] metadata_hit_lru,metadata_refill_lru;
+    wire unused_metadata_hit_lru_bits = &{1'b0, metadata_hit_lru};
+
+    wire unused_metadata_refill_lru_bits = &{1'b0, metadata_refill_lru};
+
     rv32_frequency_control_tree #(.LEAVES(CACHE_LINES+CACHE_SETS)) metadata_reset_tree (
         .signal_i(reset_i),.views_o(metadata_reset));
     rv32_frequency_control_tree #(.LEAVES(CACHE_LINES)) metadata_refill_tree (
@@ -595,12 +614,16 @@ module rv32_icache_nonblocking #(
     localparam integer TAG_WRITE_DOMAINS=(CACHE_LINES+3)/4;
     localparam integer TAG_WRITE_WIDTH=CACHE_ENTRY_WIDTH+TAG_STORED_WIDTH;
     wire [TAG_WRITE_DOMAINS*TAG_WRITE_WIDTH-1:0] tag_write_views;
+    wire unused_tag_write_views_bits = &{1'b0, tag_write_views};
+
     rv32_frequency_control_tree #(.WIDTH(TAG_WRITE_WIDTH),.LEAVES(TAG_WRITE_DOMAINS)) tag_write_tree (
         .signal_i({refill_entry,mem_resp_line_addr_i[31-TAG_REGION_BITS:CACHE_SET_WIDTH+4]}),
         .views_o(tag_write_views));
     localparam integer LRU_QUERY_DOMAINS=(CACHE_SETS+3)/4;
     localparam integer LRU_QUERY_WIDTH=2*CACHE_SET_WIDTH+2;
     wire [LRU_QUERY_DOMAINS*LRU_QUERY_WIDTH-1:0] lru_query_views;
+    wire unused_lru_query_views_bits = &{1'b0, lru_query_views};
+
     rv32_frequency_control_tree #(.WIDTH(LRU_QUERY_WIDTH),.LEAVES(LRU_QUERY_DOMAINS)) lru_query_tree (
         .signal_i({refill_set,refill_entry[0],request_set,request_entry[0]}),
         .views_o(lru_query_views));
@@ -699,7 +722,7 @@ module rv32_icache_nonblocking #(
     endgenerate
 
     integer reset_index;
-    integer prefetch_count;
+    localparam integer PREFETCH_LIMIT = (PREFETCH_DISTANCE < MSHR_ENTRIES-1) ? PREFETCH_DISTANCE : MSHR_ENTRIES-1;
 
     localparam integer RESPONSE_META_WIDTH=65+EPOCH_WIDTH;
     wire response_hit_write=!reset_i && hit_array_read;
@@ -758,7 +781,8 @@ module rv32_icache_nonblocking #(
         .clk_i(clk_i),.write_i(!reset_i && stream_request),.data_i(request_line),.data_o(last_demand_line));
 
     always @(posedge clk_i) begin
-        if (reset_i) begin
+        if (reset_i)
+        begin
             resp_valid_reg <= 1'b0;
             resp_from_sram <= 1'b0;
             prefetch_active <= 1'b0;
@@ -770,8 +794,10 @@ module rv32_icache_nonblocking #(
             event_miss_o <= 1'b0;
             event_refill_o <= 1'b0;
             event_stall_o <= 1'b0;
-            for (reset_index = 0; reset_index < MSHR_ENTRIES; reset_index = reset_index + 1) begin
-                if (MSHR_STATIC_WRITES == 0) begin
+            for (reset_index = 0; reset_index < MSHR_ENTRIES; reset_index = reset_index + 1)
+            begin
+                if (MSHR_STATIC_WRITES == 0)
+                begin
                     mshr_valid[reset_index] <= 1'b0;
                     mshr_sent[reset_index] <= 1'b0;
                     mshr_prefetch[reset_index] <= 1'b0;
@@ -782,25 +808,25 @@ module rv32_icache_nonblocking #(
                     mshr_txn_epoch[reset_index] <= {EPOCH_WIDTH{1'b0}};
                 end
             end
-        end else begin
+        end
+        else
+        begin
             resp_from_sram <= 1'b0;
             event_request_o <= request_fire;
             event_hit_o <= 1'b0;
             event_miss_o <= 1'b0;
             event_refill_o <= 1'b0;
             event_stall_o <= lookup_req_valid && !lookup_req_ready;
-
             if (response_slot_free)
                 resp_valid_reg <= 1'b0;
-
-            // Redirects advance current_epoch_i.  Wrong-path demand and
-            // prefetch MSHRs are immediately reusable; the transaction ID
-            // carries the old epoch so any late response is rejected above.
-            for (k = 0; k < MSHR_ENTRIES; k = k + 1) begin
+            for (k = 0; k < MSHR_ENTRIES; k = k + 1)
+            begin
                 if (mshr_valid[k] &&
-                    (mshr_txn_epoch[k] != current_epoch_i) &&
-                    !mshr_control_prefetch[k]) begin
-                    if (MSHR_STATIC_WRITES == 0) begin
+                (mshr_txn_epoch[k] != current_epoch_i) &&
+                !mshr_control_prefetch[k])
+                begin
+                    if (MSHR_STATIC_WRITES == 0)
+                    begin
                         mshr_valid[k] <= 1'b0;
                         mshr_sent[k] <= 1'b0;
                         mshr_control_prefetch[k] <= 1'b0;
@@ -808,29 +834,39 @@ module rv32_icache_nonblocking #(
                 end
             end
             if (prefetch_active && (prefetch_epoch != current_epoch_i) &&
-                !prefetch_control_stream) begin
+            !prefetch_control_stream)
+            begin
                 prefetch_active <= 1'b0;
                 prefetch_remaining <= 0;
                 last_demand_valid <= 1'b0;
             end
-
-            if (request_fire) begin
-                if (request_hit) begin
+            if (request_fire)
+            begin
+                if (request_hit)
+                begin
                     event_hit_o <= 1'b1;
-                    if (lookup_req_epoch == current_epoch_i) begin
+                    if (lookup_req_epoch == current_epoch_i)
+                    begin
                         resp_valid_reg <= 1'b1;
                         resp_from_sram <= 1'b1;
                     end
-                end else begin
+                end
+                else
+                begin
                     event_miss_o <= 1'b1;
-                    if (request_match_found) begin
-                        if (MSHR_STATIC_WRITES == 0) begin
+                    if (request_match_found)
+                    begin
+                        if (MSHR_STATIC_WRITES == 0)
+                        begin
                             mshr_prefetch[request_match_index] <= 1'b0;
                             mshr_pc[request_match_index] <= lookup_req_pc;
                             mshr_demand_epoch[request_match_index] <= lookup_req_epoch;
                         end
-                    end else begin
-                        if (MSHR_STATIC_WRITES == 0) begin
+                    end
+                    else
+                    begin
+                        if (MSHR_STATIC_WRITES == 0)
+                        begin
                             mshr_valid[free_index] <= 1'b1;
                             mshr_sent[free_index] <= 1'b0;
                             mshr_prefetch[free_index] <= 1'b0;
@@ -843,19 +879,15 @@ module rv32_icache_nonblocking #(
                     end
                 end
             end
-
-            // Keep a bounded sliding window in front of the most recent
-            // demand line.  Advancing sequentially earns exactly one new
-            // prefetch credit; a non-sequential request (taken branch/jump)
-            // discards the old direction and seeds a fresh bounded window.
-            // This preserves memory-level parallelism on long straight-line
-            // regions without issuing an unbounded wrong-path stream.
-            if (prefetch_step) begin
+            if (prefetch_step)
+            begin
                 if (!stream_sequential)
                     prefetch_remaining <= prefetch_remaining - 1;
             end
-            if (prefetch_step_allocates) begin
-                if (MSHR_STATIC_WRITES == 0) begin
+            if (prefetch_step_allocates)
+            begin
+                if (MSHR_STATIC_WRITES == 0)
+                begin
                     mshr_valid[free_index] <= 1'b1;
                     mshr_sent[free_index] <= 1'b0;
                     mshr_prefetch[free_index] <= 1'b1;
@@ -866,67 +898,70 @@ module rv32_icache_nonblocking #(
                     mshr_txn_epoch[free_index] <= prefetch_epoch;
                 end
             end
-
-            if (stream_request) begin
+            if (stream_request)
+            begin
                 last_demand_valid <= 1'b1;
-                if (stream_reset) begin
+                if (stream_reset)
+                begin
                     prefetch_active <= 1'b1;
                     prefetch_control_stream <= 1'b0;
-                    prefetch_count = PREFETCH_DISTANCE;
-                    if (prefetch_count > MSHR_ENTRIES-1)
-                        prefetch_count = MSHR_ENTRIES-1;
-                    prefetch_remaining <= prefetch_count;
-                end else if (!prefetch_step &&
-                             (prefetch_remaining < PREFETCH_DISTANCE) &&
-                             (prefetch_remaining < MSHR_ENTRIES-1)) begin
-                    prefetch_remaining <= prefetch_remaining + 1;
+                    prefetch_remaining <= STREAM_COUNT_WIDTH'(PREFETCH_LIMIT);
                 end
+                else
+                    if (!prefetch_step &&
+                    (32'(prefetch_remaining) < PREFETCH_DISTANCE) &&
+                    (32'(prefetch_remaining) < MSHR_ENTRIES-1))
+                    begin
+                        prefetch_remaining <= prefetch_remaining + 1;
+                    end
             end
-
             if (mem_req_valid_o && mem_req_ready_i)
-                if (MSHR_STATIC_WRITES == 0) begin
+                if (MSHR_STATIC_WRITES == 0)
+                begin
                     mshr_sent[send_index] <= 1'b1;
                 end
-
             if (mem_resp_valid_i && mem_resp_ready_o &&
-                response_target_found) begin
-                if (MSHR_STATIC_WRITES == 0) begin
+            response_target_found)
+            begin
+                if (MSHR_STATIC_WRITES == 0)
+                begin
                     mshr_valid[response_index] <= 1'b0;
                     mshr_sent[response_index] <= 1'b0;
                     mshr_control_prefetch[response_index] <= 1'b0;
                 end
                 event_refill_o <= !mem_resp_error_i && response_matches;
-                // Tag payload belongs to the static row owners above.
-
                 if (request_fire && request_match_found &&
-                    (request_match_index == response_index)) begin
-                    if (lookup_req_epoch == current_epoch_i) begin
+                (request_match_index == response_index))
+                begin
+                    if (lookup_req_epoch == current_epoch_i)
+                    begin
                         resp_valid_reg <= 1'b1;
                     end
-                end else if (!mshr_prefetch[response_index] &&
-                             (mshr_demand_epoch[response_index] == current_epoch_i)) begin
-                    resp_valid_reg <= 1'b1;
                 end
+                else
+                    if (!mshr_prefetch[response_index] &&
+                    (mshr_demand_epoch[response_index] == current_epoch_i))
+                    begin
+                        resp_valid_reg <= 1'b1;
+                    end
             end
-
-            if (control_target_allocate) begin
-                if (MSHR_STATIC_WRITES == 0) begin
+            if (control_target_allocate)
+            begin
+                if (MSHR_STATIC_WRITES == 0)
+                begin
                     mshr_valid[response_index] <= 1'b1;
                     mshr_sent[response_index] <= 1'b0;
                     mshr_prefetch[response_index] <= 1'b1;
                     mshr_control_prefetch[response_index] <= 1'b1;
                     mshr_pc[response_index] <= control_target;
                     mshr_line[response_index] <=
-                        {control_target[31:4], 4'b0};
+                    {control_target[31:4], 4'b0};
                     mshr_demand_epoch[response_index] <= current_epoch_i;
                     mshr_txn_epoch[response_index] <= current_epoch_i;
                 end
                 prefetch_active <= 1'b1;
                 prefetch_control_stream <= 1'b1;
-                prefetch_count = PREFETCH_DISTANCE;
-                if (prefetch_count > MSHR_ENTRIES-1)
-                    prefetch_count = MSHR_ENTRIES-1;
-                prefetch_remaining <= prefetch_count;
+                prefetch_remaining <= STREAM_COUNT_WIDTH'(PREFETCH_LIMIT);
             end
         end
     end
@@ -1081,360 +1116,5 @@ module rv32_icache_nonblocking #(
             $display("ERROR: rv32_icache_nonblocking requires EPOCH_WIDTH <= 4");
             $finish;
         end
-    end
-endmodule
-
-// Functional storage row: owns all MSHR state and decodes updates locally.
-module rv32_icache_mshr_state_bank #(
-    parameter integer EPOCH_WIDTH = 4,
-    parameter integer ROW = 0
-) (
-    input wire clk_i,
-    input wire reset_i,
-    input wire [EPOCH_WIDTH-1:0] current_epoch_i,
-    input wire request_fire_i,
-    input wire request_hit_i,
-    input wire request_match_found_i,
-    input wire [31:0] request_match_index_i,
-    input wire [31:0] free_index_i,
-    input wire [31:0] if_req_pc_i,
-    input wire [31:0] request_line_i,
-    input wire [EPOCH_WIDTH-1:0] if_req_epoch_i,
-    input wire prefetch_step_allocates_i,
-    input wire prefetch_control_stream_i,
-    input wire [31:0] prefetch_next_line_i,
-    input wire [EPOCH_WIDTH-1:0] prefetch_epoch_i,
-    input wire mem_req_valid_i,
-    input wire mem_req_ready_i,
-    input wire [31:0] send_index_i,
-    input wire mem_resp_valid_i,
-    input wire mem_resp_ready_i,
-    input wire response_target_found_i,
-    input wire [31:0] response_index_i,
-    input wire control_target_allocate_i,
-    input wire [31:0] control_target_i,
-    output reg valid_o,
-    output reg sent_o,
-    output reg prefetch_o,
-    output reg control_prefetch_o,
-    output wire [31:0] pc_o,
-    output wire [31:0] line_o,
-    output wire [EPOCH_WIDTH-1:0] demand_epoch_o,
-    output wire [EPOCH_WIDTH-1:0] txn_epoch_o
-);
-
-    localparam integer MSHR_PAYLOAD_WIDTH=32+EPOCH_WIDTH;
-    wire enabled=!reset_i;
-    wire demand=enabled && request_fire_i && !request_hit_i;
-    wire demand_match=demand && request_match_found_i && request_match_index_i==ROW;
-    wire demand_new=demand && !request_match_found_i && free_index_i==ROW;
-    wire prefetch_allocate=enabled && prefetch_step_allocates_i && free_index_i==ROW;
-    wire control_allocate=enabled && control_target_allocate_i && response_index_i==ROW;
-    wire [2:0] pc_events={control_allocate,prefetch_allocate,demand_match || demand_new};
-    wire [2:0] line_events={control_allocate,prefetch_allocate,demand_new};
-    wire [3*MSHR_PAYLOAD_WIDTH-1:0] pc_values={
-        current_epoch_i,control_target_i,prefetch_epoch_i,prefetch_next_line_i,if_req_epoch_i,if_req_pc_i};
-    wire [3*MSHR_PAYLOAD_WIDTH-1:0] line_values={
-        current_epoch_i,control_target_i[31:4],4'b0,prefetch_epoch_i,prefetch_next_line_i,if_req_epoch_i,request_line_i};
-    wire pc_write,line_write;
-    wire [MSHR_PAYLOAD_WIDTH-1:0] next_pc,next_line,saved_pc,saved_line;
-    rv32_frequency_event_select #(.WIDTH(MSHR_PAYLOAD_WIDTH),.EVENTS(3)) pc_selector (
-        .events_i(pc_events),.values_i(pc_values),.write_o(pc_write),.value_o(next_pc));
-    rv32_frequency_event_select #(.WIDTH(MSHR_PAYLOAD_WIDTH),.EVENTS(3)) line_selector (
-        .events_i(line_events),.values_i(line_values),.write_o(line_write),.value_o(next_line));
-    rv32_frequency_word_bank #(.WIDTH(MSHR_PAYLOAD_WIDTH)) pc_owner (
-        .clk_i(clk_i),.write_i(pc_write),.data_i(next_pc),.data_o(saved_pc));
-    rv32_frequency_word_bank #(.WIDTH(MSHR_PAYLOAD_WIDTH)) line_owner (
-        .clk_i(clk_i),.write_i(line_write),.data_i(next_line),.data_o(saved_line));
-    assign {demand_epoch_o,pc_o}=saved_pc;
-    assign {txn_epoch_o,line_o}=saved_line;
-
-    always @(posedge clk_i) begin
-        if (reset_i) begin
-            valid_o <= 1'b0;
-            sent_o <= 1'b0;
-            prefetch_o <= 1'b0;
-            control_prefetch_o <= 1'b0;
-        end else begin
-            if (valid_o &&
-                (txn_epoch_o != current_epoch_i) &&
-                !control_prefetch_o) begin
-                valid_o <= 1'b0;
-                sent_o <= 1'b0;
-                control_prefetch_o <= 1'b0;
-            end
-            if (request_fire_i && !request_hit_i) begin
-                if (request_match_found_i) begin
-                    if (request_match_index_i == ROW) begin
-                        prefetch_o <= 1'b0;
-                    end
-                end else if (free_index_i == ROW) begin
-                    valid_o <= 1'b1;
-                    sent_o <= 1'b0;
-                    prefetch_o <= 1'b0;
-                    control_prefetch_o <= 1'b0;
-                end
-            end
-            if (prefetch_step_allocates_i && (free_index_i == ROW)) begin
-                valid_o <= 1'b1;
-                sent_o <= 1'b0;
-                prefetch_o <= 1'b1;
-                control_prefetch_o <= prefetch_control_stream_i;
-            end
-            if (mem_req_valid_i && mem_req_ready_i && (send_index_i == ROW))
-                sent_o <= 1'b1;
-            if (mem_resp_valid_i && mem_resp_ready_i &&
-                response_target_found_i && (response_index_i == ROW)) begin
-                valid_o <= 1'b0;
-                sent_o <= 1'b0;
-                control_prefetch_o <= 1'b0;
-            end
-            if (control_target_allocate_i && (response_index_i == ROW)) begin
-                valid_o <= 1'b1;
-                sent_o <= 1'b0;
-                prefetch_o <= 1'b1;
-                control_prefetch_o <= 1'b1;
-            end
-        end
-    end
-endmodule
-
-// Two request slots decouple front-end ready from tag/MSHR/response logic.
-// Epoch-stale requests drain independently of lookup readiness.
-module rv32_icache_query_queue #(parameter integer EPOCH_WIDTH=4) (
-    input wire clk_i,reset_i,
-    input wire [EPOCH_WIDTH-1:0] current_epoch_i,
-    input wire valid_i,
-    output wire ready_o,
-    input wire [31:0] pc_i,
-    input wire [EPOCH_WIDTH-1:0] epoch_i,
-    output wire valid_o,
-    input wire ready_i,
-    output wire [31:0] pc_o,
-    output wire [EPOCH_WIDTH-1:0] epoch_o
-);
-    reg [1:0] count;
-    reg read_slot,write_slot;
-    localparam integer PAYLOAD_WIDTH=32+EPOCH_WIDTH;
-    localparam integer PAYLOAD_WORDS=(PAYLOAD_WIDTH+15)/16;
-    wire [PAYLOAD_WIDTH-1:0] payload [0:1];
-    wire [PAYLOAD_WORDS-1:0] read_views;
-    wire [PAYLOAD_WIDTH-1:0] read_payload;
-    rv32_frequency_control_tree #(.LEAVES(PAYLOAD_WORDS)) read_tree (
-        .signal_i(read_slot),.views_o(read_views));
-    assign {pc_o,epoch_o}=read_payload;
-    genvar read_word;
-    generate for(read_word=0;read_word<PAYLOAD_WORDS;read_word=read_word+1) begin:g_read_word
-        localparam integer LOW=read_word*16;
-        localparam integer BITS=(PAYLOAD_WIDTH-LOW>=16)?16:PAYLOAD_WIDTH-LOW;
-        assign read_payload[LOW +: BITS]=read_views[read_word]?
-            payload[1][LOW +: BITS]:payload[0][LOW +: BITS];
-    end endgenerate
-    wire stale=count!=0 && epoch_o!=current_epoch_i;
-    assign ready_o=!reset_i && count<2;
-    assign valid_o=!reset_i && count!=0 && !stale;
-    wire push=valid_i && ready_o;
-    wire pop=!reset_i && (stale || (valid_o && ready_i));
-    genvar queue_row;
-    generate for(queue_row=0;queue_row<2;queue_row=queue_row+1) begin:g_row
-        // Preserve the same two unreset payload slots and write edge.
-        // Each write leaf now owns at most sixteen existing hold muxes.
-        rv32_frequency_word_bank #(.WIDTH(PAYLOAD_WIDTH)) owner (
-            .clk_i(clk_i),.write_i(push && write_slot==queue_row),
-            .data_i({pc_i,epoch_i}),.data_o(payload[queue_row]));
-    end endgenerate
-    always @(posedge clk_i) begin
-        if(reset_i) begin count<=0;read_slot<=0;write_slot<=0;end
-        else begin
-            count<=count+push-pop;
-            if(pop) read_slot<=!read_slot;
-            if(push) write_slot<=!write_slot;
-        end
-    end
-endmodule
-
-// A small direct-mapped L0 over the immutable instruction-line interface.
-// It has one registered response, at most one primary miss in flight, and
-// accepts a replacement request on the same edge as a consumed response.
-// There is no combinational path from a new request to response validity.
-module rv32_instruction_line_filter #(
-    parameter integer LINES=16,EPOCH_WIDTH=4,DATA_SRAM=0,
-    parameter integer INDEX_WIDTH=$clog2(LINES),
-    parameter integer TAG_BITS=28-INDEX_WIDTH
-) (
-    input wire clk_i,reset_i,
-    input wire [EPOCH_WIDTH-1:0] current_epoch_i,
-    input wire if_req_valid_i,
-    output wire if_req_ready_o,
-    input wire [31:0] if_req_pc_i,
-    input wire [EPOCH_WIDTH-1:0] if_req_epoch_i,
-    output wire if_resp_valid_o,
-    input wire if_resp_ready_i,
-    output wire [31:0] if_resp_pc_o,if_resp_line_addr_o,
-    output wire [127:0] if_resp_line_data_o,
-    output wire [EPOCH_WIDTH-1:0] if_resp_epoch_o,
-    output wire if_resp_error_o,
-    output wire primary_req_valid_o,
-    input wire primary_req_ready_i,
-    output wire [31:0] primary_req_pc_o,
-    output wire [EPOCH_WIDTH-1:0] primary_req_epoch_o,
-    input wire primary_resp_valid_i,
-    output wire primary_resp_ready_o,
-    input wire [31:0] primary_resp_pc_i,primary_resp_line_addr_i,
-    input wire [127:0] primary_resp_line_data_i,
-    input wire [EPOCH_WIDTH-1:0] primary_resp_epoch_i,
-    input wire primary_resp_error_i
-);
-    reg [LINES-1:0] valid;
-    wire [TAG_BITS-1:0] row_tags [0:LINES-1];
-    wire [LINES*128-1:0] row_lines;
-    wire [LINES-1:0] hits;
-    wire [LINES*28-1:0] request_line_views;
-    rv32_frequency_control_tree #(.WIDTH(28),.LEAVES(LINES)) request_views (
-        .signal_i(if_req_pc_i[31:4]),.views_o(request_line_views));
-    wire [127:0] hit_line;
-    generate if(DATA_SRAM==0) begin:g_register_line_read
-        rv32_frequency_event_select #(.WIDTH(128),.EVENTS(LINES),.PRIORITY(0)) line_select (
-            .events_i(hits),.values_i(row_lines),.write_o(),.value_o(hit_line));
-    end else begin:g_no_register_line_read
-        assign hit_line=128'b0;
-    end endgenerate
-    wire hit=|hits;
-
-    reg fast_valid,miss_pending;
-    wire [31:0] fast_pc,pending_pc;
-    wire [EPOCH_WIDTH-1:0] fast_epoch,pending_epoch;
-    wire [127:0] fast_line;
-    wire fast_live=fast_valid && fast_epoch==current_epoch_i;
-    wire miss_live=miss_pending && pending_epoch==current_epoch_i;
-    wire primary_live=miss_live && primary_resp_valid_i &&
-        primary_resp_epoch_i==pending_epoch && primary_resp_pc_i==pending_pc;
-    wire release_miss=primary_live && if_resp_ready_i;
-    wire fill=!reset_i && primary_live && if_resp_ready_i && !primary_resp_error_i &&
-        primary_resp_line_addr_i=={primary_resp_pc_i[31:4],4'b0};
-    // Independent low-index banks allow a fill and next hit together. Only
-    // a hit in the actual write bank waits, retaining the original old-line
-    // semantics when that row is being replaced.
-    localparam integer SRAM_BANKS=(LINES<4)?LINES:4;
-    localparam integer SRAM_BANK_WIDTH=$clog2(SRAM_BANKS);
-    localparam integer SRAM_DEPTH=LINES/SRAM_BANKS;
-    localparam integer SRAM_ADDR_WIDTH=(SRAM_DEPTH<=1)?1:$clog2(SRAM_DEPTH);
-    wire hit_fill_conflict=(DATA_SRAM!=0) && fill && hit &&
-        (if_req_pc_i[4 +: SRAM_BANK_WIDTH]==primary_resp_line_addr_i[4 +: SRAM_BANK_WIDTH]);
-    wire fast_slot_free=!fast_valid || !fast_live || if_resp_ready_i;
-    wire can_start=!reset_i && (!miss_live || release_miss) && fast_slot_free && !hit_fill_conflict;
-    assign if_req_ready_o=can_start && (hit || primary_req_ready_i);
-    wire request_fire=if_req_valid_i && if_req_ready_o;
-    wire accept_hit=request_fire && hit && if_req_epoch_i==current_epoch_i;
-    wire accept_miss=request_fire && !hit;
-    assign primary_req_valid_o=if_req_valid_i && can_start && !hit;
-    assign primary_req_pc_o=if_req_pc_i;
-    assign primary_req_epoch_o=if_req_epoch_i;
-    // Unexpected or epoch-stale primary outputs drain without publishing.
-    // A live primary response obeys the original frontend backpressure.
-    assign primary_resp_ready_o=!reset_i && (!primary_live || if_resp_ready_i);
-    assign if_resp_valid_o=!reset_i && (fast_live || primary_live);
-    localparam integer RESPONSE_WIDTH=65+128+EPOCH_WIDTH;
-    rv32_frequency_event_select #(.WIDTH(RESPONSE_WIDTH),.EVENTS(2),.PRIORITY(0)) response_select (
-        .events_i({fast_live,primary_live}),
-        .values_i({fast_pc,{fast_pc[31:4],4'b0},fast_line,fast_epoch,1'b0,
-            primary_resp_pc_i,primary_resp_line_addr_i,primary_resp_line_data_i,
-            primary_resp_epoch_i,primary_resp_error_i}),.write_o(),
-        .value_o({if_resp_pc_o,if_resp_line_addr_o,if_resp_line_data_o,if_resp_epoch_o,if_resp_error_o}));
-    generate if(DATA_SRAM!=0) begin:g_sram_lines
-        wire [SRAM_BANKS*128-1:0] bank_data;
-        wire [SRAM_BANKS-1:0] response_banks;
-        rv32_frequency_word_bank #(.WIDTH(32+EPOCH_WIDTH)) fast_identity (
-            .clk_i(clk_i),.write_i(accept_hit),.data_i({if_req_pc_i,if_req_epoch_i}),
-            .data_o({fast_pc,fast_epoch}));
-        for(genvar bank=0;bank<SRAM_BANKS;bank=bank+1) begin:g_bank
-            localparam [SRAM_BANK_WIDTH-1:0] BANK=bank;
-            wire bank_fill=fill && primary_resp_line_addr_i[4 +: SRAM_BANK_WIDTH]==BANK;
-            wire bank_hit=accept_hit && if_req_pc_i[4 +: SRAM_BANK_WIDTH]==BANK;
-            // FakeRAM invalidates rdata on idle/write edges. Reread a held
-            // response on every stalled edge instead of assuming Q holds.
-            // A live primary fill requires ready, so cannot overwrite a
-            // backpressured fast response.
-            wire bank_hold=fast_live && !fast_slot_free && fast_pc[4 +: SRAM_BANK_WIDTH]==BANK;
-            // Hold chooses the saved PC; otherwise an offered request PC is
-            // safe before its tag/hit acceptance. Extra speculative reads do
-            // not publish a response: fast_identity/valid still use accept_hit.
-            wire hold_read=fast_live && !fast_slot_free;
-            wire offered_read=if_req_valid_i && fast_slot_free &&
-                if_req_pc_i[4 +: SRAM_BANK_WIDTH]==BANK;
-            wire [INDEX_WIDTH-1:0] read_index=hold_read?
-                fast_pc[4 +: INDEX_WIDTH]:if_req_pc_i[4 +: INDEX_WIDTH];
-            wire [SRAM_ADDR_WIDTH-1:0] address=bank_fill?
-                SRAM_ADDR_WIDTH'(primary_resp_line_addr_i[4 +: INDEX_WIDTH] >> SRAM_BANK_WIDTH):
-                SRAM_ADDR_WIDTH'(read_index >> SRAM_BANK_WIDTH);
-            localparam integer COMMAND_WIDTH=SRAM_ADDR_WIDTH+2;
-            wire [8*COMMAND_WIDTH-1:0] commands;
-            rv32_frequency_control_tree #(.WIDTH(COMMAND_WIDTH),.LEAVES(8)) command_tree (
-                .signal_i({!reset_i && (bank_fill || offered_read || bank_hold),bank_fill,address}),
-                .views_o(commands));
-            // Same eight physical4x16 macros per bank as the former128-bit
-            // wrapper expansion; each priced command leaf drives one macro.
-            for(genvar data_lane=0;data_lane<8;data_lane=data_lane+1) begin:g_data_lane
-                wire enable,write;
-                wire [SRAM_ADDR_WIDTH-1:0] lane_address;
-                assign {enable,write,lane_address}=commands[data_lane*COMMAND_WIDTH +: COMMAND_WIDTH];
-                sram_fakeram #(.DEPTH(SRAM_DEPTH),.WIDTH(16),.WRITE_GRANULARITY(16)) data (
-                    .clk(clk_i),.en(enable),.we(write),.wmask(1'b1),.addr(lane_address),
-                    .wdata(primary_resp_line_data_i[data_lane*16 +: 16]),
-                    .rdata(bank_data[bank*128+data_lane*16 +: 16]));
-            end
-            assign response_banks[bank]=fast_live && fast_pc[4 +: SRAM_BANK_WIDTH]==BANK;
-        end
-        rv32_frequency_event_select #(.WIDTH(128),.EVENTS(SRAM_BANKS),.PRIORITY(0)) response_read (
-            .events_i(response_banks),.values_i(bank_data),.write_o(),.value_o(fast_line));
-    end else begin:g_register_lines
-        rv32_frequency_word_bank #(.WIDTH(32+EPOCH_WIDTH+128)) fast_response (
-            .clk_i(clk_i),.write_i(accept_hit),.data_i({if_req_pc_i,if_req_epoch_i,hit_line}),
-            .data_o({fast_pc,fast_epoch,fast_line}));
-    end endgenerate
-    rv32_frequency_word_bank #(.WIDTH(32+EPOCH_WIDTH)) miss_identity (
-        .clk_i(clk_i),.write_i(accept_miss),.data_i({if_req_pc_i,if_req_epoch_i}),
-        .data_o({pending_pc,pending_epoch}));
-
-    genvar row;
-    generate for(row=0;row<LINES;row=row+1) begin:g_row
-        localparam [INDEX_WIDTH-1:0] ROW=row;
-        wire [27:0] request_line=request_line_views[row*28 +: 28];
-        wire [TAG_BITS-1:0] row_tag=row_tags[row];
-        assign hits[row]=valid[row] && request_line[INDEX_WIDTH-1:0]==ROW &&
-            request_line[27:INDEX_WIDTH]==row_tag;
-
-        wire row_write=fill && primary_resp_line_addr_i[4 +: INDEX_WIDTH]==ROW;
-        if(DATA_SRAM!=0) begin:g_sram_tag
-            rv32_frequency_word_bank #(.WIDTH(TAG_BITS)) tag (
-                .clk_i(clk_i),.write_i(row_write),
-                .data_i(primary_resp_line_addr_i[31:4+INDEX_WIDTH]),.data_o(row_tags[row]));
-            assign row_lines[row*128 +: 128]=128'b0;
-        end else begin:g_register_payload
-            wire [TAG_BITS+128-1:0] payload_word;
-            rv32_frequency_word_bank #(.WIDTH(TAG_BITS+128)) payload (
-                .clk_i(clk_i),.write_i(row_write),
-                .data_i({primary_resp_line_addr_i[31:4+INDEX_WIDTH],primary_resp_line_data_i}),
-                .data_o(payload_word));
-            assign row_tags[row]=payload_word[128 +: TAG_BITS];
-            assign row_lines[row*128 +: 128]=payload_word[127:0];
-        end
-        always @(posedge clk_i) begin
-            if(reset_i) valid[row]<=1'b0;
-            else if(row_write) valid[row]<=1'b1;
-        end
-    end endgenerate
-    always @(posedge clk_i) begin
-        if(reset_i) begin fast_valid<=1'b0;miss_pending<=1'b0;end
-        else begin
-            if(fast_slot_free) fast_valid<=1'b0;
-            if(accept_hit) fast_valid<=1'b1;
-            if(!miss_live || release_miss) miss_pending<=1'b0;
-            if(accept_miss) miss_pending<=1'b1;
-        end
-    end
-    initial begin
-        if(LINES<2 || LINES>32 || (LINES & (LINES-1))!=0)
-            $fatal(1,"Instruction line filter needs a power-of-two line count in 2..32");
     end
 endmodule

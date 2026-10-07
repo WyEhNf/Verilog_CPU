@@ -62,7 +62,7 @@ module rv32m_divider #(
 
     // Hierarchical 16/8/4/2/1 priority selection, rather than a 32-bit
     // serial found-one chain. Zero has an explicit 32 result.
-    function [5:0] count_leading_zeros;
+    function automatic [5:0] count_leading_zeros;
         input [31:0] value;
         reg [31:0] shifted;
         reg [5:0] count;

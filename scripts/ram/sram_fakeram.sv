@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // Public RAM interface. Automatically included by the framework.
 // See docs/sram.md for supported configurations and access semantics.
 module sram_fakeram #(
@@ -30,8 +31,18 @@ module sram_fakeram #(
             initial $fatal(1, "RAM library error (%m): WIDTH must be divisible by WRITE_GRANULARITY");
         end else begin : storage
             reg [WIDTH-1:0] words [0:DEPTH-1];
-            reg [WIDTH-1:0] next_word;
-            integer lane;
+            function automatic [WIDTH-1:0] merge_write;
+                input [WIDTH-1:0] old_word, new_word;
+                input [WIDTH/WRITE_GRANULARITY-1:0] mask;
+                integer lane;
+                begin
+                    merge_write = old_word;
+                    for (lane = 0; lane < WIDTH / WRITE_GRANULARITY; lane = lane + 1)
+                        if (mask[lane])
+                            merge_write[lane*WRITE_GRANULARITY +: WRITE_GRANULARITY]
+                                = new_word[lane*WRITE_GRANULARITY +: WRITE_GRANULARITY];
+                end
+            endfunction
             always @(posedge clk) begin
                 rdata <= 'x;
                 if (en) begin
@@ -40,12 +51,7 @@ module sram_fakeram #(
                     if (we) begin
                         // Merge locally, then schedule one array assignment.
                         // This also supports large lane counts in Verilator 5.020.
-                        next_word = words[addr];
-                        for (lane = 0; lane < WIDTH / WRITE_GRANULARITY; lane = lane + 1)
-                            if (wmask[lane])
-                                next_word[lane*WRITE_GRANULARITY +: WRITE_GRANULARITY]
-                                    = wdata[lane*WRITE_GRANULARITY +: WRITE_GRANULARITY];
-                        words[addr] <= next_word;
+                        words[addr] <= merge_write(words[addr], wdata, wmask);
                     end else begin
                         rdata <= words[addr];
                     end

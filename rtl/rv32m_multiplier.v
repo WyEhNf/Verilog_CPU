@@ -32,11 +32,11 @@ module rv32m_multiplier #(
     input  wire                         live_tag_valid_i,
     input  wire [TAG_WIDTH-1:0]         live_tag_i
 );
-    function [63:0] csa_sum3;
+    function automatic [63:0] csa_sum3;
         input [63:0] a,b,c;
         begin csa_sum3=a^b^c; end
     endfunction
-    function [63:0] csa_carry3;
+    function automatic [63:0] csa_carry3;
         input [63:0] a,b,c;
         begin csa_carry3=((a&b)|(a&c)|(b&c))<<1; end
     endfunction
@@ -86,22 +86,36 @@ module rv32m_multiplier #(
             rv32_frequency_control_tree #(.LEAVES(SIGN_DOMAINS)) sign_tree (
                 .signal_i(relative_row[33]),.views_o(sign_views));
             for(genvar product_bit=0;product_bit<64;product_bit=product_bit+1) begin:g_bit
-                if(product_bit<2*row) assign pp[row][product_bit]=1'b0;
+                if(product_bit<2*row) begin : g_named_89_38
+assign pp[row][product_bit]=1'b0;
+end
                 else if(product_bit<2*row+34)
-                    assign pp[row][product_bit]=relative_row[product_bit-2*row];
-                else assign pp[row][product_bit]=sign_views[(product_bit-2*row-34)/8];
+                    begin : g_named_91_20
+assign pp[row][product_bit]=relative_row[product_bit-2*row];
+end
+                else begin : g_named_92_21
+assign pp[row][product_bit]=sign_views[(product_bit-2*row-34)/8];
+end
             end
         end else begin:g_no_sign_extension
             for(genvar product_bit=0;product_bit<64;product_bit=product_bit+1) begin:g_bit
-                if(product_bit<2*row) assign pp[row][product_bit]=1'b0;
-                else assign pp[row][product_bit]=relative_row[product_bit-2*row];
+                if(product_bit<2*row) begin : g_named_96_38
+assign pp[row][product_bit]=1'b0;
+end
+                else begin : g_named_97_21
+assign pp[row][product_bit]=relative_row[product_bit-2*row];
+end
             end
         end
     end endgenerate
     generate for(genvar correction_bit=0;correction_bit<64;correction_bit=correction_bit+1) begin:g_correction_bit
         if(correction_bit<=32 && correction_bit%2==0)
-            assign pp[17][correction_bit]=negative_corrections[correction_bit/2];
-        else assign pp[17][correction_bit]=1'b0;
+            begin : g_named_103_12
+assign pp[17][correction_bit]=negative_corrections[correction_bit/2];
+end
+        else begin : g_named_104_13
+assign pp[17][correction_bit]=1'b0;
+end
     end endgenerate
     wire [63:0] first_reduce1 [0:11];
     assign first_reduce1[0]=csa_sum3(pp[0],pp[1],pp[2]);

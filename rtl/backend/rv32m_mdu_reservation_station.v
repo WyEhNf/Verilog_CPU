@@ -10,8 +10,8 @@ module rv32m_mdu_reservation_station #(
     parameter integer MUL_IMPL = 0,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
-    parameter integer RECOVERY_OLDER_ISSUE = 0,
-    parameter integer ISSUE_RECOVERY_PREDECODE = 0,
+    parameter RECOVERY_OLDER_ISSUE = 0,
+    parameter ISSUE_RECOVERY_PREDECODE = 0,
     parameter integer RECOVERY_WIDTH = 1+2*((ROB_ENTRIES<=1)?1:$clog2(ROB_ENTRIES))+$clog2(ROB_ENTRIES+1)
 ) (
     input  wire                         clk_i,
@@ -46,6 +46,8 @@ module rv32m_mdu_reservation_station #(
     wire [2:0] inflight_count;
     wire mul_occupied,div_occupied;
     wire [3*RECOVERY_WIDTH-1:0] recovery_views;
+    wire unused_recovery_views_bits = &{1'b0, recovery_views};
+
     rv32_frequency_control_tree #(.WIDTH(RECOVERY_WIDTH),.LEAVES(3)) recovery_tree (
         .signal_i(recovery_packet_i),.views_o(recovery_views));
     wire pending_cancel;
@@ -69,9 +71,12 @@ module rv32m_mdu_reservation_station #(
     wire mul_resp_rd_we, div_resp_rd_we;
     wire mul_resp_ready = completion_ready_i;
     wire div_resp_ready = completion_ready_i && !mul_resp_valid;
+    wire unused_div_resp_ready_bits = &{1'b0, div_resp_ready};
+
     wire unit_req_fire = (mul_req_valid && mul_req_ready) ||
                          (div_req_valid && div_req_ready);
     wire completion_fire = completion_valid_o && completion_ready_i;
+    wire unused_completion_fire_bits = &{1'b0, completion_fire};
 
     // Refill the one-entry launch buffer on the same edge that the current
     // request enters its execution unit.  The pipelined Wallace multiplier
@@ -88,7 +93,7 @@ module rv32m_mdu_reservation_station #(
         .active_i(issue_valid_i),.tag_i(issue_rob_tag_i),.cancel_o(issue_cancel));
     end endgenerate
     assign issue_ready_o = !flush_i &&
-                           (!SELECTIVE_RECOVERY || !recovery_packet_i[RECOVERY_WIDTH-1] ||
+                           (!(SELECTIVE_RECOVERY != 0) || !recovery_packet_i[RECOVERY_WIDTH-1] ||
                             ((RECOVERY_OLDER_ISSUE!=0) && !issue_cancel)) &&
                            (!pending_valid || unit_req_fire ||
                             ((RECOVERY_OLDER_ISSUE!=0) && pending_cancel)) &&
@@ -111,7 +116,7 @@ module rv32m_mdu_reservation_station #(
     end endgenerate
     // Selectively canceled requests do not produce fake completions.
     // Their physical stage occupancy is the authority for the busy counter.
-    assign busy_o = pending_valid || (SELECTIVE_RECOVERY ?
+    assign busy_o = pending_valid || ((SELECTIVE_RECOVERY != 0) ?
         (mul_occupied || div_occupied) : (inflight_count != 0));
 
     generate
@@ -178,22 +183,11 @@ module rv32m_mdu_reservation_station #(
         if (reset_i || flush_i) begin
             pending_valid <= 1'b0;
 
-
-
-
-
-
-
         end else begin
             if (pending_cancel || (pending_valid && ((mul_req_valid && mul_req_ready) || (div_req_valid && div_req_ready))))
                 pending_valid <= 1'b0;
             if (issue_valid_i && issue_ready_o) begin
                 pending_valid <= 1'b1;
-
-
-
-
-
 
             end
 

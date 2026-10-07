@@ -82,7 +82,7 @@ module rv32_memory_bridge #(
     wire i_local_resp_fire = i_local_error && cache_i_resp_ready_i;
     wire d_local_resp_fire = d_local_error && cache_d_resp_ready_i;
 
-    function line_address_valid;
+    function automatic line_address_valid;
         input [31:0] address;
         begin
             line_address_valid = (address[3:0] == 4'd0) && (address < MEMORY_SIZE_U);
@@ -105,7 +105,6 @@ module rv32_memory_bridge #(
     assign mem_d_req_wdata_o = cache_d_req_wdata_i;
     assign mem_d_req_wmask_o = cache_d_req_wmask_i;
     assign mem_d_req_id_o = cache_d_req_id_i;
-
 
     wire [11:0] i_error_views,d_error_views;
     rv32_frequency_control_tree #(.LEAVES(12)) instruction_error_tree (

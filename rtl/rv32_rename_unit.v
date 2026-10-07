@@ -52,6 +52,10 @@ module rv32_rename_unit #(
     input  wire [PHYS_REGS-1:0]           restore_free_bitmap_i,
     input  wire [COUNT_WIDTH-1:0]         restore_free_count_i
 );
+    wire unused_commit_new_phys_i_bits = &{1'b0, commit_new_phys_i};
+
+    wire unused_restore_rat_i_bits = &{1'b0, restore_rat_i};
+
     localparam integer RENAME_COUNT_WIDTH = (BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1);
     localparam integer FREE_SLOTS = PHYS_REGS - 1;
     localparam integer FREE_GROUPS = (PHYS_REGS + 7) / 8;
@@ -61,7 +65,7 @@ module rv32_rename_unit #(
     reg [COUNT_WIDTH-1:0] free_count;
 
     reg [PHYS_ADDR_WIDTH-1:0] bundle_rat [0:31];
-    reg [PHYS_REGS-1:0] candidate_free_bitmap;
+
     wire [PHYS_ADDR_WIDTH-1:0] raw_candidate [0:BE_WIDTH-1];
     wire [PHYS_ADDR_WIDTH-1:0] free_candidate [0:BE_WIDTH-1];
     reg [PHYS_ADDR_WIDTH-1:0] pool_candidate [0:BE_WIDTH-1];
@@ -72,8 +76,8 @@ module rv32_rename_unit #(
     reg [BE_WIDTH*PHYS_ADDR_WIDTH-1:0] pool_next_payload;
     reg [BE_WIDTH-1:0] pool_write;
     integer pool_retained,pool_refilled,pool_row,pool_source;
-    wire [COUNT_WIDTH-1:0] available_for_rename=(REGISTERED_FREE_POOL!=0)?pool_count:free_count;
-    assign allocatable_count_o=(available_for_rename>BE_WIDTH)?BE_WIDTH:available_for_rename;
+    wire [COUNT_WIDTH-1:0] available_for_rename=(REGISTERED_FREE_POOL!=0)?COUNT_WIDTH'(pool_count):free_count;
+    assign allocatable_count_o=((BE_WIDTH<=1)?1:$clog2(BE_WIDTH+1))'((32'(available_for_rename)>BE_WIDTH)?BE_WIDTH:32'(available_for_rename));
     wire [BE_WIDTH*PHYS_ADDR_WIDTH-1:0] pool_ids,pool_ids_local;
     wire [BE_WIDTH-1:0] pool_valid,pool_valid_local;
     rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*PHYS_ADDR_WIDTH),.LEAVES(1)) pool_id_tree (
@@ -102,12 +106,12 @@ module rv32_rename_unit #(
     // The pool is not architectural allocation. Expose both unreserved and
     // reserved-but-unused registers as free so recovery never leaks them.
     always @* begin
-        pool_retained=pool_count-alloc_count_comb;
+        pool_retained=32'(pool_count)-32'(alloc_count_comb);
         pool_refilled=0;
         pool_reserve_mask=0;pool_next_payload=0;pool_write=0;
         for(pool_row=0;pool_row<BE_WIDTH;pool_row=pool_row+1) begin
             if(pool_row<pool_retained) begin
-                pool_source=pool_row+alloc_count_comb;
+                pool_source=pool_row+32'(alloc_count_comb);
                 pool_next_payload[pool_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]=pool_candidate[pool_source];
                 pool_write[pool_row]=(alloc_count_comb!=0);
             end else begin
@@ -120,7 +124,7 @@ module rv32_rename_unit #(
                 end
             end
         end
-        pool_next_count=pool_retained+pool_refilled;
+        pool_next_count=RENAME_COUNT_WIDTH'(pool_retained+pool_refilled);
     end
     always @(posedge clk_i) begin
         // Payload writes remain suppressed on restore. Retained unused
@@ -188,7 +192,7 @@ module rv32_rename_unit #(
                     if(REGISTERED_FREE_POOL!=0)
                         bits_next=bits_q & ~pool_reserve_mask[LOW +: BITS];
                     for(writer=0;writer<BE_WIDTH;writer=writer+1) begin
-                        phys_index=rename_new_phys_o[writer*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
+                        phys_index=32'(rename_new_phys_o[writer*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]);
                         if(REGISTERED_FREE_POOL==0 && rename_valid_o[writer] && rename_rd_we_o[writer] &&
                            phys_index>=LOW && phys_index<LOW+BITS)
                             bits_next[phys_index-LOW]=0;
@@ -196,7 +200,7 @@ module rv32_rename_unit #(
                     // Commit returns win over same-edge reservation/allocation,
                     // exactly as the original low-to-high NBA sequence.
                     for(writer=0;writer<BE_WIDTH;writer=writer+1) begin
-                        phys_index=commit_old_phys_i[writer*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
+                        phys_index=32'(commit_old_phys_i[writer*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]);
                         if(commit_valid_i && commit_rd_we_i[writer] && commit_rd_i[writer*5 +: 5]!=0 &&
                            phys_index!=0 && phys_index>=LOW && phys_index<LOW+BITS)
                             bits_next[phys_index-LOW]=1;
@@ -216,18 +220,21 @@ module rv32_rename_unit #(
     integer rob_used;
     integer rs_used;
     integer lsq_used;
-    integer release_used;
-    integer candidate_lane;
-    integer reset_index;
-    integer commit_lane;
-    integer restore_index;
-    integer selected_phys;
+    wire [31:0] release_used;
+    wire [BE_WIDTH-1:0] committed_releases;
+    generate for (genvar release_lane=0; release_lane<BE_WIDTH; release_lane=release_lane+1) begin : g_committed_release
+        assign committed_releases[release_lane] = commit_valid_i && commit_rd_we_i[release_lane] &&
+            commit_rd_i[release_lane*5 +: 5] != 0 &&
+            commit_old_phys_i[release_lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH] != 0;
+    end endgenerate
+    assign release_used = count_release_bits(committed_releases);
+
     reg prefix_open;
     reg [COUNT_WIDTH-1:0] alloc_count_comb;
 
     // Two-level priority encoding keeps the per-candidate search to eight
     // local bits followed by at most ceil(PHYS_REGS/8) group selections.
-    function [PHYS_ADDR_WIDTH-1:0] lowest_free_phys;
+    function automatic [PHYS_ADDR_WIDTH-1:0] lowest_free_phys;
         input [PHYS_REGS-1:0] bitmap;
         integer group_index;
         integer bit_index;
@@ -248,7 +255,7 @@ module rv32_rename_unit #(
                     end
                 end
                 if (group_found)
-                    lowest_free_phys = group_index * 8 + local_index;
+                    lowest_free_phys = PHYS_ADDR_WIDTH'(group_index * 8 + 32'(local_index));
             end
         end
     endfunction
@@ -315,8 +322,12 @@ module rv32_rename_unit #(
             wire [COUNT_WIDTH-1:0] prefix_tree [1:2*REFILL_GROUP_LEAVES-1];
             for(refill_bit=0;refill_bit<8;refill_bit=refill_bit+1) begin:g_leaf
                 if(refill_group*8+refill_bit<PHYS_REGS)
-                    assign group_tree[8+refill_bit]=free_bitmap[refill_group*8+refill_bit];
-                else assign group_tree[8+refill_bit]=0;
+                    begin : g_named_318_20
+assign group_tree[8+refill_bit]=free_bitmap[refill_group*8+refill_bit];
+end
+                else begin : g_named_319_21
+assign group_tree[8+refill_bit]=0;
+end
             end
             for(refill_node=1;refill_node<8;refill_node=refill_node+1) begin:g_sum
                 assign group_tree[refill_node]=group_tree[2*refill_node]+group_tree[2*refill_node+1];
@@ -324,8 +335,12 @@ module rv32_rename_unit #(
             assign refill_group_count[refill_group]=group_tree[1];
             for(refill_bit=0;refill_bit<REFILL_GROUP_LEAVES;refill_bit=refill_bit+1) begin:g_prefix_leaf
                 if(refill_bit<refill_group)
-                    assign prefix_tree[REFILL_GROUP_LEAVES+refill_bit]=refill_group_count[refill_bit];
-                else assign prefix_tree[REFILL_GROUP_LEAVES+refill_bit]=0;
+                    begin : g_named_327_20
+assign prefix_tree[REFILL_GROUP_LEAVES+refill_bit]=refill_group_count[refill_bit];
+end
+                else begin : g_named_328_21
+assign prefix_tree[REFILL_GROUP_LEAVES+refill_bit]=0;
+end
             end
             for(refill_node=1;refill_node<REFILL_GROUP_LEAVES;refill_node=refill_node+1) begin:g_prefix_sum
                 assign prefix_tree[refill_node]=prefix_tree[2*refill_node]+prefix_tree[2*refill_node+1];
@@ -337,8 +352,12 @@ module rv32_rename_unit #(
             localparam integer OFFSET=refill_row%8;
             wire [2:0] local_tree [1:15];
             for(refill_bit=0;refill_bit<8;refill_bit=refill_bit+1) begin:g_leaf
-                if(refill_bit<OFFSET) assign local_tree[8+refill_bit]=free_bitmap[GROUP*8+refill_bit];
-                else assign local_tree[8+refill_bit]=0;
+                if(refill_bit<OFFSET) begin : g_named_340_38
+assign local_tree[8+refill_bit]=free_bitmap[GROUP*8+refill_bit];
+end
+                else begin : g_named_341_21
+assign local_tree[8+refill_bit]=0;
+end
             end
             for(refill_node=1;refill_node<8;refill_node=refill_node+1) begin:g_sum
                 assign local_tree[refill_node]=local_tree[2*refill_node]+local_tree[2*refill_node+1];
@@ -450,52 +469,32 @@ module rv32_rename_unit #(
                 prefix_open = 1'b0;
             end
         end
-        alloc_count_comb = alloc_used;
+        alloc_count_comb = COUNT_WIDTH'(alloc_used);
     end
 
     always @(posedge clk_i) begin
-        if (rename_reset_views[0]) begin
-            free_count <= FREE_SLOTS;
-        end else if (rename_restore_views[0]) begin
-            free_count <= restore_free_count_i;
-        end else begin
-            // Rename allocation advances RAT and consumes reserved entries.
-            for (lane = 0; lane < BE_WIDTH; lane = lane + 1)
-                if (rename_valid_o[lane] && rename_rd_we_o[lane]) begin
-                end
-
-            release_used = 0;
-            for (commit_lane = 0; commit_lane < BE_WIDTH; commit_lane = commit_lane + 1) begin
-                if (commit_valid_i && commit_rd_we_i[commit_lane] &&
-                    (commit_rd_i[(commit_lane*5) +: 5] != 0)) begin
-                    if (commit_old_phys_i[(commit_lane*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH] != 0) begin
-                        release_used = release_used + 1;
-                    end
-                end
-            end
-            free_count <= free_count - alloc_count_comb + release_used;
+        if (rename_reset_views[0])
+        begin
+            free_count <= COUNT_WIDTH'(FREE_SLOTS);
         end
+        else
+            if (rename_restore_views[0])
+            begin
+                free_count <= restore_free_count_i;
+            end
+            else
+            begin
+                free_count <= COUNT_WIDTH'(32'(free_count) - 32'(alloc_count_comb) + release_used);
+            end
     end
-endmodule
 
-
-module rv32_rename_map_row #(parameter integer LANES=4,PAW=6) (
-    input wire clk_i,reset_i,restore_i,
-    input wire [PAW-1:0] restore_value_i,
-    input wire [LANES-1:0] match_i,
-    input wire [LANES*PAW-1:0] values_i,
-    output reg [PAW-1:0] value_o
-);
-    reg [PAW-1:0] selected;
-    integer lane;
-    always @* begin
-        selected=0;
-        for(lane=0;lane<LANES;lane=lane+1)
-            if(match_i[lane]) selected=values_i[lane*PAW +: PAW];
-    end
-    always @(posedge clk_i) begin
-        if(reset_i) value_o<=0;
-        else if(restore_i) value_o<=restore_value_i;
-        else if(|match_i) value_o<=selected;
-    end
+    function automatic [31:0] count_release_bits;
+        input [BE_WIDTH-1:0] mask;
+        integer bit_index;
+        begin
+            count_release_bits = 0;
+            for (bit_index=0; bit_index<BE_WIDTH; bit_index=bit_index+1)
+                count_release_bits = count_release_bits + 32'(mask[bit_index]);
+        end
+    endfunction
 endmodule

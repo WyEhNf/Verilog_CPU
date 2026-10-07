@@ -149,7 +149,7 @@ module rv32_dcache #(
     assign mem_req_id_o = mshr_lsq[7:0];
     assign mem_resp_ready_o = mem_resp_match;
 
-    function [31:0] extract_value;
+    function automatic [31:0] extract_value;
         input [127:0] line_data;
         input [31:0] address;
         input [1:0] size;
@@ -180,7 +180,7 @@ module rv32_dcache #(
         end
     endfunction
 
-    function [127:0] merge_store;
+    function automatic [127:0] merge_store;
         input [127:0] line_data;
         input [127:0] store_data;
         input [15:0] mask;

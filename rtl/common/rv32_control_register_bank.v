@@ -28,7 +28,7 @@ module rv32_control_register_bank #(
                 // preserving wire names alone would not prevent FF merging.
                 (* keep = 1 *) always @(posedge clk_i)
                     if (reset_i) value_q <= RESET_VALUE;
-                    else if (update_en_i) value_q <= value_i;
+                else if (update_en_i) value_q <= value_i;
                 assign replicas_o[leaf*WIDTH +: WIDTH] = value_q;
             end
         end else begin : g_shared_register

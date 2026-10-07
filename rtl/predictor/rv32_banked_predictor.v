@@ -11,12 +11,12 @@ module rv32_banked_predictor #(
     parameter integer DIRECT_BRANCH_TARGET = 0,
     parameter integer COMPACT_INDIRECT_BTB = 0,
     parameter integer COMPACT_BTB_ENTRIES = 64,
-    parameter integer FEEDBACK_LANES = 1, MULTI_FEEDBACK = 0,
-    parameter integer HYBRID_DIRECTION = 0,
-    parameter integer DIRECTION_INDEPENDENT_TARGET = 0,
+    parameter integer FEEDBACK_LANES = 1, parameter MULTI_FEEDBACK = 0,
+    parameter HYBRID_DIRECTION = 0,
+    parameter DIRECTION_INDEPENDENT_TARGET = 0,
     parameter integer NARROW_DIRECTION_READ = 0,
     parameter integer BANK_PC_CARRY_SELECT = 0,
-    parameter integer PREFIX_QUERY_HISTORY = 0,
+    parameter PREFIX_QUERY_HISTORY = 0,
     parameter integer BANK_LOCAL_INSTRUCTION_READ = 0,
     parameter integer BANK_LOCAL_PREFIX_HISTORY = 0,
     parameter integer BANK_DIRECT_WORD_INDEX = 0,
@@ -57,8 +57,8 @@ module rv32_banked_predictor #(
     // Compute this constant increment before the bank-dependent offset arrives.
     // Truncation preserves modulo-2^32 PC wrap after reattaching the low bits.
     wire [27:0] next_line_high=query_pc_i[31:4]+28'd1;
-    localparam integer MULTI_ACTIVE=(MULTI_FEEDBACK!=0) && (DIRECT_BRANCH_TARGET!=0);
-    localparam integer HYBRID_ACTIVE=(HYBRID_DIRECTION!=0) &&
+    localparam MULTI_ACTIVE=(MULTI_FEEDBACK!=0) && (DIRECT_BRANCH_TARGET!=0);
+    localparam HYBRID_ACTIVE=(HYBRID_DIRECTION!=0) &&
         (DIRECT_BRANCH_TARGET==2) && (HISTORY_BITS<=6);
     wire [FE_WIDTH-1:0] bank_feedback_valid,bank_feedback_correct;
     wire [FE_WIDTH-1:0] bank_taken, bank_hit;
@@ -96,7 +96,11 @@ module rv32_banked_predictor #(
             wire [2:0] word_index;
             if(BANK_DIRECT_WORD_INDEX!=0 && FE_WIDTH==4) begin:g_direct_four_word
                 // W+((B-W)&3) is B, or B+4 when this bank precedes W.
-                assign word_index={query_pc_i[3:2]>BANK_NUMBER,BANK_NUMBER};
+                if (bank == 3) begin : g_last_bank
+                    assign word_index={1'b0,BANK_NUMBER};
+                end else begin : g_compare_bank
+                    assign word_index={query_pc_i[3:2]>BANK_NUMBER,BANK_NUMBER};
+                end
             end else if(BANK_DIRECT_WORD_INDEX!=0 && FE_WIDTH==2) begin:g_direct_two_word
                 if(bank==0) begin:g_even_bank
                     // Round W up to the next even word, including invalid4.
@@ -230,6 +234,10 @@ module rv32_banked_predictor #(
             end
             assign bank_query_packets[bank*40 +: 40]={bank_component_directions[bank*2 +: 2],bank_taken[bank],bank_hit[bank],
                 bank_target[bank*32 +: 32],bank_kind[bank*2 +: 2],bank_counter[bank*2 +: 2]};
+                wire [5:0] unused_predictor_pred_bht_index_o;
+                wire [3:0] unused_predictor_pred_btb_index_o;
+                wire [31:0] unused_predictor_prediction_count_o;
+            wire [31:0] unused_predictor_correct_count_o;
             rv32_branch_predictor #(.BANK_BITS(BANK_BITS), .DIRECT_BRANCH_TARGET(DIRECT_BRANCH_TARGET),
                 .HISTORY_BITS(HISTORY_BITS), .HYBRID_DIRECTION(HYBRID_DIRECTION), .DIRECTION_INDEPENDENT_TARGET(DIRECTION_INDEPENDENT_TARGET), .NARROW_DIRECTION_READ(NARROW_DIRECTION_READ), .COMPACT_INDIRECT_BTB(COMPACT_INDIRECT_BTB), .COMPACT_BTB_ENTRIES(COMPACT_BTB_ENTRIES)) predictor (
                 .clk_i(clk_i), .reset_i(reset_i),
@@ -242,7 +250,7 @@ module rv32_banked_predictor #(
                 .pred_kind_o(bank_kind[bank*2 +: 2]),
                 .pred_counter_o(bank_counter[bank*2 +: 2]),
                 .pred_component_directions_o(bank_component_directions[bank*2 +: 2]),
-                .pred_bht_index_o(), .pred_btb_index_o(),
+                .pred_bht_index_o(unused_predictor_pred_bht_index_o), .pred_btb_index_o(unused_predictor_pred_btb_index_o),
                 .feedback_valid_i(update_valid),
                 .feedback_pc_i(update_pc), .feedback_kind_i(update_kind),
                 .feedback_taken_i(update_taken), .feedback_target_i(update_target),
@@ -250,7 +258,7 @@ module rv32_banked_predictor #(
                 .feedback_pred_target_i(update_pred_target),
                 .feedback_training_index_i(update_training_index),
                 .feedback_component_directions_i(update_component_directions),
-                .prediction_count_o(), .correct_count_o()
+                .prediction_count_o(unused_predictor_prediction_count_o), .correct_count_o(unused_predictor_correct_count_o)
             );
         end
         for (lane = 0; lane < FE_WIDTH; lane = lane + 1) begin : g_lane
@@ -274,12 +282,12 @@ module rv32_banked_predictor #(
         history_prefix_live = query_valid_i;
         pred_metadata_o = {FE_WIDTH*16{1'b0}};
         for (history_lane = 0; history_lane < FE_WIDTH; history_lane = history_lane + 1) begin
-            history_word = query_pc_i[3:2] + history_lane;
+            history_word = 32'(query_pc_i[3:2]) + history_lane;
             if (history_prefix_live && history_word < 4) begin
                 if (DIRECT_BRANCH_TARGET == 2)
                     pred_metadata_o[history_lane*16 +: 16] = {
                         history_after_bundle,
-                        bank_training_index[((base_bank+history_lane)&BANK_MASK)*8 +: 8]};
+                        bank_training_index[((32'(base_bank)+history_lane)&32'(BANK_MASK))*8 +: 8]};
                 // Keep the exact low history checkpoint and global-table
                 // query index. The two spare high bits carry both raw fetch
                 // directions for resolution-time preference training.
@@ -293,7 +301,7 @@ module rv32_banked_predictor #(
                 // Follow that effective prefix, not the raw BTB direction.
                 if (effective_pred_taken_i[history_lane] ||
                     ((LEGACY_SENTINEL_HALT != 0) &&
-                     ((query_line_i >> (history_word*32)) == 32'h0ff00513)))
+                     ((query_line_i >> (history_word*32)) == 128'h0000000000000000000000000ff00513)))
                     history_prefix_live = 1'b0;
             end
         end

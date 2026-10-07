@@ -85,6 +85,7 @@ module rv32m_mdu_iterative #(
     reg result_negate_increment;
     reg [31:0] corrected_result;
     reg [31:0] final_value;
+    wire unused_final_value_bits = &{1'b0, final_value};
 
     wire [2*RECOVERY_WIDTH-1:0] recovery_views;
     rv32_frequency_control_tree #(.WIDTH(RECOVERY_WIDTH),.LEAVES(2)) recovery_tree (
@@ -129,13 +130,15 @@ module rv32m_mdu_iterative #(
     wire division_no_borrow=division_shifted[64] || feedback_sum[32];
     wire [32:0] division_difference={division_shifted[64]^!feedback_sum[32],feedback_sum[31:0]};
     wire [32:0] finishing_correction=prefix_add32(~finishing_magnitude,32'b0,finishing_increment);
+    wire unused_finishing_correction_bits = &{1'b0, finishing_correction};
+
     wire [31:0] finishing_corrected=finishing_negate?finishing_correction[31:0]:finishing_magnitude;
     wire operation_is_remainder=(operation==`RV32IM_OP_REM || operation==`RV32IM_OP_REMU);
     wire [31:0] finishing_value=(!mode_mul && divide_zero)?
         (operation_is_remainder?original_a:32'hffffffff):
         ((!mode_mul && signed_overflow)?
          ((operation==`RV32IM_OP_REM)?32'b0:32'h80000000):finishing_corrected);
-    function [32:0] prefix_add32;
+    function automatic [32:0] prefix_add32;
         input [31:0] lhs;
         input [31:0] adjusted_rhs;
         input carry_in;

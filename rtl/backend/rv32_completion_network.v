@@ -17,7 +17,7 @@ module rv32_completion_network #(
     // which does not consume the corresponding CDB outputs. Legacy FIFO
     // paths and the standalone defaults retain their complete payload.
     parameter integer DIRECT_BRANCH_PAYLOAD = 1,
-    parameter integer DIRECT_STORE_PAYLOAD = 1,
+    parameter DIRECT_STORE_PAYLOAD = 1,
     parameter integer SLOT_WIDTH = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH),
     parameter integer COUNT_WIDTH = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH + 1)
 ) (
@@ -114,21 +114,21 @@ module rv32_completion_network #(
     reg [CDB_WIDTH-1:0] direct_selected_valid;
     reg [SOURCE_WIDTH-1:0] direct_selected_source [0:CDB_WIDTH-1];
     wire [SOURCES-1:0] direct_eligible, direct_used;
-    integer direct_source, direct_lane, direct_scan, direct_candidate;
+    integer direct_source, direct_lane;
+
     integer direct_state_lane;
-    wire [COUNT_WIDTH-1:0] occupancy_wire = BYPASS ? {COUNT_WIDTH{1'b0}} : count_reg;
+    wire [COUNT_WIDTH-1:0] occupancy_wire = (BYPASS != 0) ? {COUNT_WIDTH{1'b0}} : count_reg;
     assign occupancy_o = occupancy_wire;
 
     genvar entry_index;
     generate
         for (entry_index = 0; entry_index < FIFO_DEPTH; entry_index = entry_index + 1) begin : g_entry_state
-            assign entry_valid_o[entry_index] = BYPASS ? 1'b0 :
+            assign entry_valid_o[entry_index] = (BYPASS != 0) ? 1'b0 :
                 (valid_mem[entry_index] && live_mem[entry_index]);
             assign entry_tag_o[(entry_index*TAG_WIDTH) +: TAG_WIDTH] =
-                BYPASS ? {TAG_WIDTH{1'b0}} : tag_mem[entry_index];
+                (BYPASS != 0) ? {TAG_WIDTH{1'b0}} : tag_mem[entry_index];
         end
     endgenerate
-
 
     // Reserve held sources using static tag comparisons. Each remaining
     // source computes its rank in the round-robin order in parallel. Free
@@ -160,9 +160,9 @@ module rv32_completion_network #(
             for(rank_other=0;rank_other<RANK_LEAVES;rank_other=rank_other+1) begin:g_earlier
                 if(rank_other<SOURCES) begin:g_source
                     assign earlier_count[RANK_LEAVES+rank_other]=
-                        direct_eligible[rank_other] && !direct_used[rank_other] &&
+                        RANK_WIDTH'(direct_eligible[rank_other] && !direct_used[rank_other] &&
                         ((source_above_cursor[rank_other]==source_above_cursor[rank_source]) ?
-                         (rank_other<rank_source) : source_above_cursor[rank_other]);
+                         (rank_other<rank_source) : source_above_cursor[rank_other]));
                 end else begin:g_padding
                     assign earlier_count[RANK_LEAVES+rank_other]=0;
                 end
@@ -185,7 +185,7 @@ module rv32_completion_network #(
             wire [RANK_WIDTH-1:0] free_prefix [0:rank_lane];
             assign free_prefix[0]=0;
             for(rank_prior_lane=0;rank_prior_lane<rank_lane;rank_prior_lane=rank_prior_lane+1) begin:g_free_prefix
-                assign free_prefix[rank_prior_lane+1]=free_prefix[rank_prior_lane]+!held_lane_live[rank_prior_lane];
+                assign free_prefix[rank_prior_lane+1]=free_prefix[rank_prior_lane]+RANK_WIDTH'(!held_lane_live[rank_prior_lane]);
             end
             assign lane_free_rank[rank_lane]=free_prefix[rank_lane];
         end
@@ -197,11 +197,11 @@ module rv32_completion_network #(
             direct_selected_source[direct_lane]=0;
             direct_selected_valid[direct_lane]=|selected_mask[direct_lane];
             for(direct_source=0;direct_source<SOURCES;direct_source=direct_source+1)
-                direct_selected_source[direct_lane]=direct_selected_source[direct_lane] |
-                    ({SOURCE_WIDTH{selected_mask[direct_lane][direct_source]}} & direct_source);
+                direct_selected_source[direct_lane]=SOURCE_WIDTH'(32'(direct_selected_source[direct_lane]) |
+                    (32'({SOURCE_WIDTH{selected_mask[direct_lane][direct_source]}}) & direct_source));
             // Retain the exact old cursor rule: last accepted lane wins.
             if(direct_selected_valid[direct_lane] && cdb_ready_i[direct_lane]) begin
-                if(direct_selected_source[direct_lane]==SOURCES-1) direct_rr_next=0;
+                if(32'(direct_selected_source[direct_lane])==SOURCES-1) direct_rr_next=0;
                 else direct_rr_next=direct_selected_source[direct_lane]+1'b1;
             end
         end
@@ -359,7 +359,7 @@ module rv32_completion_network #(
         bypass_source_tag = {TAG_WIDTH{1'b0}};
         prefix_open = 1'b1;
         enq_count = 0;
-        free_slots = FIFO_DEPTH - count_reg;
+        free_slots = FIFO_DEPTH - 32'(count_reg);
         for (source = 0; source < SOURCES; source = source + 1) begin
             if (prefix_open && producer_valid_i[source]) begin
                 if (!producer_target_live_i[source]) begin
@@ -399,7 +399,7 @@ module rv32_completion_network #(
         pop_break = 1'b0;
         for (lane = 0; lane < CDB_WIDTH; lane = lane + 1) begin
             if (!pop_break) begin
-                pop_slot = head_reg + pop_count;
+                pop_slot = 32'(head_reg) + pop_count;
                 if (pop_slot >= FIFO_DEPTH) pop_slot = pop_slot - FIFO_DEPTH;
                 if (!flush_i && valid_mem[pop_slot] && live_mem[pop_slot] &&
                     (!live_tag_valid_i || tag_mem[pop_slot] == live_tag_i)) begin
@@ -530,63 +530,81 @@ module rv32_completion_network #(
     assign wakeup_value_o = cdb_value_o;
 
     always @(posedge clk_i) begin
-        if (BYPASS != 0) begin
+        if (BYPASS != 0)
+        begin
             head_reg <= 0;
             tail_reg <= 0;
             count_reg <= 0;
-            for (slot = 0; slot < FIFO_DEPTH; slot = slot + 1) begin
+            for (slot = 0; slot < FIFO_DEPTH; slot = slot + 1)
+            begin
                 valid_mem[slot] <= 1'b0;
                 live_mem[slot] <= 1'b0;
-            end
-        end else if (reset_i || flush_i) begin
-            head_reg <= 0;
-            tail_reg <= 0;
-            count_reg <= 0;
-            for (slot = 0; slot < FIFO_DEPTH; slot = slot + 1) begin
-                valid_mem[slot] <= 1'b0;
-                live_mem[slot] <= 1'b0;
-            end
-        end else begin
-            for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
-                if (pop_fire[lane]) begin
-                    pop_slot = head_reg + lane;
-                    if (pop_slot >= FIFO_DEPTH) pop_slot = pop_slot - FIFO_DEPTH;
-                    valid_mem[pop_slot] <= 1'b0;
-                    live_mem[pop_slot] <= 1'b0;
-                end
-            end
-            enq_slot = tail_reg;
-            for (source = 0; source < SOURCES; source = source + 1) begin
-                if (source_fire[source]) begin
-                    if (enq_slot >= FIFO_DEPTH) enq_slot = enq_slot - FIFO_DEPTH;
-                    valid_mem[enq_slot] <= 1'b1;
-                    live_mem[enq_slot] <= producer_target_live_i[source] && producer_tag_i[(source*TAG_WIDTH)];
-                    tag_mem[enq_slot] <= producer_tag_i[(source*TAG_WIDTH) +: TAG_WIDTH];
-                    phys_mem[enq_slot] <= producer_phys_rd_i[(source*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
-                    value_mem[enq_slot] <= producer_value_i[(source*32) +: 32];
-                    addr_mem[enq_slot] <= producer_addr_i[(source*32) +: 32];
-                    branch_target_mem[enq_slot] <= producer_branch_target_i[(source*32) +: 32];
-                    store_data_mem[enq_slot] <= producer_store_data_i[(source*32) +: 32];
-                    rd_we_mem[enq_slot] <= producer_rd_we_i[source];
-                    store_mem[enq_slot] <= producer_is_store_i[source];
-                    branch_mem[enq_slot] <= producer_is_branch_i[source];
-                    branch_taken_mem[enq_slot] <= producer_branch_taken_i[source];
-                    redirect_mem[enq_slot] <= producer_redirect_valid_i[source];
-                    memory_mem[enq_slot] <= producer_is_memory_i[source];
-                    load_mem[enq_slot] <= producer_is_load_i[source];
-                    enq_slot = enq_slot + 1;
-                end
-            end
-            head_reg <= head_reg + pop_count;
-            if (head_reg + pop_count >= FIFO_DEPTH) head_reg <= head_reg + pop_count - FIFO_DEPTH;
-            tail_reg <= tail_reg + enq_count;
-            if (tail_reg + enq_count >= FIFO_DEPTH) tail_reg <= tail_reg + enq_count - FIFO_DEPTH;
-            count_reg <= count_reg - pop_count + enq_count;
-            if (kill_valid_i) begin
-                for (slot = 0; slot < FIFO_DEPTH; slot = slot + 1)
-                    if (kill_mask_i[slot]) live_mem[slot] <= 1'b0;
             end
         end
+        else
+            if (reset_i || flush_i)
+            begin
+                head_reg <= 0;
+                tail_reg <= 0;
+                count_reg <= 0;
+                for (slot = 0; slot < FIFO_DEPTH; slot = slot + 1)
+                begin
+                    valid_mem[slot] <= 1'b0;
+                    live_mem[slot] <= 1'b0;
+                end
+            end
+            else
+            begin
+                for (lane = 0; lane < BE_WIDTH; lane = lane + 1)
+                begin
+                    if (pop_fire[lane])
+                    begin
+                        pop_slot = 32'(head_reg) + lane;
+                        if (pop_slot >= FIFO_DEPTH)
+                            pop_slot = pop_slot - FIFO_DEPTH;
+                        valid_mem[pop_slot] <= 1'b0;
+                        live_mem[pop_slot] <= 1'b0;
+                    end
+                end
+                enq_slot = 32'(tail_reg);
+                for (source = 0; source < SOURCES; source = source + 1)
+                begin
+                    if (source_fire[source])
+                    begin
+                        if (enq_slot >= FIFO_DEPTH)
+                            enq_slot = enq_slot - FIFO_DEPTH;
+                        valid_mem[enq_slot] <= 1'b1;
+                        live_mem[enq_slot] <= producer_target_live_i[source] && producer_tag_i[(source*TAG_WIDTH)];
+                        tag_mem[enq_slot] <= producer_tag_i[(source*TAG_WIDTH) +: TAG_WIDTH];
+                        phys_mem[enq_slot] <= producer_phys_rd_i[(source*PHYS_ADDR_WIDTH) +: PHYS_ADDR_WIDTH];
+                        value_mem[enq_slot] <= producer_value_i[(source*32) +: 32];
+                        addr_mem[enq_slot] <= producer_addr_i[(source*32) +: 32];
+                        branch_target_mem[enq_slot] <= producer_branch_target_i[(source*32) +: 32];
+                        store_data_mem[enq_slot] <= producer_store_data_i[(source*32) +: 32];
+                        rd_we_mem[enq_slot] <= producer_rd_we_i[source];
+                        store_mem[enq_slot] <= producer_is_store_i[source];
+                        branch_mem[enq_slot] <= producer_is_branch_i[source];
+                        branch_taken_mem[enq_slot] <= producer_branch_taken_i[source];
+                        redirect_mem[enq_slot] <= producer_redirect_valid_i[source];
+                        memory_mem[enq_slot] <= producer_is_memory_i[source];
+                        load_mem[enq_slot] <= producer_is_load_i[source];
+                        enq_slot = enq_slot + 1;
+                    end
+                end
+                head_reg <= SLOT_WIDTH'(32'(head_reg) + pop_count);
+                if (32'(head_reg) + pop_count >= FIFO_DEPTH)
+                    head_reg <= SLOT_WIDTH'(32'(head_reg) + pop_count - FIFO_DEPTH);
+                tail_reg <= SLOT_WIDTH'(32'(tail_reg) + enq_count);
+                if (32'(tail_reg) + enq_count >= FIFO_DEPTH)
+                    tail_reg <= SLOT_WIDTH'(32'(tail_reg) + enq_count - FIFO_DEPTH);
+                count_reg <= COUNT_WIDTH'(32'(count_reg) - pop_count + enq_count);
+                if (kill_valid_i)
+                begin
+                    for (slot = 0; slot < FIFO_DEPTH; slot = slot + 1)
+                        if (kill_mask_i[slot])
+                            live_mem[slot] <= 1'b0;
+                end
+            end
     end
 
     initial begin

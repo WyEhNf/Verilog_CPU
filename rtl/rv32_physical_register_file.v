@@ -13,13 +13,13 @@ module rv32_physical_register_file #(
     parameter integer LOCAL_VALUE_ROWS = 0,
     // Optional combination output for even allocation read ports only.
     // The original read data/ready and storage updates remain independent.
-    parameter integer STORE_ADDRESS_READ = 0,
+    parameter STORE_ADDRESS_READ = 0,
     // Optional ram/half/word alignment flags computed before the same
     // stored/write-through address event selector. No state or edge added.
-    parameter integer STORE_ADDRESS_FLAGS = 0,
+    parameter STORE_ADDRESS_FLAGS = 0,
     // Private saved-operand qualification; never changes public read data.
-    parameter integer STORE_SAVED_QUERY = 0,
-    parameter integer STORE_CLASS_COMPARE = 0,
+    parameter STORE_SAVED_QUERY = 0,
+    parameter STORE_CLASS_COMPARE = 0,
     parameter integer PHYS_ADDR_WIDTH = (PHYS_REGS <= 1) ? 1 : $clog2(PHYS_REGS)
 ) (
     input  wire                         clk_i,
@@ -43,11 +43,8 @@ module rv32_physical_register_file #(
     // a compact multi-ported memory.  The previous flattened vector forced
     // every data bit into a flip-flop plus a large read mux.
     wire [31:0] value [0:PHYS_REGS-1];
-    reg [31:0] value_legacy [0:PHYS_REGS-1];
+
     wire [PHYS_REGS-1:0] ready;
-    reg [PHYS_REGS-1:0] ready_legacy;
-    integer alloc_lane;
-    integer write_lane;
 
     initial begin
         if ((BE_WIDTH != 1) && (BE_WIDTH != 2) && (BE_WIDTH != 4)) begin
@@ -64,10 +61,11 @@ module rv32_physical_register_file #(
         end
     end
 
-
     localparam integer READ_DOMAINS=4;
     wire [2*BE_WIDTH*PHYS_ADDR_WIDTH-1:0] read_phys_local;
     wire [READ_DOMAINS*2*BE_WIDTH*PHYS_ADDR_WIDTH-1:0] read_domain_queries;
+    wire unused_read_domain_queries_bits = &{1'b0, read_domain_queries};
+
     generate if(READ_MUX_IMPL!=0) begin:g_query_domains
         wire [(READ_DOMAINS+1)*2*BE_WIDTH*PHYS_ADDR_WIDTH-1:0] queries;
         rv32_frequency_control_tree #(.WIDTH(2*BE_WIDTH*PHYS_ADDR_WIDTH),.LEAVES(READ_DOMAINS+1)) query_tree (
@@ -86,6 +84,8 @@ module rv32_physical_register_file #(
            (BE_WIDTH==1 || BE_WIDTH==2 || BE_WIDTH==4)) begin:g_word_storage
             reg [31:0] words [0:55];
             reg [55:0] word_ready;
+            wire unused_word_ready_bits = &{1'b0, word_ready};
+
             integer lane;
             for(owner_row=0;owner_row<56;owner_row=owner_row+1) begin:g_view
                 assign value[owner_row]=(owner_row==0)?32'b0:words[owner_row];
@@ -148,11 +148,11 @@ module rv32_physical_register_file #(
 `endif
     end else begin:g_legacy_alias
         for(owner_row=0;owner_row<PHYS_REGS;owner_row=owner_row+1) begin:g_row
-            assign value[owner_row]=value_legacy[owner_row];
+            assign value[owner_row]=g_legacy_storage.value_legacy[owner_row];
         end
-        assign ready=ready_legacy;
-    end endgenerate
 
+        assign ready=g_legacy_storage.ready_legacy;
+    end endgenerate
 
     // Four query domains decode physical words independently. Data and ready
     // use separate bounded select leaves; the reductions have explicit depth.
@@ -161,7 +161,7 @@ module rv32_physical_register_file #(
     generate if(READ_MUX_IMPL!=0) begin:g_parallel_read
         for(rp=0;rp<2*BE_WIDTH;rp=rp+1) begin:g_port
             wire [PHYS_ADDR_WIDTH-1:0] address=read_phys_local[rp*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
-            wire legal=address!=0 && address<PHYS_REGS;
+            wire legal=address!=0 && 32'(address)<PHYS_REGS;
             wire [31:0] stored_tree [1:2*READ_ROWS-1];
             wire ready_tree [1:2*READ_ROWS-1];
             wire [BE_WIDTH-1:0] bypass_match;
@@ -238,18 +238,22 @@ module rv32_physical_register_file #(
                         // Reuse legal/write-valid/phys equality. Highest write
                         // lane still wins, including the branch-link lane.
                         assign address_events[address_lane+1]=bypass_match[address_lane];
+                        wire [2:0] unused_write_address_class_flags_o;
                         rv32_frequency_add_simm12 write_address (
                             .base_i(write_data_i[address_lane*32 +: 32]),
                             .immediate_i(store_offset_i[(rp/2)*12 +: 12]),
-                            .sum_o(address_values[(address_lane+1)*32 +: 32]));
+                            .sum_o(address_values[(address_lane+1)*32 +: 32]), .class_flags_o(unused_write_address_class_flags_o));
                     end
+                    wire  unused_address_selector_write_o;
                     rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH+1),.PRIORITY(1)) address_selector (
-                        .events_i(address_events),.values_i(address_values),.write_o(),
+                        .events_i(address_events),.values_i(address_values),.write_o(unused_address_selector_write_o),
                         .value_o(store_address_o[(rp/2)*32 +: 32]));
                     if(STORE_ADDRESS_FLAGS!=0) begin:g_address_flags
                         wire [(BE_WIDTH+1)*3-1:0] flag_values;
                         for(genvar flag_lane=0;flag_lane<BE_WIDTH+1;flag_lane=flag_lane+1) begin:g_candidate
                             wire [31:0] candidate_address=address_values[flag_lane*32 +: 32];
+                            wire unused_candidate_address_bits = &{1'b0, candidate_address};
+
                             // bit0: ordinary RAM; bit1: half alignment;
                             // bit2: word alignment. All wrap/carry is already
                             // included by the exact original address adder.
@@ -257,8 +261,9 @@ module rv32_physical_register_file #(
                                 candidate_address[1:0]==2'b00,
                                 !candidate_address[0],candidate_address[31:28]==4'b0000};
                         end
+                        wire  unused_flags_selector_write_o;
                         rv32_frequency_event_select #(.WIDTH(3),.EVENTS(BE_WIDTH+1),.PRIORITY(1)) flags_selector (
-                            .events_i(address_events),.values_i(flag_values),.write_o(),
+                            .events_i(address_events),.values_i(flag_values),.write_o(unused_flags_selector_write_o),
                             .value_o(store_address_flags_o[(rp/2)*3 +: 3]));
                     end else begin:g_no_address_flags
                         assign store_address_flags_o[(rp/2)*3 +: 3]=0;
@@ -313,6 +318,11 @@ module rv32_physical_register_file #(
     end endgenerate
 
     generate if(LOCAL_VALUE_ROWS==0) begin:g_legacy_storage
+    reg [31:0] value_legacy [0:PHYS_REGS-1];
+    reg [PHYS_REGS-1:0] ready_legacy;
+    integer alloc_lane;
+    integer write_lane;
+
     always @(posedge clk_i) begin
         if (reset_i) begin
             ready_legacy <= {{(PHYS_REGS-1){1'b0}}, 1'b1};
@@ -340,29 +350,4 @@ module rv32_physical_register_file #(
         end
     end
     end endgenerate
-endmodule
-
-// Highest valid lane wins. Value payload has no later reset mux; the final
-// write enable already excludes reset before its priced local driver.
-module rv32_prf_value_row #(parameter integer LANES=4) (
-    input wire clk_i,reset_i,alloc_i,
-    input wire [LANES-1:0] write_matches_i,
-    input wire [LANES*32-1:0] write_values_i,
-    output reg [31:0] value_o,
-    output reg ready_o
-);
-    wire [1:0] write_views;
-    wire write_event;
-    wire [31:0] next_value;
-    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(LANES)) value_selector (
-        .events_i(write_matches_i),.values_i(write_values_i),.write_o(write_event),.value_o(next_value));
-    rv32_frequency_control_tree #(.LEAVES(2)) write_tree (
-        .signal_i(!reset_i && write_event),.views_o(write_views));
-    always @(posedge clk_i) if(write_views[0]) value_o[15:0]<=next_value[15:0];
-    always @(posedge clk_i) if(write_views[1]) value_o[31:16]<=next_value[31:16];
-    always @(posedge clk_i) begin
-        if(reset_i) ready_o<=0;
-        else if(|write_matches_i) ready_o<=1;
-        else if(alloc_i) ready_o<=0;
-    end
 endmodule

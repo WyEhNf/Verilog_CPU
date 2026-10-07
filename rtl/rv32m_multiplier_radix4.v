@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// Compact radix-4 shift/add multiplier.  It processes two multiplier bits per
+// Compact radix-4 shift/add multiplier_reg.  It processes two multiplier_reg bits per
 // cycle and shares one iterative datapath across all RV32M multiply variants.
 module rv32m_multiplier_radix4 #(
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
@@ -47,7 +47,7 @@ module rv32m_multiplier_radix4 #(
     reg [3:0] iteration;
     reg [63:0] accumulator;
     reg [63:0] multiplicand;
-    reg [31:0] multiplier;
+    reg [31:0] multiplier_reg;
     reg operation_negative;
     reg [OP_WIDTH-1:0] operation;
     reg [TAG_WIDTH-1:0] operation_tag;
@@ -85,7 +85,7 @@ module rv32m_multiplier_radix4 #(
     wire out_slot_ready = !out_valid || resp_ready_i || out_discard;
 
     always @* begin
-        case (multiplier[1:0])
+        case (multiplier_reg[1:0])
             2'b01: radix_addend = multiplicand;
             2'b10: radix_addend = multiplicand << 1;
             2'b11: radix_addend = multiplicand + (multiplicand << 1);
@@ -112,12 +112,13 @@ module rv32m_multiplier_radix4 #(
     assign resp_rd_we_o = 1'b1;
 
     always @(posedge clk_i) begin
-        if (reset_i || flush_i) begin
+        if (reset_i || flush_i)
+        begin
             busy <= 1'b0;
             iteration <= 4'b0;
             accumulator <= 64'b0;
             multiplicand <= 64'b0;
-            multiplier <= 32'b0;
+            multiplier_reg <= 32'b0;
             operation_negative <= 1'b0;
             operation <= {OP_WIDTH{1'b0}};
             operation_tag <= {TAG_WIDTH{1'b0}};
@@ -129,17 +130,21 @@ module rv32m_multiplier_radix4 #(
             out_tag <= {TAG_WIDTH{1'b0}};
             out_phys <= {PHYS_ADDR_WIDTH{1'b0}};
             out_live <= 1'b0;
-        end else begin
+        end
+        else
+        begin
             if (out_slot_ready)
                 out_valid <= 1'b0;
-
-            if(operation_cancel) busy<=1'b0;
-            if (busy && !operation_cancel) begin
+            if(operation_cancel)
+                busy<=1'b0;
+            if (busy && !operation_cancel)
+            begin
                 accumulator <= iteration_sum;
                 multiplicand <= multiplicand << 2;
-                multiplier <= multiplier >> 2;
+                multiplier_reg <= multiplier_reg >> 2;
                 iteration <= iteration + 1'b1;
-                if (iteration == 4'd15) begin
+                if (iteration == 4'd15)
+                begin
                     busy <= 1'b0;
                     out_valid <= 1'b1;
                     out_op <= operation;
@@ -149,13 +154,13 @@ module rv32m_multiplier_radix4 #(
                     out_live <= operation_live;
                 end
             end
-
-            if (req_valid_i && req_ready_o) begin
+            if (req_valid_i && req_ready_o)
+            begin
                 busy <= 1'b1;
                 iteration <= 4'b0;
                 accumulator <= 64'b0;
                 multiplicand <= {32'b0, req_abs_a};
-                multiplier <= req_abs_b;
+                multiplier_reg <= req_abs_b;
                 operation_negative <= req_a_negative ^ req_b_negative;
                 operation <= req_op_i;
                 operation_tag <= req_rob_tag_i;
