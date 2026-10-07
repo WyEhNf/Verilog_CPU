@@ -9,6 +9,8 @@ import subprocess
 import sys
 import time
 
+from cpu2026_build_log import run_logged
+
 
 ROOT = Path(__file__).resolve().parents[1]
 TRAINING_CYCLES = 100000
@@ -102,7 +104,8 @@ def compile_with_profile(generation, command, environment):
     if selected is None:
         print("[build] GCC profiles: ordinary build (" + reason + ")",
               file=sys.stderr, flush=True)
-        return subprocess.call(command, env=environment)
+        return run_logged(command, environment,
+                          Path(command[2]) / "cpu2026_compile.log", "C++ build")
     profile = selected["profile"]
     profile.mkdir(exist_ok=True)
     profile_flag = profile.as_posix()
@@ -124,7 +127,10 @@ def compile_with_profile(generation, command, environment):
                                 VM_USER_LDFLAGS=(link + " " + flags).strip())
         print("[build] " + label + "; jobs=1", file=sys.stderr, flush=True)
         started = time.monotonic()
-        status = subprocess.call(step, env=environment)
+        logfile = "cpu2026_compile_generate.log" if "-fprofile-generate=" in flags \
+                  else "cpu2026_compile_use.log"
+        status = run_logged(step, environment,
+                            selected["directory"] / logfile, label)
         record["phases"].append({"phase": label, "seconds": time.monotonic() - started,
                                  "status": status, "command": step})
         save()

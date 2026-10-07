@@ -6,4 +6,5 @@
 /docs/sram.md text eol=lf
 /tools/verilator_low_memory.py text eol=lf
 /tools/cpu2026_pgo.py text eol=lf
+/tools/cpu2026_build_log.py text eol=lf
 /tools/cpu2026_pgo_pi.txt -text

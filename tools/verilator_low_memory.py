@@ -10,6 +10,8 @@ import subprocess
 import sys
 import time
 
+from cpu2026_build_log import run_logged
+
 
 ROOT = Path(__file__).resolve().parents[1]
 # Inline the equivalent word model and retain the verified loop/function limits.
@@ -235,6 +237,10 @@ def main(arguments=None):
         # compile_command, copied from the official -MAKEFLAGS argument.
         environment.pop("MAKEFLAGS", None)
         environment.pop("MFLAGS", None)
+        version = subprocess.run(backend + ["--version"], env=environment,
+                                 capture_output=True, text=True)
+        print("[build] Backend: " + (version.stdout or version.stderr).strip()
+              + "; Python=" + sys.version.split()[0], file=sys.stderr, flush=True)
         print("[build] Phase 1: Verilator generation; trace depth="
               + os.environ.get("CPU2026_TRACE_DEPTH", "1")
               + "; compact ids=" + os.environ.get("CPU2026_COMPACT_IDS", "1")
@@ -245,7 +251,9 @@ def main(arguments=None):
               + "; output split=8000; function split=2000; expression depth=32", file=sys.stderr,
               flush=True)
         started = time.monotonic()
-        status = subprocess.call(backend + generation, env=environment)
+        status = run_logged(backend + generation, environment,
+                            Path(compile_command[2]) / "cpu2026_generation.log",
+                            "Verilator generation")
         print(f"[build] Phase 1 finished: {time.monotonic() - started:.1f}s; "
               f"status={status}", file=sys.stderr, flush=True)
         if status:
