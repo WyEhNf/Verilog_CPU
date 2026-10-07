@@ -51,7 +51,7 @@ def select_backend():
     return [executable("verilator")], False
 
 
-def build_plan(arguments):
+def build_plan(arguments, backend_version=""):
     """Keep RTL/driver arguments; move only the host make phase out of Verilator."""
     generation = []
     make_flags = []
@@ -134,6 +134,12 @@ def build_plan(arguments):
         raise ValueError("CPU2026_UNROLL_STMTS must be positive")
     limits = GENERATION_FLAGS.copy()
     limits[limits.index("--unroll-stmts") + 1] = str(unroll_statements)
+    # 5.040's cross-module DFG pass moves MDU expressions into the root.
+    # Retain that module boundary for the validated scheduling caches while
+    # leaving both within-module DFG passes enabled. 5.020 lacks this option.
+    if (re.search(r"\bVerilator 5\.040\b", backend_version)
+            and stable_mdu and word_sim):
+        limits.append("-fno-dfg-scoped")
     if int(os.environ.get("CPU2026_CPP_GROUP_BYTES", "2097152")) < 0:
         raise ValueError("CPU2026_CPP_GROUP_BYTES must be nonnegative")
     return (limits + trace_flags + id_flags + scheduling_flags + word_flags + mdu_flags + generation,
@@ -230,7 +236,6 @@ def main(arguments=None):
         backend, reenter = select_backend()
         if reenter or "--build" not in arguments:
             return subprocess.call(backend + arguments)
-        generation, compile_command = build_plan(arguments)
         environment = os.environ.copy()
         # An inherited GNU Make jobserver could override the one-job limit.
         # Compiler, linker, archiver and Python overrides remain explicit in
@@ -239,7 +244,9 @@ def main(arguments=None):
         environment.pop("MFLAGS", None)
         version = subprocess.run(backend + ["--version"], env=environment,
                                  capture_output=True, text=True)
-        print("[build] Backend: " + (version.stdout or version.stderr).strip()
+        backend_version = (version.stdout or version.stderr).strip()
+        generation, compile_command = build_plan(arguments, backend_version)
+        print("[build] Backend: " + backend_version
               + "; Python=" + sys.version.split()[0], file=sys.stderr, flush=True)
         print("[build] Phase 1: Verilator generation; trace depth="
               + os.environ.get("CPU2026_TRACE_DEPTH", "1")
@@ -248,6 +255,7 @@ def main(arguments=None):
               + "; word simulation=" + os.environ.get("CPU2026_WORD_SIM", "1")
               + "; native bits=" + os.environ.get("CPU2026_NATIVE_BITS", "1")
               + "; stable MDU=" + os.environ.get("CPU2026_STABLE_MDU", "1")
+              + "; scoped DFG=" + ("0" if "-fno-dfg-scoped" in generation else "default")
               + "; output split=8000; function split=2000; expression depth=32", file=sys.stderr,
               flush=True)
         started = time.monotonic()

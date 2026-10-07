@@ -59,6 +59,9 @@ export CPU2026_UNROLL_STMTS
 CPU2026_STABLE_MDU ?= 1
 export CPU2026_STABLE_MDU
 # Set CPU2026_STABLE_MDU=0 to keep the unmodified generated evaluator.
+# For Verilator 5.040, the wrapper preserves the MDU module boundary with
+# -fno-dfg-scoped while retaining both within-module DFG optimization passes.
+# Verilator 5.020 keeps its original generation flags.
 # Reuse the input-combinational calculation between a full falling evaluation
 # and its rising evaluation when every non-clock input is unchanged.
 CPU2026_ICO_PAIR ?= 1

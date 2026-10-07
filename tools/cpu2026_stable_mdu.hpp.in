@@ -11,11 +11,7 @@
 #include <vector>
 using Root=@ROOT_CLASS@;
 using Mdu=@MDU_CLASS@;
-void @MDU_FUNC_0@(Mdu*);
-void @MDU_FUNC_1@(Mdu*);
-void @MDU_FUNC_2@(Mdu*);
-void @MDU_FUNC_3@(Mdu*);
-void @MDU_FUNC_4@(Mdu*);
+@MDU_DECLARATIONS@
 void @ROOT_EVAL@(Root*);
 namespace cpu2026_stable_mdu {
 struct Inputs {
@@ -95,10 +91,7 @@ struct Accelerate {
   // A crossing can change partway through the original NBA sequence. Retry
   // the normal whole-model edge from the saved MDU state in that case.
   bool good=same_cross();
-  if(good){@MDU_FUNC_1@(&m);good=same_cross();}
-  if(good){@MDU_FUNC_2@(&m);good=same_cross();}
-  if(good){@MDU_FUNC_3@(&m);good=same_cross();}
-  if(good){@MDU_FUNC_4@(&m);good=same_cross();}
+@MDU_NBA_CALLS@
   if(!good){std::memcpy(mdudata(),saved.data(),mdusize);active=false;++wake;return false;}
   ++r.debug_core_cycles;r.@ID:__Vdly__debug_core_cycles@=r.debug_core_cycles;
   for(size_t j=0;j<10;++j){*counters[j]+=delta[j];*delayed[j]=*counters[j];}

@@ -38,10 +38,14 @@ def install(directory, prefix):
                                directory.glob(root + "__DepSet*.cpp")
                                if not path.name.endswith("__Slow.cpp"))
         hot_source = re.sub(r"#ifdef VL_DEBUG\n.*?#endif[^\n]*\n", "", hot_source, flags=re.S)
+        if "vlSelfRef." in hot_source:
+            if "auto& vlSelfRef = std::ref(*vlSelf).get();" not in hot_source:
+                raise ValueError("unrecognized generated self reference")
+            hot_source = hot_source.replace("vlSelfRef.", "vlSelf->")
         edge = (",((IData)(vlSelf->clock)&(~(IData)(vlSelf->"
                 + mapping["__Vtrigprevexpr___TOP__clock__0"] + "))));")
         edges = re.findall(re.escape("vlSelf->" + mapping["__VactTriggered"])
-                           + r"\.set\(([0-9]+)U" + re.escape(edge),
+                           + r"\.(?:set|setBit)\(([0-9]+)U" + re.escape(edge),
                            re.sub(r"\s+", "", hot_source))
         if len(edges) != 1:
             raise ValueError("unrecognized rising clock trigger")
@@ -86,7 +90,7 @@ def install(directory, prefix):
         ico_path, ico_source, insert = matches[0]
         activity = mapping["__Vm_traceActivity"]
         activity_write = "vlSelf->" + activity + "[1U] = 1U;"
-        if ico_source.count(activity_write) != 1:
+        if ico_source.replace("vlSelfRef.", "vlSelf->").count(activity_write) != 1:
             raise ValueError("unrecognized input-region waveform activity")
         original = "        " + root_eval + "(&root);"
         if top.count(original) != 1:

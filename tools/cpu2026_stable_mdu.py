@@ -1,4 +1,4 @@
-"""Install a conservative settled-core cache in Verilator 5.020 output.
+"""Install a conservative settled-core cache in recognized Verilator output.
 
 This is host scheduling only. It neither changes RTL nor collapses CPU clocks.
 Unknown generated layouts retain the original evaluator.
@@ -71,6 +71,12 @@ def install(directory, prefix):
         root_text = "\n".join(p.read_text() for p in
                                directory.glob(root + "__DepSet*.cpp")
                                if not p.name.endswith("__Slow.cpp"))
+        # 5.040 expresses the same object accesses through this reference.
+        # Normalize only for structural checks; leave generated code intact.
+        if "vlSelfRef." in root_text:
+            if "auto& vlSelfRef = std::ref(*vlSelf).get();" not in root_text:
+                raise ValueError("unrecognized generated self reference")
+            root_text = root_text.replace("vlSelfRef.", "vlSelf->")
         crossings = set(re.findall(r"vlSymsp->" + re.escape(cell) +
                                    r"\.(\w+)", root_text))
         expected = {mapping[name] for name in (
@@ -79,15 +85,21 @@ def install(directory, prefix):
             "__Vcellinp__operation_cancel_guard__active_i")}
         if crossings != expected:
             raise ValueError("unrecognized MDU to root boundary")
-        functions = [mdu + "__" + mapping[region + "__TOP__" + MDU_PATH +
-                     "__" + str(index)] for region, index in
-                     [("_ico_sequent", 0)] + [("_nba_sequent", i) for i in range(4)]]
         mdu_text = "\n".join(p.read_text() for p in
                               directory.glob(mdu + "__DepSet*.cpp")
                               if not p.name.endswith("__Slow.cpp"))
         definitions = re.findall(r"^(?:VL_INLINE_OPT )?void (" +
                                  re.escape(mdu) + r"__\w+)\(", mdu_text, re.M)
-        if set(definitions) != set(functions) or len(definitions) != 5:
+        # 5.020 emits four NBA regions; 5.040 without scoped DFG emits
+        # three. Require the complete known region set, then preserve the
+        # generated call order and check every crossing after each region.
+        nba_count = len(definitions) - 1
+        if nba_count not in (3, 4):
+            raise ValueError("unrecognized MDU evaluation region count")
+        functions = [mdu + "__" + mapping[region + "__TOP__" + MDU_PATH +
+                     "__" + str(index)] for region, index in
+                     [("_ico_sequent", 0)] + [("_nba_sequent", i) for i in range(nba_count)]]
+        if set(definitions) != set(functions) or len(definitions) != len(functions):
             raise ValueError("unrecognized MDU evaluation regions")
         calls = re.findall(r"(" + re.escape(mdu) + r"__\w+)\(\(&vlSymsp->" +
                            re.escape(cell) + r"\)\);", root_text)
@@ -124,7 +136,10 @@ def install(directory, prefix):
                 raise ValueError("counter has an unrecognized reader: " + name)
         values = {"ROOT_CLASS": root, "MDU_CLASS": mdu,
                   "MDU_LAST_FIELD": mdu_fields[-1],
-                  "ROOT_EVAL": root + "__" + mapping["_eval"]}
+                  "ROOT_EVAL": root + "__" + mapping["_eval"],
+                  "MDU_DECLARATIONS": "\n".join("void " + f + "(Mdu*);" for f in functions),
+                  "MDU_NBA_CALLS": "\n".join(
+                      "  if(good){" + f + "(&m);good=same_cross();}" for f in functions[1:])}
         values.update({"MDU_FUNC_" + str(i): f for i, f in enumerate(functions)})
 
         def replace(match):
@@ -168,6 +183,7 @@ def install(directory, prefix):
                   "mdu_snapshot_first": mdu_fields[0],
                   "mdu_snapshot_last": mdu_fields[-1],
                   "mdu_fixed_fields": len(mdu_fields),
+                  "mdu_regions": functions,
                   "stats_preserved": 10, "cpu_cycles_collapsed": False}
     except (OSError, KeyError, IndexError, ValueError, ET.ParseError) as error:
         report["reason"] = str(error)
