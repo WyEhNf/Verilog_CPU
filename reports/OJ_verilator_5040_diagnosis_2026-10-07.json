@@ -1,0 +1,390 @@
+{
+  "status": "LOCAL_VERILATOR_5040_BUILD_SUCCEEDED_REMOTE_FAILURE_NOT_YET_IDENTIFIED",
+  "scope": "Windows native; no Linux/WSL build; OJ suffix and commit not provided",
+  "tool_build": {
+    "url": "https://codeload.github.com/verilator/verilator/tar.gz/refs/tags/v5.040",
+    "archive_sha256": "56c7c46314adfad06dd093b77823bfd9b49ebef72342549f790718199c3e8223",
+    "windows_native": true,
+    "command": [
+      "F:/c26/msys64/usr/bin/bash.exe",
+      "F:/CPU2026CourseTools/win5040/build_native.sh"
+    ],
+    "seconds": 285.1971448999975,
+    "exit_code": 0,
+    "source": "F:\\CPU2026CourseTools\\win5040\\source_release\\verilator-5.040"
+  },
+  "generation": {
+    "version": "Verilator 5.040 2025-08-30 rev UNKNOWN.REV",
+    "seconds": 6.922989600003348,
+    "exit_code": 0,
+    "generation_command": [
+      "F:\\CPU2026CourseTools\\win5040\\source_release\\verilator-5.040\\bin\\verilator_bin.exe",
+      "-O3",
+      "--no-trace-params",
+      "--unroll-count",
+      "1024",
+      "--unroll-stmts",
+      "4096",
+      "--output-split",
+      "8000",
+      "--output-split-cfuncs",
+      "2000",
+      "--output-split-ctrace",
+      "2000",
+      "--comp-limit-parens",
+      "32",
+      "--trace-depth",
+      "1",
+      "--protect-ids",
+      "--protect-key",
+      "CPU2026-COMPILE-NAMES-V1",
+      "E:\\Verilog_cpu\\tools\\cpu2026_simulation.vlt",
+      "+define+CPU2026_WORD_SIM",
+      "E:\\Verilog_cpu\\tools\\cpu2026_mdu_schedule.vlt",
+      "--cc",
+      "--exe",
+      "--trace",
+      "--assert",
+      "-Wall",
+      "-Wno-fatal",
+      "--top-module",
+      "student_top",
+      "--Mdir",
+      "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\obj",
+      "-o",
+      "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\sim",
+      "-CFLAGS",
+      "-std=c++17",
+      "E:\\Verilog_cpu\\scripts\\ram\\sram_fakeram.sv",
+      "E:\\Verilog_cpu\\rtl\\rv32im_decoder.v",
+      "E:\\Verilog_cpu\\rtl\\predictor\\rv32_branch_predictor.v",
+      "E:\\Verilog_cpu\\rtl\\predictor\\rv32_banked_predictor.v",
+      "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache.v",
+      "E:\\Verilog_cpu\\rtl\\cache\\rv32_icache_nonblocking.v",
+      "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache.v",
+      "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_control_banks.v",
+      "E:\\Verilog_cpu\\rtl\\cache\\rv32_dcache_nonblocking.v",
+      "E:\\Verilog_cpu\\rtl\\cache\\rv32_cache_stats.v",
+      "E:\\Verilog_cpu\\rtl\\memory\\rv32_memory_bridge.v",
+      "E:\\Verilog_cpu\\rtl\\memory\\rv32_uncached_memory.v",
+      "E:\\Verilog_cpu\\rtl\\frontend\\rv32_fetch_frontend.v",
+      "E:\\Verilog_cpu\\rtl\\rv32i_alu.v",
+      "E:\\Verilog_cpu\\rtl\\rv32m_multiplier.v",
+      "E:\\Verilog_cpu\\rtl\\rv32m_multiplier_radix4.v",
+      "E:\\Verilog_cpu\\rtl\\rv32m_divider.v",
+      "E:\\Verilog_cpu\\rtl\\rv32m_mdu_iterative.v",
+      "E:\\Verilog_cpu\\rtl\\rv32_physical_register_file.v",
+      "E:\\Verilog_cpu\\rtl\\rv32_rename_unit.v",
+      "E:\\Verilog_cpu\\rtl\\backend\\rv32_rob.v",
+      "E:\\Verilog_cpu\\rtl\\backend\\rv32_reservation_station.v",
+      "E:\\Verilog_cpu\\rtl\\backend\\rv32m_mdu_reservation_station.v",
+      "E:\\Verilog_cpu\\rtl\\backend\\rv32_completion_network.v",
+      "E:\\Verilog_cpu\\rtl\\backend\\rv32_lsq.v",
+      "E:\\Verilog_cpu\\rtl\\backend\\rv32_store_address_select.v",
+      "E:\\Verilog_cpu\\rtl\\backend\\rv32_rat_recovery.v",
+      "E:\\Verilog_cpu\\rtl\\backend\\rv32_backend_joint.v",
+      "E:\\Verilog_cpu\\rtl\\backend\\rv32_serial_backend.v",
+      "E:\\Verilog_cpu\\rtl\\common\\rv32im_tag_compare.v",
+      "E:\\Verilog_cpu\\rtl\\common\\rv32im_fifo.v",
+      "E:\\Verilog_cpu\\rtl\\common\\rv32im_skid_buffer.v",
+      "E:\\Verilog_cpu\\rtl\\common\\rv32im_prefix_alloc.v",
+      "E:\\Verilog_cpu\\rtl\\common\\rv32im_priority_select.v",
+      "E:\\Verilog_cpu\\rtl\\common\\rv32_asap7_fanout.v",
+      "E:\\Verilog_cpu\\rtl\\common\\rv32_control_register_bank.v",
+      "E:\\Verilog_cpu\\rtl\\cpu_core.v",
+      "E:\\Verilog_cpu\\rtl\\course\\rv32_axi_lite_bridge.v",
+      "E:\\Verilog_cpu\\rtl\\course\\student_top.v",
+      "E:\\Verilog_cpu\\scripts\\sim.cpp"
+    ],
+    "compile_command": [
+      "F:\\c26\\msys64\\usr\\bin\\make.exe",
+      "-C",
+      "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\obj",
+      "-f",
+      "Vstudent_top.mk",
+      "-j1",
+      "VM_PARALLEL_BUILDS=1",
+      "CXX=F:/c26/msys64/mingw64/bin/g++.exe",
+      "LINK=F:/c26/msys64/mingw64/bin/g++.exe",
+      "AR=F:/c26/msys64/mingw64/bin/ar.exe",
+      "PYTHON3=C:/Users/admin/miniconda3/python.exe",
+      "VM_USER_LDLIBS=F:/CPU2026CourseRuns/A109_readme_interface_no_pi_20261006/windows_time_zero.o",
+      "OPT_FAST=-O3"
+    ],
+    "windows_native": true
+  },
+  "compile": {
+    "seconds": 90.50414849999652,
+    "exit_code": 0,
+    "version": "Verilator 5.040 2025-08-30 rev UNKNOWN.REV",
+    "windows_native": true,
+    "generation_seconds": 6.922989600003348
+  },
+  "post_generation": {
+    "bits": {
+      "enabled": true,
+      "calls": 1320,
+      "library_files_modified": false,
+      "method": "bit width of value-1; zero/one explicitly return zero"
+    },
+    "mdu": {
+      "enabled": false,
+      "reason": "unrecognized MDU to root boundary"
+    },
+    "ico": {
+      "enabled": false,
+      "reason": "requires the recognized two-object MDU schedule"
+    },
+    "groups": {
+      "enabled": true,
+      "byte_limit": 2097152,
+      "original_units": 93,
+      "compilation_units": 9,
+      "sections": [
+        {
+          "category": "VM_CLASSES_FAST",
+          "original_units": 66,
+          "compilation_units": 5,
+          "groups": [
+            {
+              "unit": "Vstudent_top__cpu2026_vm_classes_fast_0",
+              "members": [
+                "Vstudent_top",
+                "Vstudent_top_PSYuEB__DepSet_h2f96319a__0",
+                "Vstudent_top_PSYuEB__DepSet_h2f96319a__1",
+                "Vstudent_top_PSYuEB__DepSet_h2f96319a__2",
+                "Vstudent_top_PSYuEB__DepSet_h2f96319a__3",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__0",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__1",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__2",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__3",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__4",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__5",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__6",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__7",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__8",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__9"
+              ]
+            },
+            {
+              "unit": "Vstudent_top__cpu2026_vm_classes_fast_1",
+              "members": [
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__10",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__11",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__12",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__13",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__14",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__15",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__16",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__17",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__18",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__19",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__20",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__21",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__22",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__23",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__24"
+              ]
+            },
+            {
+              "unit": "Vstudent_top__cpu2026_vm_classes_fast_2",
+              "members": [
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__25",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__26",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__27",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__28",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__29",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__30",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__31",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__32",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__33",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__34",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__35"
+              ]
+            },
+            {
+              "unit": "Vstudent_top__cpu2026_vm_classes_fast_3",
+              "members": [
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__36",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__37",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__38",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__39",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__40",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__41",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__42",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__43",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__44",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__45",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__46",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__47",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__48",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__49"
+              ]
+            },
+            {
+              "unit": "Vstudent_top__cpu2026_vm_classes_fast_4",
+              "members": [
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__50",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__51",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__52",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__53",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__54",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__55",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__56",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__57",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__58",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__59",
+                "Vstudent_top_PSixpC__DepSet_h3ff10179__0"
+              ]
+            }
+          ]
+        },
+        {
+          "category": "VM_CLASSES_SLOW",
+          "original_units": 23,
+          "compilation_units": 2,
+          "groups": [
+            {
+              "unit": "Vstudent_top__cpu2026_vm_classes_slow_0",
+              "members": [
+                "Vstudent_top__ConstPool_0",
+                "Vstudent_top_PSYuEB__Slow",
+                "Vstudent_top_PSYuEB__DepSet_h2f96319a__0__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__0__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__1__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__2__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__3__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__4__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__5__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__6__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__7__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__8__Slow"
+              ]
+            },
+            {
+              "unit": "Vstudent_top__cpu2026_vm_classes_slow_1",
+              "members": [
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__9__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__10__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__11__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__12__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__13__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__14__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__15__Slow",
+                "Vstudent_top_PSYuEB__DepSet_habf61e71__16__Slow",
+                "Vstudent_top_PSixpC__Slow",
+                "Vstudent_top_PSixpC__DepSet_h3ff10179__0__Slow",
+                "Vstudent_top_PSixpC__DepSet_hbc592f54__0__Slow"
+              ]
+            }
+          ]
+        },
+        {
+          "category": "VM_SUPPORT_FAST",
+          "original_units": 1,
+          "compilation_units": 1,
+          "groups": [
+            {
+              "unit": "Vstudent_top_PSasBc__0",
+              "members": [
+                "Vstudent_top_PSasBc__0"
+              ]
+            }
+          ]
+        },
+        {
+          "category": "VM_SUPPORT_SLOW",
+          "original_units": 3,
+          "compilation_units": 1,
+          "groups": [
+            {
+              "unit": "Vstudent_top__cpu2026_vm_support_slow_0",
+              "members": [
+                "Vstudent_top_PSDmQb",
+                "Vstudent_top_PSasBc__0__Slow",
+                "Vstudent_top_PSrqTA__0__Slow"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "profile_phases": {
+    "compiler": "g++.exe (Rev4, Built by MSYS2 project) 16.2.0",
+    "training_cycles": 100000,
+    "latency": 10,
+    "wave": false,
+    "phases": [
+      {
+        "phase": "GCC profile generation",
+        "seconds": 53.900102600004175,
+        "status": 0,
+        "command": [
+          "F:\\c26\\msys64\\usr\\bin\\make.exe",
+          "-C",
+          "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\obj",
+          "-f",
+          "Vstudent_top.mk",
+          "-j1",
+          "VM_PARALLEL_BUILDS=1",
+          "CXX=F:/c26/msys64/mingw64/bin/g++.exe",
+          "LINK=F:/c26/msys64/mingw64/bin/g++.exe",
+          "AR=F:/c26/msys64/mingw64/bin/ar.exe",
+          "PYTHON3=C:/Users/admin/miniconda3/python.exe",
+          "VM_USER_LDLIBS=F:/CPU2026CourseRuns/A109_readme_interface_no_pi_20261006/windows_time_zero.o",
+          "OPT_FAST=-O3 -fprofile-generate=F:/CPU2026NativeExperiments/oj-verilator-5040-20261007/obj/cpu2026_profile -fprofile-update=single",
+          "VM_USER_LDFLAGS=-fprofile-generate=F:/CPU2026NativeExperiments/oj-verilator-5040-20261007/obj/cpu2026_profile -fprofile-update=single"
+        ]
+      },
+      {
+        "phase": "limited Pi profile training",
+        "seconds": 2.675774299990735,
+        "status": 1,
+        "stdout": "FAIL cycles=100000 (timeout or finish before exit write response)\n",
+        "stderr": ""
+      },
+      {
+        "phase": "GCC profile use and serial LTO",
+        "seconds": 33.8286483999982,
+        "status": 0,
+        "command": [
+          "F:\\c26\\msys64\\usr\\bin\\make.exe",
+          "-C",
+          "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007\\obj",
+          "-f",
+          "Vstudent_top.mk",
+          "-j1",
+          "VM_PARALLEL_BUILDS=1",
+          "CXX=F:/c26/msys64/mingw64/bin/g++.exe",
+          "LINK=F:/c26/msys64/mingw64/bin/g++.exe",
+          "AR=F:/c26/msys64/mingw64/bin/ar.exe",
+          "PYTHON3=C:/Users/admin/miniconda3/python.exe",
+          "VM_USER_LDLIBS=F:/CPU2026CourseRuns/A109_readme_interface_no_pi_20261006/windows_time_zero.o",
+          "OPT_FAST=-O3 -fprofile-use=F:/CPU2026NativeExperiments/oj-verilator-5040-20261007/obj/cpu2026_profile -flto=1",
+          "VM_USER_LDFLAGS=-fprofile-use=F:/CPU2026NativeExperiments/oj-verilator-5040-20261007/obj/cpu2026_profile -flto=1"
+        ]
+      }
+    ],
+    "profile_files": 7,
+    "profile_bytes": 142296
+  },
+  "original_oj_point_1": {
+    "version": "5.040",
+    "seconds": 0.20590850000735372,
+    "exit_code": 0,
+    "stdout": "5050\n",
+    "stderr": "CPU2026 cycles=447\n",
+    "original_oj_input": "3201/3201/1.in",
+    "expected": "5050"
+  },
+  "failure_log_probe": {
+    "intentional_invalid_input": true,
+    "exit_code_preserved": 1,
+    "full_log_retained": true,
+    "error_summary_printed_before_tail": true
+  },
+  "measured_cpu_full_pi_this_turn": false,
+  "original_5020_pi_result_not_revalidated_on_5040": true,
+  "evidence_directory": "F:\\CPU2026NativeExperiments\\oj-verilator-5040-20261007"
+}

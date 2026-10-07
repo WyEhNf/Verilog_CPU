@@ -1,6 +1,6 @@
 # Pi 仿真加速研究进度
 
-当前本机目标已达成：正式 Makefile 构建产物以 3201 原始 stdin 输入完成完整 Pi，用时 **96.2889 秒**，输出 **112**，真实周期仍为 **38,853,527**，峰值工作集 **265.76 MiB**。完整构建含有限窗口 profile 收集为 **104.7987 秒**。qsort/tak 也分别正确完成于 **9.8433/9.4919 秒**。这些是 Windows 原生实测；尚未推送或获得新的远端 OJ 结果。最新记录见末节和 [测量 JSON](OJ_pi_pgo_final_2026-10-07.json)。
+当前本机目标已达成：正式 Makefile 构建产物以 3201 原始 stdin 输入完成完整 Pi，用时 **96.2889 秒**，输出 **112**，真实周期仍为 **38,853,527**，峰值工作集 **265.76 MiB**。完整构建含有限窗口 profile 收集为 **104.7987 秒**。qsort/tak 也分别正确完成于 **9.8433/9.4919 秒**。这些是 **Verilator 5.020 / Windows 原生**实测；尚未推送或获得新的远端 OJ 通过结果。用户随后给出的 OJ 日志实际为 5.040，该平台的完整 Pi 尚未重新验证，见末节诊断。最新记录见末节和 [测量 JSON](OJ_pi_pgo_final_2026-10-07.json)。
 
 以下按研究顺序保留各阶段记录。最初阶段尚未达成目标，恢复了 Word4，41 项构建输入 SHA-256 与当时二进制计划匹配；后续采用的改动和最终完整结果在各追加章节说明。
 
@@ -242,3 +242,17 @@ GCC 的 [优化选项](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)
 重新审查自 `40bab1a06825cc9a92be9e0a422fdbe2f5817634` 后修改的全部 10 个 RTL 文件：用课程 Verilator 预处理，设置 `SYNTHESIS` 并关闭 `CPU2026_WORD_SIM`，前后 token 完全相同。其余 HDL 和文件清单字节未变。该检查覆盖真正综合视图；软件构建优化不改变该视图。IPC GEOMEAN **1.1152626918348099**、总面积含 SRAM **35891.672317998215 μm²**、频率 **321.60804020100505 MHz**沿用冻结硬件记录，本次没有重新综合或重测整套 IPC。Pi 的最终周期与冻结结果一致。
 
 完整实验、构建日志、原始 stdout/stderr、输入与二进制哈希、逐文件硬件视图 identity 和有限状态比较在 `F:/CPU2026NativeExperiments/official-pgo-entry-20261007/`，此前 profile/LTO 配对实验在 `F:/CPU2026NativeExperiments/pgo-word-model-20261007/`。仓库中的 [最终测量 JSON](OJ_pi_pgo_final_2026-10-07.json) 汇总关键信息。代码与文档仅作本地提交，没有推送，也没有声称 OJ 已通过。
+
+## OJ 的 Verilator 5.040 构建退出诊断
+
+用户补充 `runtime error: Program exited with status 2`，提供的部分停在生成阶段的 warning 中途，未包含 `%Error`、失败阶段末尾、Python traceback 或提交哈希。链接参数 `v=5.040` 表明实际 OJ Verilator 不同于前述本机 5.020。当前官方构建参数已有 `-Wno-fatal`；不能据此把 INSECURE、PINCONNECTEMPTY 或 DECLFILENAME 等 warning 当成退出原因，也不能仅因版本不同就断言发生兼容错误。
+
+从 [Verilator 官方 v5.040 发布标签](https://github.com/verilator/verilator/releases/tag/v5.040) 的归档原生构建工具，放在独立 `F:/CPU2026CourseTools/win5040/`。下载归档 SHA-256 `56c7c46314adfad06dd093b77823bfd9b49ebef72342549f790718199c3e8223`；本机工具原生构建 285.1971 秒，显示 `Verilator 5.040 2025-08-30 rev UNKNOWN.REV`（归档没有 Git 元数据）。此时间是准备工具本身，不是 OJ 编译学生 CPU 的时间。原 5.020 安装和冻结结果未改，没有使用 WSL。
+
+同一 RTL、RAM、驱动及生成参数在 5.040 下生成成功：**6.9230 秒**，退出 0，标量 bit scan 1320 处，C++ 分组 9 个单元。生成边界变化使 MDU 调度报告 `unrecognized MDU to root boundary`，半周期复用也正确回退。随后 GCC profile generation、100000 周期训练、profile-use/串行 LTO 均成功；C++ 含训练 **90.5041 秒**，生成与 C++ 两阶段合计 **97.4271 秒**，不是另一台 OJ 主机的时间保证。训练 2.6758 秒、stdout `FAIL cycles=100000 ...`、stderr 空，仍只作为有限窗口训练，不计作通过。
+
+最终 5.040 产物使用无参数 OJ stdin 运行原始第 1 点，正确输出 **5050**，**447 周期**，退出 0，用时 **0.2059 秒**。本次没有执行完整 Pi 或 21 点套件，且没有宣称此前 96.29 秒结果适用于 5.040。硬件源和综合配置没有改动。
+
+已采用日志可见性修复 `589bdc81`：生成和两阶段 C++ 输出完整保存于对象目录，失败时首先展示 `%Error`/编译错误，再展示末尾 30 行；成功时展示 warning 类别计数、编译 warning 和完整日志位置。构建开头打印真实 backend/Python 版本。对实际 5.040 传入一个故意非法的最小语法输入，验证原非零退出码和完整日志保留，错误摘要出现在日志尾部之前。该检查不属于 CPU 正确性测试，也没有跳过 warning 或改变 CPU 求值。
+
+**尚未定位用户那次 OJ 的真正退出原因。**本机 5.040 完成生成、编译和一个原始 OJ 点，未复现退出码 2；仍需要该次提交的完整哈希与日志最后 30–50 行。尤其需要 `%Error`、`[build] Phase ... finished`、`error:` 或 traceback。新日志格式可以避免这些关键内容被 warning 前缀挤出 OJ 页面。代码没有推送。完整日志、版本、配置、结果在 `F:/CPU2026NativeExperiments/oj-verilator-5040-20261007/`，关键信息汇总在 [5.040 诊断 JSON](OJ_verilator_5040_diagnosis_2026-10-07.json)。
