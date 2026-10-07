@@ -33,8 +33,8 @@ CPU2026_OPT_FAST ?= -O3
 export CPU2026_OPT_FAST
 # Use CPU2026_OPT_FAST=-Os and CPU2026_PGO=0 for the original compiler level.
 # Train GCC hot-code branch profiles on a bounded original Pi window, then
-# link the final simulator with at most two LTO workers. Other C++ jobs remain
-# serial. Unsupported/custom builds keep
+# link model objects directly with at most two LTO workers. This avoids relying
+# on ar's LTO-plugin discovery. Other C++ jobs remain serial. Custom builds keep
 # the ordinary compiler path. CPU2026_PGO=0 disables this build optimization.
 CPU2026_PGO ?= 1
 export CPU2026_PGO

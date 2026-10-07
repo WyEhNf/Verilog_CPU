@@ -38,6 +38,25 @@ def objects_in_section(text, name):
     return names
 
 
+def link_model_objects(directory, prefix):
+    """Keep Verilator's link recipe, bypassing the LTO archive symbol index."""
+    path = directory / (prefix + ".mk")
+    if path.is_symlink() or path.resolve().parent != directory.resolve():
+        raise ValueError("generated makefile escaped its object directory")
+    text = path.read_text()
+    marker = "# CPU2026 LTO: link model objects without an archive index.\n"
+    if text.startswith(marker):
+        return
+    # The original $^ recipe retains user/runtime objects, hierarchy libraries
+    # and all link flags. VK_OBJS is Verilator's complete generated model list.
+    pattern = re.compile(r"^(.*: \$\(VK_USER_OBJS\) \$\(VK_GLOBAL_OBJS\) )"
+                         r"\$\(VM_PREFIX\)__ALL\.a( \$\(VM_HIER_LIBS\))$", re.M)
+    if len(list(pattern.finditer(text))) != 1:
+        raise ValueError("unrecognized Verilator executable link prerequisites")
+    text = pattern.sub(lambda m: m[1] + "$(VK_OBJS)" + m[2], text)
+    path.write_text(marker + text, encoding="utf-8", newline="\n")
+
+
 def plan(generation, command, environment):
     enabled = environment.get("CPU2026_PGO", "1")
     if enabled not in ("0", "1"):
@@ -72,6 +91,8 @@ def plan(generation, command, environment):
         return None, "course Pi training input unavailable"
     directory = Path(command[2]).resolve()
     prefix = Path(command[4]).stem
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", prefix):
+        raise ValueError("unsupported generated C++ prefix")
     hot = objects_in_section((directory / (prefix + "_classes.mk")).read_text(),
                              "VM_CLASSES_FAST")
     hot += objects_in_section((directory / (prefix + "_classes.mk")).read_text(),
@@ -96,7 +117,7 @@ def plan(generation, command, environment):
         return None, "profile directory already populated; clean build required"
     return {"directory": directory, "profile": profile, "binary": binary,
             "objects": objects, "image": image,
-            "compiler": version.stdout.splitlines()[0]}, None
+            "prefix": prefix, "compiler": version.stdout.splitlines()[0]}, None
 
 
 def compile_with_profile(generation, command, environment):
@@ -106,13 +127,20 @@ def compile_with_profile(generation, command, environment):
               file=sys.stderr, flush=True)
         return run_logged(command, environment,
                           Path(command[2]) / "cpu2026_compile.log", "C++ build")
+    # Plain ar may not find GCC's LTO plugin in isolated toolchains (e.g. Nix).
+    # Direct objects reach the compiler's own linker plugin without relying on
+    # ar's symbol discovery. No archiver replacement or RTL change is required.
+    link_model_objects(selected["directory"], selected["prefix"])
+    print("[build] LTO linkage: direct generated model objects", file=sys.stderr,
+          flush=True)
     profile = selected["profile"]
     profile.mkdir(exist_ok=True)
     profile_flag = profile.as_posix()
     fast = assignment(command, "OPT_FAST", "-O3")
     link = assignment(command, "VM_USER_LDFLAGS")
     record = {"compiler": selected["compiler"], "training_cycles": TRAINING_CYCLES,
-              "latency": 10, "wave": False, "phases": []}
+              "latency": 10, "wave": False, "model_linkage": "direct objects",
+              "phases": []}
 
     def save():
         (selected["directory"] / "cpu2026_pgo.json").write_text(
