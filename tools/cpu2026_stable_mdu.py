@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
 
+from cpu2026_generated_names import load_names
+
 
 TEMPLATE = Path(__file__).with_name("cpu2026_stable_mdu.hpp.in")
 MDU_PATH = ("student_top__DOT__core__DOT__g_ooo_backend__DOT__backend"
@@ -44,8 +46,7 @@ def install(directory, prefix):
     directory = Path(directory)
     report = {"enabled": False}
     try:
-        mapping = {node.attrib["to"]: node.attrib["from"] for node in
-                   ET.parse(directory / (prefix + "__idmap.xml")).iter("map")}
+        mapping = load_names(directory, prefix)
         root = prefix + "_" + mapping["__024root"]
         syms = prefix + "_" + mapping["_Syms"]
         types = [value for key, value in mapping.items()
@@ -117,9 +118,9 @@ def install(directory, prefix):
             delayed = mapping["__Vdly__" + name]
             if (len(re.findall(r"vlSelf->" + re.escape(actual) + r"\b", root_text)) != 3
                     or not re.search(r"vlSelf->" + re.escape(actual) +
-                                     r" = vlSelf->" + re.escape(delayed) + r";", root_text)
+                                     r"\s*=\s*vlSelf->" + re.escape(delayed) + r";", root_text)
                     or not re.search(r"vlSelf->" + re.escape(delayed) +
-                                     r" = vlSelf->" + re.escape(actual) + r";", root_text)):
+                                     r"\s*=\s*vlSelf->" + re.escape(actual) + r";", root_text)):
                 raise ValueError("counter has an unrecognized reader: " + name)
         values = {"ROOT_CLASS": root, "MDU_CLASS": mdu,
                   "MDU_LAST_FIELD": mdu_fields[-1],

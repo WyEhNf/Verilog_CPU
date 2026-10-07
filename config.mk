@@ -20,10 +20,10 @@ export CPU2026_BUILD_APPIMAGE = $(APPIMAGE)
 CPU2026_TRACE_DEPTH ?= 1
 export CPU2026_TRACE_DEPTH
 # Use CPU2026_TRACE_DEPTH=0 to restore full internal waveform visibility.
-# Short, reproducible private C++ names reduce parser/linker overhead.
-CPU2026_COMPACT_IDS ?= 1
+# Keep original C++ names: --protect-ids conflicts with the required --trace.
+CPU2026_COMPACT_IDS ?= 0
 export CPU2026_COMPACT_IDS
-# Set CPU2026_COMPACT_IDS=0 to preserve original internal diagnostic names.
+# The optional value 1 retains the old compact-name profile for non-trace builds.
 # Combine small C++ files by source size, keeping hot/cold flags separate.
 CPU2026_CPP_GROUP_BYTES ?= 2097152
 export CPU2026_CPP_GROUP_BYTES
@@ -33,7 +33,8 @@ CPU2026_OPT_FAST ?= -O3
 export CPU2026_OPT_FAST
 # Use CPU2026_OPT_FAST=-Os and CPU2026_PGO=0 for the original compiler level.
 # Train GCC hot-code branch profiles on a bounded original Pi window, then
-# link the final simulator with serial LTO. Unsupported/custom builds keep
+# link the final simulator with at most two LTO workers. Other C++ jobs remain
+# serial. Unsupported/custom builds keep
 # the ordinary compiler path. CPU2026_PGO=0 disables this build optimization.
 CPU2026_PGO ?= 1
 export CPU2026_PGO

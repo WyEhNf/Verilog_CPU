@@ -108,7 +108,7 @@ def build_plan(arguments):
     if trace_depth < 0:
         raise ValueError("CPU2026_TRACE_DEPTH must be nonnegative")
     trace_flags = ["--trace-depth", str(trace_depth)] if trace_depth else []
-    compact_ids = int(os.environ.get("CPU2026_COMPACT_IDS", "1"))
+    compact_ids = int(os.environ.get("CPU2026_COMPACT_IDS", "0"))
     if compact_ids not in (0, 1):
         raise ValueError("CPU2026_COMPACT_IDS must be 0 or 1")
     # Shorten private C++ identifiers without changing the public top interface.
@@ -243,7 +243,7 @@ def main(arguments=None):
               + "; Python=" + sys.version.split()[0], file=sys.stderr, flush=True)
         print("[build] Phase 1: Verilator generation; trace depth="
               + os.environ.get("CPU2026_TRACE_DEPTH", "1")
-              + "; compact ids=" + os.environ.get("CPU2026_COMPACT_IDS", "1")
+              + "; compact ids=" + os.environ.get("CPU2026_COMPACT_IDS", "0")
               + "; split schedule=" + os.environ.get("CPU2026_SPLIT_SCHEDULE", "1")
               + "; word simulation=" + os.environ.get("CPU2026_WORD_SIM", "1")
               + "; native bits=" + os.environ.get("CPU2026_NATIVE_BITS", "1")

@@ -5,6 +5,8 @@ from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
 
+from cpu2026_generated_names import load_names
+
 TEMPLATE = Path(__file__).with_suffix(".hpp.in")
 INPUTS = {"clock", "reset", "rdata", "arready", "rresp", "rvalid",
           "awready", "wready", "bresp", "bvalid"}
@@ -19,8 +21,7 @@ def install(directory, prefix):
         boundary = json.loads((directory / (prefix + "_stable_mdu.json")).read_text())
         if not boundary["enabled"]:
             raise ValueError("requires the recognized two-object MDU schedule")
-        mapping = {n.attrib["to"]: n.attrib["from"] for n in
-                   ET.parse(directory / (prefix + "__idmap.xml")).iter("map")}
+        mapping = load_names(directory, prefix)
         top_header = (directory / (prefix + ".h")).read_text()
         ports = re.findall(r"VL_IN(8|16|64|W)?\(&([A-Za-z_][A-Za-z0-9_]*),(\d+),(\d+)\);",
                            top_header)

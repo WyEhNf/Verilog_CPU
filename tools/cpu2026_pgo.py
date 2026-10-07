@@ -175,7 +175,8 @@ def compile_with_profile(generation, command, environment):
     record["profile_files"] = len(profiles)
     record["profile_bytes"] = sum(path.stat().st_size for path in profiles)
     # GCC's profile counters are collected before link-time optimization.
-    # The measured configuration uses serial LTO for the final executable;
-    # missing/mismatched profile warnings remain visible and unsuppressed.
-    return build("GCC profile use and serial LTO",
-                 shlex.quote("-fprofile-use=" + profile_flag) + " -flto=1")
+    # Bound the LTO partition workers to two. GCC warns for an explicitly
+    # serial LTO link; auto would start an unbounded number of compiler jobs.
+    # Missing/mismatched profile warnings remain visible and unsuppressed.
+    return build("GCC profile use and bounded LTO",
+                 shlex.quote("-fprofile-use=" + profile_flag) + " -flto=2")
