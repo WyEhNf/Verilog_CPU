@@ -15,10 +15,12 @@ module rv32_frequency_line_extract32 (
 // Equivalent two-state word form for the cycle-accurate simulator.
 // Synthesis retains the original fanout/carry/ownership structure.
 `ifdef CPU2026_WORD_SIM
-    wire [127:0] shifted_line = line_i >> {offset_i,3'b0};
-    wire unused_shifted_line_bits = &{1'b0, shifted_line};
-
-    wire [31:0] shifted = shifted_line[31:0];
+    // A 32-bit byte window touches at most two adjacent native words. The
+    // last word pairs with zeros to retain the full-line shift's end behavior.
+    wire [63:0] byte_window = (offset_i[3:2]==2'd0) ? line_i[63:0] :
+        ((offset_i[3:2]==2'd1) ? line_i[95:32] :
+        ((offset_i[3:2]==2'd2) ? line_i[127:64] : {32'b0,line_i[127:96]}));
+    wire [31:0] shifted = 32'(byte_window >> {offset_i[1:0],3'b0});
     assign value_o = (size_i==2'd0) ? {{24{!unsigned_i && shifted[7]}},shifted[7:0]} :
         ((size_i==2'd1) ? {{16{!unsigned_i && shifted[15]}},shifted[15:0]} : shifted);
 `else

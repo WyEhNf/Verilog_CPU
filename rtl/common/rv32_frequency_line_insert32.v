@@ -12,7 +12,20 @@ module rv32_frequency_line_insert32 (
 // Equivalent two-state word form for the cycle-accurate simulator.
 // Synthesis retains the original fanout/carry/ownership structure.
 `ifdef CPU2026_WORD_SIM
-    assign line_o = {96'b0,value_i} << {offset_i,3'b0};
+    // Shift only the two possibly nonzero native words, then place them in
+    // the line. The high word is discarded when the offset lies in word 3.
+    wire [63:0] byte_words = {32'b0,value_i} << {offset_i[1:0],3'b0};
+    genvar native_word;
+    generate for(native_word=0;native_word<4;native_word=native_word+1) begin:g_native_word
+        if(native_word==0) begin:g_first
+            assign line_o[native_word*32 +: 32] =
+                (offset_i[3:2]==2'(native_word)) ? byte_words[31:0] : 32'b0;
+        end else begin:g_later
+            assign line_o[native_word*32 +: 32] =
+                (offset_i[3:2]==2'(native_word)) ? byte_words[31:0] :
+                ((offset_i[3:2]==2'(native_word-1)) ? byte_words[63:32] : 32'b0);
+        end
+    end endgenerate
 `else
     wire [39:0] shift8;
     wire [55:0] shift16;
