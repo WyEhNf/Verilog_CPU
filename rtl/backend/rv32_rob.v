@@ -7,6 +7,7 @@ module rv32_rob #(
     parameter integer RELEASE_CREDITS = 0,
     parameter integer SINGLE_GENERATION_OWNER = 0,
     parameter integer COMPLETION_COMMIT_BYPASS = 0,
+    parameter integer STORE_RETIRE_ADMISSION_BYPASS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
@@ -103,7 +104,7 @@ module rv32_rob #(
 
     output reg                          store_commit_valid_o,
     input  wire                         store_commit_ready_i,
-    output reg  [TAG_WIDTH-1:0]          store_commit_tag_o,
+    output wire [TAG_WIDTH-1:0]          store_commit_tag_o,
     output reg  [31:0]                  store_commit_addr_o,
     output reg  [15:0]                  store_commit_mask_o,
     output reg  [127:0]                 store_commit_data_o,
@@ -1091,6 +1092,14 @@ end
         (STORE_BUFFERED_RETIRE!=0) && (LIGHT_RETIRE_PAYLOAD!=0) &&
         (MMIO_PREDECODE!=0) && (LEGACY_HALT_PAYLOAD==0) && (RETURN_VALUE_ENABLE==0);
     wire [TAG_WIDTH-1:0] prefix_admission_tag;
+    reg [TAG_WIDTH-1:0] store_commit_tag_legacy;
+    // Query identity comes from saved owners before the ready/retire handshake.
+    // Invalid payload tags are unobservable; only valid architectural offers fire.
+    assign store_commit_tag_o=(STORE_RETIRE_ADMISSION_BYPASS!=0) ?
+        ((STORE_PREFIX_ADMISSION_ACTIVE!=0) ? prefix_admission_tag :
+         make_tag(32'(head_commit_index),head_generation[0])) : store_commit_tag_legacy;
+    initial if(STORE_RETIRE_ADMISSION_BYPASS!=0 && STORE_RETIRE_ADMISSION_BYPASS!=1)
+        $fatal(1,"STORE_RETIRE_ADMISSION_BYPASS must be 0 or 1");
     generate if(STORE_PREFIX_ADMISSION_ACTIVE!=0) begin:g_store_prefix_identity
         wire [BE_WIDTH-1:0] potential,grants;
         wire [BE_WIDTH*TAG_WIDTH-1:0] tags;
@@ -1258,7 +1267,7 @@ end
         commit_old_phys_o = {(BE_WIDTH*PHYS_ADDR_WIDTH){1'b0}};
         commit_new_phys_o = {(BE_WIDTH*PHYS_ADDR_WIDTH){1'b0}};
         store_commit_valid_o = 1'b0;
-        store_commit_tag_o = {TAG_WIDTH{1'b0}};
+        store_commit_tag_legacy = {TAG_WIDTH{1'b0}};
         store_commit_addr_o = 32'b0;
         store_commit_mask_o = 16'b0;
         store_commit_data_o = 128'b0;
@@ -1296,11 +1305,12 @@ end
                             if (commit_lane == 0) begin
                                 if ((STORE_BUFFERED_RETIRE != 0) &&
                                     !(head_mmio_word[commit_lane]))
-                                    // Admission is recorded in store_sent_mem
-                                    // on the preceding edge.  Retire from that
-                                    // registered state to avoid a ROB<->LSQ
-                                    // combinational ready/tag loop.
-                                    commit_valid_o[commit_lane] = head_store_sent[commit_lane];
+                                    // Default retires from saved admission. The optional
+                                    // exact-tag query has independent saved identity, so
+                                    // an actual head admission may retire on this edge.
+                                    commit_valid_o[commit_lane] = head_store_sent[commit_lane] ||
+                                        ((STORE_RETIRE_ADMISSION_BYPASS!=0) && store_commit_ready_i &&
+                                         !head_halt[commit_lane] && !head_error[commit_lane]);
                                 else
                                     commit_valid_o[commit_lane] = head_store_wait[commit_lane];
                             end
@@ -1314,7 +1324,7 @@ end
                             !store_commit_valid_o &&
                             ((STORE_BUFFERED_RETIRE != 0) || !head_store_wait[commit_lane])) begin
                             store_commit_valid_o = 1'b1;
-                            store_commit_tag_o = (STORE_PREFIX_ADMISSION_ACTIVE!=0) ?
+                            store_commit_tag_legacy = (STORE_PREFIX_ADMISSION_ACTIVE!=0) ?
                                 prefix_admission_tag : make_tag(commit_slot, head_generation[commit_lane]);
                             store_commit_addr_o = head_store_addr[commit_lane];
                             store_commit_mask_o = line_mask_from_relative(

@@ -1239,6 +1239,8 @@ module rv32_lsq #(
         store_commit_ready_o=commit_slot_found;
         commit_slot_select=commit_slot_found?32'(commit_slot_tree[1]):0;
 
+    end
+    always @* begin
         // The eligibility bits above feed the balanced oldest-first tree.
         candidate_found = (REQUEST_PIPELINE!=0)?(selection_live || selection_direct_bypass):pick_valid[1];
         candidate = candidate_found ? 32'(selected_slot) : 0;

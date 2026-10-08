@@ -53,6 +53,8 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["ROB_STORE_RETIRE_ADMISSION_BYPASS"] not in (0,1):
+        raise ValueError("ROB store retirement admission bypass is 0/1")
     if p["ROB_COMPLETION_COMMIT_BYPASS"] not in (0,1):
         raise ValueError("ROB completion commit bypass is 0/1")
     if p["TAG_SINGLE_GENERATION_OWNER"] not in (0,1):
