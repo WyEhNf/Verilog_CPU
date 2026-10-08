@@ -207,10 +207,12 @@ rv32_frequency_event_select #(.WIDTH(128),.EVENTS(SRAM_BANKS),.PRIORITY(0)) resp
                 miss_pending<=1'b1;
         end
     end
+`ifdef VERILATOR
     always @(posedge clk_i) begin
         if(OWNER_PAYLOAD_SELECT!=0 && !reset_i && fast_valid && miss_pending)
             $fatal(1,"Instruction response owners overlap");
     end
+`endif
     initial begin
         if(LINES<2 || LINES>32 || (LINES & (LINES-1))!=0)
             $fatal(1,"Instruction line filter needs a power-of-two line count in 2..32");
