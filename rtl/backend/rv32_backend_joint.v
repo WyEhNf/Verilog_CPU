@@ -65,6 +65,7 @@ module rv32_backend_joint #(
     parameter integer RS_AGE_WIDTH = 32,
     parameter integer RS_ALLOC_STATIC_WRITE = 0,
     parameter integer PRF_READ_MUX_IMPL = 0,
+    parameter integer PRF_VALUE_SRAM = 0,
     parameter integer RAT_READ_BYPASS = 0,
     parameter integer RENAME_RETAIN_FREE_POOL = 0,
     parameter integer ASAP7_FANOUT_BUFFERS = 0,
@@ -2071,7 +2072,7 @@ module rv32_backend_joint #(
     generate for(genvar store_offset_lane=0;store_offset_lane<BE_WIDTH;store_offset_lane=store_offset_lane+1) begin:g_store_offset
         assign prf_store_offsets[store_offset_lane*12 +: 12]=d_imm[store_offset_lane*32 +: 12];
     end endgenerate
-    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL), .LOCAL_VALUE_ROWS(1), .STORE_ADDRESS_READ(PARALLEL_STORE_ADDRESS), .STORE_ADDRESS_FLAGS((FAST_STORE_ADDRESS_PREDECODE!=0) && FAST_STORE_COMPLETE_ACTIVE && PARALLEL_STORE_ADDRESS), .STORE_SAVED_QUERY(FAST_STORE_SAVED_ACTIVE), .STORE_CLASS_COMPARE((FAST_STORE_CLASS_COMPARE!=0) && FAST_STORE_SAVED_ACTIVE)) prf (
+    rv32_physical_register_file #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .READ_MUX_IMPL(PRF_READ_MUX_IMPL), .LOCAL_VALUE_ROWS(1), .VALUE_SRAM(PRF_VALUE_SRAM), .STORE_ADDRESS_READ(PARALLEL_STORE_ADDRESS), .STORE_ADDRESS_FLAGS((FAST_STORE_ADDRESS_PREDECODE!=0) && FAST_STORE_COMPLETE_ACTIVE && PARALLEL_STORE_ADDRESS), .STORE_SAVED_QUERY(FAST_STORE_SAVED_ACTIVE), .STORE_CLASS_COMPARE((FAST_STORE_CLASS_COMPARE!=0) && FAST_STORE_SAVED_ACTIVE)) prf (
         .clk_i(clk_i), .reset_i(reset_i), .read_phys_i(prf_read_phys), .read_data_o(prf_read_data), .read_ready_o(prf_read_ready),
         .store_offset_i(prf_store_offsets), .store_address_o(prf_store_address), .store_address_flags_o(prf_store_address_flags),
         .read_stored_ready_o(prf_read_stored_ready), .read_bypass_pending_o(prf_read_bypass_pending),

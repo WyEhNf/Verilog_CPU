@@ -11,6 +11,7 @@ module rv32_physical_register_file #(
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer READ_MUX_IMPL = 0,
     parameter integer LOCAL_VALUE_ROWS = 0,
+    parameter integer VALUE_SRAM = 0,
     // Optional combination output for even allocation read ports only.
     // The original read data/ready and storage updates remain independent.
     parameter STORE_ADDRESS_READ = 0,
@@ -47,6 +48,10 @@ module rv32_physical_register_file #(
     wire [PHYS_REGS-1:0] ready;
 
     initial begin
+        if ((VALUE_SRAM!=0 && VALUE_SRAM!=1) || (VALUE_SRAM!=0 && LOCAL_VALUE_ROWS==0)) begin
+            $display("ERROR: SRAM values require local PRF row ownership");
+            $finish(1);
+        end
         if ((BE_WIDTH != 1) && (BE_WIDTH != 2) && (BE_WIDTH != 4)) begin
             $display("ERROR: invalid PRF BE_WIDTH=%0d; expected 1, 2, or 4", BE_WIDTH);
             $finish;
@@ -77,10 +82,35 @@ module rv32_physical_register_file #(
             .signal_i(read_phys_i),.views_o(read_phys_local));
         assign read_domain_queries=0;
     end endgenerate
+    wire [4*BE_WIDTH-1:0] recent_valids;
+    wire [4*BE_WIDTH*PHYS_ADDR_WIDTH-1:0] recent_addresses;
+    wire [4*BE_WIDTH*32-1:0] recent_values;
+    generate if(VALUE_SRAM!=0) begin:g_recent_writeback
+        reg [BE_WIDTH-1:0] previous_valid;
+        wire [BE_WIDTH*PHYS_ADDR_WIDTH-1:0] previous_ids;
+        wire [BE_WIDTH*32-1:0] previous_values;
+        always @(posedge clk_i)
+            if(reset_i) previous_valid<=0;
+            else previous_valid<=write_valid_i;
+        rv32_frequency_word_bank #(.WIDTH(BE_WIDTH*PHYS_ADDR_WIDTH)) id_capture (
+            .clk_i(clk_i),.write_i(!reset_i && |write_valid_i),
+            .data_i(write_phys_i),.data_o(previous_ids));
+        rv32_frequency_word_bank #(.WIDTH(BE_WIDTH*32)) value_capture (
+            .clk_i(clk_i),.write_i(!reset_i && |write_valid_i),
+            .data_i(write_data_i),.data_o(previous_values));
+        rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(4)) valid_tree (
+            .signal_i(previous_valid),.views_o(recent_valids));
+        rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*PHYS_ADDR_WIDTH),.LEAVES(4)) id_tree (
+            .signal_i(previous_ids),.views_o(recent_addresses));
+        rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*32),.LEAVES(4)) value_tree (
+            .signal_i(previous_values),.views_o(recent_values));
+    end else begin:g_no_recent_writeback
+        assign recent_valids=0;assign recent_addresses=0;assign recent_values=0;
+    end endgenerate
     genvar owner_row,owner_lane;
     generate if(LOCAL_VALUE_ROWS!=0) begin:g_local_storage
 `ifdef CPU2026_WORD_SIM
-        if(PHYS_REGS==56 && PHYS_ADDR_WIDTH==6 &&
+        if(VALUE_SRAM==0 && PHYS_REGS==56 && PHYS_ADDR_WIDTH==6 &&
            (BE_WIDTH==1 || BE_WIDTH==2 || BE_WIDTH==4)) begin:g_word_storage
             reg [31:0] words [0:55];
             reg [55:0] word_ready;
@@ -130,16 +160,19 @@ module rv32_physical_register_file #(
                 assign value[owner_row]=0;assign ready[owner_row]=1;
             end else begin:g_register
                 localparam integer DOMAIN=(owner_row*4)/PHYS_REGS;
-                wire [BE_WIDTH-1:0] writes,allocations;
+                wire [BE_WIDTH-1:0] writes,allocations,recent_matches;
                 for(owner_lane=0;owner_lane<BE_WIDTH;owner_lane=owner_lane+1) begin:g_match
                     assign writes[owner_lane]=write_valids[DOMAIN*BE_WIDTH+owner_lane] &&
                         write_addresses[(DOMAIN*BE_WIDTH+owner_lane)*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==owner_row;
                     assign allocations[owner_lane]=alloc_valids[DOMAIN*BE_WIDTH+owner_lane] &&
                         alloc_addresses[(DOMAIN*BE_WIDTH+owner_lane)*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==owner_row;
+                    assign recent_matches[owner_lane]=recent_valids[DOMAIN*BE_WIDTH+owner_lane] &&
+                        recent_addresses[(DOMAIN*BE_WIDTH+owner_lane)*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==owner_row;
                 end
-                rv32_prf_value_row #(.LANES(BE_WIDTH)) contents (
+                rv32_prf_value_row #(.LANES(BE_WIDTH),.VALUE_SRAM(VALUE_SRAM)) contents (
                     .clk_i(clk_i),.reset_i(reset_views[owner_row]),.alloc_i(|allocations),.write_matches_i(writes),
                     .write_values_i(write_values[DOMAIN*BE_WIDTH*32 +: BE_WIDTH*32]),
+                    .recent_matches_i(recent_matches),.recent_values_i(recent_values[DOMAIN*BE_WIDTH*32 +: BE_WIDTH*32]),
                     .value_o(value[owner_row]),.ready_o(ready[owner_row]));
             end
         end

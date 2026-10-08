@@ -67,6 +67,7 @@ module cpu_core #(
     parameter integer DISPATCH_FULL_REPLACE = 0,
     parameter integer EARLY_STORE_ADDRESS = 0,
     parameter integer STORE_ALLOC_EARLY_DATA = 0,
+    parameter integer STORE_ALLOC_EARLY_ADDRESS = 2,
     parameter integer FAST_STORE_COMPLETE = 0,
     parameter integer FAST_STORE_IDENTITY_PRESELECT = 0,
     parameter integer ROB_STORE_PREFIX_ADMISSION = 0,
@@ -85,6 +86,7 @@ module cpu_core #(
     parameter integer RS_AGE_WIDTH = 32,
     parameter integer RS_ALLOC_STATIC_WRITE = 0,
     parameter integer PRF_READ_MUX_IMPL = 0,
+    parameter integer PRF_VALUE_SRAM = 0,
     parameter integer RAT_READ_BYPASS = 0,
     parameter integer RENAME_RETAIN_FREE_POOL = 0,
     parameter integer ASAP7_FANOUT_BUFFERS = 0,
@@ -198,9 +200,8 @@ module cpu_core #(
         GENERATION_WIDTH;
 
     initial begin
-        if (SERIAL_BACKEND == 3 &&
-            (BE_WIDTH != 1 || DCACHE_TAG_SRAM != 1 || DCACHE_WORD_RESPONSE != 1 || ENABLE_CACHES == 0)) begin
-            $display("ERROR: lookup inorder requires BE1 and synchronous tag/word-response cache");
+        if (SERIAL_BACKEND != 0) begin
+            $display("ERROR: tier CPUs share rv32_backend_joint; select widths/capacities, not a separate backend");
             $finish(1);
         end
         if ((RS_ISSUE_METADATA != 0 && RS_ISSUE_METADATA != 1) ||
@@ -271,7 +272,7 @@ module cpu_core #(
     // original registered epoch and original frontend request contract.
     localparam REDIRECT_REQUEST_ACTIVE=(FRONTEND_REDIRECT_REQUEST!=0) &&
         (ENABLE_CACHES!=0) && (ICACHE_MSHRS>1) &&
-        (ICACHE_COMBINATIONAL_HIT==0) && (DECODE_PIPELINE!=0) && (SERIAL_BACKEND!=1);
+        (ICACHE_COMBINATIONAL_HIT==0) && (DECODE_PIPELINE!=0) && (SERIAL_BACKEND==0);
     wire [EPOCH_WIDTH-1:0] icache_effective_epoch=
         (REDIRECT_REQUEST_ACTIVE!=0 && redirect_domains[0])?redirect_epoch:frontend_epoch;
     wire branch_feedback_valid, branch_feedback_taken, branch_feedback_pred_taken;
@@ -608,12 +609,12 @@ module cpu_core #(
     end
 
     rv32_fetch_frontend #(.QUEUE_PAYLOAD_BANKS(FRONTEND_QUEUE_PAYLOAD_BANKS), .FE_WIDTH(FE_WIDTH), .FQ_DEPTH(FETCH_QUEUE_DEPTH), .NARROW_OCCUPANCY(FRONTEND_NARROW_OCCUPANCY),
-        .RESPONSE_BYPASS((FRONTEND_RESPONSE_BYPASS != 0) && (DECODE_PIPELINE!=0) && (SERIAL_BACKEND!=1)),
+        .RESPONSE_BYPASS((FRONTEND_RESPONSE_BYPASS != 0) && (DECODE_PIPELINE!=0) && (SERIAL_BACKEND==0)),
         .PARALLEL_BUNDLE_CONTROL(FRONTEND_PARALLEL_BUNDLE_CONTROL), .REDIRECT_REQUEST(REDIRECT_REQUEST_ACTIVE),
         .RESPONSE_WORD_OFFSET_READ(FRONTEND_RESPONSE_WORD_OFFSET_READ),
         .DIRECT_WORD_BOUNDS(FRONTEND_DIRECT_WORD_BOUNDS),
         .RESPONSE_LOCAL_PC((FRONTEND_RESPONSE_LOCAL_PC != 0) && (ENABLE_CACHES!=0) &&
-            (ICACHE_MSHRS>1) && (ICACHE_COMBINATIONAL_HIT==0) && (SERIAL_BACKEND!=1)), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) frontend (
+            (ICACHE_MSHRS>1) && (ICACHE_COMBINATIONAL_HIT==0) && (SERIAL_BACKEND==0)), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .LEGACY_SENTINEL_HALT(LEGACY_SENTINEL_HALT)) frontend (
         .clk_i(clk), .reset_i(reset), .redirect_valid_i(redirect_domains[0]),
         .redirect_pc_i(redirect_pc), .redirect_epoch_i(redirect_epoch),
         .stop_i(halted), .error_i(error), .if_req_valid_o(if_req_valid),
@@ -662,13 +663,7 @@ module cpu_core #(
     // An exit store is an uncached architectural side effect. It must reach
     // the external data port with its full 32-bit payload before the ROB may
     // retire it; ordinary cache write-back must not absorb this MMIO access.
-    wire lookup_mmio_exit_request;
-    generate if (SERIAL_BACKEND != 3) begin:g_no_lookup_mmio
-        assign lookup_mmio_exit_request=1'b0;
-    end endgenerate
-    wire mmio_exit_request = (SERIAL_BACKEND==3 && DCACHE_REQUEST_PIPELINE==0) ?
-                             lookup_mmio_exit_request :
-                             memory_dreq_valid && memory_dreq_store &&
+    wire mmio_exit_request = memory_dreq_valid && memory_dreq_store &&
                              (memory_dreq_addr == 32'h80000000) &&
                              (memory_dreq_mask == 16'h000f);
     // Qualify once, then partition the final request consumers. The
@@ -842,7 +837,7 @@ module cpu_core #(
     end
 
     if (DCACHE_MSHRS > 1) begin : g_nonblocking_dcache
-    rv32_dcache_nonblocking #(.WORD_RESPONSE((DCACHE_WORD_RESPONSE!=0) && (SERIAL_BACKEND!=1)), .HIT_BYPASS(1), .LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), .WAY_PARALLEL_QUERY(DCACHE_WAY_PARALLEL_QUERY), .HIT_RESPONSE_COISSUE(DCACHE_HIT_RESPONSE_COISSUE),
+    rv32_dcache_nonblocking #(.WORD_RESPONSE((DCACHE_WORD_RESPONSE!=0) && (SERIAL_BACKEND==0)), .HIT_BYPASS(1), .LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), .WAY_PARALLEL_QUERY(DCACHE_WAY_PARALLEL_QUERY), .HIT_RESPONSE_COISSUE(DCACHE_HIT_RESPONSE_COISSUE),
         .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS), .WAITER_ENTRIES(DCACHE_WAITERS),
         .CACHE_LINES(DCACHE_LINES), .CACHE_WAYS(DCACHE_WAYS),
         .INDEX_HASH(DCACHE_INDEX_HASH), .STORE_MERGE_DELAY(DCACHE_STORE_MERGE_DELAY),
@@ -1190,129 +1185,8 @@ end
     wire [BE_WIDTH-1:0] perf_issue_valid;
     wire perf_branch_pending, perf_mdu_busy;
     assign commit_ready = 1'b1;
-    generate if (SERIAL_BACKEND != 0) begin : g_serial_backend
-    assign branch_feedback_metadata = 16'b0;
-    assign branch_feedback_lane_valid=0;
-    assign branch_feedback_lane_packets=0;
-    assign branch_feedback_lane_metadata=0;
-    assign branch_recovery_history = 8'b0;
-    if(SERIAL_BACKEND==2) begin:g_pipelined
-    rv32_inorder_backend #(.ROB_ENTRIES(ROB_ENTRIES), .BE_WIDTH(BE_WIDTH), .SHIFT_IMPL(SHIFT_IMPL),
-        .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL),
-        .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
-        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
-        .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
-        .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),
-        .trace_rs2_i(backend_rs2), .trace_rd_we_i(dec_rd_we), .trace_rs1_used_i(backend_rs1_used),
-        .trace_rs2_used_i(dec_rs2_used & ~is_halt_trace), .trace_is_load_i(dec_load), .trace_is_store_i(dec_store),
-        .trace_is_branch_i(dec_branch | dec_jump), .trace_is_halt_i(is_halt_trace),
-        .trace_is_error_i(trace_valid & ~dec_legal), .trace_mem_size_i(dec_mem_size),
-        .trace_mem_unsigned_i(dec_mem_unsigned), .trace_store_data_i({BE_WIDTH*128{1'b0}}),
-        .trace_pred_taken_i(trace_pred_taken), .trace_pred_target_i(trace_pred_target),
-        .trace_pred_kind_i(trace_pred_kind), .dcache_req_valid_o(dcache_req_valid),
-        .dcache_req_ready_i(dcache_req_ready), .dcache_req_is_load_o(dcache_req_load),
-        .dcache_req_is_store_o(dcache_req_store), .dcache_req_addr_o(dcache_req_addr),
-        .dcache_req_size_o(dcache_req_size), .dcache_req_unsigned_o(dcache_req_unsigned),
-        .dcache_req_mask_o(dcache_req_mask), .dcache_req_wdata_o(dcache_req_wdata),
-        .dcache_req_rob_tag_o(dcache_req_rob_tag), .dcache_req_lsq_tag_o(dcache_req_lsq_tag),
-        .dcache_resp_valid_i(dcache_resp_valid), .dcache_resp_ready_o(dcache_resp_ready),
-        .dcache_resp_lsq_tag_i(dcache_resp_lsq_tag), .dcache_resp_addr_i(dcache_resp_addr),
-        .dcache_resp_line_data_i(dcache_resp_line), .dcache_resp_word_data_i(dcache_resp_word),
-        .dcache_resp_line_valid_i(dcache_resp_line_valid), .dcache_resp_error_i(dcache_resp_error),
-        .dcache_store_ack_valid_i(dcache_store_ack_valid), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag),
-        .dcache_store_ack_error_i(dcache_store_ack_error), .commit_ready_i(commit_ready),
-        .commit_valid_o(commit_valid), .commit_pc_o(commit_pc), .commit_inst_o(commit_inst),
-        .commit_rd_o(commit_rd), .commit_rd_we_o(commit_rd_we), .commit_value_o(commit_value),
-        .commit_is_store_o(commit_is_store), .commit_store_addr_o(commit_store_addr),
-        .commit_store_mask_o(commit_store_mask), .commit_store_data_o(commit_store_data),
-        .commit_tag_o(commit_tag), .redirect_valid_o(redirect_valid), .redirect_pc_o(redirect_pc),
-        .redirect_epoch_o(redirect_epoch), .halted_o(halted), .error_o(error),
-        .return_value_o(return_value), .branch_feedback_valid_o(branch_feedback_valid),
-        .branch_feedback_pc_o(branch_feedback_pc), .branch_feedback_kind_o(branch_feedback_kind),
-        .branch_feedback_taken_o(branch_feedback_taken), .branch_feedback_target_o(branch_feedback_target),
-        .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target)
-    );
-    end else if(SERIAL_BACKEND==3) begin:g_lookup
-    rv32_inorder_lookup_backend #(.ROB_ENTRIES(ROB_ENTRIES), .BE_WIDTH(BE_WIDTH), .SHIFT_IMPL(SHIFT_IMPL),
-        .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL),
-        .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
-        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
-        .mmio_exit_request_o(lookup_mmio_exit_request),
-        .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
-        .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),
-        .trace_rs2_i(backend_rs2), .trace_rd_we_i(dec_rd_we), .trace_rs1_used_i(backend_rs1_used),
-        .trace_rs2_used_i(dec_rs2_used & ~is_halt_trace), .trace_is_load_i(dec_load), .trace_is_store_i(dec_store),
-        .trace_is_branch_i(dec_branch | dec_jump), .trace_is_halt_i(is_halt_trace),
-        .trace_is_error_i(trace_valid & ~dec_legal), .trace_mem_size_i(dec_mem_size),
-        .trace_mem_unsigned_i(dec_mem_unsigned), .trace_store_data_i({BE_WIDTH*128{1'b0}}),
-        .trace_pred_taken_i(trace_pred_taken), .trace_pred_target_i(trace_pred_target),
-        .trace_pred_kind_i(trace_pred_kind), .dcache_req_valid_o(dcache_req_valid),
-        .dcache_req_ready_i(dcache_req_ready), .dcache_req_is_load_o(dcache_req_load),
-        .dcache_req_is_store_o(dcache_req_store), .dcache_req_addr_o(dcache_req_addr),
-        .dcache_req_size_o(dcache_req_size), .dcache_req_unsigned_o(dcache_req_unsigned),
-        .dcache_req_mask_o(dcache_req_mask), .dcache_req_wdata_o(dcache_req_wdata),
-        .dcache_req_rob_tag_o(dcache_req_rob_tag), .dcache_req_lsq_tag_o(dcache_req_lsq_tag),
-        .dcache_resp_valid_i(dcache_resp_valid), .dcache_resp_ready_o(dcache_resp_ready),
-        .dcache_resp_lsq_tag_i(dcache_resp_lsq_tag), .dcache_resp_addr_i(dcache_resp_addr),
-        .dcache_resp_line_data_i(dcache_resp_line), .dcache_resp_word_data_i(dcache_resp_word),
-        .dcache_resp_line_valid_i(dcache_resp_line_valid), .dcache_resp_error_i(dcache_resp_error),
-        .dcache_store_ack_valid_i(dcache_store_ack_valid), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag),
-        .dcache_store_ack_error_i(dcache_store_ack_error), .commit_ready_i(commit_ready),
-        .commit_valid_o(commit_valid), .commit_pc_o(commit_pc), .commit_inst_o(commit_inst),
-        .commit_rd_o(commit_rd), .commit_rd_we_o(commit_rd_we), .commit_value_o(commit_value),
-        .commit_is_store_o(commit_is_store), .commit_store_addr_o(commit_store_addr),
-        .commit_store_mask_o(commit_store_mask), .commit_store_data_o(commit_store_data),
-        .commit_tag_o(commit_tag), .redirect_valid_o(redirect_valid), .redirect_pc_o(redirect_pc),
-        .redirect_epoch_o(redirect_epoch), .halted_o(halted), .error_o(error),
-        .return_value_o(return_value), .branch_feedback_valid_o(branch_feedback_valid),
-        .branch_feedback_pc_o(branch_feedback_pc), .branch_feedback_kind_o(branch_feedback_kind),
-        .branch_feedback_taken_o(branch_feedback_taken), .branch_feedback_target_o(branch_feedback_target),
-        .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target)
-    );
-    end else begin:g_original
-    rv32_serial_backend #(.BE_WIDTH(BE_WIDTH), .SHIFT_IMPL(SHIFT_IMPL),
-        .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
-        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
-        .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
-        .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),
-        .trace_rs2_i(backend_rs2), .trace_rd_we_i(dec_rd_we), .trace_rs1_used_i(backend_rs1_used),
-        .trace_rs2_used_i(dec_rs2_used & ~is_halt_trace), .trace_is_load_i(dec_load), .trace_is_store_i(dec_store),
-        .trace_is_branch_i(dec_branch | dec_jump), .trace_is_halt_i(is_halt_trace),
-        .trace_is_error_i(trace_valid & ~dec_legal), .trace_mem_size_i(dec_mem_size),
-        .trace_mem_unsigned_i(dec_mem_unsigned), .trace_store_data_i({BE_WIDTH*128{1'b0}}),
-        .trace_pred_taken_i(trace_pred_taken), .trace_pred_target_i(trace_pred_target),
-        .trace_pred_kind_i(trace_pred_kind), .dcache_req_valid_o(dcache_req_valid),
-        .dcache_req_ready_i(dcache_req_ready), .dcache_req_is_load_o(dcache_req_load),
-        .dcache_req_is_store_o(dcache_req_store), .dcache_req_addr_o(dcache_req_addr),
-        .dcache_req_size_o(dcache_req_size), .dcache_req_unsigned_o(dcache_req_unsigned),
-        .dcache_req_mask_o(dcache_req_mask), .dcache_req_wdata_o(dcache_req_wdata),
-        .dcache_req_rob_tag_o(dcache_req_rob_tag), .dcache_req_lsq_tag_o(dcache_req_lsq_tag),
-        .dcache_resp_valid_i(dcache_resp_valid), .dcache_resp_ready_o(dcache_resp_ready),
-        .dcache_resp_lsq_tag_i(dcache_resp_lsq_tag), .dcache_resp_addr_i(dcache_resp_addr),
-        .dcache_resp_line_data_i(dcache_resp_line), .dcache_resp_word_data_i(dcache_resp_word),
-        .dcache_resp_line_valid_i(dcache_resp_line_valid), .dcache_resp_error_i(dcache_resp_error),
-        .dcache_store_ack_valid_i(dcache_store_ack_valid), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag),
-        .dcache_store_ack_error_i(dcache_store_ack_error), .commit_ready_i(commit_ready),
-        .commit_valid_o(commit_valid), .commit_pc_o(commit_pc), .commit_inst_o(commit_inst),
-        .commit_rd_o(commit_rd), .commit_rd_we_o(commit_rd_we), .commit_value_o(commit_value),
-        .commit_is_store_o(commit_is_store), .commit_store_addr_o(commit_store_addr),
-        .commit_store_mask_o(commit_store_mask), .commit_store_data_o(commit_store_data),
-        .commit_tag_o(commit_tag), .redirect_valid_o(redirect_valid), .redirect_pc_o(redirect_pc),
-        .redirect_epoch_o(redirect_epoch), .halted_o(halted), .error_o(error),
-        .return_value_o(return_value), .branch_feedback_valid_o(branch_feedback_valid),
-        .branch_feedback_pc_o(branch_feedback_pc), .branch_feedback_kind_o(branch_feedback_kind),
-        .branch_feedback_taken_o(branch_feedback_taken), .branch_feedback_target_o(branch_feedback_target),
-        .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target)
-    );
-    end
-    assign perf_rob_occupancy = 16'd0;
-    assign perf_rs_occupancy = 16'd0;
-    assign perf_lsq_occupancy = 16'd0;
-    assign perf_issue_valid = {BE_WIDTH{1'b0}};
-    assign perf_branch_pending = 1'b0;
-    assign perf_mdu_busy = 1'b0;
-    end else begin : g_ooo_backend
-    rv32_backend_joint #(.LSQ_RESPONSE_QUERY_PREDECODE(1), .STORE_ALLOC_EARLY_ADDRESS(2), .LSQ_ROB_QUERY_PREDECODE(1), .STORE_ALLOC_IMM12(1), .RS_PHYSICAL_WAKEUP(1), .DISPATCH_PIPELINE(DISPATCH_PIPELINE), .DISPATCH_ELASTIC(DISPATCH_ELASTIC), .DISPATCH_FULL_REPLACE(DISPATCH_FULL_REPLACE), .ISSUE_PIPELINE(ISSUE_PIPELINE), .LOCAL_EXEC_RECOVERY(1), .BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_LOAD_ADDRESS(EARLY_LOAD_ADDRESS), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LSQ_SAVED_REPORT_PRIORITY(LSQ_SAVED_REPORT_PRIORITY), .LSQ_HEAD_LOAD_IDENTITY_QUERY(LSQ_HEAD_LOAD_IDENTITY_QUERY), .LSQ_HELD_LOAD_IDENTITY_QUERY(LSQ_HELD_LOAD_IDENTITY_QUERY), .LSQ_REPORT_RECOVERY_PREQUALIFY(LSQ_REPORT_RECOVERY_PREQUALIFY), .LSQ_REPORT_RECOVERY_CIRCULAR_COMPARE(LSQ_REPORT_RECOVERY_CIRCULAR_COMPARE), .LSQ_HEAD_LOAD_PACKET_PRESELECT(LSQ_HEAD_LOAD_PACKET_PRESELECT), .LSQ_SAVED_IDENTITY_WORD_MASK(LSQ_SAVED_IDENTITY_WORD_MASK), .LSQ_SAVED_IDENTITY_BALANCED_MERGE(LSQ_SAVED_IDENTITY_BALANCED_MERGE), .LOAD_WAKE_BYPASS(LOAD_WAKE_BYPASS), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .LSQ_ALLOC_SLOT_PRESELECT(LSQ_ALLOC_SLOT_PRESELECT), .LSQ_ALLOC_PAYLOAD_PRESELECT(LSQ_ALLOC_PAYLOAD_PRESELECT), .LSQ_ALLOC_FIRE_DISTRIBUTE(LSQ_ALLOC_FIRE_DISTRIBUTE), .LSQ_RESPONSE_SOURCE_QUERY(LSQ_RESPONSE_SOURCE_QUERY), .LSQ_RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .LSQ_SECOND_REPORT_RECLAIM(LSQ_SECOND_REPORT_RECLAIM), .LSQ_EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .LSQ_PICK_LOCAL_VALIDITY(LSQ_PICK_LOCAL_VALIDITY), .LSQ_FORWARD_ONEHOT(LSQ_FORWARD_ONEHOT), .LSQ_PICK_ONEHOT(LSQ_PICK_ONEHOT), .EARLY_FRONT_REDIRECT(EARLY_FRONT_REDIRECT), .BRANCH_CAPTURE_REDIRECT_READY(BRANCH_CAPTURE_REDIRECT_READY), .BRANCH_CAPTURE_PHASE_VALID(BRANCH_CAPTURE_PHASE_VALID), .RECOVERY_DIRECT_APPLY(RECOVERY_DIRECT_APPLY), .RECOVERY_ROB_CREDIT(RECOVERY_ROB_CREDIT), .RECOVERY_PREVIEW_OLDER_ISSUE(RECOVERY_PREVIEW_OLDER_ISSUE), .RECOVERY_APPLY_OLDER_ISSUE(RECOVERY_APPLY_OLDER_ISSUE), .RS_ROW_RECOVERY_QUALIFICATION(RS_ROW_RECOVERY_QUALIFICATION), .RS_ROW_LIVE_MEMBERSHIP(RS_ROW_LIVE_MEMBERSHIP), .RS_PREDECODE_ISSUE_CANCEL(RS_PREDECODE_ISSUE_CANCEL), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .STORE_ALLOC_EARLY_DATA(STORE_ALLOC_EARLY_DATA), .FAST_STORE_COMPLETE(FAST_STORE_COMPLETE), .FAST_STORE_IDENTITY_PRESELECT(FAST_STORE_IDENTITY_PRESELECT), .ROB_STORE_PREFIX_ADMISSION(ROB_STORE_PREFIX_ADMISSION), .ROB_RECOVERY_ROW_LIVE_QUALIFY(ROB_RECOVERY_ROW_LIVE_QUALIFY), .ROB_OCCUPANCY_DISTRIBUTE(ROB_OCCUPANCY_DISTRIBUTE), .LSQ_STORE_ACK_SOURCE_QUERY(LSQ_STORE_ACK_SOURCE_QUERY), .LSQ_HEAD_STORE_ACK_BYPASS(LSQ_HEAD_STORE_ACK_BYPASS), .FAST_STORE_ADDRESS_PREDECODE(FAST_STORE_ADDRESS_PREDECODE), .FAST_STORE_SAVED_OPERANDS(FAST_STORE_SAVED_OPERANDS), .FAST_STORE_WB_DATA(FAST_STORE_WB_DATA), .FAST_STORE_CLASS_COMPARE(FAST_STORE_CLASS_COMPARE), .FAST_STORE_BATCH(FAST_STORE_BATCH), .RS_ELASTIC_SKIP_CAPACITY(RS_ELASTIC_SKIP_CAPACITY), .RS_ISSUE_METADATA(RS_ISSUE_METADATA), .RS_WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .RS_ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .RS_AGE_WIDTH(RS_AGE_WIDTH), .PRF_READ_MUX_IMPL(PRF_READ_MUX_IMPL), .RAT_READ_BYPASS(RAT_READ_BYPASS), .RENAME_RETAIN_FREE_POOL(RENAME_RETAIN_FREE_POOL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .ROB_COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ROB_ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .ROB_UNIQUE_RECLAIM_COUNT(ROB_UNIQUE_RECLAIM_COUNT), .ROB_MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .ROB_LEGACY_HALT_PAYLOAD(LEGACY_SENTINEL_HALT), .ROB_RETURN_VALUE_ENABLE(RETURN_VALUE_ENABLE), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .RAT_SUFFIX_BRANCH_MAPPING(RAT_SUFFIX_BRANCH_MAPPING), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
+    generate begin : g_ooo_backend
+    rv32_backend_joint #(.LSQ_RESPONSE_QUERY_PREDECODE(1), .STORE_ALLOC_EARLY_ADDRESS(STORE_ALLOC_EARLY_ADDRESS), .LSQ_ROB_QUERY_PREDECODE(1), .STORE_ALLOC_IMM12(1), .RS_PHYSICAL_WAKEUP(1), .DISPATCH_PIPELINE(DISPATCH_PIPELINE), .DISPATCH_ELASTIC(DISPATCH_ELASTIC), .DISPATCH_FULL_REPLACE(DISPATCH_FULL_REPLACE), .ISSUE_PIPELINE(ISSUE_PIPELINE), .LOCAL_EXEC_RECOVERY(1), .BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .ROB_ENTRIES(ROB_ENTRIES), .RS_ENTRIES(RS_ENTRIES), .LSQ_ENTRIES(LSQ_ENTRIES), .LSQ_STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .EARLY_LOAD_ADDRESS(EARLY_LOAD_ADDRESS), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .LSQ_SAVED_REPORT_PRIORITY(LSQ_SAVED_REPORT_PRIORITY), .LSQ_HEAD_LOAD_IDENTITY_QUERY(LSQ_HEAD_LOAD_IDENTITY_QUERY), .LSQ_HELD_LOAD_IDENTITY_QUERY(LSQ_HELD_LOAD_IDENTITY_QUERY), .LSQ_REPORT_RECOVERY_PREQUALIFY(LSQ_REPORT_RECOVERY_PREQUALIFY), .LSQ_REPORT_RECOVERY_CIRCULAR_COMPARE(LSQ_REPORT_RECOVERY_CIRCULAR_COMPARE), .LSQ_HEAD_LOAD_PACKET_PRESELECT(LSQ_HEAD_LOAD_PACKET_PRESELECT), .LSQ_SAVED_IDENTITY_WORD_MASK(LSQ_SAVED_IDENTITY_WORD_MASK), .LSQ_SAVED_IDENTITY_BALANCED_MERGE(LSQ_SAVED_IDENTITY_BALANCED_MERGE), .LOAD_WAKE_BYPASS(LOAD_WAKE_BYPASS), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .LSQ_ALLOC_SLOT_PRESELECT(LSQ_ALLOC_SLOT_PRESELECT), .LSQ_ALLOC_PAYLOAD_PRESELECT(LSQ_ALLOC_PAYLOAD_PRESELECT), .LSQ_ALLOC_FIRE_DISTRIBUTE(LSQ_ALLOC_FIRE_DISTRIBUTE), .LSQ_RESPONSE_SOURCE_QUERY(LSQ_RESPONSE_SOURCE_QUERY), .LSQ_RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .LSQ_SECOND_REPORT_RECLAIM(LSQ_SECOND_REPORT_RECLAIM), .LSQ_EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .LSQ_PICK_LOCAL_VALIDITY(LSQ_PICK_LOCAL_VALIDITY), .LSQ_FORWARD_ONEHOT(LSQ_FORWARD_ONEHOT), .LSQ_PICK_ONEHOT(LSQ_PICK_ONEHOT), .EARLY_FRONT_REDIRECT(EARLY_FRONT_REDIRECT), .BRANCH_CAPTURE_REDIRECT_READY(BRANCH_CAPTURE_REDIRECT_READY), .BRANCH_CAPTURE_PHASE_VALID(BRANCH_CAPTURE_PHASE_VALID), .RECOVERY_DIRECT_APPLY(RECOVERY_DIRECT_APPLY), .RECOVERY_ROB_CREDIT(RECOVERY_ROB_CREDIT), .RECOVERY_PREVIEW_OLDER_ISSUE(RECOVERY_PREVIEW_OLDER_ISSUE), .RECOVERY_APPLY_OLDER_ISSUE(RECOVERY_APPLY_OLDER_ISSUE), .RS_ROW_RECOVERY_QUALIFICATION(RS_ROW_RECOVERY_QUALIFICATION), .RS_ROW_LIVE_MEMBERSHIP(RS_ROW_LIVE_MEMBERSHIP), .RS_PREDECODE_ISSUE_CANCEL(RS_PREDECODE_ISSUE_CANCEL), .EARLY_STORE_ADDRESS(EARLY_STORE_ADDRESS), .STORE_ALLOC_EARLY_DATA(STORE_ALLOC_EARLY_DATA), .FAST_STORE_COMPLETE(FAST_STORE_COMPLETE), .FAST_STORE_IDENTITY_PRESELECT(FAST_STORE_IDENTITY_PRESELECT), .ROB_STORE_PREFIX_ADMISSION(ROB_STORE_PREFIX_ADMISSION), .ROB_RECOVERY_ROW_LIVE_QUALIFY(ROB_RECOVERY_ROW_LIVE_QUALIFY), .ROB_OCCUPANCY_DISTRIBUTE(ROB_OCCUPANCY_DISTRIBUTE), .LSQ_STORE_ACK_SOURCE_QUERY(LSQ_STORE_ACK_SOURCE_QUERY), .LSQ_HEAD_STORE_ACK_BYPASS(LSQ_HEAD_STORE_ACK_BYPASS), .FAST_STORE_ADDRESS_PREDECODE(FAST_STORE_ADDRESS_PREDECODE), .FAST_STORE_SAVED_OPERANDS(FAST_STORE_SAVED_OPERANDS), .FAST_STORE_WB_DATA(FAST_STORE_WB_DATA), .FAST_STORE_CLASS_COMPARE(FAST_STORE_CLASS_COMPARE), .FAST_STORE_BATCH(FAST_STORE_BATCH), .RS_ELASTIC_SKIP_CAPACITY(RS_ELASTIC_SKIP_CAPACITY), .RS_ISSUE_METADATA(RS_ISSUE_METADATA), .RS_WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .RS_ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .RS_AGE_WIDTH(RS_AGE_WIDTH), .PRF_READ_MUX_IMPL(PRF_READ_MUX_IMPL), .PRF_VALUE_SRAM(PRF_VALUE_SRAM), .RAT_READ_BYPASS(RAT_READ_BYPASS), .RENAME_RETAIN_FREE_POOL(RENAME_RETAIN_FREE_POOL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .ROB_COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ROB_ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .ROB_UNIQUE_RECLAIM_COUNT(ROB_UNIQUE_RECLAIM_COUNT), .ROB_MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .ROB_LEGACY_HALT_PAYLOAD(LEGACY_SENTINEL_HALT), .ROB_RETURN_VALUE_ENABLE(RETURN_VALUE_ENABLE), .COMPACT_PRED_TARGET(COMPACT_TARGET_ACTIVE), .PREDICTOR_META(PREDICTOR_DIRECT_BRANCH_TARGET == 2), .INT_ISSUE_WIDTH(INT_ISSUE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .MUL_IMPL(MUL_IMPL), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .PHYS_TAG_IMPL(PHYS_TAG_IMPL), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .RAT_RECOVERY_IMPL(RAT_RECOVERY_IMPL), .RAT_SUFFIX_BRANCH_MAPPING(RAT_SUFFIX_BRANCH_MAPPING), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE), .COMPLETION_BYPASS(COMPLETION_BYPASS), .COMPLETION_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),
