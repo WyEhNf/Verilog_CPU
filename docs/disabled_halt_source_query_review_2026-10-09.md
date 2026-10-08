@@ -1,0 +1,13 @@
+# Disabled HALT sentinel and source-query timing
+
+This is an unimplemented source review while one fresh-RS-data PPA is running. It does not change any RTL, profile, frozen run or acceptance status.
+
+The measured combined Tier1 path at `a7e64b80` reaches `core.backend_rs1[4]` at 1.466 ns, then the direct RAT/PRF operand preview. `cpu_core` selects backend RS1/RS2/op using `is_halt_trace`, currently derived from the decoded opcode comparison even when `LEGACY_SENTINEL_HALT=0`. Course `student_top` explicitly sets `LEGACY_SENTINEL_HALT(0)` and `RETURN_VALUE_ENABLE(0)`.
+
+The shared decoder assigns HALT only in its final `LEGACY_SENTINEL_HALT!=0 && inst_i==32'h0ff00513` override. With that parameter zero, every instruction, including illegal encodings and unsupported system forms, produces another opcode. The sentinel word remains ordinary ADDI a0, zero, 255. The instruction stream is unrestricted; this is a parameter-level decoder invariant, not a benchmark restriction.
+
+With `DECODE_PIPELINE=0`, the downstream decoded opcode is that decoder's direct output. With a decode queue, every valid saved packet was written from the same decoder output on a storage push. Reset/flush clear count, hiding any stale or uninitialized payload. Empty bypass validity requires input validity; queued validity refers only to occupied rows. FULL_REPLACE changes ownership at the same edge but writes another decoder output. Missing frontend lanes supply zero instructions and invalid input. Thus every valid downstream decoded packet has op!=HALT when the sentinel parameter is zero. Invalid payload may contain arbitrary bits and cannot create architectural work.
+
+A possible later change is `is_halt_trace = (LEGACY_SENTINEL_HALT!=0) && (dec_op==HALT)`. It keeps the entire legacy-enabled behavior, and lets the parameter-disabled profile remove HALT-derived backend opcode and source-register muxes. A simulation-only assertion should require non-HALT for every valid downstream packet in that mode, using the original opcode. No opcode/tag/state bits need be removed. The common decoder, queue and backend remain shared across widths.
+
+This might remove an early decode dependency from the measured source-query path. It is not implemented yet; no area, frequency or IPC improvement is claimed. The current fresh-data freeze must finish first. If it passes its gates, retain its evidence; any later candidate must be measured under its own source identity. If it fails frequency, review the new timing path before combining this change with any further optimization. Do not rerun the current PPA or a whole correctness suite for this review.
