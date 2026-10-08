@@ -193,7 +193,7 @@
   },
   "status": "REJECTED_BELOW_IPC_AND_CASE_REGRESSION",
   "accepted": false,
-  "source_commit": null,
+  "source_commit": "ba74726d479c869c91865454e19ee7cd7e248197",
   "manifest_sha256": "8008d8ecf70444d3187a3ad332e3e7917c4084703e4f7817e6a09ae6b18ae851",
   "run_directory": "F:\\CPU2026TierRuns\\tier1_shared_lsq_pop_credit_20261009",
   "previous_shared_candidate_geomean_ipc": 0.57320053984619,

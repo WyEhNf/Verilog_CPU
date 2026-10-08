@@ -53,6 +53,8 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["TAG_SINGLE_GENERATION_OWNER"] not in (0,1):
+        raise ValueError("Tag single generation owner is 0/1")
     if p["LSQ_DIRECT_POP_CREDIT"] not in (0,1) or (p["LSQ_DIRECT_POP_CREDIT"] and
             (not p["DIRECT_DISPATCH_CURRENT_CREDITS"] or p["DISPATCH_PIPELINE"] or
              p["DISPATCH_ELASTIC"] or p["DIRECT_DISPATCH_RELEASE_CREDITS"])):

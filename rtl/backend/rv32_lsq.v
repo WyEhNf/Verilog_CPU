@@ -10,6 +10,7 @@ module rv32_lsq #(
     // 0: registered free slots; 1: registered head certificate;
     // 2: actual head pop, with caller-owned registered response source.
     parameter integer RELEASE_CREDITS = 0,
+    parameter integer SINGLE_GENERATION_OWNER = 0,
     parameter integer ALLOC_LOAD_REQUEST_BYPASS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
@@ -228,6 +229,13 @@ module rv32_lsq #(
     reg retired_mem_write_data [0:LSQ_ENTRIES-1];
     reg retired_mem_write_enable [0:LSQ_ENTRIES-1];
 
+    // Invalid rows start at MAX only in the single-owner policy, so the first
+    // allocation derives generation 1. Live generation comparisons stay direct.
+    localparam [GENERATION_WIDTH-1:0] GENERATION_RESET =
+        (SINGLE_GENERATION_OWNER!=0) ? {GENERATION_WIDTH{1'b1}} :
+        {{(GENERATION_WIDTH-1){1'b0}},1'b1};
+    initial if(SINGLE_GENERATION_OWNER!=0 && SINGLE_GENERATION_OWNER!=1)
+        $fatal(1,"SINGLE_GENERATION_OWNER must be 0 or 1");
     wire [GENERATION_WIDTH-1:0] generation_mem [0:LSQ_ENTRIES-1];
     reg [GENERATION_WIDTH-1:0] generation_mem_write_data [0:LSQ_ENTRIES-1];
     reg generation_mem_write_enable [0:LSQ_ENTRIES-1];
@@ -2296,7 +2304,7 @@ module rv32_lsq #(
                 size_mem_write_data[metadata_row]=0; size_mem_write_enable[metadata_row]=0;
                 unsigned_mem_write_data[metadata_row]=0; unsigned_mem_write_enable[metadata_row]=0;
                 if(modes[0]) begin
-                    generation_mem_write_data[metadata_row]={{(GENERATION_WIDTH-1){1'b0}},1'b1}; generation_mem_write_enable[metadata_row]=1'b1;
+                    generation_mem_write_data[metadata_row]=GENERATION_RESET; generation_mem_write_enable[metadata_row]=1'b1;
                     generation_next_mem_write_data[metadata_row]={{(GENERATION_WIDTH-1){1'b0}},1'b1}; generation_next_mem_write_enable[metadata_row]=1'b1;
                 end else if(!modes[1] && !modes[2] && allocated) begin
                     generation_mem_write_data[metadata_row]=allocated_generation; generation_mem_write_enable[metadata_row]=1'b1;
@@ -2483,9 +2491,15 @@ module rv32_lsq #(
         rv32_lsq_owned_field #(.WIDTH(GENERATION_WIDTH-1+1)) generation_mem_owner (
             .clk_i(clk_i),.write_i(generation_mem_write_enable[storage_row]),
             .data_i(generation_mem_write_data[storage_row]),.data_o(generation_mem[storage_row]));
+        if(SINGLE_GENERATION_OWNER!=0) begin:g_single_generation
+            assign generation_next_mem[storage_row] =
+                (generation_mem[storage_row]=={GENERATION_WIDTH{1'b1}}) ?
+                {{(GENERATION_WIDTH-1){1'b0}},1'b1} : generation_mem[storage_row]+1'b1;
+        end else begin:g_dual_generation
         rv32_lsq_owned_field #(.WIDTH(GENERATION_WIDTH-1+1)) generation_next_mem_owner (
             .clk_i(clk_i),.write_i(generation_next_mem_write_enable[storage_row]),
             .data_i(generation_next_mem_write_data[storage_row]),.data_o(generation_next_mem[storage_row]));
+        end
         rv32_lsq_owned_field #(.WIDTH(1+1)) size_mem_owner (
             .clk_i(clk_i),.write_i(size_mem_write_enable[storage_row]),
             .data_i(size_mem_write_data[storage_row]),.data_o(size_mem[storage_row]));

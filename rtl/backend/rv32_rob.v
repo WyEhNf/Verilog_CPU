@@ -5,6 +5,7 @@
 // architectural commit separate from store visibility and branch recovery.
 module rv32_rob #(
     parameter integer RELEASE_CREDITS = 0,
+    parameter integer SINGLE_GENERATION_OWNER = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
@@ -182,6 +183,13 @@ module rv32_rob #(
     wire store_sent_mem [0:ROB_ENTRIES-1];
     reg store_sent_mem_write_data [0:ROB_ENTRIES-1];
     reg store_sent_mem_write_enable [0:ROB_ENTRIES-1];
+    // Invalid rows start at MAX only in the single-owner policy, so the first
+    // allocation derives generation 1. Live generation comparisons stay direct.
+    localparam [GENERATION_WIDTH-1:0] GENERATION_RESET =
+        (SINGLE_GENERATION_OWNER!=0) ? {GENERATION_WIDTH{1'b1}} :
+        {{(GENERATION_WIDTH-1){1'b0}},1'b1};
+    initial if(SINGLE_GENERATION_OWNER!=0 && SINGLE_GENERATION_OWNER!=1)
+        $fatal(1,"SINGLE_GENERATION_OWNER must be 0 or 1");
     wire [GENERATION_WIDTH-1:0] generation_mem [0:ROB_ENTRIES-1];
     reg [GENERATION_WIDTH-1:0] generation_mem_write_data [0:ROB_ENTRIES-1];
     reg generation_mem_write_enable [0:ROB_ENTRIES-1];
@@ -1566,7 +1574,7 @@ end
                     (|completion_errors) || (acknowledged && ack_error);
                 error_mem_write_data[command_row]=row_reset ? 1'b0 : (allocate ? allocation_error : 1'b1);
                 generation_mem_write_enable[command_row]=row_reset || allocate;
-                generation_mem_write_data[command_row]=row_reset ? {{(GENERATION_WIDTH-1){1'b0}},1'b1} : next_generation_local;
+                generation_mem_write_data[command_row]=row_reset ? GENERATION_RESET : next_generation_local;
                 generation_next_mem_write_enable[command_row]=row_reset || allocate;
                 generation_next_mem_write_data[command_row]=row_reset ? {{(GENERATION_WIDTH-1){1'b0}},1'b1} : generation_after_allocate;
                 value_mem_write_enable[command_row]=completed;
@@ -1653,7 +1661,7 @@ end
                 begin store_wait_mem_write_data[bank_reset_slot] = 1'b0; store_wait_mem_write_enable[bank_reset_slot] = 1'b1; end
                 begin store_sent_mem_write_data[bank_reset_slot] = 1'b0; store_sent_mem_write_enable[bank_reset_slot] = 1'b1; end
                 begin error_mem_write_data[bank_reset_slot] = 1'b0; error_mem_write_enable[bank_reset_slot] = 1'b1; end
-                begin generation_mem_write_data[bank_reset_slot] = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1}; generation_mem_write_enable[bank_reset_slot] = 1'b1; end
+                begin generation_mem_write_data[bank_reset_slot] = GENERATION_RESET; generation_mem_write_enable[bank_reset_slot] = 1'b1; end
                 begin generation_next_mem_write_data[bank_reset_slot] = {{(GENERATION_WIDTH-1){1'b0}}, 1'b1}; generation_next_mem_write_enable[bank_reset_slot] = 1'b1; end
             end
         end else if (recovery_domains[5]) begin
@@ -1906,9 +1914,15 @@ end
         rv32_rob_owned_field #(.WIDTH(GENERATION_WIDTH-1+1)) generation_mem_owner (
             .clk_i(clk_i),.write_i(generation_mem_write_enable[storage_row]),
             .data_i(generation_mem_write_data[storage_row]),.data_o(generation_mem[storage_row]));
+        if(SINGLE_GENERATION_OWNER!=0) begin:g_single_generation
+            assign generation_next_mem[storage_row] =
+                (generation_mem[storage_row]=={GENERATION_WIDTH{1'b1}}) ?
+                {{(GENERATION_WIDTH-1){1'b0}},1'b1} : generation_mem[storage_row]+1'b1;
+        end else begin:g_dual_generation
         rv32_rob_owned_field #(.WIDTH(GENERATION_WIDTH-1+1)) generation_next_mem_owner (
             .clk_i(clk_i),.write_i(generation_next_mem_write_enable[storage_row]),
             .data_i(generation_next_mem_write_data[storage_row]),.data_o(generation_next_mem[storage_row]));
+        end
         if(LIGHT_RETIRE_PAYLOAD==0) begin:g_full_pc
         rv32_rob_owned_field #(.WIDTH(31+1)) pc_mem_owner (
             .clk_i(clk_i),.write_i(pc_mem_write_enable[storage_row]),
