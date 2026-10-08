@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 `include "rv32im_defs.vh"
 
-// 256-entry bimodal predictor plus a 64-entry direct-mapped BTB.
+// Parameterized direction tables (256 entries by default) and a direct-mapped BTB.
 // Table updates use accepted resolution feedback from the backend.
 /* verilator lint_off UNUSEDSIGNAL */
 module rv32_branch_predictor #(
@@ -17,7 +17,10 @@ module rv32_branch_predictor #(
     // omits unused direct targets from saved resolution metadata.
     parameter DIRECTION_INDEPENDENT_TARGET = 0,
     parameter integer NARROW_DIRECTION_READ = 0,
-    parameter integer HISTORY_BITS = 6
+    parameter integer HISTORY_BITS = 6,
+    // Total table size before banking. Prediction-time metadata keeps its
+    // original eight-bit contract; small profiles consume its low index bits.
+    parameter integer BHT_INDEX_BITS = 8
 ) (
     input  wire        clk_i,
     input  wire        reset_i,
@@ -49,7 +52,7 @@ module rv32_branch_predictor #(
     output wire [31:0] prediction_count_o,
     output wire [31:0] correct_count_o
 );
-    localparam integer BHT_ENTRIES = 256 >> BANK_BITS;
+    localparam integer BHT_ENTRIES = (1 << BHT_INDEX_BITS) >> BANK_BITS;
     // Two high metadata bits are available only with <=6 history bits.
     // Other modes retain the original predictor and full history encoding.
     localparam HYBRID_ACTIVE=(HYBRID_DIRECTION!=0) &&
@@ -59,6 +62,9 @@ module rv32_branch_predictor #(
     localparam integer BTB_ENTRIES=BTB_TOTAL_ENTRIES >> BANK_BITS;
     localparam integer BTB_TOTAL_INDEX_WIDTH=$clog2(BTB_TOTAL_ENTRIES);
     initial begin
+        if(BHT_INDEX_BITS<6 || BHT_INDEX_BITS>8 ||
+                BANK_BITS<0 || BANK_BITS>2 || HISTORY_BITS>BHT_INDEX_BITS-BANK_BITS)
+            $fatal(1,"BHT index bits must be6/7/8 and history must fit each bank");
         if(COMPACT_BTB_ENTRIES!=16 && COMPACT_BTB_ENTRIES!=32 && COMPACT_BTB_ENTRIES!=64)
             $fatal(1,"Compact BTB entries must be16/32/64");
     end
@@ -91,7 +97,7 @@ module rv32_branch_predictor #(
     wire [1:0] btb_kind [0:BTB_ENTRIES-1];
     localparam integer BHT_DOMAINS=(BHT_ENTRIES+3)/4;
     localparam integer BTB_DOMAINS=(BTB_ENTRIES+3)/4;
-    localparam integer BHT_INDEX_WIDTH=8-BANK_BITS;
+    localparam integer BHT_INDEX_WIDTH=BHT_INDEX_BITS-BANK_BITS;
     localparam integer BTB_INDEX_WIDTH=BTB_TOTAL_INDEX_WIDTH-BANK_BITS;
     wire [BHT_ENTRIES*3-1:0] bht_rows;
     wire [BTB_ENTRIES*59-1:0] btb_rows;
@@ -164,7 +170,7 @@ module rv32_branch_predictor #(
     localparam [7:0] HISTORY_MASK = (1 << HISTORY_BITS) - 1;
     wire [7:0] query_full_index = query_pc_i[9:2] ^
         ((DIRECT_BRANCH_TARGET == 2) ? ((query_history_i & HISTORY_MASK) << BANK_BITS) : 8'b0);
-    wire [7-BANK_BITS:0] query_bht_index = query_full_index[7:BANK_BITS];
+    wire [BHT_INDEX_WIDTH-1:0] query_bht_index = query_full_index[BHT_INDEX_BITS-1:BANK_BITS];
     assign pred_training_index_o = query_full_index;
     wire [BTB_INDEX_WIDTH-1:0] query_btb_index = query_pc_i[2+BANK_BITS +: BTB_INDEX_WIDTH];
     wire query_btb_match = query_btb_word[58] &&
@@ -175,8 +181,8 @@ module rv32_branch_predictor #(
     wire [31:0] branch_imm = {{19{query_inst_i[31]}}, query_inst_i[31],
                               query_inst_i[7], query_inst_i[30:25],
                               query_inst_i[11:8], 1'b0};
-    wire [7-BANK_BITS:0] feedback_bht_index = (DIRECT_BRANCH_TARGET == 2) ?
-        feedback_training_index_i[7:BANK_BITS] : feedback_pc_i[9:2+BANK_BITS];
+    wire [BHT_INDEX_WIDTH-1:0] feedback_bht_index = (DIRECT_BRANCH_TARGET == 2) ?
+        feedback_training_index_i[BHT_INDEX_BITS-1:BANK_BITS] : feedback_pc_i[BHT_INDEX_BITS+1:2+BANK_BITS];
     wire [BTB_INDEX_WIDTH-1:0] feedback_btb_index = feedback_pc_i[2+BANK_BITS +: BTB_INDEX_WIDTH];
     wire feedback_btb_write = feedback_valid_i && feedback_taken_i &&
                              (((DIRECT_BRANCH_TARGET == 0) &&
@@ -215,7 +221,7 @@ module rv32_branch_predictor #(
         rv32_frequency_control_tree #(.LEAVES(BHT_ENTRIES+CHOICE_ENTRIES)) hybrid_reset_tree (
             .signal_i(reset_i),.views_o(hybrid_reset_views));
         rv32_frequency_control_tree #(.WIDTH(BHT_INDEX_WIDTH),.LEAVES(BHT_DOMAINS)) bimodal_address_tree (
-            .signal_i(feedback_pc_i[9:2+BANK_BITS]),.views_o(bimodal_write_queries));
+            .signal_i(feedback_pc_i[BHT_INDEX_BITS+1:2+BANK_BITS]),.views_o(bimodal_write_queries));
         rv32_frequency_control_tree #(.LEAVES(BHT_DOMAINS)) bimodal_event_tree (
             .signal_i(conditional_feedback),.views_o(bimodal_write_events));
         rv32_frequency_control_tree #(.LEAVES(BHT_DOMAINS)) bimodal_direction_tree (
@@ -250,10 +256,10 @@ module rv32_branch_predictor #(
         // never an extra serialized index lookup before either direction table.
         if(NARROW_DIRECTION_READ!=0) begin:g_narrow_bimodal_query
             rv32_frequency_narrow_array_read #(.WIDTH(3),.ENTRIES(BHT_ENTRIES),.INDEX_WIDTH(BHT_INDEX_WIDTH)) query (
-                .rows_i(bimodal_rows),.index_i(query_pc_i[9:2+BANK_BITS]),.value_o(query_bimodal_word));
+                .rows_i(bimodal_rows),.index_i(query_pc_i[BHT_INDEX_BITS+1:2+BANK_BITS]),.value_o(query_bimodal_word));
         end else begin:g_regular_bimodal_query
             rv32_frequency_array_read #(.WIDTH(3),.ENTRIES(BHT_ENTRIES),.INDEX_WIDTH(BHT_INDEX_WIDTH)) query (
-                .rows_i(bimodal_rows),.index_i(query_pc_i[9:2+BANK_BITS]),.value_o(query_bimodal_word));
+                .rows_i(bimodal_rows),.index_i(query_pc_i[BHT_INDEX_BITS+1:2+BANK_BITS]),.value_o(query_bimodal_word));
         end
         if(NARROW_DIRECTION_READ!=0) begin:g_narrow_choice_query
             rv32_frequency_narrow_array_read #(.WIDTH(2),.ENTRIES(CHOICE_ENTRIES),.INDEX_WIDTH(CHOICE_INDEX_WIDTH)) query (

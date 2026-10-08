@@ -39,3 +39,11 @@ Tier2 副本 `F:/CPU2026TierRuns/tier2_compact_20261008` 已冻结，尚未开�
 只读核对原 A109 完整网表及原五条最慢路径，未新增 STA。最慢路径数据到达约 `3.049 ns`：分支捕获 tag→ROB live/generation 查询→recovery→LSQ head/saved 身份选择→RS 物理唤醒/ready→lane1 issue payload→SUB 控制与算术→结果寄存器。另有 LSQ forwarding/request owner 至 selection payload 的约3 ns链。
 
 因此，只改变时钟约束或独立 ALU 加法器不足以保证500 MHz。后续优先考察把身份比较/恢复资格与晚事件选择并行化，并同时处理 LSQ forwarding/request 的控制链；新增 issue 寄存级需要真实 IPC 改善补偿，不能带着 IPC 回退采用。之前准备的 A110/A111 没有完整测量，不继承 A109 数字，也没有直接覆盖主树。
+
+## 小容量预测表源候选
+
+在修正后的 Tier1 原综合进程 PID80820 仍存活时，完成独立的可选源码改进：顶层 `PREDICTOR_BHT_INDEX_BITS`、banked/scalar predictor 的 `BHT_INDEX_BITS` 支持6/7/8位索引（总64/128/256项，再按FE bank划分），默认8。原8位 prediction-time training metadata 保留；查询及反馈在各自 bank 消费完全相同的低索引位。双模表同步收窄；64项 chooser 与原混合预测 metadata 契约保留。历史长度必须适配实际 bank 位宽，冻结工具提前检查该条件。
+
+默认8位下，原表项数256、索引宽8-bank、原PC切片[9:2+bank]及query/training切片[7:bank]完全还原。小表只改变预测资源/aliasing，执行阶段依旧检查原完整目标并恢复错误预测，ISA/ROB/AXI/时钟边沿无变化。单发射关闭hybrid时256→64项减少576个counter/trained状态位及相应更新/查询逻辑；尚未换算为面积或IPC收益。
+
+该源码仅做审阅与 `git diff --check`，未开始第二轮HDL/形式/CPU仿真/综合/STA；没有改变当前正在测量的冻结源、工具或结果。初始Tier1/Tier2配置仍用256项，待原完整面积结果判断是否需要小表再组成下一批。源候选不是已验收的Tier3新硬件版本；历史 A109 的 PPA 不外推给新增参数后的当前源码。

@@ -62,7 +62,9 @@ def validate_parameters(text, profile):
             raise ValueError("This profile requires a power-of-two capacity >= backend width: " + key)
     if p["PREDICTOR_COMPACT_BTB_ENTRIES"] not in (16, 32, 64):
         raise ValueError("The current compact BTB supports 16/32/64 entries")
-    if not 1 <= p["PREDICTOR_HISTORY_BITS"] <= 8 - int(math.log2(p["FE_WIDTH"])):
+    if p["PREDICTOR_BHT_INDEX_BITS"] not in (6, 7, 8):
+        raise ValueError("The current BHT supports 64/128/256 total entries")
+    if not 1 <= p["PREDICTOR_HISTORY_BITS"] <= p["PREDICTOR_BHT_INDEX_BITS"] - int(math.log2(p["FE_WIDTH"])):
         raise ValueError("Predictor history must fit the banked tables")
     for side in ("I", "D"):
         ways = p[side + "CACHE_WAYS"]

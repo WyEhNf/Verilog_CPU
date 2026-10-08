@@ -3,7 +3,7 @@
 
 // Sequential RV32 fetch lanes have distinct low word-index bits. Route them
 // to FE_WIDTH disjoint table banks rather than replicate the complete tables.
-// Supports the same 1/2/4-wide profiles as cpu_core, retaining BHT256/BTB64.
+// Supports cpu_core's 1/2/4-wide profiles and a shared, parameterized BHT size.
 /* verilator lint_off UNUSEDSIGNAL */
 module rv32_banked_predictor #(
     parameter integer FE_WIDTH = 4,
@@ -20,7 +20,8 @@ module rv32_banked_predictor #(
     parameter integer BANK_LOCAL_INSTRUCTION_READ = 0,
     parameter integer BANK_LOCAL_PREFIX_HISTORY = 0,
     parameter integer BANK_DIRECT_WORD_INDEX = 0,
-    parameter integer HISTORY_BITS = 6
+    parameter integer HISTORY_BITS = 6,
+    parameter integer BHT_INDEX_BITS = 8
 ) (
     input wire clk_i, reset_i,
     input wire query_valid_i,
@@ -80,7 +81,8 @@ module rv32_banked_predictor #(
             $finish;
         end
         if (DIRECT_BRANCH_TARGET < 0 || DIRECT_BRANCH_TARGET > 2 ||
-            HISTORY_BITS < 1 || HISTORY_BITS > (8-BANK_BITS)) begin
+            BHT_INDEX_BITS < 6 || BHT_INDEX_BITS > 8 ||
+            HISTORY_BITS < 1 || HISTORY_BITS > (BHT_INDEX_BITS-BANK_BITS)) begin
             $display("ERROR: predictor mode must be 0/1/2; history must fit bank rows");
             $finish;
         end
@@ -239,6 +241,7 @@ module rv32_banked_predictor #(
                 wire [31:0] unused_predictor_prediction_count_o;
             wire [31:0] unused_predictor_correct_count_o;
             rv32_branch_predictor #(.BANK_BITS(BANK_BITS), .DIRECT_BRANCH_TARGET(DIRECT_BRANCH_TARGET),
+                .BHT_INDEX_BITS(BHT_INDEX_BITS),
                 .HISTORY_BITS(HISTORY_BITS), .HYBRID_DIRECTION(HYBRID_DIRECTION), .DIRECTION_INDEPENDENT_TARGET(DIRECTION_INDEPENDENT_TARGET), .NARROW_DIRECTION_READ(NARROW_DIRECTION_READ), .COMPACT_INDIRECT_BTB(COMPACT_INDIRECT_BTB), .COMPACT_BTB_ENTRIES(COMPACT_BTB_ENTRIES)) predictor (
                 .clk_i(clk_i), .reset_i(reset_i),
                 .query_valid_i(query_valid_i && word_index < 3'd4),
