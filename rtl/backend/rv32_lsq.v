@@ -38,6 +38,7 @@ module rv32_lsq #(
     // 0: registered selection; 1: empty fallthrough with AGU lookthrough;
     // 2: empty fallthrough from registered addresses only (shorter timing path).
     parameter integer EMPTY_SELECTION_BYPASS = 0,
+    parameter integer COMMITTED_STORE_BYPASS = 0,
     // Carry the exact current-row direct-bypass predicate with the selected
 
     // packet, avoiding selected slot -> second row read -> qualification.
@@ -726,9 +727,14 @@ module rv32_lsq #(
     // eligible tournament. Unknown-store and byte-overlap guards are unchanged.
     // A held ticket retains priority; stores and newly allocated rows still
     // cross their original selection edge. This decision never uses ready.
-    wire selection_direct_bypass=(EMPTY_SELECTION_BYPASS!=0) && (REQUEST_PIPELINE!=0) &&
-        !reset_i && !flush_i && !recovery_valid_i && !selection_valid && pick_valid[1] && pick_load &&
-        direct_selection_qualified;
+    // A store reaches the tournament only after its saved address/data are
+    // ready and exact-tag architectural admission is present (or retained).
+    // The same held selection owner captures a first offer under backpressure.
+    wire store_selection_bypass=(COMMITTED_STORE_BYPASS!=0) && !pick_load;
+    wire selection_direct_bypass=(REQUEST_PIPELINE!=0) &&
+        !reset_i && !flush_i && !recovery_valid_i && !selection_valid && pick_valid[1] &&
+        (((EMPTY_SELECTION_BYPASS!=0) && pick_load && direct_selection_qualified) ||
+         store_selection_bypass);
     generate if(REQUEST_PIPELINE!=0) begin:g_visible_selection
         wire [VISIBLE_SELECTION_WORDS-1:0] direct_views;
         rv32_frequency_control_tree #(.LEAVES(VISIBLE_SELECTION_WORDS)) direct_tree (
