@@ -65,8 +65,10 @@ module rv32_branch_predictor #(
         if(BHT_INDEX_BITS<6 || BHT_INDEX_BITS>8 ||
                 BANK_BITS<0 || BANK_BITS>2 || HISTORY_BITS>BHT_INDEX_BITS-BANK_BITS)
             $fatal(1,"BHT index bits must be6/7/8 and history must fit each bank");
-        if(COMPACT_BTB_ENTRIES!=16 && COMPACT_BTB_ENTRIES!=32 && COMPACT_BTB_ENTRIES!=64)
-            $fatal(1,"Compact BTB entries must be16/32/64");
+        if((COMPACT_BTB_ENTRIES!=4 && COMPACT_BTB_ENTRIES!=8 &&
+            COMPACT_BTB_ENTRIES!=16 && COMPACT_BTB_ENTRIES!=32 && COMPACT_BTB_ENTRIES!=64) ||
+            (COMPACT_BTB_ENTRIES >> BANK_BITS)<2)
+            $fatal(1,"Compact BTB entries must be4/8/16/32/64 with at least two rows per bank");
     end
     localparam integer BTB_PAYLOAD_WIDTH=BTB_COMPACT_ACTIVE?39:58;
     // A predictor tag may alias; execution still compares the full resolved

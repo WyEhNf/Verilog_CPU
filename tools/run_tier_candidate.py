@@ -62,18 +62,27 @@ def validate_parameters(text, profile):
     for key in ("ROB_ENTRIES", "LSQ_ENTRIES", "FETCH_QUEUE_DEPTH", "COMPLETION_DEPTH"):
         if p[key] < p["BE_WIDTH"] or p[key] & (p[key] - 1):
             raise ValueError("This profile requires a power-of-two capacity >= backend width: " + key)
-    if p["PREDICTOR_COMPACT_BTB_ENTRIES"] not in (16, 32, 64):
-        raise ValueError("The current compact BTB supports 16/32/64 entries")
+    if p["PREDICTOR_COMPACT_BTB_ENTRIES"] not in (4, 8, 16, 32, 64) or p["PREDICTOR_COMPACT_BTB_ENTRIES"] < 2*p["FE_WIDTH"]:
+        raise ValueError("The compact BTB requires 4/8/16/32/64 entries and >=2 rows per bank")
     if p["PREDICTOR_BHT_INDEX_BITS"] not in (6, 7, 8):
         raise ValueError("The current BHT supports 64/128/256 total entries")
     if not 1 <= p["PREDICTOR_HISTORY_BITS"] <= p["PREDICTOR_BHT_INDEX_BITS"] - int(math.log2(p["FE_WIDTH"])):
         raise ValueError("Predictor history must fit the banked tables")
     for side in ("I", "D"):
+        if not 2 <= p[side + "CACHE_MSHRS"] <= 16:
+            raise ValueError("These capacity profiles require the nonblocking cache with 2..16 MSHRs: " + side)
         ways = p[side + "CACHE_WAYS"]
         lines = p[side + "CACHE_LINES"]
         sets = lines // ways if ways else 0
         if ways not in (1, 2) or lines % ways or sets < 2 or sets & (sets - 1):
             raise ValueError("Invalid cache geometry: " + side)
+    if not 1 <= p["DCACHE_WAITERS"] <= 16:
+        raise ValueError("D-cache requires 1..16 waiters")
+    if p["ROB_ENTRIES"] < 4 or p["AXI_RESPONSE_FIFO_DEPTH"] not in (0, 2, 4, 8):
+        raise ValueError("ROB requires >=4 rows and response FIFO depth must be 0/2/4/8")
+    for key, minimum in (("READ_LINES", 2), ("WRITE_LINES", 2), ("WORD_QUEUE", 4)):
+        if p[key] < minimum or p[key] & (p[key]-1):
+            raise ValueError("AXI bridge capacity must be a power of two >= " + str(minimum) + ": " + key)
 
 
 def prepare(out, profile, host):
