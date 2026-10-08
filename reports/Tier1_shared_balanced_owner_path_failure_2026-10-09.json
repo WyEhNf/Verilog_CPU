@@ -1,0 +1,51 @@
+{
+  "status": "PREPARATION_PATH_FAILURE_NO_EDA",
+  "accepted": false,
+  "source_commit": "9f76f6019db69509f118150f78d0a665c4c486b2",
+  "run_directory": "F:\\CPU2026TierRuns\\tier1_shared_balanced_owner_20261009",
+  "lint": {
+    "returncode": 0,
+    "elapsed_seconds": 7.678520799992839,
+    "errors": 0,
+    "latches": 0,
+    "unoptflat": 0,
+    "log_sha256": "25328f22110ca07b20844319d3693a189dd83fb1b86e0f24671f3ccf9933df5e"
+  },
+  "synth_attempt": {
+    "status": "FAILED",
+    "command": [
+      "C:\\Users\\admin\\miniconda3\\python.exe",
+      "F:\\CPU2026TierRuns\\tier1_shared_balanced_owner_20261009\\source\\scripts\\synth.py",
+      "--filelist",
+      "verilog/filelist.f",
+      "--out",
+      "F:\\CPU2026TierRuns\\tier1_shared_balanced_owner_20261009\\synth",
+      "--mode",
+      "opt",
+      "--clock-period",
+      "2.0",
+      "--appimage",
+      "",
+      "--yosys",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys.exe",
+      "--abc",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys-abc.exe",
+      "--sta",
+      "F:/CPU2026CourseTools/win54fc150/opensta/bin/sta.exe",
+      "--asap7-lib",
+      "F:/CPU2026CourseTools/win54fc150/asap7/lib"
+    ],
+    "manifest_sha256": "1df5dcf41eedc52a2246b5c812709d17396778f32a3574d503c98af89e4ebbbb",
+    "phase": "synth",
+    "returncode": 2,
+    "seconds": 0.463508599990746,
+    "log_sha256": "66b421e8bd5a1d8f271647377b71499f06f4ff19228a3cf52fd1144704f5c8d9"
+  },
+  "area_um2": null,
+  "fmax_mhz": null,
+  "geomean_ipc": null,
+  "build_run": false,
+  "perf_run": false,
+  "cpu_smoke_run": false,
+  "reason": "Official filelist parser rejected the two new relative paths before any EDA execution. Their ../ prefix is being repaired in main worktree; original freeze is retained. Official scripts were not modified."
+}
