@@ -85,6 +85,19 @@ Tier2对应资源候选 `configs/tier2_micro_ooo.json`：保留ROB16/RS4/LSQ8和
 
 与已存在的同源baseline相比，multiply仅慢约2.6%，rsort/vvadd明显受限；数据缓存容量是优先恢复方向，而不能为了面积继续一味缩小它。下批 `configs/tier2_balanced_memory.json` 在micro配置上恢复D256/PRF40，改I64/RS3/128项混合方向表，保持ROB16/LSQ8/FQ8及全部显式缓冲。RS已有的平衡rank/allocation树支持任意>=BE的行数，3行使用4叶树的一条常量填充叶；不是把非法槽当有效行。新配置尚未测量，不借用已有各单参数结果相乘预测联合IPC。默认Tier3仍未缩减上述资源。
 
-Tier1下一批 `configs/tier1_micro_frontend.json` 在micro配置上把I64→32、FQ4→2，保留16行真实SRAM loop filter与原8项AXI word metadata queue，以免256MiB RAM latency10下额外限制总线在途字数。副本 `F:/CPU2026TierRuns/tier1_micro_frontend_20261008` 在Tier2 micro perf结束后开始一次完整PPA，目前暂无完整结果。已排除无效的completion depth缩减思路：当前 `COMPLETION_BYPASS=2` 已不存completion FIFO，改变深度不会提供期望的面积收益，因此不为它单独测试。
+Tier1下一批 `configs/tier1_micro_frontend.json` 在micro配置上把I64→32、FQ4→2，保留16行真实SRAM loop filter与原8项AXI word metadata queue，以免256MiB RAM latency10下额外限制总线在途字数。副本 `F:/CPU2026TierRuns/tier1_micro_frontend_20261008` 在Tier2 micro perf结束后顺序测量，manifest SHA256 `fee2f781954881455f35bd8f50c31ef42df7c2dc650e555633ead487895fb833`。完整PPA耗时577.328秒，含SRAM面积 `8641.614987999217 μm²`、频率 `352.9817304377801 MHz`、最小周期 `2.8330078125 ns`；组合 `5299.013519999216`、时序 `2608.9452`、SRAM `733.6562680000002 μm²`。report SHA256 `f42b6e2a26130ebab2e89b0669e89f83a767811117b8b7a58bd9be5ae4d56012`，PPA通过。
+
+该Tier1只构建一次（42.372秒），可执行文件SHA256 `fbb36f44fd5b6b3de6aaa546f8eff62eb3df87b3405af843dba5aca8197d3d5b`，只跑一次六项官方perf（7.155秒，latency10），答案全通过，几何平均 `0.4275510094072113`，未达0.6000。因此未验收Tier1、不增加smoke，也不继续缩小关键容量。
+
+| perf | 动态指令 | 周期 | IPC |
+|---|---:|---:|---:|
+| median | 6961 | 15997 | 0.435144090 |
+| multiply | 21722 | 35848 | 0.605947333 |
+| qsort | 139900 | 338907 | 0.412797611 |
+| rsort | 195719 | 740634 | 0.264258730 |
+| towers | 5278 | 9782 | 0.539562462 |
+| vvadd | 4524 | 11494 | 0.393596659 |
+
+这个结果改变后续方向：仅靠缩容量的单发射乱序候选仍不能同时达成三项门槛，需要减少后端流水/控制成本，为缓存与在途指令留出空间。已排除无效的completion depth缩减思路：当前 `COMPLETION_BYPASS=2` 已不存completion FIFO，改变深度不会提供期望的面积收益，因此不为它单独测试。Tier2 balanced副本 `F:/CPU2026TierRuns/tier2_balanced_memory_20261008` 在本次Tier1 perf结束后开始完整PPA，目前没有完整指标。
 
 额外暴露已有 backend 的 `DISPATCH_PIPELINE` 到core/top，默认1还原此前hardcoded1，未启用直接分发。可选0必须同时关闭`DISPATCH_ELASTIC`，由冻结前校验拒绝矛盾组合。它只开放已有direct dispatch分支供后续容量与周期优化；这条分支也会关闭依赖弹性D包的fast-store shortcut，因此不能宣称性能自动改善。尚无直接分发候选测试，不改当前在测副本；默认Tier3保留原D pipeline和fast-store实现。
