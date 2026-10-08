@@ -184,3 +184,8 @@ Tier1 inorder tagfix完整PPA耗时542.349秒，manifest SHA256 `90e3943a5c3cf45
 第一份冻结 `F:/CPU2026TierRuns/tier2_inorder_lookup_20261008`（b1080e98）top级lint退出0但有UNOPTFLAT：提前load的request valid仍结构依赖ALU memory ready，并与MMIO仲裁形成组合反馈；store选取与load阻塞共用always块也产生不必要的地址依赖。未启动综合、构建或CPU测试。修正提交29db9777：fast-load模式不存在ALU held-load，因此显式切除ALU ready到issue_enable的依赖；把store选取与load阻塞拆为独立组合过程。
 
 修正版冻结 `F:/CPU2026TierRuns/tier2_inorder_lookup_isolated_20261008`，一次top级原RTL lint退出0，无Error或UNOPTFLAT。接着只开始一次完整官方PPA，尚无结果。保留初次有警告快照，不覆盖；未运行完整正确性套件。
+
+
+Tier2 lookup isolated完整PPA结束，628.212秒，manifest SHA256 `5cc5b4042aeadef56ef6e001c27b511f0aee71123c838157aeae93a64fa1d09b`，report SHA256 `59b8523ec0034bae304ed4aa5e4b8c871ec3ed0e90ee25c2e025e861f908811c`。面积 `21421.329662000047 μm²`、频率 `256.19214410808104 MHz`，组合 `9145.202940000045`、时序 `4348.3392`、SRAM `7927.787522000003 μm²`。面积与频率均失败，跳过build/perf/smoke；未替代Tier1或默认Tier3。
+
+实际STA首路径从Dcache metadata状态经过cache响应资格、ROB load旁路、架构producer查询、提前AGU，再经过core的泛用MMIO谓词到状态FF，数据到达约3.84ns。64个Dcache metadata bank合计面积3054.59748μm²；更大容量与在途资源的总逻辑成本超过先前预算，不能把新结构当作已经节省面积。后续候选需同时减少实际缓存/等待槽成本，并切断load数据到仅用于store的MMIO控制路径；此次失败不追加CPU测试。
