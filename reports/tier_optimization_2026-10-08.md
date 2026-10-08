@@ -295,3 +295,23 @@ ready且无RAW的load在trace_ready/rename两处都不消耗RS信用，仍必须
 
 
 从114b4dc5冻结F:/CPU2026TierRuns/tier1_shared_load_window8_20261008，manifest SHA256 4f44d9655ca75492fd3ac7446b221a10720216f32c460d5e7cf23f2b5c8fc89c。一次原RTL静态lint退出0，无Error/LATCH/UNOPTFLAT，9.797秒，日志SHA256 0056315212cbae3e5d8da550cf3c65f740cc14a85df92cbdb04244dce2f44ec5；有既存参数宽度/未用信号warning，不宣称零warning。接着顺序启动一次完整PPA，尚无面积/频率/IPC结论。已准备configs/tier2_shared_load_credit.json：共享FE2/BE2、ROB8/PRF38/RS3/LSQ4/I64/D512的未测SRAM候选加相同当前信用及预读开关，不另建双发射模块；该Tier2配置还未冻结/测试，等待Tier1当前阶段结束。
+
+
+## 预读 / 单way窗口候选未通过 IPC 门
+
+114b4dc5冻结的共享load-window8完整PPA一次完成，815.690秒：面积8878.268245000081μm²，Fmax369.009009009009MHz；组合5470.47432000008、时序2175.6276、SRAM1232.1663250000004μm²。report SHA256 ace9200741789d9c06e64cd5e92548bb9cbb543e6151d21eb0f2ad13b364933b，log SHA256 6d4c98bab3d49c2a81128a6cba4f0f9a4d2d91870cb746592b0d078f7edd8638。与已测current-credit小窗口候选相比，面积多227.86149μm²、频率少8.99025MHz，不能称为全指标改善。
+
+PPA门通过后构建一次65.619秒，exe SHA256 729ea70140f157f29f47883eb4ba2d992b42e662d308a739293a75df888ae30b；一次六项官方perf，latency10、7.319秒，答案与分配断言全部通过，geomean0.4947168434105929。比同D容量双way/ROB4/current-credit的0.506860下降2.3958%，未达0.6000，所以不验收，不跑smoke，不重复perf。perf log SHA256 c64fb9a2b84fbabb3625b3e7b1b0d684f8ed791f84ca46372831223bd1e1249d。完整记录在Tier1_shared_load_window8_2026-10-08.json。
+
+| perf | 官方指令数 | 实测周期 | IPC |
+|---|---:|---:|---:|
+| median | 6961 | 14738 | 0.472316461 |
+| multiply | 21722 | 25156 | 0.863491811 |
+| qsort | 139900 | 276243 | 0.506438172 |
+| rsort | 195719 | 586871 | 0.333495777 |
+| towers | 5278 | 11160 | 0.472939068 |
+| vvadd | 4524 | 10053 | 0.450014921 |
+
+这一批有容量、关联度与控制多项变化，不能把结果归因于单一项；大ROB没有在当前组合产生显著性能提升，小LSQ包含已退休但未ACK的store，也不能仅凭ROB容量推定更多独立load在途。只读检查另发现，历史独立Tier1配置选择PREDICTOR_DIRECT_BRANCH_TARGET1（PC索引），共享小OoO候选仍使用2（带历史的索引/metadata）；不能将历史独立架构的IPC直接用于共享后端。后续需检查小表预测及前端吞吐，同时保留当前最好的共享数值候选0.506860，失败候选不替代canonical或默认Tier3。
+
+同属目标1的双发射共享配置configs/tier2_shared_load_credit.json保留双way I64/D512、LSQ4、RS3，比刚测Tier1有更大的缓存和内存窗口，来自同一114b4dc5后端及相同信用/预读算法。此前没有对这一统一双发射配置测量；在Tier1本批结束后顺序冻结并测一次完整PPA，避免依据不同配置的IPC推断它必然成功或失败。默认Tier3参数仍为原值；Tier1/Tier2及500MHz均未验收完成。
