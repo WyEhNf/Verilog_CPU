@@ -53,6 +53,8 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["FETCH_OWNER_PAYLOAD_SELECT"] not in (0, 1):
+        raise ValueError("Fetch owner payload selection is 0/1")
     if p["LSQ_COMMITTED_STORE_BYPASS"] not in (0, 1):
         raise ValueError("Committed store selection bypass is 0/1")
     if p["DECODE_EMPTY_BYPASS"] not in (0, 1) or p["DECODE_FULL_REPLACE"] not in (0, 1):

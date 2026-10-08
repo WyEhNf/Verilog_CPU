@@ -16,6 +16,7 @@ module rv32_fetch_frontend #(
     parameter integer QUEUE_PAYLOAD_BANKS = 0,
     parameter integer COMPACT_PRED_TARGET = 0,
     parameter integer RESPONSE_BYPASS = 0,
+    parameter integer OWNER_PAYLOAD_SELECT = 0,
     parameter integer RESPONSE_LOCAL_PC = 0,
     // Caller supplies the redirect epoch to its registered-response cache on
     // this same edge. Old responses remain blocked while the new PC is offered.
@@ -350,8 +351,10 @@ module rv32_fetch_frontend #(
                     if_resp_pred_metadata_i[public_lane*16 +: 16]:16'b0;
                 wire  unused_packet_selector_write_o;
                 rv32_frequency_event_select #(.WIDTH(READ_DATA_WIDTH),.EVENTS(2),.PRIORITY(0)) packet_selector (
-                    .events_i({bypass_lane_valid[public_lane],
-                        !response_bypass && public_lane<count_reg}),
+                    // Queue occupancy is the registered payload owner. All
+                    // original lane/epoch/redirect gates remain on fetch_valid.
+                    .events_i((OWNER_PAYLOAD_SELECT!=0)?{count_reg==0,count_reg!=0}:
+                        {bypass_lane_valid[public_lane],!response_bypass && public_lane<count_reg}),
                     .values_i({response_packet,response_metadata,
                         queue_read_packets[public_lane*PACKET_WIDTH +: PACKET_WIDTH],
                         queue_read_metadata[public_lane*16 +: 16]}),.write_o(unused_packet_selector_write_o),
@@ -451,15 +454,21 @@ module rv32_fetch_frontend #(
         enq_count = (if_resp_valid_i && if_resp_ready_o) ? bundle_count : 0;
     end
 
+    // VALID does not depend on ready. Keeping its owner separate from
+    // dequeue accounting makes that independence explicit to elaboration.
+    integer valid_lane;
     always @* begin
         fetch_valid_o = {FE_WIDTH{1'b0}};
-        deq_count = 0;
-        for (j = 0; j < FE_WIDTH; j = j + 1) begin
-            if(response_bypass) fetch_valid_o[j]=bypass_lane_valid[j];
-            else if(j<count_reg) fetch_valid_o[j]=1'b1;
-            if(fetch_valid_o[j] && (deq_count == j) && fetch_ready_i[j])
-                deq_count = deq_count + 1;
+        for(valid_lane=0;valid_lane<FE_WIDTH;valid_lane=valid_lane+1) begin
+            if(response_bypass) fetch_valid_o[valid_lane]=bypass_lane_valid[valid_lane];
+            else if(valid_lane<count_reg) fetch_valid_o[valid_lane]=1'b1;
         end
+    end
+    always @* begin
+        deq_count=0;
+        for(j=0;j<FE_WIDTH;j=j+1)
+            if(fetch_valid_o[j] && (deq_count==j) && fetch_ready_i[j])
+                deq_count=deq_count+1;
     end
 
     always @* begin

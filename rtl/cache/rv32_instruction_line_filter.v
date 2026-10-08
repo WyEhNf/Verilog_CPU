@@ -7,6 +7,7 @@
 // There is no combinational path from a new request to response validity.
 module rv32_instruction_line_filter #(
     parameter integer LINES=16,EPOCH_WIDTH=4,DATA_SRAM=0,
+    parameter integer OWNER_PAYLOAD_SELECT=0,
     parameter integer INDEX_WIDTH=$clog2(LINES),
     parameter integer TAG_BITS=28-INDEX_WIDTH
 ) (
@@ -90,7 +91,11 @@ rv32_frequency_event_select #(.WIDTH(128),.EVENTS(LINES),.PRIORITY(0)) line_sele
     localparam integer RESPONSE_WIDTH=65+128+EPOCH_WIDTH;
 wire  unused_response_select_write_o;
 rv32_frequency_event_select #(.WIDTH(RESPONSE_WIDTH),.EVENTS(2),.PRIORITY(0)) response_select (
-        .events_i({fast_live,primary_live}),
+        // fast_valid and miss_pending are mutually exclusive registered owners.
+        // Epoch qualification still controls response VALID and all handshakes.
+        // Unqualified payloads are observable only when the original live gate
+        // allows publication, when this selects precisely the same owner.
+        .events_i((OWNER_PAYLOAD_SELECT!=0)?{fast_valid,!fast_valid}:{fast_live,primary_live}),
         .values_i({fast_pc,{fast_pc[31:4],4'b0},fast_line,fast_epoch,1'b0,
             primary_resp_pc_i,primary_resp_line_addr_i,primary_resp_line_data_i,
             primary_resp_epoch_i,primary_resp_error_i}),.write_o(unused_response_select_write_o),
@@ -201,6 +206,10 @@ rv32_frequency_event_select #(.WIDTH(128),.EVENTS(SRAM_BANKS),.PRIORITY(0)) resp
             if(accept_miss)
                 miss_pending<=1'b1;
         end
+    end
+    always @(posedge clk_i) begin
+        if(OWNER_PAYLOAD_SELECT!=0 && !reset_i && fast_valid && miss_pending)
+            $fatal(1,"Instruction response owners overlap");
     end
     initial begin
         if(LINES<2 || LINES>32 || (LINES & (LINES-1))!=0)

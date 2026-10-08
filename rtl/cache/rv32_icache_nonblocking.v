@@ -13,6 +13,7 @@ module rv32_icache_nonblocking #(
     parameter integer TAG_REGION_BITS = 0,
     parameter integer LOCAL_RESPONSE_READY = 0,
     parameter integer REQUEST_PIPELINE = 0,
+    parameter integer OWNER_PAYLOAD_SELECT = 0,
     parameter integer LOOP_BUFFER_LINES = 0,
     parameter integer LOOP_BUFFER_SRAM = 0,
     parameter integer REFILL_PROTECT_PENDING_HIT = 1,
@@ -73,7 +74,7 @@ module rv32_icache_nonblocking #(
     // Cached instruction bytes survive redirects exactly as the primary
     // I-cache does. Only transaction validity is qualified by the epoch.
     generate if(LOOP_BUFFER_LINES!=0) begin:g_instruction_line_filter
-        rv32_instruction_line_filter #(.LINES(LOOP_BUFFER_LINES),.DATA_SRAM(LOOP_BUFFER_SRAM),.EPOCH_WIDTH(EPOCH_WIDTH)) lines (
+        rv32_instruction_line_filter #(.OWNER_PAYLOAD_SELECT(OWNER_PAYLOAD_SELECT),.LINES(LOOP_BUFFER_LINES),.DATA_SRAM(LOOP_BUFFER_SRAM),.EPOCH_WIDTH(EPOCH_WIDTH)) lines (
             .clk_i(clk_i),.reset_i(reset_i),.current_epoch_i(current_epoch_i),
             .if_req_valid_i(if_req_valid_i),
             .primary_req_valid_o(primary_if_req_valid),
