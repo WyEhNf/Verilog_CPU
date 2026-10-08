@@ -136,3 +136,15 @@ Tier1 branchfix完整综合在通用read_verilog阶段退出（233.964秒，mani
 一次单模块Yosys read_verilog检查在缺少运行时PATH的直接shell调用中未加载工具（退出-1073741515，不是HDL错误）；配置与原runner相同的runtime/build PATH后，静态read_verilog退出0，只保留正常的数组到寄存器展开提示。未改变官方综合脚本或规避参数检查。
 
 从7283a8ef冻结修正版 `F:/CPU2026TierRuns/tier1_inorder_memory_tagfix_20261008`，顺序重新开始完整PPA。旧branchfix结果原样保留，不重跑或覆盖它。先前未测的Tier2 direct副本也含错误模块默认值，因此不对其启动综合；从修正版另冻 `F:/CPU2026TierRuns/tier2_direct_memory_tagfix_20261008` 等待Tier1结束。默认Tier3所有架构参数与分支仍为原值；解析修复也确保新增但不使用的模块不会令默认课程综合提前退出。
+
+## 流水后端首轮 PPA 与字段分散候选
+
+Tier1 inorder tagfix完整PPA耗时542.349秒，manifest SHA256 `90e3943a5c3cf455ce7ecd7fb54c87bedf7250b49ae6a9f64a7775a25cb5174f`，report SHA256 `418acc914a5bcffcaff69c0c2a904f1769969afc63144abe266bedd48e4aeecc`。面积 `9705.712986999559 μm²`、频率 `190.54707852623744 MHz`；组合 `4952.89889999956`、时序 `2487.348`、SRAM `2265.466086999998 μm²`。两项PPA门均失败，跳过构建、IPC及smoke，不宣称该新架构性能达标。相比小容量OoO，D256提供更大真实SRAM，后端逻辑较少仍不足消除面积与控制时序代价。
+
+原最慢STA路径从decode head selection进入新后端的数据选择，NOR3驱动124个负载、延迟约0.783ns，随后NOR2驱动340个负载、单段延迟约2.502ns。这是实际映射路径证据，不是根据声明FF数推测的瓶颈。没有额外重跑STA。
+
+顺序测量Tier2 direct修正版（冻结7283a8ef，manifest SHA256 `00e63550530ea549c441ea87e26caa5a1db44fff896ef3409f1663440f9b4cab`），完整PPA耗时1657.298秒：面积 `19434.734685013675 μm²`、频率 `347.5899524779362 MHz`；组合 `11102.509620013672`、时序 `4274.2728`、SRAM `4057.9522650000026 μm²`。report SHA256 `e3443ee2ca6292719aff5303d69a9fa4aa0fa146d78e50d027a3d05b8d03552d`。频率通过但面积高1434.735μm²，跳过构建、IPC与smoke；去掉D包并没有为D512提供足够面积。未改默认Tier3的D包、资源或fast-store。
+
+字段分散源码提交 `dc2e3bf3`，仅修改可选流水后端：架构RF改原频率域array read与分组写索引/使能、每row 16bit word owner；RF初始化valid同样分布至两字。ROB完成旁路和按年龄最后匹配源改原event_select优先选择，每个选择叶驱动16bit数据，最年轻写者的ready仍控制发射，未变WAW/RAW策略。ALU/MDU launch、源使用屏蔽、store结果选择分散控制。ROB结果与store address用word owner写入，store data复用该row的value字段（store不写架构寄存器），省去4×32bit独立store-word状态。转发top已有的SHIFT_SHARED_BARREL给新ALU，不改变默认OoO实例。所有执行响应仍由原完整代际资格检查后写入对应row。
+
+新配置 `configs/tier1_inorder_banked.json` 保留D256、ROB4、31×32架构RF及两个独立代际store槽，改I32/FQ2/WAITERS2，减少前端和等待槽以配合字段控制开销；不缩D-cache、word queue或总线line容量。新模块单独Yosys通用解析退出0；从dc2e3bf3冻结 `F:/CPU2026TierRuns/tier1_inorder_banked_20261008`，一次Verilator5.040原RTL lint退出0，无Error/LATCH/UNOPTFLAT。Tier2 direct PPA完成后顺序开始该候选完整PPA，尚无面积、频率或IPC结果。不把改动的逻辑等值或存储声明缩减当作性能证明。
