@@ -74,6 +74,8 @@ module rv32_backend_joint #(
     parameter integer PRF_READ_MUX_IMPL = 0,
     parameter integer PRF_VALUE_SRAM = 0,
     parameter integer RAT_READ_BYPASS = 0,
+    // 1: registered free-ID reservoir; 0: existing current-bitmap allocator.
+    parameter integer RENAME_REGISTERED_FREE_POOL = 1,
     parameter integer RENAME_RETAIN_FREE_POOL = 0,
     parameter integer ASAP7_FANOUT_BUFFERS = 0,
     parameter integer ROB_CONTROL_REGISTER_BANKS = 0,
@@ -820,6 +822,8 @@ module rv32_backend_joint #(
         assign shared_store_addr = 32'b0;
     end endgenerate
     initial begin
+        if(RENAME_REGISTERED_FREE_POOL!=0 && RENAME_REGISTERED_FREE_POOL!=1)
+            $fatal(1,"RENAME_REGISTERED_FREE_POOL must be 0/1");
         if ((DIRECT_LOAD_RS_CREDIT!=0 && DIRECT_LOAD_RS_CREDIT!=1) ||
             (DIRECT_LOAD_RS_CREDIT!=0 && (DIRECT_DISPATCH_CURRENT_CREDITS==0 ||
              DISPATCH_PIPELINE!=0 || DISPATCH_ELASTIC!=0 || EARLY_LOAD_ADDRESS<2 ||
@@ -2123,7 +2127,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rename_unit #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .RAT_READ_BYPASS(RAT_READ_BYPASS), .REGISTERED_FREE_POOL(1), .RETAIN_FREE_POOL_ON_RESTORE(RENAME_RETAIN_FREE_POOL)) rename (
+    rv32_rename_unit #(.BE_WIDTH(BE_WIDTH), .PHYS_REGS(PHYS_REGS), .RAT_READ_BYPASS(RAT_READ_BYPASS), .REGISTERED_FREE_POOL(RENAME_REGISTERED_FREE_POOL), .RETAIN_FREE_POOL_ON_RESTORE(RENAME_RETAIN_FREE_POOL)) rename (
         .clk_i(clk_i), .reset_i(reset_i), .rename_ready_i(!halted_o && !flush_i && !branch_busy_domains[1] && dispatch_packet_ready),
         .decoded_valid_i(dec_valid), .decoded_rd_we_i(dec_rd_we), .decoded_rs1_used_i(dec_rs1_used), .decoded_rs2_used_i(dec_rs2_used),
         .decoded_rs_need_i(dec_rs_need), .decoded_lsq_need_i(dec_lsq_need), .decoded_rd_i(dec_rd), .decoded_rs1_i(dec_rs1), .decoded_rs2_i(dec_rs2),

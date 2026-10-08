@@ -55,6 +55,8 @@ def validate_parameters(text, profile):
     p = defaults | overrides
     if p["SERIAL_BACKEND"] != 0:
         raise ValueError("Tier profiles must share rv32_backend_joint and vary widths/capacities; old separate-backend experiments require their frozen historical revision")
+    if p["RENAME_REGISTERED_FREE_POOL"] not in (0, 1):
+        raise ValueError("RENAME_REGISTERED_FREE_POOL is 0/1")
     if p["PRF_VALUE_SRAM"] not in (0, 1) or p["STORE_ALLOC_EARLY_ADDRESS"] not in (0, 1, 2):
         raise ValueError("PRF_VALUE_SRAM is 0/1; STORE_ALLOC_EARLY_ADDRESS is 0/1/2")
     if p["DISPATCH_PIPELINE"] not in (0, 1) or p["DISPATCH_ELASTIC"] not in (0, 1) or (p["DISPATCH_ELASTIC"] and not p["DISPATCH_PIPELINE"]):

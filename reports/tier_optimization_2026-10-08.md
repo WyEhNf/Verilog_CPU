@@ -381,3 +381,12 @@ c7e53071 冻结的 window16 完整 PPA 一次完成，658.653 秒：面积 18066
 ## FE2 / BE1 共享取指候选已冻结
 
 从 64c0447a15f2d9320f069dbd89aa517b0eb571f7 冻结 F:/CPU2026TierRuns/tier1_shared_fetch2_20261008，manifest SHA256 a251a25f26d13a7ae7dedff101a250dbba0ba3b08140cbd82867357bbdb2ad1f。一次原 RTL 静态 lint 6.294 秒，退出 0，Error/LATCH/UNOPTFLAT 均 0；保留既存其他 warning，lint log SHA256 e010082d7c4cd7bf3f8bd54105048f125071078bcc4ca5014c3e80a0353a8c18。共享 Tier2 当前批次结束后顺序开始一次完整 PPA，尚无面积、频率或 IPC 结论。没有新建窄后端，默认 Tier3 仍保持原资源与策略。
+
+
+## 暴露共享 rename 现有直接空闲位图分配路径（未测）
+
+RENAME_REGISTERED_FREE_POOL 默认 1，top/core/backend 逐级传给 rv32_rename_unit 的既有 REGISTERED_FREE_POOL 参数。之前 backend 固定传 1；没有新建 allocator 或改变默认 Tier3 的池时序。0 使用同一模块原有的 raw_candidate 及寄存 free_count 作为分配候选/信用，已提交旧物理寄存器在空闲位图更新后的下一拍可用，不必再等待进入池；不会借用当前边沿尚未发生的 commit。物理寄存器少的候选可能因此减少回收等待，但优先编码重新进入分配路径可能恶化频率，必须完整 PPA 判定。
+
+两个模式都按相同 decoded prefix、rd_we、ROB/RS/LSQ/物理信用分配，最年轻 RAW 映射、提交回收、恢复位图和完整 GEN 契约都保留。直接模式的池计数恒为零，不预留池位，空闲位图更新使用已有 rename_new_phys 消费路径；每个候选从寄存位图的第 k 个空闲非零位选择。没有绕过 ROB 有序退休、CDB 或 LSQ 身份过滤，也没有按 BE_WIDTH 选择另一套 CPU。顶层只增加默认值1的参数，原有所有默认值未改；这仍不是新 Tier3 实测成绩。
+
+准备 configs/tier1_shared_direct_free.json（沿用 FE2/BE1 候选）及 configs/tier2_shared_direct_free.json（沿用已测 ROB8/PHYS38 预读候选），仅切换池参数为0。都未冻结、未测试。正在运行的 FE2/BE1 冻结副本仍使用原固定池1；副本、工具和报告不被修改或覆盖。源码连线及 diff 静态检查完成，未运行新的正确性/性能/PPA 批次。下一步依据当前 FE2/BE1 的完整结果，选择一次直接分配批次。
