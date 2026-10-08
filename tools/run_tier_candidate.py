@@ -65,6 +65,9 @@ def validate_parameters(text, profile):
     if p["DCACHE_NARROW_REQUEST_WORD"] not in (0,1) or (p["DCACHE_NARROW_REQUEST_WORD"] and
             (p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"] or p["DCACHE_REQUEST_PIPELINE"])):
         raise ValueError("Narrow cache request requires unpipelined synchronous nonblocking cache query")
+    if p["MMIO_STORE_ADMISSION_ROUTE"] not in (0,1) or (p["MMIO_STORE_ADMISSION_ROUTE"] and
+            (not p["MMIO_SAVED_ROUTE_CLASS"] or not p["LSQ_SAVED_REQUEST_QUERY"] or p["DCACHE_REQUEST_PIPELINE"])):
+        raise ValueError("Factored MMIO STORE admission requires direct saved-query routing")
     if p["MMIO_SAVED_ROUTE_CLASS"] not in (0,1) or (p["MMIO_SAVED_ROUTE_CLASS"] and not p["LSQ_SAVED_REQUEST_QUERY"]):
         raise ValueError("Saved MMIO routing requires saved LSQ request classification")
     if p["MMIO_WRITE_CAPACITY_READY"] not in (0,1) or (p["MMIO_WRITE_CAPACITY_READY"] and not p["LSQ_SAVED_REQUEST_QUERY"]):

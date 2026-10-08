@@ -142,6 +142,7 @@ module rv32_lsq #(
     output wire                         dcache_req_is_store_o,
     output wire [31:0]                  dcache_req_addr_o,
     output wire                         dcache_req_mmio_class_o,
+    output wire                         dcache_req_mmio_valid_o,
     output wire [1:0]                   dcache_req_size_o,
     output wire                         dcache_req_unsigned_o,
     output wire [15:0]                  dcache_req_mask_o,
@@ -1312,10 +1313,18 @@ module rv32_lsq #(
     assign dcache_req_mmio_class_o=(SAVED_REQUEST_QUERY!=0) && (|allocation_present_stores) &&
         !existing_selection_packet[39] && existing_selection_packet[40 +: 32]==32'h80000000 &&
         existing_selection_packet[32 +: 4]==4'hf;
+    // An exact saved MMIO STORE class excludes a fresh LOAD offer and the
+    // old packet's LOAD forwarding alternative. Preserve the original old
+    // selection and wait guards without querying byte forwarding coverage.
+    assign dcache_req_mmio_valid_o=!flush_i && !recovery_valid_i &&
+        candidate_found && !candidate_wait && dcache_req_mmio_class_o;
     wire fresh_without_forward=(SAVED_REQUEST_QUERY!=0) && allocation_request_offer;
     wire [3:0] owner_forward_mask=fresh_without_forward ? 4'b0 : raw_forward_mask;
     wire [31:0] owner_forward_data=fresh_without_forward ? 32'b0 : raw_forward_data;
 `ifdef VERILATOR
+    always @(posedge clk_i) if(!reset_i && SAVED_REQUEST_QUERY!=0)
+        assert(dcache_req_mmio_valid_o==(dcache_req_valid_o && dcache_req_mmio_class_o))
+            else $fatal(1,"Factored MMIO STORE admission differs from qualified request");
     always @(posedge clk_i) if(!reset_i && !flush_i && SAVED_REQUEST_QUERY!=0) begin
         if(dcache_req_valid_o)
             assert(dcache_req_mmio_class_o==(dcache_req_is_store_o && dcache_req_addr_o==32'h80000000 && dcache_req_mask_o==16'h000f))

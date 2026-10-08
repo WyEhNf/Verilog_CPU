@@ -62,6 +62,7 @@ module cpu_core #(
     parameter integer LSQ_PHASED_DATA_OWNER = 0,
     parameter integer MMIO_WRITE_CAPACITY_READY = 0,
     parameter integer MMIO_SAVED_ROUTE_CLASS = 0,
+    parameter integer MMIO_STORE_ADMISSION_ROUTE = 0,
     parameter integer LSQ_ALLOC_SLOT_PRESELECT = 0,
     parameter integer LSQ_ALLOC_PAYLOAD_PRESELECT = 0,
     parameter integer LSQ_ALLOC_FIRE_DISTRIBUTE = 0,
@@ -233,6 +234,10 @@ module cpu_core #(
            (DCACHE_NARROW_REQUEST_WORD!=0 && (ENABLE_CACHES==0 || DCACHE_MSHRS<=1 ||
             DCACHE_TAG_SRAM==0 || DCACHE_REQUEST_PIPELINE!=0)))
             $fatal(1,"Narrow D-cache request word requires unpipelined synchronous nonblocking cache query");
+        if((MMIO_STORE_ADMISSION_ROUTE!=0 && MMIO_STORE_ADMISSION_ROUTE!=1) ||
+           (MMIO_STORE_ADMISSION_ROUTE!=0 && (MMIO_SAVED_ROUTE_CLASS==0 ||
+            LSQ_SAVED_REQUEST_QUERY==0 || DCACHE_REQUEST_PIPELINE!=0)))
+            $fatal(1,"Factored MMIO STORE admission requires direct saved-query routing");
         if((MMIO_SAVED_ROUTE_CLASS!=0 && MMIO_SAVED_ROUTE_CLASS!=1) ||
            (MMIO_SAVED_ROUTE_CLASS!=0 && LSQ_SAVED_REQUEST_QUERY==0))
             $fatal(1,"MMIO saved route class requires saved LSQ request classification");
@@ -718,6 +723,7 @@ module cpu_core #(
     wire [31:0] dcache_req_raw_word;
     wire memory_dreq_valid, memory_dreq_ready, memory_dreq_load, memory_dreq_store;
     wire dcache_req_mmio_class;
+    wire dcache_req_mmio_valid;
     wire normal_memory_dreq_ready;
     wire memory_dreq_unsigned;
     wire [31:0] memory_dreq_addr;
@@ -743,7 +749,8 @@ module cpu_core #(
     // On every valid request the saved class is equal to the original exact
     // address/store/mask predicate. Invalid stale packets remain qualified
     // off. Reuse that class before the fresh size/mask payload mux.
-    wire mmio_exit_request = (MMIO_SAVED_ROUTE_CLASS!=0) ?
+    wire mmio_exit_request = (MMIO_STORE_ADMISSION_ROUTE!=0) ?
+        dcache_req_mmio_valid : (MMIO_SAVED_ROUTE_CLASS!=0) ?
         (memory_dreq_valid && mmio_ready_class) : original_mmio_exit_request;
     // Qualify once, then partition the final request consumers. The
     // acknowledgement retains the original predicate and capture edge.
@@ -1302,7 +1309,7 @@ end
         .trace_mem_unsigned_i(dec_mem_unsigned), .trace_store_data_i({BE_WIDTH*128{1'b0}}),
         .trace_pred_taken_i(trace_pred_taken), .trace_pred_target_i(trace_pred_target),
         .trace_pred_kind_i(trace_pred_kind), .dcache_req_valid_o(dcache_req_valid),
-        .dcache_req_ready_i(dcache_req_ready), .dcache_req_is_load_o(dcache_req_load), .dcache_req_mmio_class_o(dcache_req_mmio_class),
+        .dcache_req_ready_i(dcache_req_ready), .dcache_req_is_load_o(dcache_req_load), .dcache_req_mmio_class_o(dcache_req_mmio_class), .dcache_req_mmio_valid_o(dcache_req_mmio_valid),
         .dcache_req_is_store_o(dcache_req_store), .dcache_req_addr_o(dcache_req_addr),
         .dcache_req_size_o(dcache_req_size), .dcache_req_unsigned_o(dcache_req_unsigned),
         .dcache_req_mask_o(dcache_req_mask), .dcache_req_wdata_o(dcache_req_wdata),
