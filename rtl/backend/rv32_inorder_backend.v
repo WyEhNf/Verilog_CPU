@@ -6,6 +6,7 @@
 module rv32_inorder_backend #(
     parameter integer BE_WIDTH = 1,
     parameter integer SHIFT_IMPL = 1,
+    parameter integer SHIFT_SHARED_BARREL = 1,
     parameter integer ROB_ENTRIES = 4,
     parameter integer TAG_WIDTH = 11+$clog2(ROB_ENTRIES)
 ) (
@@ -96,11 +97,18 @@ module rv32_inorder_backend #(
     reg [7:0] generation [0:ROB_ENTRIES-1];
     reg [31:0] pc [0:ROB_ENTRIES-1], inst [0:ROB_ENTRIES-1];
     reg [4:0] rd [0:ROB_ENTRIES-1];
-    reg [31:0] value [0:ROB_ENTRIES-1];
-    reg [31:0] store_addr [0:ROB_ENTRIES-1], store_word [0:ROB_ENTRIES-1];
+    wire [31:0] value [0:ROB_ENTRIES-1];
+    wire [31:0] store_addr [0:ROB_ENTRIES-1];
     reg [1:0] store_size [0:ROB_ENTRIES-1];
-    reg [31:0] registers [1:31];
+    wire [31:0] registers [1:31];
     reg [31:1] register_valid;
+    wire [32*32-1:0] register_rows;
+    wire [31:0] rf_src1, rf_src2;
+    assign register_rows[31:0]=32'b0;
+    rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(32),.INDEX_WIDTH(5)) read_rs1 (
+        .rows_i(register_rows),.index_i(trace_rs1_i[4:0]),.value_o(rf_src1));
+    rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(32),.INDEX_WIDTH(5)) read_rs2 (
+        .rows_i(register_rows),.index_i(trace_rs2_i[4:0]),.value_o(rf_src2));
     reg [3:0] epoch;
     reg stop_issue;
 
@@ -179,52 +187,71 @@ module rv32_inorder_backend #(
     wire sb_send = dcache_req_valid_o && dcache_req_ready_i && sb_pick_valid;
     assign alu_ready = !alu_load || (load_request && dcache_req_ready_i && !halted_o && !error_o);
 
-    // Youngest matching writer wins, including an unready writer. This is
-    // the architectural WAW/RAW scoreboard, with same-cycle result bypasses.
-    reg [31:0] src1, src2, scanned_value;
-    reg src1_ready, src2_ready, scanned_ready;
-    reg [SW-1:0] scan_slot;
-    integer age;
+    // Last event wins in program-age order. Selection leaves drive sixteen
+    // data bits, avoiding a wide priority mux controlled by an unbuffered match.
+    wire [ROB_ENTRIES*32-1:0] completion_rows;
+    wire [ROB_ENTRIES-1:0] completion_ready;
+    wire [2*(ROB_ENTRIES+1)-1:0] operand_events;
+    wire [2*(ROB_ENTRIES+1)*32-1:0] operand_values;
+    wire [31:0] selected_src1, selected_src2;
+    wire [31:0] src1,src2;
+    wire [3:0] source_needed_views;
+    wire [ROB_ENTRIES-1:0] source1_writers,source2_writers;
+    wire [SW-1:0] age_slots [0:ROB_ENTRIES-1];
+    genvar operand_row,operand_age,source_word;
+    generate for(operand_row=0;operand_row<ROB_ENTRIES;operand_row=operand_row+1) begin:g_completion_row
+        wire a=alu_fire && !alu_memory && alu_slot==SW'(operand_row);
+        wire m=mdu_live && mdu_slot==SW'(operand_row);
+        wire l=load_live && load_slot==SW'(operand_row);
+        assign completion_ready[operand_row]=done[operand_row] || a || m || l;
+        rv32_frequency_event_select #(.WIDTH(32),.EVENTS(4),.PRIORITY(1)) result_bypass (
+            .events_i({l,m,a,1'b1}),
+            .values_i({dcache_resp_word_data_i,mdu_value,alu_value,value[operand_row]}),
+            .write_o(),.value_o(completion_rows[operand_row*32 +: 32]));
+    end endgenerate
+    generate for(operand_age=0;operand_age<ROB_ENTRIES;operand_age=operand_age+1) begin:g_operand_age
+        wire [SW-1:0] slot=head+SW'(operand_age);
+        assign age_slots[operand_age]=slot;
+        wire writer=CW'(operand_age)<count && valid[slot] && writes[slot] && rd[slot]!=0;
+        assign source1_writers[operand_age]=writer && rd[slot]==trace_rs1_i[4:0];
+        assign source2_writers[operand_age]=writer && rd[slot]==trace_rs2_i[4:0];
+        assign operand_events[operand_age+1]=source1_writers[operand_age];
+        assign operand_events[(ROB_ENTRIES+1)+operand_age+1]=source2_writers[operand_age];
+        wire [31:0] age_value;
+        rv32_frequency_array_read #(.WIDTH(32),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SW)) age_value_reader (
+            .rows_i(completion_rows),.index_i(slot),.value_o(age_value));
+        assign operand_values[(operand_age+1)*32 +: 32]=age_value;
+        assign operand_values[((ROB_ENTRIES+1)+operand_age+1)*32 +: 32]=age_value;
+    end endgenerate
+    assign operand_events[0]=1'b1;
+    assign operand_events[ROB_ENTRIES+1]=1'b1;
+    assign operand_values[31:0]=rf_src1;
+    assign operand_values[(ROB_ENTRIES+1)*32 +: 32]=rf_src2;
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(ROB_ENTRIES+1),.PRIORITY(1)) select_rs1 (
+        .events_i(operand_events[0 +: ROB_ENTRIES+1]),.values_i(operand_values[0 +: 32*(ROB_ENTRIES+1)]),
+        .write_o(),.value_o(selected_src1));
+    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(ROB_ENTRIES+1),.PRIORITY(1)) select_rs2 (
+        .events_i(operand_events[ROB_ENTRIES+1 +: ROB_ENTRIES+1]),
+        .values_i(operand_values[32*(ROB_ENTRIES+1) +: 32*(ROB_ENTRIES+1)]),
+        .write_o(),.value_o(selected_src2));
+    reg src1_ready,src2_ready;
+    integer ready_age;
     always @* begin
-        src1 = trace_rs1_i[4:0]==0 ? 32'b0 :
-            (register_valid[trace_rs1_i[4:0]] ? registers[trace_rs1_i[4:0]] : 32'b0);
-        src2 = trace_rs2_i[4:0]==0 ? 32'b0 :
-            (register_valid[trace_rs2_i[4:0]] ? registers[trace_rs2_i[4:0]] : 32'b0);
-        src1_ready=1'b1;
-        src2_ready=1'b1;
-        scan_slot=head;
-        scanned_ready=1'b0;
-        scanned_value=32'b0;
-        for(age=0;age<ROB_ENTRIES;age=age+1) begin
-            scan_slot=head+SW'(age);
-            scanned_ready=done[scan_slot];
-            scanned_value=value[scan_slot];
-            if(alu_fire && !alu_memory && alu_slot==scan_slot) begin
-                scanned_ready=1'b1;
-                scanned_value=alu_value;
-            end
-            if(mdu_live && mdu_slot==scan_slot) begin
-                scanned_ready=1'b1;
-                scanned_value=mdu_value;
-            end
-            if(load_live && load_slot==scan_slot) begin
-                scanned_ready=1'b1;
-                scanned_value=dcache_resp_word_data_i;
-            end
-            if(age<count && valid[scan_slot] && writes[scan_slot] && rd[scan_slot]!=0) begin
-                if(rd[scan_slot]==trace_rs1_i[4:0]) begin
-                    src1=scanned_value;
-                    src1_ready=scanned_ready;
-                end
-                if(rd[scan_slot]==trace_rs2_i[4:0]) begin
-                    src2=scanned_value;
-                    src2_ready=scanned_ready;
-                end
-            end
+        src1_ready=1'b1;src2_ready=1'b1;
+        for(ready_age=0;ready_age<ROB_ENTRIES;ready_age=ready_age+1) begin
+            if(source1_writers[ready_age]) src1_ready=completion_ready[age_slots[ready_age]];
+            if(source2_writers[ready_age]) src2_ready=completion_ready[age_slots[ready_age]];
         end
-        if(!trace_rs1_used_i[0] || trace_rs1_i[4:0]==0) begin src1=0; src1_ready=1'b1; end
-        if(!trace_rs2_used_i[0] || trace_rs2_i[4:0]==0) begin src2=0; src2_ready=1'b1; end
+        if(!trace_rs1_used_i[0] || trace_rs1_i[4:0]==0) src1_ready=1'b1;
+        if(!trace_rs2_used_i[0] || trace_rs2_i[4:0]==0) src2_ready=1'b1;
     end
+    rv32_frequency_control_tree #(.WIDTH(2),.LEAVES(2)) source_needed_tree (
+        .signal_i({trace_rs2_used_i[0] && trace_rs2_i[4:0]!=0,
+                   trace_rs1_used_i[0] && trace_rs1_i[4:0]!=0}),.views_o(source_needed_views));
+    generate for(source_word=0;source_word<2;source_word=source_word+1) begin:g_source_word
+        assign src1[source_word*16 +: 16]={16{source_needed_views[2*source_word]}} & selected_src1[source_word*16 +: 16];
+        assign src2[source_word*16 +: 16]={16{source_needed_views[2*source_word+1]}} & selected_src2[source_word*16 +: 16];
+    end endgenerate
     wire is_mdu = trace_op_i[0 +: `RV32IM_OP_WIDTH]>=`RV32IM_OP_MUL &&
         trace_op_i[0 +: `RV32IM_OP_WIDTH]<=`RV32IM_OP_REMU;
     wire issue_enable = count<CW'(ROB_ENTRIES) && src1_ready && src2_ready && !stop_issue &&
@@ -232,11 +259,14 @@ module rv32_inorder_backend #(
         (!alu_valid || alu_ready);
     assign trace_ready_o = {{(BE_WIDTH-1){1'b0}},issue_enable && (is_mdu ? mdu_ready : alu_issue_ready)};
     wire input_fire = trace_valid_i[0] && trace_ready_o[0];
+    wire [1:0] launch_views;
+    rv32_frequency_control_tree #(.LEAVES(2)) launch_tree (
+        .signal_i(trace_valid_i[0] && issue_enable),.views_o(launch_views));
 
     rv32i_alu #(.TAG_WIDTH(TAG_WIDTH),.PHYS_ADDR_WIDTH(5),.ROB_ENTRIES(ROB_ENTRIES),
-        .SHIFT_IMPL(SHIFT_IMPL),.FORWARD_METADATA(1)) alu (
+        .SHIFT_IMPL(SHIFT_IMPL),.SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL),.FORWARD_METADATA(1)) alu (
         .clk_i(clk_i),.reset_i(reset_i),.flush_i(flush_i),.recovery_packet_i('0),.issue_cancel_i(1'b0),
-        .issue_valid_i(trace_valid_i[0] && issue_enable && !is_mdu),.issue_ready_o(alu_issue_ready),
+        .issue_valid_i(launch_views[0] && !is_mdu),.issue_ready_o(alu_issue_ready),
         .issue_op_i(trace_op_i[0 +: `RV32IM_OP_WIDTH]),.issue_pc_i(trace_pc_i[31:0]),
         .issue_imm_i(trace_imm_i[31:0]),.issue_src1_value_i(src1),.issue_src2_value_i(src2),
         .issue_store_data_i(src2),.issue_phys_rd_i(trace_rd_i[4:0]),.issue_rob_tag_i(alloc_tag),
@@ -254,7 +284,7 @@ module rv32_inorder_backend #(
         .exec_saved_valid_o(),.exec_phys_rd_o(),.exec_epoch_o(),.exec_rd_we_o());
     rv32m_mdu_iterative #(.TAG_WIDTH(TAG_WIDTH),.PHYS_ADDR_WIDTH(5),.ROB_ENTRIES(ROB_ENTRIES)) mdu (
         .clk_i(clk_i),.reset_i(reset_i),.flush_i(flush_i),.recovery_packet_i('0),
-        .req_valid_i(trace_valid_i[0] && issue_enable && is_mdu),.req_ready_o(mdu_ready),
+        .req_valid_i(launch_views[1] && is_mdu),.req_ready_o(mdu_ready),
         .req_op_i(trace_op_i[0 +: `RV32IM_OP_WIDTH]),.req_src1_i(src1),.req_src2_i(src2),
         .req_rob_tag_i(alloc_tag),.req_phys_rd_i(trace_rd_i[4:0]),.req_target_live_i(1'b1),
         .resp_valid_o(mdu_valid),.resp_ready_i(1'b1),.resp_value_o(mdu_value),.resp_rob_tag_o(mdu_tag),
@@ -294,15 +324,59 @@ module rv32_inorder_backend #(
     assign commit_store_addr_o = {{(BE_WIDTH-1)*32{1'b0}},store_addr[head]};
     assign commit_store_mask_o = {{(BE_WIDTH-1)*16{1'b0}},retire_base_mask << store_addr[head][3:0]};
     assign commit_store_data_o = {{(BE_WIDTH-1)*128{1'b0}},
-        {96'b0,store_word[head]} << (store_addr[head][3:0]*8)};
+        {96'b0,value[head]} << (store_addr[head][3:0]*8)};
     assign commit_tag_o = {{(BE_WIDTH-1)*TAG_WIDTH{1'b0}},row_tag(head)};
 
+    wire [8*5-1:0] register_write_indices;
+    wire [7:0] register_write_enables;
+    rv32_frequency_control_tree #(.WIDTH(5),.LEAVES(8)) register_index_tree (
+        .signal_i(rd[head]),.views_o(register_write_indices));
+    rv32_frequency_control_tree #(.LEAVES(8)) register_write_tree (
+        .signal_i(retire && writes[head] && !faults[head]),.views_o(register_write_enables));
+    genvar rf_row,result_row;
+    generate for(rf_row=1;rf_row<32;rf_row=rf_row+1) begin:g_register_row
+        wire write=register_write_enables[rf_row/4] && register_write_indices[(rf_row/4)*5 +: 5]==5'(rf_row);
+        wire [1:0] initialized;
+        rv32_frequency_control_tree #(.LEAVES(2)) initialized_tree (
+            .signal_i(register_valid[rf_row]),.views_o(initialized));
+        rv32_frequency_word_bank #(.WIDTH(32)) owner (
+            .clk_i(clk_i),.write_i(write),.data_i(value[head]),.data_o(registers[rf_row]));
+        for(genvar rf_word=0;rf_word<2;rf_word=rf_word+1) begin:g_word
+            assign register_rows[rf_row*32+rf_word*16 +: 16]=
+                {16{initialized[rf_word]}} & registers[rf_row][rf_word*16 +: 16];
+        end
+        always @(posedge clk_i)
+            if(reset_i || flush_i) register_valid[rf_row]<=1'b0;
+            else if(write) register_valid[rf_row]<=1'b1;
+    end endgenerate
+    wire [1:0] store_result_views;
+    wire [31:0] alu_retire_value;
+    rv32_frequency_control_tree #(.LEAVES(2)) store_result_tree (
+        .signal_i(alu_store),.views_o(store_result_views));
+    generate for(genvar result_word=0;result_word<2;result_word=result_word+1) begin:g_alu_retire_word
+        assign alu_retire_value[result_word*16 +: 16]=store_result_views[result_word] ?
+            alu_store_word[result_word*16 +: 16] : alu_value[result_word*16 +: 16];
+    end endgenerate
+    generate for(result_row=0;result_row<ROB_ENTRIES;result_row=result_row+1) begin:g_result_row
+        wire a=alu_fire && !alu_load && alu_slot==SW'(result_row);
+        wire m=mdu_live && mdu_slot==SW'(result_row);
+        wire l=load_live && load_slot==SW'(result_row);
+        wire write;
+        wire [31:0] next_value;
+        rv32_frequency_event_select #(.WIDTH(32),.EVENTS(3),.PRIORITY(1)) selector (
+            .events_i({l,m,a}),.values_i({dcache_resp_word_data_i,mdu_value,
+                alu_retire_value}),.write_o(write),.value_o(next_value));
+        rv32_frequency_word_bank #(.WIDTH(32)) owner (
+            .clk_i(clk_i),.write_i(write),.data_i(next_value),.data_o(value[result_row]));
+        rv32_frequency_word_bank #(.WIDTH(32)) store_address_owner (
+            .clk_i(clk_i),.write_i(a && alu_store),.data_i(alu_addr),.data_o(store_addr[result_row]));
+    end endgenerate
     integer row;
     always @(posedge clk_i) begin
         if(reset_i || flush_i) begin
             head<=0; tail<=0; count<=0;
             valid<=0; done<=0; writes<=0; loads<=0; stores<=0; halts<=0; faults<=0;
-            register_valid<=0; epoch<=0; stop_issue<=0;
+            epoch<=0; stop_issue<=0;
             halted_o<=0; error_o<=0; return_value_o<=0;
             sb_head<=0; sb_tail<=0; sb_count<=0; sb_valid<=0; sb_sent<=0; sb_done<=0;
             for(row=0;row<ROB_ENTRIES;row=row+1) generation[row]<=0;
@@ -310,25 +384,19 @@ module rv32_inorder_backend #(
         end else begin
             if(redirect_valid_o) epoch<=epoch+1'b1;
             if(alu_fire) begin
-                if(!alu_load) begin done[alu_slot]<=1'b1; value[alu_slot]<=alu_value; end
+                if(!alu_load) done[alu_slot]<=1'b1;
                 if(alu_store) begin
-                    store_addr[alu_slot]<=alu_addr;
-                    store_word[alu_slot]<=alu_store_word;
                     store_size[alu_slot]<=alu_size;
                 end
             end
-            if(mdu_live) begin done[mdu_slot]<=1'b1; value[mdu_slot]<=mdu_value; end
+            if(mdu_live) done[mdu_slot]<=1'b1;
             if(load_live) begin
                 done[load_slot]<=1'b1;
-                value[load_slot]<=dcache_resp_word_data_i;
                 faults[load_slot]<=faults[load_slot] || dcache_resp_error_i;
             end
             if(retire) begin
                 valid[head]<=1'b0;
                 head<=head+1'b1;
-                if(writes[head] && !faults[head]) begin
-                    registers[rd[head]]<=value[head]; register_valid[rd[head]]<=1'b1;
-                end
                 if(halts[head]) begin halted_o<=1'b1; return_value_o<=value[head]; end
                 if(faults[head]) error_o<=1'b1;
             end
@@ -358,7 +426,7 @@ module rv32_inorder_backend #(
             if(sb_pop) begin sb_valid[sb_head]<=1'b0; sb_head<=~sb_head; end
             if(sb_push) begin
                 sb_valid[sb_tail]<=1'b1; sb_sent[sb_tail]<=1'b0; sb_done[sb_tail]<=1'b0;
-                sb_addr[sb_tail]<=store_addr[head]; sb_word[sb_tail]<=store_word[head];
+                sb_addr[sb_tail]<=store_addr[head]; sb_word[sb_tail]<=value[head];
                 sb_size[sb_tail]<=store_size[head]; sb_generation[sb_tail]<=sb_generation[sb_tail]+8'd1;
                 sb_tail<=~sb_tail;
             end

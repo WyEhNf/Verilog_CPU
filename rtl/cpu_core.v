@@ -1187,6 +1187,7 @@ end
     assign branch_recovery_history = 8'b0;
     if(SERIAL_BACKEND==2) begin:g_pipelined
     rv32_inorder_backend #(.ROB_ENTRIES(ROB_ENTRIES), .BE_WIDTH(BE_WIDTH), .SHIFT_IMPL(SHIFT_IMPL),
+        .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL),
         .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
