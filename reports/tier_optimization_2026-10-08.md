@@ -320,3 +320,28 @@ PPA门通过后构建一次65.619秒，exe SHA256 729ea70140f157f29f47883eb4ba2d
 从0ce3725a冻结F:/CPU2026TierRuns/tier2_shared_load_credit_20261008，manifest SHA256 982b20a96b685b17f3674e7a2cfdbd034da18774f66298230746c45d6579f688。一次原RTL top静态lint退出0，无Error/LATCH/UNOPTFLAT，13.431秒；log SHA256 d7443f42e4389b77692eb6083e2ec3e97f5169b347f9f44d03ba629928ec1ed5，有既存宽度与未用信号warning。已顺序开始一次完整PPA，仍无面积/频率/IPC结论。
 
 另准备configs/tier1_shared_pc_predictor.json，只在已测current-credit共享ROB4/PRF36/RS2/LSQ2、I32/D128双way配置上将PREDICTOR_DIRECT_BRANCH_TARGET2→1。源码显示2的BHT索引为PC xor预测历史、训练使用携带的索引；1仅用PC索引并按反馈PC训练，不再保存/查询indexed predictor metadata。64项的小表可能受历史别名影响，但差异只是合理优化假设，不能从独立历史backend的0.604828证明它有效。CPU/backend及全部容量保持相同，预读开关仍0，单独观察预测策略变化。未冻结、未测；等待当前Tier2阶段后再决定启动。
+
+
+## 共享双发射预读候选：三项综合指标改善但 IPC 仍未达标
+
+0ce3725a 冻结的 Tier2 完整 PPA 一次完成，733.813 秒：面积 17088.199166006725 μm²、Fmax 363.12056737588654 MHz；组合 9563.85306000672、时序 3416.6772、SRAM 4107.6689060000035 μm²。report SHA256 d068fe308078eda0934e67e955dc227cc34f0fe673e1a9ed2ea61f7cdf130548，log SHA256 b35d8d9159b90ab2527f3fc9cab579b7a8f08f6a1de9cb87a37e532c62a016b7。
+
+PPA 门通过后仅构建一次，57.955 秒，exe SHA256 e94802bcac746ab38c7f0c3a36ef68e10a7337dcafcf65caff1fafd1f0f2fe7a。一次六项官方 perf，latency10、7.060 秒，答案及分配断言全部通过，IPC 几何平均 0.8076379385990462，未达到 0.8450。相较历史共享 balanced-memory 候选的 17146.600825 μm² / 353.59116 MHz / IPC 0.770462340，三项综合指标改善，仍不验收，不切 canonical，不跑 smoke，不重复 perf。完整身份和阶段记录为 Tier2_shared_load_credit_2026-10-08.json；perf log SHA256 38e9abbaabd11bcabd7c8fd0911a5f8cc1c48a9e7e76934b94f5da177538f02e。
+
+| perf | 官方指令数 | 实测周期 | IPC |
+|---|---:|---:|---:|
+| median | 6961 | 9080 | 0.766629956 |
+| multiply | 21722 | 17620 | 1.232803632 |
+| qsort | 139900 | 166127 | 0.842126807 |
+| rsort | 195719 | 305311 | 0.641047981 |
+| towers | 5278 | 6318 | 0.835390947 |
+| vvadd | 4524 | 6948 | 0.651122625 |
+
+## 共享单发射 PC 索引候选已冻结
+
+从 691323bf42ebd8ffe85a227e1b7c9d85e3ae3ee3 冻结 F:/CPU2026TierRuns/tier1_shared_pc_predictor_20261008，manifest SHA256 e14a21c71cc178797e8bcefe74040d25cf916dfc7735b205442032b9955bf9d7。一次原 RTL 静态 lint 7.698 秒，退出 0，Error/LATCH/UNOPTFLAT 均为 0；有既存其他 warning，lint log SHA256 987f9e43fdf19ee007acd637a23bdca45f2e990fa0bab2e06a10ba70f5a22165。当前 Tier2 批次结束后，顺序开始一次完整 PPA，尚无面积、频率或 IPC 结论。默认 Tier3 的参数未改变，这不是新 Tier3 PPA 证明。
+
+
+单项周期边界也已比较：本批 Tier2 相对 balanced-memory 的 median 多 303 周期、towers 多 717 周期；另四项减少。上述“三项改善”只指评分面积、Fmax、六项 IPC 几何平均，不能宣称六项程序都加速。候选未验收。
+
+准备下一共享 Tier2 窗口候选 configs/tier2_shared_window16.json，只把本批 ROB8/PHYS38 改为 ROB16/PHYS40，保留 LSQ4、RS3、I64/D512 双way、相同预测器和预读信用算法。当前只有六个超出架构映射的物理寄存器；更大的 ROB 也容纳不写 rd 的分支/store，增加目的物理寄存器能缓解双 lane 的分配约束。扩大窗口是一批明确的结构性候选，可能增加面积或改变映射时序；现有 911.80 μm² 门槛余量不是保证。未冻结、未测试，不能提前判定达标或全指标不回退；等待 PC 索引本批结束，再根据其结论决定后续。
