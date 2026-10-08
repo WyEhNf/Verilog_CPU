@@ -662,7 +662,13 @@ module cpu_core #(
     // An exit store is an uncached architectural side effect. It must reach
     // the external data port with its full 32-bit payload before the ROB may
     // retire it; ordinary cache write-back must not absorb this MMIO access.
-    wire mmio_exit_request = memory_dreq_valid && memory_dreq_store &&
+    wire lookup_mmio_exit_request;
+    generate if (SERIAL_BACKEND != 3) begin:g_no_lookup_mmio
+        assign lookup_mmio_exit_request=1'b0;
+    end endgenerate
+    wire mmio_exit_request = (SERIAL_BACKEND==3 && DCACHE_REQUEST_PIPELINE==0) ?
+                             lookup_mmio_exit_request :
+                             memory_dreq_valid && memory_dreq_store &&
                              (memory_dreq_addr == 32'h80000000) &&
                              (memory_dreq_mask == 16'h000f);
     // Qualify once, then partition the final request consumers. The
@@ -1231,6 +1237,7 @@ end
         .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL),
         .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
+        .mmio_exit_request_o(lookup_mmio_exit_request),
         .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
         .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),
         .trace_rs2_i(backend_rs2), .trace_rd_we_i(dec_rd_we), .trace_rs1_used_i(backend_rs1_used),

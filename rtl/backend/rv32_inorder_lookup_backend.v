@@ -38,6 +38,7 @@ module rv32_inorder_lookup_backend #(
     input  wire [BE_WIDTH*32-1:0]       trace_pred_target_i,
     input  wire [BE_WIDTH*2-1:0]        trace_pred_kind_i,
 
+    output wire                         mmio_exit_request_o,
     output wire                         dcache_req_valid_o,
     input  wire                         dcache_req_ready_i,
     output wire                         dcache_req_is_load_o,
@@ -194,6 +195,13 @@ module rv32_inorder_lookup_backend #(
     wire frontend_load_request=trace_valid_i[0] && issue_enable && frontend_load && frontend_load_allowed;
     wire load_request=older_load_request || frontend_load_request;
     wire select_frontend_load=frontend_load_request && !older_load_request;
+    // Exact exit-store predicate from committed state, independent of a
+    // speculative load's address/value/acceptance cone. The core uses this
+    // only for the direct request interface; a registered interface qualifies
+    // its own saved payload instead.
+    assign mmio_exit_request_o = !halted_o && !error_o && sb_pick_valid &&
+        sb_addr[sb_pick]==32'h80000000 &&
+        sb_size[sb_pick]!=`RV32IM_MEM_BYTE && sb_size[sb_pick]!=`RV32IM_MEM_HALF;
     assign dcache_req_valid_o = !halted_o && !error_o && (sb_pick_valid || load_request);
     assign dcache_req_is_load_o = !sb_pick_valid;
     assign dcache_req_is_store_o = sb_pick_valid;
