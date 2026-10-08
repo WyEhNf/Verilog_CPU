@@ -229,3 +229,9 @@ The owner policy now also selects L0 SRAM data banks using registered `fast_vali
 一次有限双发射四行样例通过，补充覆盖老就绪项先发射、新项填余下通道，以及旧未就绪项与新就绪项同时存在时的保存、发射和源标签唤醒。此前空队列/背压和恢复边界样例也包含在同一个有限样例中。记录见 `reports/Tier_shared_rs_lane_fill_protocol_2026-10-09.json`；`configs/tier1_shared_fill_rs_lanes.json` 已做一次性能评估，结果见下段，未做 PPA。
 
 模式 2 的原始 RTL lint 无 error/latch/UNOPTFLAT，一次构建及六项答案/动态指令数/分配请求断言通过。IPC **0.5731794429**，低于模式 1 的 **0.5732005398**；四项 cycles 不变，qsort 多 54 cycles，rsort 少 2 cycles。该候选无收益且未达 0.6000，拒绝采用，跳过 PPA 和 CPU smoke。记录见 `reports/Tier1_shared_rs_lane_fill_2026-10-09.json`。
+
+### Tier1 单个短用例瓶颈观察（2026-10-09）
+
+为避免继续盲改，使用原空 RS 直通冻结源码（`858e4c1d`）、原 harness，仅把本地仿真的 trace 深度改为 2，单独执行一次 `perf_vvadd` 并读取现有计数器。答案和原 **9160 cycles / 4524 instret** 完全一致。LSQ 满 **4813** 周期，RS 满 **525** 周期，ROB 满 **0** 周期，backend stall **4461** 周期，frontend empty **172** 周期。Dcache requests/hits/misses 为 **1500/972/528**，refills 为 **355**。这些事件可重叠，不可相加；一个短用例也不能证明所有用例的瓶颈。
+
+下一步优先优化真实 LSQ 释放至分配的空拍。观察工具为 `tools/profile_tier_short_case.py`，完整源码身份、二进制、波形与输出哈希见 `reports/Tier1_shared_short_vvadd_observation_2026-10-09.json`。没有重复六项性能或运行 PPA/正确性套件，原冻结目录未修改。
