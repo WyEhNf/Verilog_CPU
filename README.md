@@ -208,4 +208,6 @@ The owner policy now also selects L0 SRAM data banks using registered `fast_vali
 
 `LSQ_ALLOC_LOAD_REQUEST_BYPASS=1` 在没有保存的选择请求、没有旧候选、没有任何旧 store（包括已知地址的 store），且没有更早同拍 store 时，用实际接受的新 load 分配标签和地址提出缓存请求。请求当拍被接受时，新行的 sent/wait 状态一并建立，不再保存重复选择票据；背压时由现有选择寄存器保存首个请求，下一拍继续原有完整 LSQ 代际检查和响应路径。没有增加请求端口或放宽 speculative store 规则，默认关闭。
 
-有限双发射四行样例通过：分配拍 word load、背压 byte load、一次请求、完整响应标签/物理目的寄存器/值，以及旧 store 和恢复边界。初次包装脚本因期望成功标记错误而报失败，日志中实际 RTL 样例通过；包装标记已修正，没有重复编译/执行。精确冻结输入和限制见 `reports/Tier_shared_alloc_load_request_protocol_2026-10-09.json`。`configs/tier1_shared_alloc_load_request.json` 保留上一最佳共用 Tier1 窗口和缓存，关闭失败的释放资源实验；尚未做 CPU 性能或 PPA 评估。
+有限双发射四行样例通过：分配拍 word load、背压 byte load、一次请求、完整响应标签/物理目的寄存器/值，以及旧 store 和恢复边界。初次包装脚本因期望成功标记错误而报失败，日志中实际 RTL 样例通过；包装标记已修正，没有重复编译/执行。精确冻结输入和限制见 `reports/Tier_shared_alloc_load_request_protocol_2026-10-09.json`。`configs/tier1_shared_alloc_load_request.json` 保留上一最佳共用 Tier1 窗口和缓存，关闭失败的释放资源实验；已做一次 CPU 性能评估（见下段），未做 PPA。
+
+该 Tier1 候选 lint 无 error/latch/UNOPTFLAT，单次构建、六项 perf 的答案和分配请求断言通过。IPC **0.5548055796**（前一共用 owner 配置 **0.5480119195**），各项 cycles **13000 / 24683 / 251415 / 496705 / 9181 / 9214**，六项均改善；仍低于 **0.6000**，所以未运行 PPA 或 CPU smoke，未替换正式配置。记录见 `reports/Tier1_shared_alloc_load_request_2026-10-09.json`。
