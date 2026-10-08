@@ -169,3 +169,5 @@ build/             Ignored local outputs
 ```
 
 The [parameter sensitivity report](reports/parameter_sensitivity.md), [architecture exploration](reports/architecture_exploration.md), and [important version index](history/important_versions/README.md) preserve development evidence. Historical measurements used their documented source and tool settings; the A109 verified report defines the current course results.
+
+The shared decode queue now offers `DECODE_QUEUE_DEPTH` (0 retains twice the backend width), `DECODE_EMPTY_BYPASS` and `DECODE_FULL_REPLACE`. All defaults retain the previous queue behavior. The bypass captures any unconsumed input suffix into the same ring; full replacement only borrows space from already stored output packets. A limited 18-cycle public-handshake scoreboard passed for 1/2/4 lanes at capacity equal to the lane count, covering bypass, stalls, partial consumption, replacement, flush and drain. See [the sample record](reports/Tier_shared_decode_bypass_protocol_2026-10-08.json). The Tier1/Tier2 decode profiles are candidates, with no CPU IPC, area or frequency claim yet.

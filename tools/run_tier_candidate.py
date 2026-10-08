@@ -53,6 +53,13 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["DECODE_EMPTY_BYPASS"] not in (0, 1) or p["DECODE_FULL_REPLACE"] not in (0, 1):
+        raise ValueError("Decode queue policies are 0/1")
+    depth = p["DECODE_QUEUE_DEPTH"]
+    if depth and (depth < p["BE_WIDTH"] or depth & (depth-1)):
+        raise ValueError("Decode queue depth is zero (legacy default) or a power of two >= BE_WIDTH")
+    if (depth or p["DECODE_EMPTY_BYPASS"] or p["DECODE_FULL_REPLACE"]) and not p["DECODE_PIPELINE"]:
+        raise ValueError("Decode queue policies require the decode stage")
     if p["SERIAL_BACKEND"] != 0:
         raise ValueError("Tier profiles must share rv32_backend_joint and vary widths/capacities; old separate-backend experiments require their frozen historical revision")
     if p["DCACHE_STORE_MERGE_POLICY"] not in (0, 1):

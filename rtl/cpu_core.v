@@ -5,6 +5,8 @@
 // lane-wise and a contiguous prefix is dispatched to the backend each cycle.
 module cpu_core #(
     parameter integer DECODE_PIPELINE = 0, ISSUE_PIPELINE = 0,
+    parameter integer DECODE_QUEUE_DEPTH = 0,
+    parameter integer DECODE_EMPTY_BYPASS = 0, DECODE_FULL_REPLACE = 0,
     parameter integer DIRECT_DISPATCH_CURRENT_CREDITS = 0,
     parameter integer DIRECT_LOAD_RS_CREDIT = 0,
     parameter integer ICACHE_MSHR_STATIC_WRITES = 0,
@@ -1157,7 +1159,9 @@ end
     endgenerate
 
     generate if (DECODE_PIPELINE != 0) begin : g_decode_pipeline
-        rv32_decode_bundle_register #(.LANES(BE_WIDTH), .PAYLOAD_WIDTH(DECODE_PAYLOAD_WIDTH)) pipe (
+        rv32_decode_bundle_register #(.LANES(BE_WIDTH), .PAYLOAD_WIDTH(DECODE_PAYLOAD_WIDTH),
+            .CAPACITY(DECODE_QUEUE_DEPTH!=0 ? DECODE_QUEUE_DEPTH : 2*BE_WIDTH),
+            .EMPTY_BYPASS(DECODE_EMPTY_BYPASS), .FULL_REPLACE(DECODE_FULL_REPLACE)) pipe (
             .clk_i(clk), .reset_i(reset), .flush_i(redirect_domains[2] || halted || error),
             .valid_i(raw_trace_valid), .ready_o(raw_trace_ready), .data_i(decode_input),
             .valid_o(trace_valid), .ready_i(trace_ready), .data_o(decode_output));

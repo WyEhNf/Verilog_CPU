@@ -5,6 +5,7 @@
 // never shifts the entire decoded payload through a recovery/ready mux.
 module rv32_decode_bundle_register #(
     parameter integer LANES=4, PAYLOAD_WIDTH=194, CAPACITY=2*LANES,
+    parameter integer EMPTY_BYPASS=0, FULL_REPLACE=0,
     parameter integer CW=(CAPACITY<2)?1:$clog2(CAPACITY+1),
     parameter integer PW=(CAPACITY<2)?1:$clog2(CAPACITY)
 ) (
@@ -27,6 +28,9 @@ module rv32_decode_bundle_register #(
     reg [LANES-1:0] storage_push;
     reg [LANES-1:0] storage_ready;
     reg [CW-1:0] storage_consumed;
+    reg [CW-1:0] stored_consumed;
+    reg input_prefix;
+    wire empty_bypass=(EMPTY_BYPASS!=0) && count==0;
     wire invalidate = reset_i || flush_i;
     wire [1:0] invalidate_domains;
     rv32_frequency_control_tree #(.LEAVES(2)) invalidate_tree (
@@ -34,15 +38,18 @@ module rv32_decode_bundle_register #(
     wire [CAPACITY*PAYLOAD_WIDTH-1:0] rows;
     always @* begin
         consumed=0;accepted=0;valid_o=0;ready_o=0;prefix=1;
-        storage_consumed=0;storage_push=0;storage_ready=0;
+        storage_consumed=0;stored_consumed=0;storage_push=0;storage_ready=0;input_prefix=1;
         for(lane=0;lane<LANES;lane=lane+1) begin
-            valid_o[lane]=(lane<count) && !invalidate_domains[0];
-            if(prefix && (lane<count) && ready_i[lane])
+            valid_o[lane]=(empty_bypass ? (input_prefix && valid_i[lane]) : (lane<count)) && !invalidate_domains[0];
+            if(prefix && (empty_bypass ? (input_prefix && valid_i[lane]) : (lane<count)) && ready_i[lane])
                 storage_consumed=storage_consumed+1'b1;
             else prefix=0;
+            if(!valid_i[lane]) input_prefix=0;
         end
-        // Upstream space is determined solely by registered occupancy.
-        capacity=CAPACITY-32'(count);
+        // Only already stored packets may release space combinationally.
+        // Fresh bypass consumption never participates in upstream ready.
+        stored_consumed=empty_bypass ? 0 : storage_consumed;
+        capacity=CAPACITY-32'(count)+((FULL_REPLACE!=0)?32'(stored_consumed):0);
         prefix=1;
         for(lane=0;lane<LANES;lane=lane+1) begin
             storage_ready[lane]=prefix && (lane<capacity);
@@ -108,12 +115,26 @@ module rv32_decode_bundle_register #(
         for(read_node=1;read_node<READ_LEAVES;read_node=read_node+1) begin:g_or
             assign payload_tree[read_node]=payload_tree[2*read_node] | payload_tree[2*read_node+1];
         end
-        assign data_o[read_lane*PAYLOAD_WIDTH +: PAYLOAD_WIDTH]=payload_tree[1];
+        if(EMPTY_BYPASS!=0) begin:g_bypass
+            wire [WORDS-1:0] bypass_views;
+            rv32_frequency_control_tree #(.LEAVES(WORDS)) bypass_tree (
+                .signal_i(empty_bypass),.views_o(bypass_views));
+            for(genvar bypass_word=0;bypass_word<WORDS;bypass_word=bypass_word+1) begin:g_word
+                localparam integer LOW=bypass_word*16;
+                localparam integer BITS=PAYLOAD_WIDTH-LOW>=16 ? 16 : PAYLOAD_WIDTH-LOW;
+                assign data_o[read_lane*PAYLOAD_WIDTH+LOW +: BITS]=bypass_views[bypass_word]?
+                    data_i[read_lane*PAYLOAD_WIDTH+LOW +: BITS]:payload_tree[1][LOW +: BITS];
+            end
+        end else begin:g_registered
+            assign data_o[read_lane*PAYLOAD_WIDTH +: PAYLOAD_WIDTH]=payload_tree[1];
+        end
     end
     endgenerate
     initial begin
         if(CAPACITY<LANES || (CAPACITY & (CAPACITY-1))!=0)
             $fatal(1,"Decode queue capacity must be a power of two >= LANES");
+        if((EMPTY_BYPASS!=0 && EMPTY_BYPASS!=1) || (FULL_REPLACE!=0 && FULL_REPLACE!=1))
+            $fatal(1,"Decode queue policies must be 0 or 1");
     end
 
 endmodule
