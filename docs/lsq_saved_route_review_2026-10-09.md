@@ -21,3 +21,7 @@ The measured candidate still exceeds 9000 um2 by 191.091475000492 um2. A promisi
 Conditional MDU sign correction can use a balanced prefix-OR/XOR formulation instead of a conditional incrementer plus output mux, retaining the original arithmetic and completion edge. This is also unimplemented and requires boundary review; deleting unused temporary expressions alone does not save mapped area.
 
 Merging the two D-cache way holds into one selected-way word was rejected by source review. Held queries can observe later refill/tag/LRU updates, so the selected hit or victim way can change while held. Without a reread, the other way's prior data would be lost; adding a reread may regress IPC. No cache way/capacity or tag-generation narrowing was made.
+
+## Frozen preflight
+
+Source `8b9d2d01`, profile `configs/tier1_shared_saved_route.json`, freeze `F:/CPU2026TierRuns/tier1_shared_saved_route_20261009`. Original structural full-core lint completed in 7.422355999995489 seconds with return code zero, zero errors, zero latch warnings and zero UNOPTFLAT warnings; other warning classes are not claimed absent. Exact manifest/log hashes and profile are recorded in `reports/Tier1_shared_saved_route_preflight_2026-10-09.json`. No PPA/build/perf/smoke was run on this freeze.
