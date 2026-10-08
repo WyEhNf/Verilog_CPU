@@ -6,6 +6,7 @@
 module rv32_rob #(
     parameter integer RELEASE_CREDITS = 0,
     parameter integer SINGLE_GENERATION_OWNER = 0,
+    parameter integer COMPLETION_COMMIT_BYPASS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
@@ -1137,9 +1138,51 @@ end
             else $fatal(1,"ROB release credit exceeds actual retirement");
 `endif
 
+    // Accepted ordinary completions may retire on the same edge. Retain
+    // full slot/generation authority, ordered prefix and precise terminals.
+    wire [BE_WIDTH-1:0] completion_commit_bypass;
+    wire [31:0] completion_commit_value [0:BE_WIDTH-1];
+    generate for(genvar bypass_lane=0;bypass_lane<BE_WIDTH;bypass_lane=bypass_lane+1) begin:g_commit_bypass
+        if(COMPLETION_COMMIT_BYPASS!=0) begin:g_enabled
+            wire [SLOT_WIDTH-1:0] slot=advance_slot(head_commit_index,bypass_lane);
+            wire [ROB_ENTRIES-1:0] branch_rows;
+            wire head_branch;
+            for(genvar bypass_row=0;bypass_row<ROB_ENTRIES;bypass_row=bypass_row+1) begin:g_branch_row
+                assign branch_rows[bypass_row]=branch_mem[bypass_row];
+            end
+            rv32_frequency_array_read #(.WIDTH(1),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) branch_reader (
+                .rows_i(branch_rows),.index_i(slot),.value_o(head_branch));
+            reg matched,error_match;
+            reg [31:0] value;
+            integer source;
+            reg [TAG_WIDTH-1:0] tag;
+            always @* begin
+                matched=0;error_match=0;value=0;tag=0;
+                for(source=0;source<BE_WIDTH;source=source+1) begin
+                    tag=completion_tag_i[source*TAG_WIDTH +: TAG_WIDTH];
+                    if(completion_valid_i[source] && completion_done_i[source] && tag[VALID_LSB] &&
+                       tag[SLOT_LSB +: SLOT_WIDTH]==slot &&
+                       tag[GEN_LSB +: GENERATION_WIDTH]==head_generation[bypass_lane]) begin
+                        matched=1;
+                        error_match=error_match || completion_error_i[source];
+                        value=completion_value_i[source*32 +: 32];
+                    end
+                end
+            end
+            assign completion_commit_bypass[bypass_lane]=!reset_i && head_valid[bypass_lane] &&
+                !head_ready[bypass_lane] && !head_store[bypass_lane] && !head_halt[bypass_lane] &&
+                !head_error[bypass_lane] && !head_branch && matched && !error_match;
+            assign completion_commit_value[bypass_lane]=value;
+        end else begin:g_disabled
+            assign completion_commit_bypass[bypass_lane]=1'b0;
+            assign completion_commit_value[bypass_lane]=32'b0;
+        end
+    end endgenerate
+    initial if(COMPLETION_COMMIT_BYPASS!=0 && COMPLETION_COMMIT_BYPASS!=1)
+        $fatal(1,"COMPLETION_COMMIT_BYPASS must be 0 or 1");
+
     // Allocation and all observable outputs are evaluated from old state.
     always @* begin
-        commit_lane = 0;
         alloc_fire_o = {BE_WIDTH{1'b0}};
         alloc_tag_o = {(BE_WIDTH*TAG_WIDTH){1'b0}};
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
@@ -1160,6 +1203,9 @@ end
             end
         end
 
+    end
+
+    always @* begin
         // Recoveries are selected oldest-first using distance from head.
         recovery_found = 1'b0;
         chosen_age = ROB_ENTRIES + 1;
@@ -1194,6 +1240,10 @@ end
             recovery_new_phys_o = recovery_selected_phys;
         end
 
+    end
+
+    always @* begin
+        commit_lane=0;
         commit_valid_o = {BE_WIDTH{1'b0}};
         commit_rd_we_o = {BE_WIDTH{1'b0}};
         commit_rd_o = {(BE_WIDTH*5){1'b0}};
@@ -1220,13 +1270,14 @@ end
                 if (!commit_break) begin
                     commit_slot = 32'(head_commit_index) + commit_lane;
                     if (commit_slot >= ROB_ENTRIES) commit_slot = commit_slot - ROB_ENTRIES;
-                    if (head_valid[commit_lane] && head_ready[commit_lane]) begin
+                    if (head_valid[commit_lane] && (head_ready[commit_lane] || completion_commit_bypass[commit_lane])) begin
                         commit_valid_o[commit_lane] = 1'b1;
                         commit_rd_we_o[commit_lane] = head_rd_we[commit_lane];
                         commit_rd_o[(commit_lane*5) +: 5] = head_rd[commit_lane];
                         commit_pc_o[(commit_lane*32) +: 32] = head_pc[commit_lane];
                         commit_inst_o[(commit_lane*32) +: 32] = head_inst[commit_lane];
-                        commit_value_o[(commit_lane*32) +: 32] = head_value[commit_lane];
+                        commit_value_o[(commit_lane*32) +: 32] = completion_commit_bypass[commit_lane] ?
+                            completion_commit_value[commit_lane] : head_value[commit_lane];
                         commit_is_store_o[commit_lane] = head_store[commit_lane];
                         commit_store_addr_o[(commit_lane*32) +: 32] = head_store_addr[commit_lane];
                         commit_store_mask_o[(commit_lane*16) +: 16] =
