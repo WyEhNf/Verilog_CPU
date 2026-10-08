@@ -256,3 +256,23 @@ configs/tier1_shared_current_credits.json只在D128共享候选上启用此项�
 
 
 从8850991f冻结F:/CPU2026TierRuns/tier1_shared_current_credits_20261008，manifest SHA256 1388d100c5e6aaaf1d77b985b6067af8c348f1dcaaf9f89f65390d5f971c9873。一次原RTL静态lint退出0，无Error/LATCH/UNOPTFLAT，5.321秒，日志SHA256 311abc68ff297ad93c8f02e587ade993e93b2dd6eb0b75635ddb465733b4c2fe；存在常量宽度等warning，其中新信用布尔localparam的integer声明产生一条WIDTHEXPAND，不能声称零warning。完整PPA已启动，尚无面积/频率结果；没有构建或性能测试。默认Tier3未启用此参数，统一Tier1/Tier2及500MHz目标仍未完成。
+
+
+## 共享信用优化的完整测量
+
+冻结8850991f只进行一次完整PPA，496.836秒，面积8650.406754999887μm²，Fmax377.99926172019195MHz；组合5245.9860599998865、时序2166.8796、SRAM1237.5410950000007μm²。report SHA256 8440f80f1a95989e55750392f338f8adfb91670857e26511ceca838ea0e9f422。相对共享D128候选，面积增加28.2123μm²、频率提高5.6356MHz，不能表述为所有指标改善或已验收。
+
+PPA门通过后构建一次41.377秒，exe SHA256 267449662812413acdd72eb3e0e43e5747b24e60fc9486a4a77ceadf014bddea；只跑一次六项perf，latency10，5.645秒，答案全部通过。IPC几何平均0.5068602348369285，较相同容量的共享D128提高17.1139%，六项周期全部下降，但仍未达0.6000；不切换canonical，不跑CPU smoke，不重复perf。perf log SHA256 14f4c1c21298f0e87d68dcf5acabe24c424bae3f0573f31acc1cce33656c7018。完整阶段记录在Tier1_shared_current_credits_2026-10-08.json。
+
+| perf | 官方指令数 | 实测周期 | IPC |
+|---|---:|---:|---:|
+| median | 6961 | 13930 | 0.499712850 |
+| multiply | 21722 | 25004 | 0.868741001 |
+| qsort | 139900 | 276589 | 0.505804642 |
+| rsort | 195719 | 546367 | 0.358218926 |
+| towers | 5278 | 11227 | 0.470116683 |
+| vvadd | 4524 | 9866 | 0.458544496 |
+
+## 保留共享数据通路的窗口扩容（待测）
+
+configs/tier1_shared_window8.json保留FE1/BE1、INT1/CDB1、D128/I32双路cache、RS2、FQ2、直接分配/当前信用及真实同步PRF SRAM，仅ROB4→8、PHYS36→40、LSQ2→4。前一个候选释放信用滞后已经消除但IPC不足；增加重命名可用目的寄存器、两倍ROB/内存窗口，让更多独立操作跨越load等待，同时没有新增单发射专用实现。不是用每个参数的历史单因素数值乘出预测结果；真实面积、频率和IPC仍须同一冻结配置验证。此次扩容只属于未验收候选，不改变默认Tier3资源、参数或canonical Tier1。顺带把信用活跃常量改为布尔localparam，修复新WIDTHEXPAND，逻辑取值/时序不变；先前冻结副本不修改、不重测。

@@ -1190,7 +1190,7 @@ module rv32_backend_joint #(
             reserved_credit=bounded_credit(unreserved,newly_reserved);
         end
     endfunction
-    localparam integer CURRENT_DISPATCH_CREDITS_ACTIVE =
+    localparam CURRENT_DISPATCH_CREDITS_ACTIVE =
         (DIRECT_DISPATCH_CURRENT_CREDITS!=0) && (DISPATCH_PIPELINE==0) &&
         (DISPATCH_ELASTIC==0);
     // Only count slots already free in registered state. This neither
