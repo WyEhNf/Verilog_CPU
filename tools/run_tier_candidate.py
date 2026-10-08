@@ -174,6 +174,11 @@ def phase(out, name):
             "--out", str(out / "synth"), "--mode", "opt", "--clock-period", "2.0", "--appimage", "",
             "--yosys", host["yosys"], "--abc", host["abc"], "--sta", host["sta"], "--asap7-lib", host["asap7_lib"]]
     elif name == "build":
+        ppa = read(out / "synth.json")
+        if ppa["status"] != "PASSED" or not ppa.get("ppa_thresholds_passed", False):
+            raise ValueError("Build requires complete area/frequency thresholds to pass")
+        if sha(out / "synth/opt/report.json") != ppa["report_sha256"]:
+            raise ValueError("Synthesis report changed")
         if binary.exists():
             raise ValueError("Keep existing binary")
         obj = out / "build/obj"
