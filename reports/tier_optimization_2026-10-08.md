@@ -171,3 +171,16 @@ Tier1 inorder tagfix完整PPA耗时542.349秒，manifest SHA256 `90e3943a5c3cf45
 | vvadd | 4524 | 8418 | 0.537419815 |
 
 指令分子来自未修改课程metrics.json，周期与答案来自原sim.cpp等待真实AXI exit写响应，不是用RTL debug_instret外推或假定退出周期。Tier1三项门通过，canonical configs/tier1.json选择该参数，旧初始OoO配置另存configs/tier1_initial_ooo.json。验收记录reports/Tier1_verified_2026-10-08.json保存完整阶段记录与source_commit dc2e3bf3。默认Tier3 top资源保持原值，当前只有Tier1完成验收，Tier2和500MHz仍未完成。
+
+
+## Tier2 producer-map / early-load 候选
+
+独立模块 `rv32_inorder_lookup_backend` 由已验收Tier1流水后端派生，使用SERIAL_BACKEND=3，未修改Tier1的mode2模块或默认Tier3的mode0执行结构。每个架构寄存器保留最年轻在途写者的完整代际标签；分配覆盖旧写者，退休仅在完整标签仍相等时清除。操作数查询读取有效位和ROB槽索引，再从物理完成row读取值，避免随ROB窗口增长的年龄旋转数据矩阵。查询依赖生命周期保证该槽仍属最年轻在途写者；ALU、MDU、load响应仍逐一检查完整slot/generation，未缩短响应资格检查。
+
+合法load用已有simm12地址单元在分配边沿直接送同步TAG查询，不再经过ALU的一周期地址寄存器。这个模式要求BE1、启用缓存、TAG_SRAM1及WORD_RESPONSE1。store缓冲仲裁独立于新load地址；load仍等待较老ROB store、未发送store、同line未完成store及MMIO。满store缓冲在旧head完成回收边沿允许新退休store补位，ACK和新row仍使用各自完整代际身份。
+
+`configs/tier2_inorder_lookup.json` 使用FE2/BE1/ROB8、I128/MSHRI4、D1024/MSHRD4/WAITERS8、FQ8、word queue16、AXI response FIFO2和256项方向表。更大的真实SRAM与在途容量，以及load地址提前，是这次候选的主要变化；尚无IPC或频率结论。
+
+第一份冻结 `F:/CPU2026TierRuns/tier2_inorder_lookup_20261008`（b1080e98）top级lint退出0但有UNOPTFLAT：提前load的request valid仍结构依赖ALU memory ready，并与MMIO仲裁形成组合反馈；store选取与load阻塞共用always块也产生不必要的地址依赖。未启动综合、构建或CPU测试。修正提交29db9777：fast-load模式不存在ALU held-load，因此显式切除ALU ready到issue_enable的依赖；把store选取与load阻塞拆为独立组合过程。
+
+修正版冻结 `F:/CPU2026TierRuns/tier2_inorder_lookup_isolated_20261008`，一次top级原RTL lint退出0，无Error或UNOPTFLAT。接着只开始一次完整官方PPA，尚无结果。保留初次有警告快照，不覆盖；未运行完整正确性套件。
