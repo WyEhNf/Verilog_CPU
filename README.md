@@ -243,3 +243,5 @@ The owner policy now also selects L0 SRAM data banks using registered `fast_vali
 该策略要求非阻塞 Dcache 的寄存 tag-query 段（MSHR>1、TAG_SRAM=1），使当前响应来源及身份与新分配请求组合隔离。此前分配拍 load 请求也明确限定到同一路径；不支持的配置由准备脚本和 core 参数检查拒绝。默认关闭。
 
 一个有限双发射四行 LSQ 样例通过：满 load 队列，上报背压不借用，本拍旧响应/报告/pop 与新分配同拍，旧响应不污染新状态；新项已经发出请求并等待时，旧完整 GEN 回复被拒绝，新完整 GEN 回复保留 ROB 身份和值。记录见 `reports/Tier_shared_lsq_current_pop_protocol_2026-10-09.json`。`configs/tier1_shared_lsq_pop_credit.json` 保留原 ROB8/PRF36/RS2/LSQ2、I32/D128 容量和模式 1 空 RS 直通，尚未测 CPU IPC/PPA。
+
+The [shared LSQ current-pop credit candidate](configs/tier1_shared_lsq_pop_credit.json) reached IPC **0.5773058334**, but remains below 0.6000 and regresses vvadd by 73 cycles against the empty-RS seed. It is rejected; no PPA or CPU smoke was run. [Frozen evidence](reports/Tier1_shared_lsq_pop_credit_2026-10-09.json).
