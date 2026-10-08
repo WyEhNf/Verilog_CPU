@@ -191,7 +191,7 @@
     "geomean_ipc": 0.6012842155901663,
     "ipc_threshold_passed": true
   },
-  "status": "IPC_PASS_PPA_RUNNING",
+  "status": "REJECTED_PPA_AREA_AND_FREQUENCY",
   "accepted": false,
   "source_commit": "c2a09eaa292e941623206ef37b5042466740fc73",
   "run_directory": "F:\\CPU2026TierRuns\\tier1_shared_store_retire_20261009",
@@ -200,5 +200,39 @@
   "all_benchmark_cycles_nonregressing": true,
   "synth_run": true,
   "cpu_smoke_run": false,
-  "reason": "Six answers/instruction counts pass; five cycle counts decrease and multiply unchanged; IPC .6012842156 passes .6000; one full PPA running, not an accepted tier yet"
+  "reason": "IPC .6012842156 passes; measured area 9555.824755 exceeds 9000 and Fmax 236.3804247 is below 300. No CPU smoke; preserve existing accepted freezes.",
+  "synth": {
+    "status": "PASSED",
+    "command": [
+      "C:\\Users\\admin\\miniconda3\\python.exe",
+      "F:\\CPU2026TierRuns\\tier1_shared_store_retire_20261009\\source\\scripts\\synth.py",
+      "--filelist",
+      "verilog/filelist.f",
+      "--out",
+      "F:\\CPU2026TierRuns\\tier1_shared_store_retire_20261009\\synth",
+      "--mode",
+      "opt",
+      "--clock-period",
+      "2.0",
+      "--appimage",
+      "",
+      "--yosys",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys.exe",
+      "--abc",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys-abc.exe",
+      "--sta",
+      "F:/CPU2026CourseTools/win54fc150/opensta/bin/sta.exe",
+      "--asap7-lib",
+      "F:/CPU2026CourseTools/win54fc150/asap7/lib"
+    ],
+    "manifest_sha256": "c97384c64cba50f386977adaac3f940f7f81ef56c5e5a10ae6f01afe15cc839c",
+    "phase": "synth",
+    "returncode": 0,
+    "seconds": 661.4452862000035,
+    "log_sha256": "451ba2d3e28ac2c19d705f2e51f66211d21df48eb1e96081c4f749ad59c1aa5a",
+    "area_um2": 9555.824755000795,
+    "fmax_mhz": 236.3804247460757,
+    "report_sha256": "0127f75bfc87d014356b7ec3f6d6f31d74b784832d1d94046156db0603ac04a6",
+    "ppa_thresholds_passed": false
+  }
 }
