@@ -55,6 +55,7 @@ rtl/backend/rv32_producer_tag_row.v
 rtl/backend/rv32_reserved_dispatch_packet.v
 rtl/backend/rv32_elastic_dispatch_packet.v
 rtl/backend/rv32_serial_backend.v
+rtl/backend/rv32_inorder_backend.v
 rtl/common/rv32im_tag_compare.v
 rtl/common/rv32im_fifo.v
 rtl/common/rv32im_skid_buffer.v

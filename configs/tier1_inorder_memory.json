@@ -1,0 +1,20 @@
+{
+  "tier": 1,
+  "maximum_area_um2": 9000,
+  "minimum_geomean_ipc": 0.6,
+  "minimum_frequency_mhz": 300,
+  "cumulative_score": 90,
+  "parameters": {
+    "FE_WIDTH": 1, "BE_WIDTH": 1, "INT_ISSUE_WIDTH": 1, "CDB_WIDTH": 1,
+    "SERIAL_BACKEND": 2,
+    "ROB_ENTRIES": 4, "PHYS_REGS": 36, "RS_ENTRIES": 2, "LSQ_ENTRIES": 4,
+    "ICACHE_LINES": 64, "ICACHE_MSHRS": 2,
+    "DCACHE_LINES": 256, "DCACHE_MSHRS": 2, "DCACHE_WAITERS": 4,
+    "FETCH_QUEUE_DEPTH": 4, "COMPLETION_DEPTH": 4,
+    "READ_LINES": 2, "WRITE_LINES": 2, "WORD_QUEUE": 8,
+    "AXI_RESPONSE_FIFO_DEPTH": 0,
+    "PREDICTOR_DIRECT_BRANCH_TARGET": 1,
+    "PREDICTOR_HYBRID_DIRECTION": 0, "PREDICTOR_COMPACT_BTB_ENTRIES": 4,
+    "PREDICTOR_BHT_INDEX_BITS": 6
+  }
+}
