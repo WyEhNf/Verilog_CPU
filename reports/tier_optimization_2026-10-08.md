@@ -67,3 +67,7 @@ Tier2 副本 `F:/CPU2026TierRuns/tier2_compact_20261008` 的第一次完整综�
 全局取消缓冲失败后，下一批恢复原显式缓冲，保留rename/ROB/LSQ完整代际身份与原时钟边沿，集中缩减状态/仲裁规模：ROB8→4、RS4→2、D128→64、Dcache等待槽8→2、间接BTB16→4，继续64项方向表；AXI响应从双槽FIFO切到源码原有的单槽保留响应模式（深度参数0），读/写line容量仍2。I64/MSHRI2/MSHRD2、PRF36、LSQ4、FQ4/CPL4保持。配置 `configs/tier1_micro_ooo.json`，尚未测量；容量降低对IPC的影响只能由之后一次六项官方perf确认。
 
 为该候选暴露 `DCACHE_WAITERS`，顶层/core均默认8并转发至原Dcache `WAITER_ENTRIES`；等待槽仅改变背压容量，旧路响应仍由原完整LSQ代际过滤。间接BTB扩展支持4/8项，原PC索引与8位折叠身份算法已按容量参数化，不改查询/训练配对或执行完整目标检查；每bank至少2行以防零宽索引，默认16项无变化。冻结前额外校验两侧非阻塞MSHR范围、合法总线line/word容量及响应模式。没有启用不支持的FIFO深度1或写line容量1，也没有以固定4KiB且会映射大寄存器阵列的旧阻塞Dcache替代当前FakeRAM配置。
+
+Tier1 micro副本 `F:/CPU2026TierRuns/tier1_micro_ooo_20261008` 基于 `1dde728c`，manifest SHA256 `15c4fe0e49ccb79753a44e8abadffbfaacf7d05a2193918eaf25055679aa95a2`，已开始完整PPA，当前尚无完整结果。与已完成的三份有效候选一样，只有面积/频率同时达标才继续仿真。
+
+Tier2对应资源候选 `configs/tier2_micro_ooo.json` 尚未测量：保留ROB16/RS4/LSQ8和256项混合方向表，把间接BTB16→4、等待槽8→4、D256→128、PRF40→38（仍6个额外物理寄存器），响应FIFO改原单槽模式0。优先保留有助双发射吞吐的ROB与方向表，期望由缓存/等待槽/响应载荷/间接预测资源弥补1886 μm²面积缺口；不凭资源数推算IPC或宣称通过。默认Tier3仍未缩减任何上述资源。
