@@ -410,3 +410,6 @@ RENAME_REGISTERED_FREE_POOL 默认 1，top/core/backend 逐级传给 rv32_rename
 不继续宽度扫描；这份共享单发射证据没有支持“仅加宽前端就有显著收益”，也不能外推 Tier2 必须加宽。未冻结的 configs/tier1_shared_direct_free.json 已回到 FE1 PC-index 配置，只改 RENAME_REGISTERED_FREE_POOL0，避免把 FE2 的面积/频率代价带入分配器批次。Tier2 对应配置保留已测 0.807638 候选的全部资源，只切相同 allocator 选项；先顺序评估这份双发射直接位图分配批次，再根据结果安排单发射。
 
 c6a0c9b1 的只读默认参数核对：A109 的 145 个数值参数全未改变。新增参数 DIRECT_DISPATCH_CURRENT_CREDITS0、DIRECT_LOAD_RS_CREDIT0、DISPATCH_PIPELINE1、STORE_ALLOC_EARLY_ADDRESS2、PRF_VALUE_SRAM0、RENAME_REGISTERED_FREE_POOL1、PREDICTOR_BHT_INDEX_BITS8、DCACHE_WAITERS8 均选择原有行为或之前隐式常量。此核对只说明参数/资源默认值，不是当前源码完整 Tier3 PPA/IPC 证明；历史冻结数字仍有自己的身份。
+
+
+共享 Tier2 直接位图批次从 24fc9f33fd105842237bf4ba05bace1cbd5608bf 冻结至 F:/CPU2026TierRuns/tier2_shared_direct_free_20261008，manifest SHA256 67feb287a30cdf1e6417e7b430f082aa78d1a77cf50908418c01582138c63e5c，保持原 ROB8/PHYS38/RS3/LSQ4、I64/D512、SRAM PRF、当前信用和预读开关，只改 RENAME_REGISTERED_FREE_POOL0。一次原 RTL 静态 lint 11.664 秒，退出0，Error/LATCH/UNOPTFLAT 均0，有既存其他 warning；log SHA256 70ec145b8413fa51274ce8a1fb8a0bd84ad3908f3470a9bbe494b1dd5df68800。顺序开始一次完整 PPA，尚无面积/频率/IPC成绩。源参数校验已检查新选项为0/1；正在运行的 frozen 工具由本次 manifest 固定，不使用当前树后续变动覆盖结果。
