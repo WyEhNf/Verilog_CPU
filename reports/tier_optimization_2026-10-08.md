@@ -413,3 +413,14 @@ c6a0c9b1 的只读默认参数核对：A109 的 145 个数值参数全未改变�
 
 
 共享 Tier2 直接位图批次从 24fc9f33fd105842237bf4ba05bace1cbd5608bf 冻结至 F:/CPU2026TierRuns/tier2_shared_direct_free_20261008，manifest SHA256 67feb287a30cdf1e6417e7b430f082aa78d1a77cf50908418c01582138c63e5c，保持原 ROB8/PHYS38/RS3/LSQ4、I64/D512、SRAM PRF、当前信用和预读开关，只改 RENAME_REGISTERED_FREE_POOL0。一次原 RTL 静态 lint 11.664 秒，退出0，Error/LATCH/UNOPTFLAT 均0，有既存其他 warning；log SHA256 70ec145b8413fa51274ce8a1fb8a0bd84ad3908f3470a9bbe494b1dd5df68800。顺序开始一次完整 PPA，尚无面积/频率/IPC成绩。源参数校验已检查新选项为0/1；正在运行的 frozen 工具由本次 manifest 固定，不使用当前树后续变动覆盖结果。
+
+
+## 直接空闲位图分配实测：没有显著性能提升
+
+24fc9f33 冻结的 Tier2 完整 PPA 一次完成，736.459 秒：面积 17082.38174600668 μm²、Fmax 362.60623229461754 MHz；组合 9556.86924000668、时序 3417.8436、SRAM 4107.6689060000035 μm²。report SHA256 0805203b46963906e04e11264cf0118cbf48ece800d78f4d71ead53e8ee0926f，log SHA256 b4cae2ce3690e3e0830c0d0e2013514ad99e57510c5bf15bbac6f2133a1adae3。相对相同资源/池1候选，面积少 5.81742 μm²，频率低 0.514335 MHz。
+
+门通过后构建一次，55.692 秒，exe SHA256 f6561a4acada1af1ca33927c07d2d1b76cd56718746767baeae4f556b769ca43；仅一次六项官方 perf，latency10、5.989 秒，答案及分配断言全部通过，IPC 0.8078263492329071。只有 rsort 的 305311→304884 周期改变，其余五项逐周期相同；几何平均仅提高约 0.02333%，仍未达 0.8450，不验收，不切 canonical，不跑 smoke，不重复测试。perf log SHA256 19082d6f4f54869a677b33673b26095a539f70ca46bd372f8403bf7bb36845ee。完整阶段/差异在 Tier2_shared_direct_free_2026-10-08.json。
+
+上述证据否定了“直接池分配足以弥补当前双发射 IPC 缺口”的假设；不继续小幅 allocator、predictor 或 fetch 宽度扫描，Tier1 的直接池配置仍未冻结/未测，不套用双发射 IPC。一次 PPA 后只在数值门通过时跑一次六项 perf，所有 IPC 失败批次都没有新增 CPU correctness。
+
+只读 kernel 检查显示官方 rsort 有 input_data 和 scratch 各 2048 个 word，另有约1 KiB计数表；8 KiB/8 KiB 的流式数组与分散 store 超出 Tier1 D128 的 2 KiB 容量。当前冷 store 可能触发整16-byte line读入和脏victim整行写回，而外部 AXI 使用4-byte word并支持 byte mask。下一方向是共享 Dcache 可选的 store-miss write-around，复用已有 MSHR/写通道，保留 store hit 的现有行为，避免为冷的分散写者强制读入整行。只是设计方向：尚未实现/冻结/测试，不能声称 IPC 或频率收益；需要核实部分写、同地址后继 load/store、背压稳定、应答归属和错误路径后形成一批完整优化，不新增宽度专用 CPU。
