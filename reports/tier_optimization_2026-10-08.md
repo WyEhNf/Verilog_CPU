@@ -230,3 +230,8 @@ Store-control候选完整PPA一次完成：面积14488.819021999865μm²，频�
 候选configs/tier1_shared_sram.json启用PRF SRAM、直接dispatch PIPELINE0/ELASTIC0、STORE_ALLOC_EARLY_ADDRESS1、D256与LSQ2，其他来自同一OoO micro frontend配置，FE1/BE1/ROB4/PRF36/RS2/I32。减少dispatch层级及PRF状态，为更大D-cache留空间；LSQ容量缩减的代价与频率不能仅凭状态数量判断。冻结F:/CPU2026TierRuns/tier1_shared_sram_20261008，top静态lint一次退出0，无Error/LATCH/UNOPTFLAT；接着顺序启动一次完整PPA，尚无达标证据。默认Tier3的PRF_VALUE_SRAM0、PIPELINE1、LSQ16等保持原值，未启用本候选参数。
 
 只读审查另排除两个无效假设：现有CHECKPOINT_IMPL1已移除整份RAT快照存储；LSQ store payload已经是相对访问的32bit，而非128bit。未为重复删除这些已不存在的开销新增测试。
+
+
+共享D256候选完整PPA一次结束，579.101秒：面积10034.566642999973μm²、频率382.660687593423MHz，组合5614.335179999973、时序2279.7288、SRAM2140.5026629999993μm²。真实PRF SRAM为35个1x32实例，合计47.029255μm²，未漏计；ready/上一拍写回与选择逻辑仍计标准单元。manifest SHA256892c2939e83c80f0a78920d7c3d6f2f865a8f5c7848f0eecd53a49a03be2ac08，report SHA25608625a54eea12b8a71f1d4bc5e309af923cc0fb6845f7e48bb6080dcbc8d748a。面积高1034.567μm²，因此不构建、不测IPC、不跑smoke；频率较历史小OoO候选提高，但配置有多项变化，不能把提高归因于单一PRF参数。
+
+后续Tier1配置configs/tier1_shared_sram_d128.json仅把未通过面积门的D256改为D128；它仍大于canonical旧micro frontend的D64，保持共享后端、直接dispatch和PRF SRAM。缩减的SRAM与metadata足以构成有实际面积意义的批次，IPC并未证明，不能取代达标验收。另准备configs/tier2_shared_sram.json：同一CPU/后端BE2，ROB8/PRF38/RS3/LSQ4/I64/D512、PRF SRAM和单个PRF读后AGU、direct dispatch，资源与宽度均为参数，没有双发射专用模块；这个Tier2候选尚未冻结或测试。
