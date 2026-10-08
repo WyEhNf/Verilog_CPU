@@ -345,3 +345,30 @@ PPA 门通过后仅构建一次，57.955 秒，exe SHA256 e94802bcac746ab38c7f0c
 单项周期边界也已比较：本批 Tier2 相对 balanced-memory 的 median 多 303 周期、towers 多 717 周期；另四项减少。上述“三项改善”只指评分面积、Fmax、六项 IPC 几何平均，不能宣称六项程序都加速。候选未验收。
 
 准备下一共享 Tier2 窗口候选 configs/tier2_shared_window16.json，只把本批 ROB8/PHYS38 改为 ROB16/PHYS40，保留 LSQ4、RS3、I64/D512 双way、相同预测器和预读信用算法。当前只有六个超出架构映射的物理寄存器；更大的 ROB 也容纳不写 rd 的分支/store，增加目的物理寄存器能缓解双 lane 的分配约束。扩大窗口是一批明确的结构性候选，可能增加面积或改变映射时序；现有 911.80 μm² 门槛余量不是保证。未冻结、未测试，不能提前判定达标或全指标不回退；等待 PC 索引本批结束，再根据其结论决定后续。
+
+
+## PC 索引实测：面积和频率改善，性能收益不足
+
+691323bf 冻结的共享单发射 PC 索引候选完整 PPA 一次完成，617.163 秒：面积 8517.160134999911 μm²、Fmax 393.3922397233961 MHz；report SHA256 fbeb1c647837548dc0341b01db05b0f2153b06179868cc4ad73a2ccdfda8949c，log SHA256 8483a9cbe48f395b22a1faee4e6b469f1785d0c312b3e514e834b0c05d68ed4d。相对 current-credit 同资源候选，面积减少 133.24662 μm²，频率提高 15.39298 MHz。
+
+门通过后仅构建一次，52.236 秒，exe SHA256 87dbd414ac4870cf18338e4b96af7244311c4371218ccfb353ee0782a71d0033。仅跑一次六项官方 perf，5.774 秒、latency10，答案通过，IPC 0.5070995903241434。相比 0.5068602348369285 只改善约 0.0472%，没有显著性能收益，仍未达 0.6000；不验收、不切 canonical、不增加 smoke 或重复 perf。perf log SHA256 4f53adc63d5294bc0a32b03c8173495bdee2a71f512d53e4fecf0e60957a76dd；阶段与逐项差异见 Tier1_shared_pc_predictor_2026-10-08.json。
+
+| perf | 官方指令数 | 实测周期 | IPC |
+|---|---:|---:|---:|
+| median | 6961 | 14273 | 0.487704057 |
+| multiply | 21722 | 25037 | 0.867595958 |
+| qsort | 139900 | 267417 | 0.523152978 |
+| rsort | 195719 | 546370 | 0.358216959 |
+| towers | 5278 | 11286 | 0.467659047 |
+| vvadd | 4524 | 9866 | 0.458544496 |
+
+这一批排除了“小表索引策略本身足以弥补单发射 IPC 缺口”的猜测；不继续微小 predictor 参数扫描。共享 Tier2 ROB16/PHYS40 候选在本批结束后冻结，CPU/backend 和其他资源仍相同，先进行静态检查及一次完整 PPA。其容量增加不是预先验收的优化，不能省略面积/时序检查或从历史独立 backend 借用 IPC。
+
+
+共享 Tier2 window16 从 c7e53071 冻结至 F:/CPU2026TierRuns/tier2_shared_window16_20261008；原 RTL 静态 lint 一次，13.181 秒，退出 0，无 Error/LATCH/UNOPTFLAT，仍有既存其他 warning；log SHA256 a8b3781a310e658cc8a80823b74d6b4a6c4299a6732da8f216bf652c768fe554。已开始一次完整 PPA，未构建、未测 IPC。
+
+## 下一单发射候选扩大取指吞吐，保持执行宽度
+
+只读检查确认 frontend 的 FQ_DEPTH 计数/存储的是单条指令，不是每项 FE_WIDTH 条的 bundle；一次响应最多产生 FE_WIDTH 条，cpu_core 只让前 BE_WIDTH 个前端 lane 接收 ready，其余 lane 为 0，未接受的指令仍留队列。decode、rename、ROB、RS、CDB 都按 BE_WIDTH 构造。因此可以用现有同一 CPU 的 FE2/BE1，让一次 I-cache 响应填两条指令而持续单发射，不必复制/新增单发射 CPU，也不必把 FQ 存储容量翻倍。
+
+configs/tier1_shared_fetch2.json 保留 PC-index 共享候选的所有执行/缓存/队列资源，仅 FE1→2；BHT64 和 BTB4 总项数保持，通过既有分 bank 参数分成两 bank。历史长度 6→5 仅满足现有小表 bank 宽度合法性，模式1未使用 history 索引或 metadata。PC-index 已测 482.84 μm² 面积门余量不能证明 FE2 能放入，也不能仅由 wider fetch 断定速度提高。此候选针对取指供应吞吐，尚未冻结/测试，等待 Tier2 当前批次结束；默认 FE4/BE2 Tier3 不变。
