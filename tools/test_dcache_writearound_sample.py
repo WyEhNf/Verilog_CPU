@@ -1,4 +1,4 @@
-"""Run two small frozen cache protocol samples; never a CPU correctness suite."""
+"""Run small frozen cache-policy protocol samples; never a CPU correctness suite."""
 import argparse
 import hashlib
 import json
@@ -18,13 +18,14 @@ def sha(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--sample', choices=('writearound', 'rolling_merge'), default='writearound')
     args = parser.parse_args()
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=False)
     selected = list((ROOT / 'rtl/common').glob('*.v')) + list((ROOT / 'rtl/cache').glob('*.v'))
     selected += [ROOT / 'rtl/rv32im_defs.vh',
                  ROOT / 'scripts/ram/sram_fakeram.sv',
-                 ROOT / 'tb/unit/rv32_dcache_writearound_tb.v', Path(__file__).resolve()]
+                 ROOT / ('tb/unit/rv32_dcache_' + args.sample + '_tb.v'), Path(__file__).resolve()]
     source = out / 'source'
     hashes = {}
     for original in selected:
@@ -40,11 +41,11 @@ def main():
     env['VERILATOR_ROOT'] = HOST['verilator_root']
     env['MAKE'] = str(Path(HOST['build_bin'])/'make.exe')
     env['SHELL'] = str(Path(HOST['build_bin'])/'sh.exe')
-    top = 'rv32_dcache_writearound_tb'
+    top = 'rv32_dcache_' + args.sample + '_tb'
     started = time.monotonic()
     results = []
     # A legacy FF owner and the synchronous SRAM/banked owner used by profiles.
-    for tag, mode in ((0, 0), (1, 2)):
+    for tag, mode in (((0, 0), (1, 2)) if args.sample == 'writearound' else ((1, 2),)):
         name = f'tag{tag}_mode{mode}'
         obj = out / name
         executable = obj / ('V' + top + '.exe')
@@ -63,7 +64,8 @@ def main():
             subprocess.run([str(executable)], env=env, stdout=stream,
                            stderr=subprocess.STDOUT, check=True)
         observed = log.read_text()
-        if 'PASS: limited write-around' not in observed or any(x in observed for x in ('FATAL', 'ERROR', 'FAIL')):
+        marker = 'PASS: limited write-around' if args.sample == 'writearound' else 'PASS: limited rolling merge'
+        if marker not in observed or any(x in observed for x in ('FATAL', 'ERROR', 'FAIL')):
             raise SystemExit('Sample did not pass: ' + str(log))
         results.append(dict(name=name, status='PASS', compile_log_sha256=sha(compile_log),
                             simulation_log_sha256=sha(log)))
@@ -74,7 +76,7 @@ def main():
     report = dict(status='PASS', elapsed_seconds=time.monotonic()-started, results=results,
                   input_sha256=hashes, proves_whole_cache=False, proves_whole_cpu=False,
                   claims_cpu_ppa=False, simulator='native Verilator two-state, original SRAM, WORD_SIM scheduling',
-                  scope='two small directed write-around ownership/traffic samples; no four-state SRAM claim')
+                  sample=args.sample, scope='small directed cache-policy samples; no four-state SRAM claim')
     (out/'report.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
 
 

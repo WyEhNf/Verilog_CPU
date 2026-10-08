@@ -17,6 +17,9 @@ module rv32_dcache_nonblocking #(
     parameter integer CACHE_WAYS = 1,
     parameter integer INDEX_HASH = 0,
     parameter integer STORE_MERGE_DELAY = 0,
+    // 0: fixed allocation timer. 1: rolling whole-word prefix coalescing;
+    // scatter stores start RFO immediately and never withdraw an offered RFO.
+    parameter integer STORE_MERGE_POLICY = 0,
     // Cold store misses write enabled bytes without allocating a cache line.
     // The store remains owned by its MSHR until the memory write response.
     parameter integer STORE_MISS_WRITE_AROUND = 0,
@@ -1666,6 +1669,13 @@ module rv32_dcache_nonblocking #(
         wire demand_allocate=(action==4'd8 || around_allocate) && free_slot==lifecycle_mshr;
         wire prefetch_new=prefetch_allocate && second_slot==lifecycle_mshr;
         wire accept_response=response_accept && response_slot==lifecycle_mshr;
+        wire initial_merge_hint=(STORE_MERGE_POLICY==0) || core_req_mask==16'h000f;
+        wire [15:0] merged_store_mask=mshr_mask[lifecycle_mshr] | core_req_mask;
+        wire prefix_extends=(merged_store_mask==16'h00ff || merged_store_mask==16'h0fff) &&
+            merged_store_mask!=mshr_mask[lifecycle_mshr];
+        wire rolling_merge=(STORE_MERGE_POLICY!=0) && action==4'd7 && matching_slot==lifecycle_mshr &&
+            !mshr_sent[lifecycle_mshr] && !mshr_writeback[lifecycle_mshr] &&
+            !mshr_rfo_offered[lifecycle_mshr] && prefix_extends;
         // Disabled policy adds no state. An around transaction never merges
         // later stores, so its write payload remains stable under backpressure.
         if (STORE_MISS_WRITE_AROUND != 0) begin:g_around_owner
@@ -1691,18 +1701,19 @@ module rv32_dcache_nonblocking #(
             end else begin
                 if(mshr_valid[lifecycle_mshr] && mshr_merge_delay[lifecycle_mshr]!=0)
                     mshr_merge_delay[lifecycle_mshr]<=mshr_merge_delay[lifecycle_mshr]-1'b1;
+                if(rolling_merge) mshr_merge_delay[lifecycle_mshr]<=MERGE_DELAY;
                 if(rfo_offer && send_slot==lifecycle_mshr) mshr_rfo_offered[lifecycle_mshr]<=1'b1;
                 if(load_promote) mshr_prefetch[lifecycle_mshr]<=1'b0;
                 if(store_promote) begin
                     mshr_store[lifecycle_mshr]<=1'b1;
                     mshr_prefetch[lifecycle_mshr]<=1'b0;
-                    mshr_merge_delay[lifecycle_mshr]<=MERGE_DELAY;
+                    mshr_merge_delay[lifecycle_mshr]<=initial_merge_hint?MERGE_DELAY:0;
                 end
                 if(demand_allocate) begin
                     mshr_valid[lifecycle_mshr]<=1'b1;
                     mshr_sent[lifecycle_mshr]<=1'b0;
                     mshr_rfo_offered[lifecycle_mshr]<=1'b0;
-                    mshr_merge_delay[lifecycle_mshr]<=request_store?MERGE_DELAY:0;
+                    mshr_merge_delay[lifecycle_mshr]<=(request_store && initial_merge_hint)?MERGE_DELAY:0;
                     mshr_store[lifecycle_mshr]<=request_store;
                     mshr_prefetch[lifecycle_mshr]<=1'b0;
                     mshr_writeback[lifecycle_mshr]<=dirty_victim || around_allocate;
@@ -1722,9 +1733,14 @@ module rv32_dcache_nonblocking #(
                 // successful victim writeback retains its demand transaction.
                 if(accept_response) begin
                     mshr_sent[lifecycle_mshr]<=1'b0;
-                    if(mshr_writeback[lifecycle_mshr] && !mshr_writearound[lifecycle_mshr] && response_success)
+                    if(mshr_writeback[lifecycle_mshr] && !mshr_writearound[lifecycle_mshr] && response_success) begin
                         mshr_writeback[lifecycle_mshr]<=1'b0;
-                    else mshr_valid[lifecycle_mshr]<=1'b0;
+                        // The old timer expired during victim writeback. A
+                        // sequential first word now gets its actual merge window.
+                        if(STORE_MERGE_POLICY!=0 && mshr_store[lifecycle_mshr] &&
+                           !mshr_rfo_offered[lifecycle_mshr] && mshr_mask[lifecycle_mshr]==16'h000f)
+                            mshr_merge_delay[lifecycle_mshr]<=MERGE_DELAY;
+                    end else mshr_valid[lifecycle_mshr]<=1'b0;
                 end
             end
         end
@@ -2064,6 +2080,7 @@ module rv32_dcache_nonblocking #(
             (INDEX_HASH != 0 && INDEX_HASH != 1) || CACHE_LINES < 16 ||
             ((CACHE_WAYS != 1) && (CACHE_WAYS != 2)) ||
             STORE_MERGE_DELAY < 0 || STORE_MERGE_DELAY > 255 ||
+            (STORE_MERGE_POLICY != 0 && STORE_MERGE_POLICY != 1) ||
             (STORE_MISS_WRITE_AROUND != 0 && STORE_MISS_WRITE_AROUND != 1) ||
             (TAG_SRAM != 0 && TAG_SRAM != 1) ||
             (STATIC_UPDATES < 0 || STATIC_UPDATES > 2) ||

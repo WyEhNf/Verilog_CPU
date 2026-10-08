@@ -55,6 +55,8 @@ def validate_parameters(text, profile):
     p = defaults | overrides
     if p["SERIAL_BACKEND"] != 0:
         raise ValueError("Tier profiles must share rv32_backend_joint and vary widths/capacities; old separate-backend experiments require their frozen historical revision")
+    if p["DCACHE_STORE_MERGE_POLICY"] not in (0, 1):
+        raise ValueError("DCACHE_STORE_MERGE_POLICY is 0/1")
     if p["DCACHE_STORE_MISS_WRITE_AROUND"] not in (0, 1):
         raise ValueError("DCACHE_STORE_MISS_WRITE_AROUND is 0/1")
     if p["RENAME_REGISTERED_FREE_POOL"] not in (0, 1):
@@ -176,7 +178,7 @@ def verify(out, manifest):
             raise ValueError("Library changed: " + name)
 
 
-def phase(out, name):
+def phase(out, name, performance_first=False):
     manifest = read(out / "manifest.json")
     verify(out, manifest)
     host = manifest["host"]
@@ -199,11 +201,12 @@ def phase(out, name):
             "--out", str(out / "synth"), "--mode", "opt", "--clock-period", "2.0", "--appimage", "",
             "--yosys", host["yosys"], "--abc", host["abc"], "--sta", host["sta"], "--asap7-lib", host["asap7_lib"]]
     elif name == "build":
-        ppa = read(out / "synth.json")
-        if ppa["status"] != "PASSED" or not ppa.get("ppa_thresholds_passed", False):
-            raise ValueError("Build requires complete area/frequency thresholds to pass")
-        if sha(out / "synth/opt/report.json") != ppa["report_sha256"]:
-            raise ValueError("Synthesis report changed")
+        if not performance_first:
+            ppa = read(out / "synth.json")
+            if ppa["status"] != "PASSED" or not ppa.get("ppa_thresholds_passed", False):
+                raise ValueError("Build requires complete area/frequency thresholds to pass")
+            if sha(out / "synth/opt/report.json") != ppa["report_sha256"]:
+                raise ValueError("Synthesis report changed")
         if binary.exists():
             raise ValueError("Keep existing binary")
         obj = out / "build/obj"
@@ -219,6 +222,12 @@ def phase(out, name):
             str(source / "scripts/ram/sram_fakeram.sv"), *map(str, files),
             str(source / "scripts/sim.cpp"), str(source / "tools/verilator_windows_time_zero.cpp")]
     else:
+        if name == "smoke":
+            ppa, perf = read(out / "synth.json"), read(out / "perf.json")
+            if (ppa["status"] != "PASSED" or not ppa.get("ppa_thresholds_passed", False)
+                    or sha(out / "synth/opt/report.json") != ppa["report_sha256"]
+                    or perf["status"] != "PASSED" or not perf.get("ipc_threshold_passed", False)):
+                raise ValueError("Smoke requires this candidate's complete PPA and IPC gates to pass")
         build = read(out / "build.json")
         if build["status"] != "PASSED" or sha(binary) != build["executable_sha256"]:
             raise ValueError("A successful matching build is required")
@@ -227,6 +236,9 @@ def phase(out, name):
         command += ["--kind", "perf"] if name == "perf" else ["--kind", "correctness", "--case", "correctness_array_test1"]
     log = out / (name + ".log")
     state = dict(status="RUNNING", command=command, manifest_sha256=sha(out / "manifest.json"), phase=name)
+    if name == "build":
+        state["ppa_gate_checked_before_build"] = not performance_first
+        state["performance_first_probe"] = performance_first
     save(record, state)
     print("START " + name + " " + str(out), flush=True)
     start = time.monotonic()
@@ -270,8 +282,12 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--profile", type=Path)
     parser.add_argument("--host-config", type=Path)
+    parser.add_argument("--performance-first", action="store_true",
+                        help="Build one frozen IPC probe before PPA; acceptance still requires full PPA on that snapshot")
     args = parser.parse_args()
     out = args.out.resolve()
+    if args.performance_first and args.action != "build":
+        parser.error("--performance-first applies only to build")
     if args.action == "prepare":
         if not args.profile:
             parser.error("prepare requires --profile")
@@ -280,7 +296,7 @@ def main():
         verify(out, read(out / "manifest.json"))
         print("VERIFIED " + str(out))
     else:
-        phase(out, args.action)
+        phase(out, args.action, args.performance_first)
 
 
 if __name__ == "__main__":
