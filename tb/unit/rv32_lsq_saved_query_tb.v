@@ -138,6 +138,17 @@ module rv32_lsq_saved_query_tb;
         if(!request_valid || request_store || request_tag!=ticket || request_mask!=16'h000d || mmio_class)
             $fatal(1,"saved query changed ordinary partial forwarding request");
         request_ready=1;tick;@(negedge clk);request_ready=0;response(32'h11223344,32'h11227f44);
+        // An existing fully covered word must complete without sending a
+        // cache request; saved-query validity preserves full-forward suppression.
+        clear;alloc_valid=1;stores=1;alloc_addr=32'h100;alloc_data=32'h55667788;alloc_size=2;alloc_rob=32'h109;
+        tick;@(negedge clk);stores=0;loads=1;alloc_addr=32'h100;alloc_size=2;alloc_rob=32'h101;
+        tick;@(negedge clk);alloc_valid=0;loads=0;
+        for(limit=0;limit<8 && !load_valid;limit=limit+1) begin
+            #1;if(request_valid) $fatal(1,"fully forwarded load queried cache");
+            tick;@(negedge clk);
+        end
+        if(!load_valid || load_value!=32'h55667788 || load_error)
+            $fatal(1,"saved query lost fully forwarded result");
         // Held exact MMIO classification remains true through backpressure.
         // After ACK/pop, its invalid payload may remain in the selection owner;
         // that stale payload must not classify the next fresh load as MMIO.

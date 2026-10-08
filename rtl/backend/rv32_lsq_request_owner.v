@@ -11,6 +11,9 @@ module rv32_lsq_request_owner #(
 ) (
     input wire flush_i,recovery_i,found_i,wait_i,load_i,ready_i,
     input wire fresh_no_forward_i,
+    input wire query_load_i,
+    input wire [1:0] query_size_i,
+    input wire [3:0] query_forward_mask_i,
     input wire [1:0] size_i,
     input wire unsigned_i,
     input wire [31:0] address_i,store_data_i,forward_data_i,
@@ -47,7 +50,13 @@ module rv32_lsq_request_owner #(
     endfunction
     wire [3:0] access_mask=decode_access_mask(size_i);
     wire incomplete_forward=(forward_mask_i & access_mask)!=access_mask;
-    wire request_valid=admitted && (!load_i || ((FRESH_NO_FORWARD!=0) && fresh_no_forward_i) || incomplete_forward);
+    // Saved query fields belong to the existing packet. A certified fresh
+    // load is an independent alternative, so its late size/mask cannot enter
+    // the old packet's full-forward predicate through a visible-payload mux.
+    wire query_incomplete_forward=(query_forward_mask_i & decode_access_mask(query_size_i))!=decode_access_mask(query_size_i);
+    wire request_valid=admitted && ((FRESH_NO_FORWARD!=0) ?
+        (fresh_no_forward_i || !query_load_i || query_incomplete_forward) :
+        (!load_i || incomplete_forward));
     wire [2:0] forward_enable;
     wire [VALID_LEAVES-1:0] valid_views;
     wire [3:0] load_views;

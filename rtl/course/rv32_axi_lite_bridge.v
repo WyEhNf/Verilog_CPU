@@ -18,6 +18,7 @@ module rv32_axi_lite_bridge #(
     output wire [31:0] i_resp_addr, output wire [127:0] i_resp_data,
     output wire [7:0] i_resp_id, output wire i_resp_error,
     input wire d_req_valid, output wire d_req_ready, input wire d_req_write,
+    output wire d_write_capacity_ready,
     input wire [31:0] d_req_addr, input wire [127:0] d_req_data,
     input wire [15:0] d_req_mask, input wire [7:0] d_req_id,
     output wire d_resp_valid, input wire d_resp_ready,
@@ -165,6 +166,9 @@ module rv32_axi_lite_bridge #(
 
     wire d_read_request = d_req_valid && !d_req_write;
     assign i_req_ready = !reset && read_free_found && (!d_read_request || !prefer_d_request);
+    // Saved write capacity is independent of the currently routed bus packet.
+    // An exact exit store can query it before late valid/mask qualification.
+    assign d_write_capacity_ready = !reset && write_free_found;
     assign d_req_ready = !reset && (d_req_write ? write_free_found :
                          (read_free_found && (!i_req_valid || prefer_d_request)));
     wire take_i = i_req_valid && i_req_ready;

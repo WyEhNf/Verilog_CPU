@@ -1316,6 +1316,8 @@ module rv32_lsq #(
         .size_i(selected_size),.unsigned_i(selected_unsigned),.address_i(selected_addr),
         .store_data_i(selected_store_data),.store_mask_i(selected_store_mask),
         .fresh_no_forward_i(fresh_without_forward),.forward_data_i(owner_forward_data),.forward_mask_i(owner_forward_mask),
+        .query_load_i(existing_selection_packet[39]),.query_size_i(forwarding_query_size),
+        .query_forward_mask_i(raw_forward_mask),
         .rob_tag_i(selected_rob_tag),.lsq_tag_i(selected_lsq_tag),
         .valid_o(dcache_req_valid_o),.load_o(dcache_req_is_load_o),.store_o(dcache_req_is_store_o),
         .unsigned_o(dcache_req_unsigned_o),.fire_o(request_fire),.size_o(dcache_req_size_o),

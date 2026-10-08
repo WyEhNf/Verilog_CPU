@@ -1,0 +1,190 @@
+{
+  "status": "REJECTED_PPA_AREA_AND_FREQUENCY_REGRESSION",
+  "accepted": false,
+  "source_commit": "5f4e376e8a623469e14577ff5884b75f6579eab9",
+  "run_directory": "F:\\CPU2026TierRuns\\tier1_shared_prf_saved_query_20261009",
+  "manifest_sha256": "e7af94f502b583c1ea890f1b73e3154c8186112107788740a6c348502bb4992b",
+  "parameters": {
+    "FE_WIDTH": 1,
+    "BE_WIDTH": 1,
+    "INT_ISSUE_WIDTH": 1,
+    "CDB_WIDTH": 1,
+    "ROB_ENTRIES": 8,
+    "PHYS_REGS": 36,
+    "RS_ENTRIES": 2,
+    "LSQ_ENTRIES": 4,
+    "ICACHE_LINES": 32,
+    "ICACHE_MSHRS": 2,
+    "DCACHE_LINES": 128,
+    "DCACHE_MSHRS": 2,
+    "DCACHE_WAITERS": 2,
+    "FETCH_QUEUE_DEPTH": 2,
+    "COMPLETION_DEPTH": 4,
+    "READ_LINES": 2,
+    "WRITE_LINES": 2,
+    "WORD_QUEUE": 8,
+    "AXI_RESPONSE_FIFO_DEPTH": 0,
+    "PREDICTOR_HYBRID_DIRECTION": 0,
+    "PREDICTOR_COMPACT_BTB_ENTRIES": 4,
+    "PREDICTOR_BHT_INDEX_BITS": 6,
+    "PRF_VALUE_SRAM": 1,
+    "STORE_ALLOC_EARLY_ADDRESS": 1,
+    "DISPATCH_PIPELINE": 0,
+    "DISPATCH_ELASTIC": 0,
+    "DIRECT_DISPATCH_CURRENT_CREDITS": 1,
+    "PREDICTOR_DIRECT_BRANCH_TARGET": 1,
+    "DECODE_QUEUE_DEPTH": 1,
+    "DECODE_EMPTY_BYPASS": 1,
+    "DECODE_FULL_REPLACE": 1,
+    "DIRECT_LOAD_RS_CREDIT": 1,
+    "LSQ_STORE_ADMISSION_BYPASS": 1,
+    "LSQ_COMMITTED_STORE_BYPASS": 1,
+    "FETCH_OWNER_PAYLOAD_SELECT": 1,
+    "LSQ_ALLOC_LOAD_REQUEST_BYPASS": 1,
+    "MDU_DIVZERO_REMAINDER_REUSE": 1,
+    "RS_ALLOC_EMPTY_BYPASS": 1,
+    "TAG_SINGLE_GENERATION_OWNER": 1,
+    "ROB_COMPLETION_COMMIT_BYPASS": 1,
+    "ROB_STORE_RETIRE_ADMISSION_BYPASS": 1,
+    "PRF_SRAM_PORT_FORWARD": 1,
+    "LSQ_SAVED_REQUEST_QUERY": 1
+  },
+  "tool_sha256": {
+    "yosys": "9f87e9fd29e294976d4dae56c142c5e64a34d61883b739a210c32ef50cc44237",
+    "abc": "6fd9bbe7d33b56ef9bc4ff66f61db75211c242617045de23ec5689f7da2e85bc",
+    "sta": "d75a85c0525b9b3a0f374bbb4d48e1b759403e4a31205047cb4c939087d3c602",
+    "verilator": "798b1da737c08a316f63195b6c1a4c9646f118788182fb1165d100a7c1e46661"
+  },
+  "library_sha256": {
+    "asap7sc7p5t_AO_RVT_TT_nldm_211120.lib": "b1ece108c0a2acd8d01c05cee6daee2834425037b1d9aad625d6f1dd640f1940",
+    "asap7sc7p5t_INVBUF_RVT_TT_nldm_220122.lib": "a4ceb32e418e1aac8667e28fbd8e9e46baf520180be4db075598a4d7c681a56e",
+    "asap7sc7p5t_OA_RVT_TT_nldm_211120.lib": "6529c6c72465cd133dfbfb03952327ab2774bb6aa4be866d78fd7bc6c58c9f6f",
+    "asap7sc7p5t_SEQ_RVT_TT_nldm_220123.lib": "57a0b403485b99ebd676942af4673ac086b86c7c75fbdc3e5c0038501dd22ba3",
+    "asap7sc7p5t_SIMPLE_RVT_TT_nldm_211120.lib": "fa92e6ab1481810602811b1eea54bc016a341f11fb5188d7512c026599adf038"
+  },
+  "lint": {
+    "returncode": 0,
+    "elapsed_seconds": 7.727798400010215,
+    "errors": 0,
+    "latches": 0,
+    "unoptflat": 0,
+    "log_sha256": "5568075853ffcee90575f77cd5374c52b4fbdd2705ff7631e69338d08b715c52"
+  },
+  "synth": {
+    "status": "PASSED",
+    "command": [
+      "C:\\Users\\admin\\miniconda3\\python.exe",
+      "F:\\CPU2026TierRuns\\tier1_shared_prf_saved_query_20261009\\source\\scripts\\synth.py",
+      "--filelist",
+      "verilog/filelist.f",
+      "--out",
+      "F:\\CPU2026TierRuns\\tier1_shared_prf_saved_query_20261009\\synth",
+      "--mode",
+      "opt",
+      "--clock-period",
+      "2.0",
+      "--appimage",
+      "",
+      "--yosys",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys.exe",
+      "--abc",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys-abc.exe",
+      "--sta",
+      "F:/CPU2026CourseTools/win54fc150/opensta/bin/sta.exe",
+      "--asap7-lib",
+      "F:/CPU2026CourseTools/win54fc150/asap7/lib"
+    ],
+    "manifest_sha256": "e7af94f502b583c1ea890f1b73e3154c8186112107788740a6c348502bb4992b",
+    "phase": "synth",
+    "returncode": 0,
+    "seconds": 657.1681717000029,
+    "log_sha256": "0eba3740f790c870b0c80b7dc1d863e4d329928a9a17a796af4c65743c45ba93",
+    "area_um2": 9352.973215000562,
+    "fmax_mhz": 212.75711614377727,
+    "report_sha256": "424ae7519142c39622a3cec344c062ba0c2e6ed9a838423beedc8731905e3213",
+    "ppa_thresholds_passed": false
+  },
+  "build_run": false,
+  "perf_run": false,
+  "cpu_smoke_run": false,
+  "candidate_geomean_ipc": null,
+  "comparison": {
+    "source_commit": "c2a09eaa292e941623206ef37b5042466740fc73",
+    "area_um2": 9555.824755000795,
+    "fmax_mhz": 236.3804247460757,
+    "geomean_ipc": 0.6012842155901663,
+    "area_change_um2": -202.8515400002325,
+    "frequency_change_mhz": -23.623308602298437
+  },
+  "worst_path": {
+    "startpoint": "core.g_cached_memory.g_nonblocking_icache.icache.data_array.lane_0/rd_out[5]",
+    "endpoint": "_118874_/D",
+    "selected_nets": [
+      {
+        "net": "core.g_cached_memory.g_nonblocking_icache.icache.data_array.rdata[5]",
+        "arrival_ns": 0.2309
+      },
+      {
+        "net": "core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[0].g_data_lane[0].data.wdata[5]",
+        "arrival_ns": 0.44589999999999996
+      },
+      {
+        "net": "core.backend_rs1[4]",
+        "arrival_ns": 1.8709999999999998
+      },
+      {
+        "net": "core.g_ooo_backend.backend.preview_read_phys[5]",
+        "arrival_ns": 2.136
+      },
+      {
+        "net": "core.g_ooo_backend.backend.prf.g_query_domains.queries[5]",
+        "arrival_ns": 2.187
+      },
+      {
+        "net": "core.g_ooo_backend.backend.d_replace_rs_demand[0]",
+        "arrival_ns": 2.551
+      },
+      {
+        "net": "core.g_ooo_backend.backend.lsq.allocation_request_offer",
+        "arrival_ns": 3.272
+      },
+      {
+        "net": "core.g_ooo_backend.backend.lsq.selected_size[1]",
+        "arrival_ns": 3.557
+      },
+      {
+        "net": "core.g_ooo_backend.backend.lsq.request_owner/size_i[1]",
+        "arrival_ns": 3.557
+      },
+      {
+        "net": "core.g_ooo_backend.backend.lsq.request_owner/valid_o",
+        "arrival_ns": 3.708
+      },
+      {
+        "net": "core.g_ooo_backend.backend.lsq.request_owner/mask_o[1]",
+        "arrival_ns": 3.875
+      },
+      {
+        "net": "core.dcache_req_mask[1]",
+        "arrival_ns": 3.875
+      },
+      {
+        "net": "core.dcache_req_ready",
+        "arrival_ns": 4.3260000000000005
+      },
+      {
+        "net": "core.g_ooo_backend.backend.lsq.request_owner/ready_i",
+        "arrival_ns": 4.3260000000000005
+      },
+      {
+        "net": "core.g_ooo_backend.backend.lsq.request_owner/fire_o",
+        "arrival_ns": 4.351999999999999
+      },
+      {
+        "net": "core.g_ooo_backend.backend.lsq.request_fire",
+        "arrival_ns": 4.351999999999999
+      }
+    ]
+  },
+  "reason": "Area still exceeds 9000; Fmax is below 300 and regresses the prior IPC-passing probe. Skip build/perf/smoke; no accepted profile is changed. Prior IPC does not establish this snapshot IPC."
+}

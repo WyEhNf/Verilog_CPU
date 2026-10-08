@@ -57,6 +57,7 @@ module cpu_core #(
     parameter integer ALLOC_LOAD_SELECTION_BYPASS = 0,
     parameter integer LSQ_ALLOC_LOAD_REQUEST_BYPASS = 0,
     parameter integer LSQ_SAVED_REQUEST_QUERY = 0,
+    parameter integer MMIO_WRITE_CAPACITY_READY = 0,
     parameter integer LSQ_ALLOC_SLOT_PRESELECT = 0,
     parameter integer LSQ_ALLOC_PAYLOAD_PRESELECT = 0,
     parameter integer LSQ_ALLOC_FIRE_DISTRIBUTE = 0,
@@ -201,6 +202,7 @@ module cpu_core #(
     input  wire        mem_i_resp_error,
     output wire        mem_d_req_valid,
     input  wire        mem_d_req_ready,
+    input  wire        mem_d_write_capacity_ready,
     output wire        mem_d_req_write,
     output wire [31:0] mem_d_req_line_addr,
     output wire [127:0] mem_d_req_wdata,
@@ -221,6 +223,9 @@ module cpu_core #(
         GENERATION_WIDTH;
 
     initial begin
+        if((MMIO_WRITE_CAPACITY_READY!=0 && MMIO_WRITE_CAPACITY_READY!=1) ||
+           (MMIO_WRITE_CAPACITY_READY!=0 && LSQ_SAVED_REQUEST_QUERY==0))
+            $fatal(1,"MMIO write capacity ready requires saved LSQ request classification");
         // Fresh allocation requests and borrowed current return credits rely
         // on the cache's saved query owner: response identity cannot depend on
         // a newly offered allocation in the same combinational cycle.
@@ -734,7 +739,14 @@ module cpu_core #(
     always @(posedge clk) if(!reset && LSQ_SAVED_REQUEST_QUERY!=0 && memory_dreq_valid)
         assert(mmio_ready_class==mmio_exit_request) else $fatal(1,"MMIO ready classification mismatch");
 `endif
-    assign memory_dreq_ready = mmio_ready_class ? mem_d_req_ready :
+    wire mmio_capacity_ready=(MMIO_WRITE_CAPACITY_READY!=0) ?
+        mem_d_write_capacity_ready : mem_d_req_ready;
+`ifdef VERILATOR
+    always @(posedge clk) if(!reset && MMIO_WRITE_CAPACITY_READY!=0 && mmio_exit_request)
+        assert(mem_d_write_capacity_ready==mem_d_req_ready)
+            else $fatal(1,"MMIO write capacity differs from routed write ready");
+`endif
+    assign memory_dreq_ready = mmio_ready_class ? mmio_capacity_ready :
                                 normal_memory_dreq_ready;
     generate
     if (DCACHE_REQUEST_PIPELINE != 0) begin : g_dcache_request_pipeline
