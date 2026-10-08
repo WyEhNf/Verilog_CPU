@@ -43,9 +43,39 @@ def save(path, data):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def validate_parameters(text, profile):
+    """Reject unsupported geometry before an expensive HDL elaboration."""
+    defaults = {k: int(v) for k, v in re.findall(r"\b([A-Z][A-Z0-9_]*)\s*=\s*([0-9]+)", text)}
+    overrides = profile["parameters"]
+    for key, value in overrides.items():
+        if key not in defaults or type(value) is not int or value < 0:
+            raise ValueError("Invalid override: " + key)
+    p = defaults | overrides
+    if p["FE_WIDTH"] not in (1, 2, 4) or p["BE_WIDTH"] not in (1, 2, 4):
+        raise ValueError("Frontend/backend widths must be 1, 2 or 4")
+    if not 1 <= p["INT_ISSUE_WIDTH"] <= p["BE_WIDTH"] or not 1 <= p["CDB_WIDTH"] <= p["BE_WIDTH"]:
+        raise ValueError("Issue/CDB width must fit the backend")
+    if p["PHYS_REGS"] <= 32 or p["RS_ENTRIES"] < p["BE_WIDTH"]:
+        raise ValueError("The OoO profile requires spare physical registers and sufficient RS rows")
+    for key in ("ROB_ENTRIES", "LSQ_ENTRIES", "FETCH_QUEUE_DEPTH", "COMPLETION_DEPTH"):
+        if p[key] < p["BE_WIDTH"] or p[key] & (p[key] - 1):
+            raise ValueError("This profile requires a power-of-two capacity >= backend width: " + key)
+    if p["PREDICTOR_COMPACT_BTB_ENTRIES"] not in (16, 32, 64):
+        raise ValueError("The current compact BTB supports 16/32/64 entries")
+    if not 1 <= p["PREDICTOR_HISTORY_BITS"] <= 8 - int(math.log2(p["FE_WIDTH"])):
+        raise ValueError("Predictor history must fit the banked tables")
+    for side in ("I", "D"):
+        ways = p[side + "CACHE_WAYS"]
+        lines = p[side + "CACHE_LINES"]
+        sets = lines // ways if ways else 0
+        if ways not in (1, 2) or lines % ways or sets < 2 or sets & (sets - 1):
+            raise ValueError("Invalid cache geometry: " + side)
+
+
 def prepare(out, profile, host):
     if out.exists():
         raise ValueError("Keep existing candidates; choose a fresh output directory")
+    validate_parameters((ROOT / "rtl/course/student_top.v").read_text(encoding="utf-8"), profile)
     if not (ROOT / "testcases/perf_median/metrics.json").is_file():
         raise ValueError("Initialize the official testcases submodule first")
     for name in ("yosys", "abc", "sta", "verilator"):

@@ -28,7 +28,9 @@
 
 保留原乱序 backend、rename、ROB 连续有序提交、完整 RV32IM；没有选择顺序串行 backend。所有变化只在独立副本中替换顶层对应参数默认数字，其余 RTL 不改。两套配置均尚未获得全部三项指标，因此尚未宣布完成 Tier1/Tier2。
 
-唯一新测试：Tier1 完整课程 `opt` 综合/STA，输出 `F:/CPU2026TierRuns/tier1_compact_20261008`，manifest SHA256 `c7c109f1fe0f6b7afa0421d033323d4ea336b53fb9652ae152890c4579fb7bf6`。使用原生 Windows Yosys0.63/固定 ABC/OpenSTA3.1/五份 ASAP7 RVT TT 与全部实际 FakeRAM；2 ns 映射目标，实际 Fmax 按原课程最低周期搜索。
+首轮 Tier1 课程综合输出 `F:/CPU2026TierRuns/tier1_compact_20261008`，manifest SHA256 `c7c109f1fe0f6b7afa0421d033323d4ea336b53fb9652ae152890c4579fb7bf6`。展开在 `rv32_branch_predictor.v:63` 拒绝不支持的8项 compact BTB；耗时501.13秒，未到综合映射、STA、面积报告或仿真阶段。原失败结果保持不动。准备配置时漏读16/32/64合法值是本轮配置错误，不是硬件指标回退。已改为最小合法16项，并在冻结工具里增加前置几何校验；没有改 RTL 的合法性检查。
+
+修正后的唯一 Tier1 候选为 `F:/CPU2026TierRuns/tier1_compact_btb16_20261008`。继续使用原生 Windows Yosys0.63/固定 ABC/OpenSTA3.1/五份 ASAP7 RVT TT 与全部实际 FakeRAM；2 ns 映射目标，实际 Fmax 按原课程最低周期搜索。只有完整 PPA 通过才继续该候选的构建、六项 IPC 和一个小 correctness。
 
 Tier2 副本 `F:/CPU2026TierRuns/tier2_compact_20261008` 已冻结，尚未开始综合、仿真、正确性或 IPC。`tools/run_tier_candidate.py` 显式分阶段运行、拒绝覆盖已有阶段和源码，记录工具/库/源码/可执行文件身份；构建使用原官方 simulator 与原生 Verilator5.040，Windows time-zero host shim 保持原驱动不变。
 
