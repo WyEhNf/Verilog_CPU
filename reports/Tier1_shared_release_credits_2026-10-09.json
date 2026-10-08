@@ -192,7 +192,7 @@
     "ipc_threshold_passed": false
   },
   "status": "REJECTED_IPC_REGRESSION",
-  "source_commit": null,
+  "source_commit": "15ae9c5c6b667ba892b32794da8dbc2ebb8c8027",
   "manifest_sha256": "1d690aef4c5c5ec2966914e81aae1d40ecc0a40ab138b8351b507a47e5b86c03",
   "run_directory": "F:\\CPU2026TierRuns\\tier1_shared_release_credits_20261009",
   "previous_shared_candidate_geomean_ipc": 0.5480119195194763,
