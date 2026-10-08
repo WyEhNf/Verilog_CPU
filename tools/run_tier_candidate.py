@@ -53,6 +53,8 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["DISPATCH_PIPELINE"] not in (0, 1) or p["DISPATCH_ELASTIC"] not in (0, 1) or (p["DISPATCH_ELASTIC"] and not p["DISPATCH_PIPELINE"]):
+        raise ValueError("Elastic dispatch requires its pipeline; both flags must be 0 or 1")
     if p["FE_WIDTH"] not in (1, 2, 4) or p["BE_WIDTH"] not in (1, 2, 4):
         raise ValueError("Frontend/backend widths must be 1, 2 or 4")
     if not 1 <= p["INT_ISSUE_WIDTH"] <= p["BE_WIDTH"] or not 1 <= p["CDB_WIDTH"] <= p["BE_WIDTH"]:
