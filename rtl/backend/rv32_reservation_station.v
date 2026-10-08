@@ -5,6 +5,7 @@
 // The class-specific instances share this state/selection contract.
 module rv32_reservation_station #(
     parameter integer RELEASE_CREDITS = 0,
+    parameter integer ALLOC_EMPTY_BYPASS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ENTRIES = 8,
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
@@ -682,6 +683,22 @@ end
         ((ISSUE_RECOVERY_CANCEL!=0)?1:0);
     localparam integer ISSUE_DATA_WORDS=(ISSUE_DATA_WIDTH+15)/16;
     localparam integer ISSUE_DATA_LEAVES=1<<$clog2(ENTRIES);
+    // Empty queue fallthrough consumes only actual accepted allocations.
+    // Unissued rows are still captured normally, so a stalled first offer
+    // transitions to the original registered owner with identical payload.
+    wire empty_allocation_issue=(ALLOC_EMPTY_BYPASS!=0) && !reset_i &&
+        !flush_valid_i && occupancy_reg==0;
+    wire [BE_WIDTH-1:0] incoming_ready;
+    wire [ALLOC_COUNT_WIDTH-1:0] incoming_rank [0:BE_WIDTH];
+    assign incoming_rank[0]=0;
+    for(genvar incoming_lane=0;incoming_lane<BE_WIDTH;incoming_lane=incoming_lane+1) begin:g_incoming_ready
+        assign incoming_ready[incoming_lane]=(ALLOC_EMPTY_BYPASS!=0) && alloc_fire_o[incoming_lane] &&
+            alloc_target_live_i[incoming_lane] && alloc_rob_tag_i[incoming_lane*TAG_WIDTH] &&
+            alloc_src1_ready_i[incoming_lane] && alloc_src2_ready_i[incoming_lane];
+        assign incoming_rank[incoming_lane+1]=incoming_rank[incoming_lane]+ALLOC_COUNT_WIDTH'(incoming_ready[incoming_lane]);
+    end
+    initial if(ALLOC_EMPTY_BYPASS!=0 && (ALLOC_STATIC_WRITE==0 || RELEASE_CREDITS!=0))
+        $fatal(1,"Empty RS bypass requires static allocation without release credits");
     genvar issue_lane,issue_row,issue_word,issue_node;
     generate for(issue_lane=0;issue_lane<BE_WIDTH;issue_lane=issue_lane+1) begin:g_issue_payload
         wire [ENTRIES-1:0] selections;
@@ -721,14 +738,39 @@ end
         for(issue_node=1;issue_node<ISSUE_DATA_LEAVES;issue_node=issue_node+1) begin:g_or
             assign payload_tree[issue_node]=payload_tree[2*issue_node] | payload_tree[2*issue_node+1];
         end
-        assign issue_valid_o[issue_lane]=|selections;
+        wire [ISSUE_DATA_WIDTH-1:0] selected_issue_payload;
+        if(ALLOC_EMPTY_BYPASS!=0) begin:g_empty_fallthrough
+            wire [BE_WIDTH-1:0] grants;
+            wire [BE_WIDTH*ISSUE_BASE_DATA_WIDTH-1:0] values;
+            wire fresh_valid;
+            wire [ISSUE_BASE_DATA_WIDTH-1:0] fresh_payload;
+            for(genvar fresh_lane=0;fresh_lane<BE_WIDTH;fresh_lane=fresh_lane+1) begin:g_lane
+                assign grants[fresh_lane]=incoming_ready[fresh_lane] && incoming_rank[fresh_lane]==issue_lane;
+                assign values[fresh_lane*ISSUE_BASE_DATA_WIDTH +: ISSUE_BASE_DATA_WIDTH]={
+                    alloc_op_i[fresh_lane*OP_WIDTH +: OP_WIDTH],alloc_pc_i[fresh_lane*32 +: 32],
+                    alloc_rob_tag_i[fresh_lane*TAG_WIDTH +: TAG_WIDTH],alloc_phys_rd_i[fresh_lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
+                    alloc_src1_value_i[fresh_lane*32 +: 32],alloc_src2_value_i[fresh_lane*32 +: 32],
+                    alloc_store_data_i[fresh_lane*STORE_DATA_WIDTH +: STORE_DATA_WIDTH],
+                    alloc_metadata_i[fresh_lane*METADATA_WIDTH +: METADATA_WIDTH],allocation_slots[fresh_lane]};
+            end
+            rv32_frequency_event_select #(.WIDTH(ISSUE_BASE_DATA_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) fresh_select (
+                .events_i(grants),.values_i(values),.write_o(fresh_valid),.value_o(fresh_payload));
+            // Allocation is inhibited during recovery. Fresh rows have no
+            // old-row recovery qualification/cancel sidebands to inherit.
+            assign selected_issue_payload=empty_allocation_issue ?
+                ISSUE_DATA_WIDTH'(fresh_payload) : payload_tree[1];
+            assign issue_valid_o[issue_lane]=empty_allocation_issue ? fresh_valid : (|selections);
+        end else begin:g_original_registered_issue
+            assign selected_issue_payload=payload_tree[1];
+            assign issue_valid_o[issue_lane]=|selections;
+        end
         if(ISSUE_RECOVERY_CANCEL!=0) begin:g_selected_cancel
-            assign issue_cancel_o[issue_lane]=payload_tree[1][ISSUE_QUALIFIED_DATA_WIDTH];
+            assign issue_cancel_o[issue_lane]=selected_issue_payload[ISSUE_QUALIFIED_DATA_WIDTH];
         end else begin:g_no_cancel
             assign issue_cancel_o[issue_lane]=1'b0;
         end
         if(ISSUE_RECOVERY_QUALIFICATION!=0) begin:g_selected_qualification
-            assign issue_recovery_qualified_o[issue_lane]=payload_tree[1][ISSUE_BASE_DATA_WIDTH];
+            assign issue_recovery_qualified_o[issue_lane]=selected_issue_payload[ISSUE_BASE_DATA_WIDTH];
         end else begin:g_no_qualification
             assign issue_recovery_qualified_o[issue_lane]=1'b0;
         end
@@ -736,7 +778,7 @@ end
             issue_rob_tag_o[issue_lane*TAG_WIDTH +: TAG_WIDTH],issue_phys_rd_o[issue_lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
             issue_src1_value_o[issue_lane*32 +: 32],issue_src2_value_o[issue_lane*32 +: 32],
             issue_store_data_o[issue_lane*STORE_DATA_WIDTH +: STORE_DATA_WIDTH],
-            issue_metadata_o[issue_lane*METADATA_WIDTH +: METADATA_WIDTH],issue_slot_o[issue_lane*SLOT_WIDTH +: SLOT_WIDTH]}=payload_tree[1][0 +: ISSUE_BASE_DATA_WIDTH];
+            issue_metadata_o[issue_lane*METADATA_WIDTH +: METADATA_WIDTH],issue_slot_o[issue_lane*SLOT_WIDTH +: SLOT_WIDTH]}=selected_issue_payload[0 +: ISSUE_BASE_DATA_WIDTH];
     end endgenerate
 
     // Allocate a contiguous prefix and choose the oldest ready entries for

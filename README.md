@@ -211,3 +211,9 @@ The owner policy now also selects L0 SRAM data banks using registered `fast_vali
 有限双发射四行样例通过：分配拍 word load、背压 byte load、一次请求、完整响应标签/物理目的寄存器/值，以及旧 store 和恢复边界。初次包装脚本因期望成功标记错误而报失败，日志中实际 RTL 样例通过；包装标记已修正，没有重复编译/执行。精确冻结输入和限制见 `reports/Tier_shared_alloc_load_request_protocol_2026-10-09.json`。`configs/tier1_shared_alloc_load_request.json` 保留上一最佳共用 Tier1 窗口和缓存，关闭失败的释放资源实验；已做一次 CPU 性能评估（见下段），未做 PPA。
 
 该 Tier1 候选 lint 无 error/latch/UNOPTFLAT，单次构建、六项 perf 的答案和分配请求断言通过。IPC **0.5548055796**（前一共用 owner 配置 **0.5480119195**），各项 cycles **13000 / 24683 / 251415 / 496705 / 9181 / 9214**，六项均改善；仍低于 **0.6000**，所以未运行 PPA 或 CPU smoke，未替换正式配置。记录见 `reports/Tier1_shared_alloc_load_request_2026-10-09.json`。
+
+### 共用 RS 空队列直通（2026-10-09，待测）
+
+`RS_ALLOC_EMPTY_BYPASS=1` 让共用 `rv32_reservation_station` 在队列为空时，按实际接受的分配 lane 中的就绪顺序，直接向现有 ALU/MDU 发射接口提出完整指令。实际发射的项不重复占用 RS；未发射的项，包括首拍背压或未就绪的更老 lane，按原有静态行分配保存，下一拍继续普通队列选择和唤醒。完整 ROB 标签、物理目的寄存器、操作数和 metadata 随同一 payload 发送，不增加独立单发射/双发射后端。要求直接非弹性派遣、无额外 issue stage、静态行分配，并关闭释放资源实验，默认关闭。
+
+一次有限双发射四行样例通过：背压前后完整 payload/标签一致、直接接受后不重复入队、年轻就绪 lane 直通且保留未就绪老 lane、老 lane 的源标签唤醒以及恢复边界。范围与冻结输入见 `reports/Tier_shared_rs_empty_bypass_protocol_2026-10-09.json`。`configs/tier1_shared_empty_rs.json` 为待测参数候选，未替换正式配置。

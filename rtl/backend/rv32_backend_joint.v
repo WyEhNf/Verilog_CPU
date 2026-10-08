@@ -21,6 +21,7 @@ module rv32_backend_joint #(
     // Read the pre-bundle RAT/PRF before admission so a qualified ready load
     // needs only ROB/LSQ capacity. Earlier bundle writers still force RS use.
     parameter integer DIRECT_LOAD_RS_CREDIT = 0,
+    parameter integer RS_ALLOC_EMPTY_BYPASS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
@@ -836,6 +837,10 @@ module rv32_backend_joint #(
             $display("ERROR: load RS credits require current direct credits and allocation-edge load addresses");
             $finish(1);
         end
+        if ((RS_ALLOC_EMPTY_BYPASS!=0 && RS_ALLOC_EMPTY_BYPASS!=1) ||
+            (RS_ALLOC_EMPTY_BYPASS!=0 && (DISPATCH_PIPELINE!=0 || DISPATCH_ELASTIC!=0 ||
+             ISSUE_PIPELINE!=0 || RS_ALLOC_STATIC_WRITE==0 || DIRECT_DISPATCH_RELEASE_CREDITS!=0)))
+            $fatal(1,"Empty RS bypass requires direct static dispatch without release credits");
         if ((LSQ_ALLOC_LOAD_REQUEST_BYPASS!=0 && LSQ_ALLOC_LOAD_REQUEST_BYPASS!=1) ||
             (LSQ_ALLOC_LOAD_REQUEST_BYPASS!=0 && (ALLOC_LOAD_SELECTION_BYPASS==0 || STORE_ALLOC_EARLY_ADDRESS==0)))
             $fatal(1,"Allocation load request bypass requires allocation selection and address");
@@ -2306,7 +2311,7 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] raw_rs_issue_store;
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] raw_rs_issue_metadata;
     wire [BE_WIDTH*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))-1:0] raw_rs_issue_slot;
-    rv32_reservation_station #(.RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_QUALIFICATION(RS_ROW_QUALIFICATION_ACTIVE), .ISSUE_RECOVERY_CANCEL(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) rs (
+    rv32_reservation_station #(.ALLOC_EMPTY_BYPASS(RS_ALLOC_EMPTY_BYPASS), .RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_QUALIFICATION(RS_ROW_QUALIFICATION_ACTIVE), .ISSUE_RECOVERY_CANCEL(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) rs (
         .entry_issue_cancel_i(rs_entry_issue_cancel), .issue_cancel_o(raw_rs_issue_cancel),
         .entry_recovery_qualified_i(rs_entry_recovery_qualified),
         .issue_recovery_qualified_o(raw_rs_issue_recovery_qualified),

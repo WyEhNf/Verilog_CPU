@@ -53,6 +53,10 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["RS_ALLOC_EMPTY_BYPASS"] not in (0,1) or (p["RS_ALLOC_EMPTY_BYPASS"] and
+            (p["DISPATCH_PIPELINE"] or p["DISPATCH_ELASTIC"] or p["ISSUE_PIPELINE"] or
+             not p["RS_ALLOC_STATIC_WRITE"] or p["DIRECT_DISPATCH_RELEASE_CREDITS"])):
+        raise ValueError("Empty RS bypass requires direct static dispatch without release credits")
     if p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] not in (0,1) or (p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] and
             (not p["ALLOC_LOAD_SELECTION_BYPASS"] or not p["STORE_ALLOC_EARLY_ADDRESS"])):
         raise ValueError("Allocation load request bypass requires allocation selection and address")
