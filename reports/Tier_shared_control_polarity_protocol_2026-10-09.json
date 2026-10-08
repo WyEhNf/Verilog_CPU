@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "elapsed_seconds": 10.815934399986872,
+  "results": [
+    {
+      "name": "limited",
+      "status": "PASS",
+      "compile_log_sha256": "3bc5cb918903c23e0ae6384e8f892f381d65df85544ab0c6d8167bd88dbe3864",
+      "simulation_log_sha256": "2b9a0245ad025cfbf3f43fc39e562aab5c65844a24df48735f8c2948cf18d339",
+      "executable_sha256": "708576545e7e7c2f7ac9f2908b34321b15a445c5f052430421284bae8fb6ab99"
+    }
+  ],
+  "input_sha256": {
+    "F:\\CPU2026TierRuns\\control_polarity_sample_20261009\\source\\rtl\\common\\rv32_frequency_inversion.v": "7342316b6cbbd1d8de73e332004f88640f6ded8d409fa16008dfafc0203f1ffe",
+    "F:\\CPU2026TierRuns\\control_polarity_sample_20261009\\source\\rtl\\common\\rv32_frequency_control_tree.v": "75ff2391c14527a812bc37c3ab8833e379a748413a2ab126731815e601711334",
+    "F:\\CPU2026TierRuns\\control_polarity_sample_20261009\\source\\rtl\\common\\rv32_frequency_negative_subtree.v": "c2f23713812b3b1f611edd0af2c7afdeb99bc914e93aa8dbca59ecbc29c12b49",
+    "F:\\CPU2026TierRuns\\control_polarity_sample_20261009\\source\\rtl\\common\\rv32_frequency_polarity_tree.v": "84d224455e1470cd8a1476d1fe6f6ec07f6e33a6daa53f06136a4f5e633d513f",
+    "F:\\CPU2026TierRuns\\control_polarity_sample_20261009\\source\\rtl\\rv32im_defs.vh": "9a3b0637ba166001a67f1d57b0dc7b7c8534290a7cba52a2bec7597d53b63c70",
+    "F:\\CPU2026TierRuns\\control_polarity_sample_20261009\\source\\tb\\unit\\rv32_frequency_polarity_tb.v": "af17d2624bf7a4cd3b64e8a73549a5322fd2e7693841167bc9f58ec5850c982c",
+    "F:\\CPU2026TierRuns\\control_polarity_sample_20261009\\source\\tools\\test_control_polarity_sample.py": "ee37069c09dc5e3d852ebdc8fe4b1f2e8890adb8ac8698ed706c1c12b72bf05f",
+    "F:\\CPU2026CourseTools\\win5040\\source_release\\verilator-5.040\\bin\\verilator_bin.exe": "798b1da737c08a316f63195b6c1a4c9646f118788182fb1165d100a7c1e46661"
+  },
+  "proves_whole_mdu": false,
+  "proves_whole_cpu": false,
+  "claims_cpu_ppa": false,
+  "simulator": "native Verilator two-state, actual structural RTL without WORD_SIM",
+  "scope": "Twelve vectors on WIDTH9/LEAVES4,8,22,64 actual RTL trees, no WORD_SIM shortcut; compares every positive leaf; no whole CPU/perf proof",
+  "run_directory": "F:\\CPU2026TierRuns\\control_polarity_sample_20261009",
+  "report_sha256": "b9632ca8f298f08f2946530252d6b82d03a4c30757aa9c1975e1b1c7354727a1",
+  "accepted_cpu_configuration": false
+}

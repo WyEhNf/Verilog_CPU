@@ -6,6 +6,7 @@
 // 32-bit operand register instead of retaining two complete datapaths.
 module rv32m_mdu_iterative #(
     parameter integer DIVZERO_REMAINDER_REUSE = 0,
+    parameter integer PREFIX_SIGN_CORRECTION = 0,
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
@@ -50,8 +51,18 @@ module rv32m_mdu_iterative #(
         (req_op_i == `RV32IM_OP_MULH);
     wire req_a_negative = req_a_signed && req_src1_i[31];
     wire req_b_negative = req_b_signed && req_src2_i[31];
-    wire [31:0] req_abs_a = req_a_negative ? (~req_src1_i + 32'd1) : req_src1_i;
-    wire [31:0] req_abs_b = req_b_negative ? (~req_src2_i + 32'd1) : req_src2_i;
+    initial if(PREFIX_SIGN_CORRECTION!=0 && PREFIX_SIGN_CORRECTION!=1)
+        $fatal(1,"Prefix sign correction must be 0 or 1");
+    wire [31:0] req_abs_a,req_abs_b;
+    generate if(PREFIX_SIGN_CORRECTION!=0) begin:g_prefix_absolute
+        rv32_frequency_conditional_negate32 a_absolute (
+            .value_i(req_src1_i),.negate_i(req_a_negative),.increment_i(1'b1),.value_o(req_abs_a));
+        rv32_frequency_conditional_negate32 b_absolute (
+            .value_i(req_src2_i),.negate_i(req_b_negative),.increment_i(1'b1),.value_o(req_abs_b));
+    end else begin:g_original_absolute
+        assign req_abs_a=req_a_negative ? (~req_src1_i + 32'd1) : req_src1_i;
+        assign req_abs_b=req_b_negative ? (~req_src2_i + 32'd1) : req_src2_i;
+    end endgenerate
 
     reg busy;
     // One extra completion edge separates iteration from sign correction.
@@ -130,10 +141,16 @@ module rv32m_mdu_iterative #(
     wire [32:0] multiply_upper_sum={shift_state[64]^feedback_sum[32],feedback_sum[31:0]};
     wire division_no_borrow=division_shifted[64] || feedback_sum[32];
     wire [32:0] division_difference={division_shifted[64]^!feedback_sum[32],feedback_sum[31:0]};
-    wire [32:0] finishing_correction=prefix_add32(~finishing_magnitude,32'b0,finishing_increment);
-    wire unused_finishing_correction_bits = &{1'b0, finishing_correction};
-
-    wire [31:0] finishing_corrected=finishing_negate?finishing_correction[31:0]:finishing_magnitude;
+    wire [31:0] finishing_corrected;
+    generate if(PREFIX_SIGN_CORRECTION!=0) begin:g_prefix_finishing
+        rv32_frequency_conditional_negate32 sign_correction (
+            .value_i(finishing_magnitude),.negate_i(finishing_negate),
+            .increment_i(finishing_increment),.value_o(finishing_corrected));
+    end else begin:g_original_finishing
+        wire [32:0] finishing_correction=prefix_add32(~finishing_magnitude,32'b0,finishing_increment);
+        wire unused_finishing_correction_bits = &{1'b0, finishing_correction};
+        assign finishing_corrected=finishing_negate?finishing_correction[31:0]:finishing_magnitude;
+    end endgenerate
     wire operation_is_remainder=(operation==`RV32IM_OP_REM || operation==`RV32IM_OP_REMU);
     wire [31:0] finishing_value=(!mode_mul && divide_zero)?
         (operation_is_remainder?((DIVZERO_REMAINDER_REUSE!=0)?finishing_corrected:original_a):32'hffffffff):

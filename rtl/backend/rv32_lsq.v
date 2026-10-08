@@ -146,6 +146,7 @@ module rv32_lsq #(
     output wire                         dcache_req_unsigned_o,
     output wire [15:0]                  dcache_req_mask_o,
     output wire [127:0]                 dcache_req_wdata_o,
+    output wire [31:0]                  dcache_req_raw_word_o,
     output wire [ROB_TAG_WIDTH-1:0]     dcache_req_rob_tag_o,
     output wire [TAG_WIDTH-1:0]         dcache_req_lsq_tag_o,
 
@@ -1341,7 +1342,7 @@ module rv32_lsq #(
         .rob_tag_i(selected_rob_tag),.lsq_tag_i(selected_lsq_tag),
         .valid_o(dcache_req_valid_o),.load_o(dcache_req_is_load_o),.store_o(dcache_req_is_store_o),
         .unsigned_o(dcache_req_unsigned_o),.fire_o(request_fire),.size_o(dcache_req_size_o),
-        .mask_o(dcache_req_mask_o),.data_o(dcache_req_wdata_o),
+        .mask_o(dcache_req_mask_o),.data_o(dcache_req_wdata_o),.raw_word_o(dcache_req_raw_word_o),
         .rob_tag_o(dcache_req_rob_tag_o),.lsq_tag_o(dcache_req_lsq_tag_o),
         .target_mask_o(target_mask),.forward_mask_o(fwd_mask),.forward_data_o(fwd_data));
 

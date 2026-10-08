@@ -10,7 +10,8 @@
 module rv32_frequency_control_tree #(
     parameter integer WIDTH=1,
     parameter integer LEAVES=4,
-    parameter integer COMPACT_CONTROL=`RV32IM_COMPACT_CONTROL_DEFAULT
+    parameter integer COMPACT_CONTROL=`RV32IM_COMPACT_CONTROL_DEFAULT,
+    parameter integer BALANCED_POLARITY=`RV32IM_BALANCED_POLARITY_DEFAULT
 ) (
     input wire [WIDTH-1:0] signal_i,
     output wire [WIDTH*LEAVES-1:0] views_o
@@ -24,6 +25,9 @@ module rv32_frequency_control_tree #(
         // This is a synthesis policy, with identical values and clock edges.
         // Removing forced keep cells also permits dead source cones to vanish.
         assign views_o={LEAVES{signal_i}};
+    end else if(BALANCED_POLARITY!=0) begin:g_balanced_polarity
+        rv32_frequency_polarity_tree #(.WIDTH(WIDTH),.LEAVES(LEAVES)) tree (
+            .signal_i(signal_i),.views_o(views_o));
     end else begin:g_distributed
     localparam integer CHILDREN=LEAVES>4?4:LEAVES;
     localparam integer BASE_COUNT=LEAVES/CHILDREN;

@@ -8,6 +8,8 @@
 `define RV32IM_ROB_ENTRIES_DEFAULT 32
 // 0 retains explicit fanout trees; 1 lets synthesis optimize compact profiles.
 `define RV32IM_COMPACT_CONTROL_DEFAULT 0
+// Keep bounded control leaves with a balanced alternating-polarity tree.
+`define RV32IM_BALANCED_POLARITY_DEFAULT 0
 
 // Shared scalar widths.
 `define RV32IM_OP_WIDTH 6

@@ -1,0 +1,513 @@
+{
+  "status": "SOURCE_SHAPE_COUNT_ONLY",
+  "input": "F:\\CPU2026TierRuns\\tier1_shared_phased_payload_20261009\\synth\\opt\\elaborated.json",
+  "input_sha256": "4e44ba17ee0182bf1a5ad16782c24de1a7fb9285d819f4b9f7a2be83ba9d0f8c",
+  "reference_source_commit": "1c0a5d2ac29740f60e007b6b0b2e2c1a0b09be09",
+  "theoretical_inverters_saved": 1243,
+  "old_theoretical_inverters": 8478,
+  "shapes": [
+    {
+      "width": 40,
+      "leaves": 8,
+      "instances": 1,
+      "old_inverters_per_bit": 17,
+      "new_inverters_per_bit": 10,
+      "theoretical_inverters_saved": 280
+    },
+    {
+      "width": 28,
+      "leaves": 16,
+      "instances": 1,
+      "old_inverters_per_bit": 25,
+      "new_inverters_per_bit": 20,
+      "theoretical_inverters_saved": 140
+    },
+    {
+      "width": 17,
+      "leaves": 8,
+      "instances": 1,
+      "old_inverters_per_bit": 17,
+      "new_inverters_per_bit": 10,
+      "theoretical_inverters_saved": 119
+    },
+    {
+      "width": 4,
+      "leaves": 8,
+      "instances": 4,
+      "old_inverters_per_bit": 17,
+      "new_inverters_per_bit": 10,
+      "theoretical_inverters_saved": 112
+    },
+    {
+      "width": 8,
+      "leaves": 8,
+      "instances": 2,
+      "old_inverters_per_bit": 17,
+      "new_inverters_per_bit": 10,
+      "theoretical_inverters_saved": 112
+    },
+    {
+      "width": 14,
+      "leaves": 8,
+      "instances": 1,
+      "old_inverters_per_bit": 17,
+      "new_inverters_per_bit": 10,
+      "theoretical_inverters_saved": 98
+    },
+    {
+      "width": 9,
+      "leaves": 16,
+      "instances": 2,
+      "old_inverters_per_bit": 25,
+      "new_inverters_per_bit": 20,
+      "theoretical_inverters_saved": 90
+    },
+    {
+      "width": 5,
+      "leaves": 8,
+      "instances": 2,
+      "old_inverters_per_bit": 17,
+      "new_inverters_per_bit": 10,
+      "theoretical_inverters_saved": 70
+    },
+    {
+      "width": 6,
+      "leaves": 16,
+      "instances": 2,
+      "old_inverters_per_bit": 25,
+      "new_inverters_per_bit": 20,
+      "theoretical_inverters_saved": 60
+    },
+    {
+      "width": 2,
+      "leaves": 8,
+      "instances": 3,
+      "old_inverters_per_bit": 17,
+      "new_inverters_per_bit": 10,
+      "theoretical_inverters_saved": 42
+    },
+    {
+      "width": 3,
+      "leaves": 22,
+      "instances": 1,
+      "old_inverters_per_bit": 43,
+      "new_inverters_per_bit": 31,
+      "theoretical_inverters_saved": 36
+    },
+    {
+      "width": 3,
+      "leaves": 8,
+      "instances": 1,
+      "old_inverters_per_bit": 17,
+      "new_inverters_per_bit": 10,
+      "theoretical_inverters_saved": 21
+    },
+    {
+      "width": 3,
+      "leaves": 6,
+      "instances": 2,
+      "old_inverters_per_bit": 11,
+      "new_inverters_per_bit": 8,
+      "theoretical_inverters_saved": 18
+    },
+    {
+      "width": 12,
+      "leaves": 5,
+      "instances": 1,
+      "old_inverters_per_bit": 8,
+      "new_inverters_per_bit": 7,
+      "theoretical_inverters_saved": 12
+    },
+    {
+      "width": 2,
+      "leaves": 14,
+      "instances": 1,
+      "old_inverters_per_bit": 23,
+      "new_inverters_per_bit": 18,
+      "theoretical_inverters_saved": 10
+    },
+    {
+      "width": 1,
+      "leaves": 16,
+      "instances": 2,
+      "old_inverters_per_bit": 25,
+      "new_inverters_per_bit": 20,
+      "theoretical_inverters_saved": 10
+    },
+    {
+      "width": 2,
+      "leaves": 5,
+      "instances": 3,
+      "old_inverters_per_bit": 8,
+      "new_inverters_per_bit": 7,
+      "theoretical_inverters_saved": 6
+    },
+    {
+      "width": 4,
+      "leaves": 5,
+      "instances": 1,
+      "old_inverters_per_bit": 8,
+      "new_inverters_per_bit": 7,
+      "theoretical_inverters_saved": 4
+    },
+    {
+      "width": 3,
+      "leaves": 5,
+      "instances": 1,
+      "old_inverters_per_bit": 8,
+      "new_inverters_per_bit": 7,
+      "theoretical_inverters_saved": 3
+    },
+    {
+      "width": 1,
+      "leaves": 1,
+      "instances": 23,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 10,
+      "leaves": 1,
+      "instances": 1,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 32,
+      "leaves": 1,
+      "instances": 1,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 3,
+      "leaves": 2,
+      "instances": 11,
+      "old_inverters_per_bit": 3,
+      "new_inverters_per_bit": 3,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 4,
+      "leaves": 1,
+      "instances": 3,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 13,
+      "leaves": 1,
+      "instances": 1,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 2,
+      "leaves": 1,
+      "instances": 20,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 3,
+      "leaves": 1,
+      "instances": 4,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 39,
+      "leaves": 1,
+      "instances": 1,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 4,
+      "leaves": 2,
+      "instances": 10,
+      "old_inverters_per_bit": 3,
+      "new_inverters_per_bit": 3,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 33,
+      "leaves": 2,
+      "instances": 1,
+      "old_inverters_per_bit": 3,
+      "new_inverters_per_bit": 3,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 7,
+      "leaves": 2,
+      "instances": 1,
+      "old_inverters_per_bit": 3,
+      "new_inverters_per_bit": 3,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 31,
+      "leaves": 2,
+      "instances": 1,
+      "old_inverters_per_bit": 3,
+      "new_inverters_per_bit": 3,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 22,
+      "leaves": 4,
+      "instances": 2,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 17,
+      "leaves": 1,
+      "instances": 1,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 31,
+      "leaves": 1,
+      "instances": 1,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 8,
+      "leaves": 1,
+      "instances": 18,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 16,
+      "leaves": 1,
+      "instances": 1,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 32,
+      "leaves": 4,
+      "instances": 6,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 3,
+      "leaves": 4,
+      "instances": 13,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 12,
+      "leaves": 4,
+      "instances": 2,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 10,
+      "leaves": 4,
+      "instances": 1,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 14,
+      "leaves": 4,
+      "instances": 1,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 1,
+      "leaves": 4,
+      "instances": 7,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 11,
+      "leaves": 3,
+      "instances": 2,
+      "old_inverters_per_bit": 4,
+      "new_inverters_per_bit": 4,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 5,
+      "leaves": 4,
+      "instances": 2,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 6,
+      "leaves": 2,
+      "instances": 3,
+      "old_inverters_per_bit": 3,
+      "new_inverters_per_bit": 3,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 11,
+      "leaves": 2,
+      "instances": 4,
+      "old_inverters_per_bit": 3,
+      "new_inverters_per_bit": 3,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 5,
+      "leaves": 1,
+      "instances": 1,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 36,
+      "leaves": 4,
+      "instances": 1,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 7,
+      "leaves": 4,
+      "instances": 5,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 3,
+      "leaves": 3,
+      "instances": 4,
+      "old_inverters_per_bit": 4,
+      "new_inverters_per_bit": 4,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 11,
+      "leaves": 4,
+      "instances": 1,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 28,
+      "leaves": 1,
+      "instances": 2,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 6,
+      "leaves": 1,
+      "instances": 2,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 14,
+      "leaves": 1,
+      "instances": 1,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 2,
+      "leaves": 4,
+      "instances": 2,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 6,
+      "leaves": 4,
+      "instances": 4,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 16,
+      "leaves": 4,
+      "instances": 1,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 18,
+      "leaves": 4,
+      "instances": 1,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 9,
+      "leaves": 4,
+      "instances": 1,
+      "old_inverters_per_bit": 5,
+      "new_inverters_per_bit": 5,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 12,
+      "leaves": 2,
+      "instances": 1,
+      "old_inverters_per_bit": 3,
+      "new_inverters_per_bit": 3,
+      "theoretical_inverters_saved": 0
+    },
+    {
+      "width": 128,
+      "leaves": 1,
+      "instances": 1,
+      "old_inverters_per_bit": 2,
+      "new_inverters_per_bit": 2,
+      "theoretical_inverters_saved": 0
+    }
+  ],
+  "claims_mapped_area": false,
+  "claims_frequency": false,
+  "notes": [
+    "Read an existing elaborated hierarchy; no synthesis, STA or simulator was started for this count.",
+    "One count per instantiated control tree; stops before that tree nested submodules to avoid double counting.",
+    "Analytical inversion counts before mapping, constant/dead-leaf effects and new profile changes; not a measured cell/area saving."
+  ]
+}

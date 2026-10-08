@@ -63,6 +63,7 @@
 ../rtl/common/rv32_frequency_inversion.v
 ../rtl/common/rv32_frequency_negative_subtree.v
 ../rtl/common/rv32_frequency_control_tree.v
+rtl/common/rv32_frequency_polarity_tree.v
 ../rtl/common/rv32_frequency_word_bank.v
 ../rtl/common/rv32_frequency_event_select.v
 ../rtl/common/rv32_frequency_first_two.v
@@ -70,6 +71,7 @@
 ../rtl/common/rv32_frequency_barrel32.v
 ../rtl/common/rv32_frequency_line_extract32.v
 ../rtl/common/rv32_frequency_line_insert32.v
+rtl/common/rv32_frequency_conditional_negate32.v
 ../rtl/common/rv32_execution_recovery_cancel.v
 ../rtl/common/rv32_frequency_add64_select.v
 ../rtl/common/rv32_frequency_add32_select.v

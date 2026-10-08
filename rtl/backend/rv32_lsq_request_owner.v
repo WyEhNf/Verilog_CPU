@@ -24,6 +24,7 @@ module rv32_lsq_request_owner #(
     output wire [1:0] size_o,
     output wire [15:0] mask_o,
     output wire [127:0] data_o,
+    output wire [31:0] raw_word_o,
     output wire [ROB_TAG_WIDTH-1:0] rob_tag_o,
     output wire [TAG_WIDTH-1:0] lsq_tag_o,
     output wire [3:0] target_mask_o,forward_mask_o,
@@ -69,6 +70,8 @@ module rv32_lsq_request_owner #(
     wire [3:0] load_views;
     wire [31:0] relative_data;
     wire [127:0] inserted_data;
+    // Accepted requests alone own this unqualified relative data word.
+    assign raw_word_o=relative_data;
     wire [3:0] relative_mask=load_views[0]?
         (access_mask & ~forward_mask_i):store_mask_i;
     wire [15:0] inserted_mask={12'b0,relative_mask} << address_i[3:0];

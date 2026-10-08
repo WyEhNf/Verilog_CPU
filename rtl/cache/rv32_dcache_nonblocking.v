@@ -24,6 +24,8 @@ module rv32_dcache_nonblocking #(
     // The store remains owned by its MSHR until the memory write response.
     parameter integer STORE_MISS_WRITE_AROUND = 0,
     parameter integer TAG_SRAM = 0,
+    // Relative LSQ word, reconstructed after the existing query capture.
+    parameter integer NARROW_REQUEST_WORD = 0,
     // 0: legacy dynamic writes; 1: flat static enables; 2: functional state banks.
     parameter integer STATIC_UPDATES = 0,
     // Compute set indices on the existing synchronous tag-query capture edge.
@@ -53,6 +55,7 @@ module rv32_dcache_nonblocking #(
     input  wire                     dcache_req_unsigned_i,
     input  wire [15:0]              dcache_req_mask_i,
     input  wire [127:0]             dcache_req_wdata_i,
+    input  wire [31:0]              dcache_req_raw_word_i,
     input  wire [TAG_WIDTH-1:0]     dcache_req_rob_tag_i,
     input  wire [TAG_WIDTH-1:0]     dcache_req_lsq_tag_i,
     output wire                     dcache_resp_valid_o,
@@ -90,6 +93,19 @@ module rv32_dcache_nonblocking #(
     output reg                      event_writeback_o,
     output reg                      event_stall_o
 );
+    initial if((NARROW_REQUEST_WORD!=0 && NARROW_REQUEST_WORD!=1) ||
+               (NARROW_REQUEST_WORD!=0 && TAG_SRAM==0))
+        $fatal(1,"Narrow request word requires synchronous SRAM query");
+`ifdef VERILATOR
+    generate if(NARROW_REQUEST_WORD!=0) begin:g_narrow_input_check
+        wire [127:0] rebuilt;
+        rv32_frequency_line_insert32 insert_check (
+            .value_i(dcache_req_raw_word_i),.offset_i(dcache_req_addr_i[3:0]),.line_o(rebuilt));
+        always @(posedge clk_i) if(!reset_i && dcache_req_valid_i)
+            assert(rebuilt==dcache_req_wdata_i)
+                else $fatal(1,"Narrow request word differs from original valid line payload");
+    end endgenerate
+`endif
     // Shared read views have exactly one selected implementation as their
     // owner. Bank outputs must not share a procedural driver with legacy FFs.
     wire [CACHE_LINES-1:0] valid_bits;
@@ -336,14 +352,28 @@ module rv32_dcache_nonblocking #(
                 !(data_we && ((32'(data_addr)%CACHE_WAYS)==read_way));
         end
         wire [31:0] input_prefetch_line = {dcache_req_addr_i[31:4],4'b0} + 32'd16;
-        localparam integer INPUT_PAYLOAD_WIDTH=181+2*TAG_WIDTH;
-        wire [INPUT_PAYLOAD_WIDTH-1:0] input_payload_saved;
-        rv32_frequency_word_bank #(.WIDTH(INPUT_PAYLOAD_WIDTH)) query_input_owner (
-            .clk_i(clk_i),.write_i(input_fire),
-            .data_i({dcache_req_rob_tag_i,dcache_req_lsq_tag_i,dcache_req_wdata_i,dcache_req_mask_i,dcache_req_addr_i,
-                     dcache_req_is_load_i,dcache_req_is_store_i,dcache_req_size_i,dcache_req_unsigned_i}),
-            .data_o(input_payload_saved));
-        assign {query_rob,query_lsq,query_wdata,query_mask,query_addr,query_load,query_store,query_size,query_unsigned}=input_payload_saved;
+        if(NARROW_REQUEST_WORD!=0) begin:g_narrow_input
+            localparam integer INPUT_PAYLOAD_WIDTH=85+2*TAG_WIDTH;
+            wire [INPUT_PAYLOAD_WIDTH-1:0] input_payload_saved;
+            wire [31:0] query_word;
+            rv32_frequency_word_bank #(.WIDTH(INPUT_PAYLOAD_WIDTH)) query_input_owner (
+                .clk_i(clk_i),.write_i(input_fire),
+                .data_i({dcache_req_rob_tag_i,dcache_req_lsq_tag_i,dcache_req_raw_word_i,dcache_req_mask_i,dcache_req_addr_i,
+                         dcache_req_is_load_i,dcache_req_is_store_i,dcache_req_size_i,dcache_req_unsigned_i}),
+                .data_o(input_payload_saved));
+            assign {query_rob,query_lsq,query_word,query_mask,query_addr,query_load,query_store,query_size,query_unsigned}=input_payload_saved;
+            rv32_frequency_line_insert32 insert_saved (
+                .value_i(query_word),.offset_i(query_addr[3:0]),.line_o(query_wdata));
+        end else begin:g_original_input
+            localparam integer INPUT_PAYLOAD_WIDTH=181+2*TAG_WIDTH;
+            wire [INPUT_PAYLOAD_WIDTH-1:0] input_payload_saved;
+            rv32_frequency_word_bank #(.WIDTH(INPUT_PAYLOAD_WIDTH)) query_input_owner (
+                .clk_i(clk_i),.write_i(input_fire),
+                .data_i({dcache_req_rob_tag_i,dcache_req_lsq_tag_i,dcache_req_wdata_i,dcache_req_mask_i,dcache_req_addr_i,
+                         dcache_req_is_load_i,dcache_req_is_store_i,dcache_req_size_i,dcache_req_unsigned_i}),
+                .data_o(input_payload_saved));
+            assign {query_rob,query_lsq,query_wdata,query_mask,query_addr,query_load,query_store,query_size,query_unsigned}=input_payload_saved;
+        end
         if(REGISTERED_INDEX!=0) begin:g_query_indices
             wire [2*CACHE_INDEX_WIDTH-1:0] saved_indices;
             rv32_frequency_word_bank #(.WIDTH(2*CACHE_INDEX_WIDTH)) index_owner (

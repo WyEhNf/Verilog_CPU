@@ -47,6 +47,10 @@ def validate_parameters(text, profile):
     """Reject unsupported geometry before an expensive HDL elaboration."""
     defaults = {k: int(v) for k, v in re.findall(r"\b([A-Z][A-Z0-9_]*)\s*=\s*([0-9]+)", text)}
     overrides = profile["parameters"]
+    if type(profile.get("balanced_control_tree", 0)) is not int or profile.get("balanced_control_tree", 0) not in (0,1):
+        raise ValueError("Balanced control tree policy must be 0 or 1")
+    if profile.get("balanced_control_tree", 0) and profile.get("compact_control", 0):
+        raise ValueError("Balanced bounded trees and global compact-control aliases are mutually exclusive")
     if type(profile.get("compact_control", 0)) is not int or profile.get("compact_control", 0) not in (0, 1):
         raise ValueError("Compact control policy must be 0 or 1")
     for key, value in overrides.items():
@@ -58,6 +62,9 @@ def validate_parameters(text, profile):
         raise ValueError("Saved LSQ request query requires registered parallel SRAM cache query")
     if p["LSQ_PHASED_DATA_OWNER"] not in (0,1):
         raise ValueError("LSQ phased data owner is 0/1")
+    if p["DCACHE_NARROW_REQUEST_WORD"] not in (0,1) or (p["DCACHE_NARROW_REQUEST_WORD"] and
+            (not p["ENABLE_CACHES"] or p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"] or p["DCACHE_REQUEST_PIPELINE"])):
+        raise ValueError("Narrow cache request requires unpipelined synchronous nonblocking cache query")
     if p["MMIO_SAVED_ROUTE_CLASS"] not in (0,1) or (p["MMIO_SAVED_ROUTE_CLASS"] and not p["LSQ_SAVED_REQUEST_QUERY"]):
         raise ValueError("Saved MMIO routing requires saved LSQ request classification")
     if p["MMIO_WRITE_CAPACITY_READY"] not in (0,1) or (p["MMIO_WRITE_CAPACITY_READY"] and not p["LSQ_SAVED_REQUEST_QUERY"]):
@@ -87,6 +94,8 @@ def validate_parameters(text, profile):
     if p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] not in (0,1) or (p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] and
             (not p["ALLOC_LOAD_SELECTION_BYPASS"] or not p["STORE_ALLOC_EARLY_ADDRESS"])):
         raise ValueError("Allocation load request bypass requires allocation selection and address")
+    if p["MDU_PREFIX_SIGN_CORRECTION"] not in (0,1) or (p["MDU_PREFIX_SIGN_CORRECTION"] and p["MUL_IMPL"]!=2):
+        raise ValueError("Prefix sign correction requires unified iterative MUL_IMPL=2")
     if p["MDU_DIVZERO_REMAINDER_REUSE"] not in (0, 1) or (p["MDU_DIVZERO_REMAINDER_REUSE"] and p["MUL_IMPL"]!=2):
         raise ValueError("MDU remainder reuse is 0/1 and requires unified iterative MUL_IMPL=2")
     if p["FETCH_OWNER_PAYLOAD_SELECT"] not in (0, 1):
@@ -189,6 +198,14 @@ def prepare(out, profile, host):
                                     header.read_text(encoding="utf-8"))
             if count != 1:
                 raise ValueError("Missing compact control policy in " + name)
+            header.write_text(content, encoding="utf-8", newline="")
+    if profile.get("balanced_control_tree", 0):
+        for name in ("rv32im_defs.vh", "rtl/rv32im_defs.vh"):
+            header = source / name
+            content, count = re.subn(r"(`define RV32IM_BALANCED_POLARITY_DEFAULT )0\b", r"\g<1>1",
+                                    header.read_text(encoding="utf-8"))
+            if count != 1:
+                raise ValueError("Missing balanced polarity policy in " + name)
             header.write_text(content, encoding="utf-8", newline="")
     # Submodules have no tracked files in the parent repository's ls-files.
     cases = ROOT / "testcases"
