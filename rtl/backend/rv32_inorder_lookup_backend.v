@@ -159,35 +159,38 @@ module rv32_inorder_lookup_backend #(
     wire sb_pop = sb_valid[sb_head] && sb_done[sb_head];
     wire frontend_load=(FAST_LOAD_DISPATCH!=0) && trace_is_load_i[0] && !trace_is_error_i[0];
     wire [31:0] frontend_load_addr;
-    wire [31:0] checked_load_addr=(frontend_load && !(alu_live && alu_load)) ? frontend_load_addr : alu_addr;
+    wire [31:0] checked_load_addr=FAST_LOAD_DISPATCH!=0 ? frontend_load_addr : alu_addr;
     rv32_frequency_add_simm12 frontend_agu (
         .base_i(src1),.immediate_i(trace_imm_i[11:0]),.sum_o(frontend_load_addr),.class_flags_o());
     reg sb_pick_valid, sb_pick, load_blocked;
-    integer scan;
+    integer sb_scan, load_scan;
     reg scan_sb;
+    // Store arbitration has no dependency on the incoming load address.
     always @* begin
         sb_pick_valid=1'b0;
         sb_pick=sb_head;
-        load_blocked=1'b0;
-        for(scan=0;scan<ROB_ENTRIES;scan=scan+1)
-            if(valid[scan] && stores[scan]) load_blocked=1'b1;
-        for(scan=0;scan<2;scan=scan+1) begin
-            scan_sb=sb_head ^ (scan!=0);
-            if(sb_valid[scan_sb] && !sb_done[scan_sb]) begin
-                if(!sb_sent[scan_sb] || sb_addr[scan_sb][31:4]==checked_load_addr[31:4] ||
-                   sb_addr[scan_sb]==32'h80000000) load_blocked=1'b1;
-                if(!sb_pick_valid && !sb_sent[scan_sb] &&
-                   (sb_addr[scan_sb]!=32'h80000000 || scan==0)) begin
-                    sb_pick_valid=1'b1;
-                    sb_pick=scan_sb;
-                end
+        for(sb_scan=0;sb_scan<2;sb_scan=sb_scan+1) begin
+            scan_sb=sb_head ^ (sb_scan!=0);
+            if(sb_valid[scan_sb] && !sb_done[scan_sb] && !sb_sent[scan_sb] &&
+               !sb_pick_valid && (sb_addr[scan_sb]!=32'h80000000 || sb_scan==0)) begin
+                sb_pick_valid=1'b1;
+                sb_pick=scan_sb;
             end
         end
     end
-    wire older_load_request=alu_live && alu_load && !load_blocked && !sb_pick_valid;
-    wire frontend_load_allowed=!load_blocked && !sb_pick_valid && !(alu_live && alu_load);
-    // Valid does not depend on cache ready. The same accepted edge allocates
-    // the ROB identity and launches the synchronous tag/data query.
+    always @* begin
+        load_blocked=1'b0;
+        for(load_scan=0;load_scan<ROB_ENTRIES;load_scan=load_scan+1)
+            if(valid[load_scan] && stores[load_scan]) load_blocked=1'b1;
+        for(load_scan=0;load_scan<2;load_scan=load_scan+1)
+            if(sb_valid[load_scan] && !sb_done[load_scan] &&
+               (!sb_sent[load_scan] || sb_addr[load_scan][31:4]==checked_load_addr[31:4] ||
+                sb_addr[load_scan]==32'h80000000)) load_blocked=1'b1;
+    end
+    wire older_load_request=(FAST_LOAD_DISPATCH==0) && alu_live && alu_load && !load_blocked && !sb_pick_valid;
+    wire frontend_load_allowed=!load_blocked && !sb_pick_valid;
+    // In fast mode every load bypasses the ALU, whose output cannot contain a
+    // held memory request. Cache READY therefore never controls ALU completion.
     wire frontend_load_request=trace_valid_i[0] && issue_enable && frontend_load && frontend_load_allowed;
     wire load_request=older_load_request || frontend_load_request;
     wire select_frontend_load=frontend_load_request && !older_load_request;
@@ -206,7 +209,7 @@ module rv32_inorder_lookup_backend #(
     assign dcache_req_lsq_tag_o = dcache_req_rob_tag_o;
     assign dcache_resp_ready_o = 1'b1;
     wire sb_send = dcache_req_valid_o && dcache_req_ready_i && sb_pick_valid;
-    assign alu_ready = !alu_load || (older_load_request && dcache_req_ready_i && !halted_o && !error_o);
+    assign alu_ready = (FAST_LOAD_DISPATCH!=0) || !alu_load || (older_load_request && dcache_req_ready_i && !halted_o && !error_o);
 
     // The map names the youngest in-flight architectural writer. Allocation
     // replaces an older writer; retirement clears only an exact generation tag.
@@ -250,7 +253,7 @@ module rv32_inorder_lookup_backend #(
         trace_op_i[0 +: `RV32IM_OP_WIDTH]<=`RV32IM_OP_REMU;
     wire issue_enable = count<CW'(ROB_ENTRIES) && src1_ready && src2_ready && !stop_issue &&
         !halted_o && !error_o && !flush_i && !reset_i && !redirect_valid_o &&
-        (!alu_valid || alu_ready);
+        ((FAST_LOAD_DISPATCH!=0) || !alu_valid || alu_ready);
     assign trace_ready_o = {{(BE_WIDTH-1){1'b0}},issue_enable && (frontend_load ? (frontend_load_allowed && dcache_req_ready_i) : (is_mdu ? mdu_ready : alu_issue_ready))};
     wire input_fire = trace_valid_i[0] && trace_ready_o[0];
     wire [1:0] launch_views;
