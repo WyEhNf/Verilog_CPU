@@ -148,3 +148,26 @@ Tier1 inorder tagfix完整PPA耗时542.349秒，manifest SHA256 `90e3943a5c3cf45
 字段分散源码提交 `dc2e3bf3`，仅修改可选流水后端：架构RF改原频率域array read与分组写索引/使能、每row 16bit word owner；RF初始化valid同样分布至两字。ROB完成旁路和按年龄最后匹配源改原event_select优先选择，每个选择叶驱动16bit数据，最年轻写者的ready仍控制发射，未变WAW/RAW策略。ALU/MDU launch、源使用屏蔽、store结果选择分散控制。ROB结果与store address用word owner写入，store data复用该row的value字段（store不写架构寄存器），省去4×32bit独立store-word状态。转发top已有的SHIFT_SHARED_BARREL给新ALU，不改变默认OoO实例。所有执行响应仍由原完整代际资格检查后写入对应row。
 
 新配置 `configs/tier1_inorder_banked.json` 保留D256、ROB4、31×32架构RF及两个独立代际store槽，改I32/FQ2/WAITERS2，减少前端和等待槽以配合字段控制开销；不缩D-cache、word queue或总线line容量。新模块单独Yosys通用解析退出0；从dc2e3bf3冻结 `F:/CPU2026TierRuns/tier1_inorder_banked_20261008`，一次Verilator5.040原RTL lint退出0，无Error/LATCH/UNOPTFLAT。Tier2 direct PPA完成后顺序开始该候选完整PPA，尚无面积、频率或IPC结果。不把改动的逻辑等值或存储声明缩减当作性能证明。
+
+## Banked inorder PPA 门通过
+
+`F:/CPU2026TierRuns/tier1_inorder_banked_20261008` 完整PPA完成，耗时485.435秒，manifest SHA256 `e97090a69808c12c66018c544887293d5972bea1d215e007d3c83f4a4ddbc325`、report SHA256 `18db45e9ab6dbe58c0cea5daea37564348575ac368a6dc065d0aeb7ecdbe4d39`。面积 `8872.458987999691 μm²`、频率 `355.18557058619496 MHz`；组合 `4524.625979999693`、时序 `2254.3596`、SRAM `2093.473407999998 μm²`。相对上一冻结版面积少约833.254μm²、频率190.55→355.19MHz；这批改动产生实际显著提升，PPA门通过。
+
+该候选只构建一次，33.438秒，exe SHA256 `b8e8aac177951da4a175fd94a513190ce97ad9decaf08c296e1a74b42aad1259`；开始一次六项官方perf，尚不宣称IPC达标。
+
+未测的PHYS_TAG_IMPL切换思路在只读核对后排除：backend已hardcode RS_PHYSICAL_WAKEUP=1，`g_owned_producer_tags`要求PHYS_TAG_IMPL0且RS_PHYSICAL_WAKEUP0，当前标签数组实际不生成；切换不能省下假设的40×TAG_WIDTH寄存器或读mux。没有为这个无效思路新建配置或运行测试。
+
+### Tier1 验收
+
+同一banked冻结源码只跑一次六项官方perf（latency10、2.766秒），所有答案通过，几何平均 `0.6048281090215314`，达0.6000。perf log SHA256 `cf77fd40590d9c8463f30b7d8f4cc34697906a627f7afdebba54a637b6a2374c`。随后只选一个小正确性样本correctness_array_test1，0.442秒通过，log SHA256 `b76d8cbe59d8294b63e53253252aa72c785c9a7bb10a5a8f964de346447a9ac4`。不跑完整正确性套件、不重复perf。
+
+| perf | 官方指令数 | 实测周期 | IPC |
+|---|---:|---:|---:|
+| median | 6961 | 10402 | 0.669198231 |
+| multiply | 21722 | 24170 | 0.898717418 |
+| qsort | 139900 | 235209 | 0.594790165 |
+| rsort | 195719 | 451540 | 0.433447757 |
+| towers | 5278 | 8984 | 0.587488869 |
+| vvadd | 4524 | 8418 | 0.537419815 |
+
+指令分子来自未修改课程metrics.json，周期与答案来自原sim.cpp等待真实AXI exit写响应，不是用RTL debug_instret外推或假定退出周期。Tier1三项门通过，canonical configs/tier1.json选择该参数，旧初始OoO配置另存configs/tier1_initial_ooo.json。验收记录reports/Tier1_verified_2026-10-08.json保存完整阶段记录与source_commit dc2e3bf3。默认Tier3 top资源保持原值，当前只有Tier1完成验收，Tier2和500MHz仍未完成。
