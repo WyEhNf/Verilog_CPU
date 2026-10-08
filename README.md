@@ -235,3 +235,11 @@ The owner policy now also selects L0 SRAM data banks using registered `fast_vali
 为避免继续盲改，使用原空 RS 直通冻结源码（`858e4c1d`）、原 harness，仅把本地仿真的 trace 深度改为 2，单独执行一次 `perf_vvadd` 并读取现有计数器。答案和原 **9160 cycles / 4524 instret** 完全一致。LSQ 满 **4813** 周期，RS 满 **525** 周期，ROB 满 **0** 周期，backend stall **4461** 周期，frontend empty **172** 周期。Dcache requests/hits/misses 为 **1500/972/528**，refills 为 **355**。这些事件可重叠，不可相加；一个短用例也不能证明所有用例的瓶颈。
 
 下一步优先优化真实 LSQ 释放至分配的空拍。观察工具为 `tools/profile_tier_short_case.py`，完整源码身份、二进制、波形与输出哈希见 `reports/Tier1_shared_short_vvadd_observation_2026-10-09.json`。没有重复六项性能或运行 PPA/正确性套件，原冻结目录未修改。
+
+### 共用 LSQ 本拍真实 pop 的资源信用（2026-10-09，待测）
+
+`LSQ_DIRECT_POP_CREDIT=1` 在直接派遣、当前资源计数模式下，给共用 LSQ 实际分配器和 backend 的 LSQ 信用同时增加至多一个**本拍实际释放**的位置。当前 load 只有原始完整标签校验、报告 valid 和 completion ready 真正形成 `metadata_pop` 时才可借用；同样遵守原有 head store ACK 接收规则。复用后的分配覆盖旧响应/pop 的状态写入，原有 occupancy 按真实 pop count 更新，完整 ROB/LSQ 代际宽度不变。物理寄存器、ROB 和 RS 不借用本拍释放，避免与此前无收益的全资源信用策略混合。
+
+该策略要求非阻塞 Dcache 的寄存 tag-query 段（MSHR>1、TAG_SRAM=1），使当前响应来源及身份与新分配请求组合隔离。此前分配拍 load 请求也明确限定到同一路径；不支持的配置由准备脚本和 core 参数检查拒绝。默认关闭。
+
+一个有限双发射四行 LSQ 样例通过：满 load 队列，上报背压不借用，本拍旧响应/报告/pop 与新分配同拍，旧响应不污染新状态；新项已经发出请求并等待时，旧完整 GEN 回复被拒绝，新完整 GEN 回复保留 ROB 身份和值。记录见 `reports/Tier_shared_lsq_current_pop_protocol_2026-10-09.json`。`configs/tier1_shared_lsq_pop_credit.json` 保留原 ROB8/PRF36/RS2/LSQ2、I32/D128 容量和模式 1 空 RS 直通，尚未测 CPU IPC/PPA。

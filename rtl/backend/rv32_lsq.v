@@ -7,6 +7,8 @@
 // accumulate in the queue and drain in program order, allowing the ROB to
 // retire past cache latency while the LSQ doubles as a store buffer.
 module rv32_lsq #(
+    // 0: registered free slots; 1: registered head certificate;
+    // 2: actual head pop, with caller-owned registered response source.
     parameter integer RELEASE_CREDITS = 0,
     parameter integer ALLOC_LOAD_REQUEST_BYPASS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
@@ -1222,6 +1224,8 @@ module rv32_lsq #(
             end
         end
 
+    end
+    always @* begin
         // Preserve lowest physical-slot matching priority, with a balanced selector.
         commit_slot_found=!flush_i && occupancy_reg!=0 && commit_valid_tree[1];
         store_commit_ready_o=commit_slot_found;
@@ -2161,9 +2165,12 @@ module rv32_lsq #(
     // Registered publication/ACK certifies one head pop. Current response,
     // report and cache ACK paths cannot manufacture allocation capacity.
     assign allocation_release_o=(RELEASE_CREDITS!=0) && !reset_i && !flush_i &&
-        !recovery_valid_i && occupancy_reg!=0 && head_valid &&
-        ((head_load && head_complete && head_reported) ||
-         (head_store && head_ack && store_ack_ready_i));
+        !recovery_valid_i && ((RELEASE_CREDITS==2) ? metadata_pop :
+        ((occupancy_reg!=0) && head_valid &&
+         ((head_load && head_complete && head_reported) ||
+          (head_store && head_ack && store_ack_ready_i))));
+    initial if(RELEASE_CREDITS<0 || RELEASE_CREDITS>2)
+        $fatal(1,"LSQ release credit policy must be 0/1/2");
 `ifdef VERILATOR
     always @(posedge clk_i) if(!reset_i && allocation_release_o)
         assert(metadata_pop) else $fatal(1,"LSQ release credit without head pop");

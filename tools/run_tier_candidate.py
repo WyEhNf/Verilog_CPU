@@ -53,6 +53,13 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["LSQ_DIRECT_POP_CREDIT"] not in (0,1) or (p["LSQ_DIRECT_POP_CREDIT"] and
+            (not p["DIRECT_DISPATCH_CURRENT_CREDITS"] or p["DISPATCH_PIPELINE"] or
+             p["DISPATCH_ELASTIC"] or p["DIRECT_DISPATCH_RELEASE_CREDITS"])):
+        raise ValueError("LSQ direct pop credit requires current direct dispatch without other release credits")
+    if ((p["LSQ_DIRECT_POP_CREDIT"] or p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"]) and
+            (p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"])):
+        raise ValueError("Direct LSQ allocation policies require the registered nonblocking cache query")
     if p["RS_ALLOC_EMPTY_BYPASS"] not in (0,1,2) or (p["RS_ALLOC_EMPTY_BYPASS"] and
             (p["DISPATCH_PIPELINE"] or p["DISPATCH_ELASTIC"] or p["ISSUE_PIPELINE"] or
              not p["RS_ALLOC_STATIC_WRITE"] or p["DIRECT_DISPATCH_RELEASE_CREDITS"])):
