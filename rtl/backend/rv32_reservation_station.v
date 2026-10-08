@@ -7,6 +7,8 @@ module rv32_reservation_station #(
     parameter integer RELEASE_CREDITS = 0,
     // 0: saved rows only; 1: empty queue fallthrough; 2: fill unused issue lanes.
     parameter integer ALLOC_EMPTY_BYPASS = 0,
+    // A fresh invalid packet may show lane 0. Actual grants still own validity.
+    parameter integer FRESH_DEFAULT_LANE_DATA = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ENTRIES = 8,
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
@@ -707,6 +709,9 @@ end
     initial if(ALLOC_EMPTY_BYPASS<0 || ALLOC_EMPTY_BYPASS>2 ||
         (ALLOC_EMPTY_BYPASS!=0 && (ALLOC_STATIC_WRITE==0 || RELEASE_CREDITS!=0)))
         $fatal(1,"Empty RS bypass requires static allocation without release credits");
+    initial if(FRESH_DEFAULT_LANE_DATA<0 || FRESH_DEFAULT_LANE_DATA>1 ||
+        (FRESH_DEFAULT_LANE_DATA!=0 && ALLOC_EMPTY_BYPASS==0))
+        $fatal(1,"Fresh default-lane data requires allocation issue bypass");
     genvar issue_lane,issue_row,issue_word,issue_node;
     generate for(issue_lane=0;issue_lane<BE_WIDTH;issue_lane=issue_lane+1) begin:g_issue_payload
         wire [ENTRIES-1:0] selections;
@@ -762,8 +767,37 @@ end
                     alloc_store_data_i[fresh_lane*STORE_DATA_WIDTH +: STORE_DATA_WIDTH],
                     alloc_metadata_i[fresh_lane*METADATA_WIDTH +: METADATA_WIDTH],allocation_slots[fresh_lane]};
             end
-            rv32_frequency_event_select #(.WIDTH(ISSUE_BASE_DATA_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) fresh_select (
-                .events_i(grants),.values_i(values),.write_o(fresh_valid),.value_o(fresh_payload));
+            if(FRESH_DEFAULT_LANE_DATA!=0) begin:g_default_lane_data
+                // Grants are one-hot for this issue rank. Selecting lane 0
+                // when no other grant exists preserves every valid packet,
+                // without waiting for allocation acceptance to zero idle data.
+                // With one lane the payload is simply the candidate input.
+                assign fresh_valid=|grants;
+                if(BE_WIDTH==1) begin:g_one_lane
+                    assign fresh_payload=values;
+                end else begin:g_many_lanes
+                    wire [BE_WIDTH-1:0] data_grants;
+                    wire unused_data_write;
+                    assign data_grants={grants[BE_WIDTH-1:1],!(|grants[BE_WIDTH-1:1])};
+                    rv32_frequency_event_select #(.WIDTH(ISSUE_BASE_DATA_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) fresh_select (
+                        .events_i(data_grants),.values_i(values),.write_o(unused_data_write),.value_o(fresh_payload));
+                end
+`ifdef VERILATOR
+                wire [ISSUE_BASE_DATA_WIDTH-1:0] original_payload;
+                wire original_valid;
+                rv32_frequency_event_select #(.WIDTH(ISSUE_BASE_DATA_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) reference_select (
+                    .events_i(grants),.values_i(values),.write_o(original_valid),.value_o(original_payload));
+                always @(posedge clk_i) if(!reset_i) begin
+                    assert ((grants & (grants-BE_WIDTH'(1)))==0)
+                        else $fatal(1,"Fresh issue rank has multiple owners");
+                    assert (fresh_valid==original_valid && (!fresh_valid || fresh_payload==original_payload))
+                        else $fatal(1,"Fresh default-lane data changed a valid packet");
+                end
+`endif
+            end else begin:g_original_fresh_data
+                rv32_frequency_event_select #(.WIDTH(ISSUE_BASE_DATA_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) fresh_select (
+                    .events_i(grants),.values_i(values),.write_o(fresh_valid),.value_o(fresh_payload));
+            end
             // Allocation is inhibited during recovery. Fresh rows have no
             // old-row recovery qualification/cancel sidebands to inherit.
             // Saved ready rows always occupy the earlier issue lanes. Fresh

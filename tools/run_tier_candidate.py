@@ -87,6 +87,8 @@ def validate_parameters(text, profile):
     if ((p["LSQ_DIRECT_POP_CREDIT"] or p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"]) and
             (p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"])):
         raise ValueError("Direct LSQ allocation policies require the registered nonblocking cache query")
+    if p["RS_FRESH_DEFAULT_LANE_DATA"] not in (0,1) or (p["RS_FRESH_DEFAULT_LANE_DATA"] and not p["RS_ALLOC_EMPTY_BYPASS"]):
+        raise ValueError("Fresh default-lane data requires RS allocation issue bypass")
     if p["RS_ALLOC_EMPTY_BYPASS"] not in (0,1,2) or (p["RS_ALLOC_EMPTY_BYPASS"] and
             (p["DISPATCH_PIPELINE"] or p["DISPATCH_ELASTIC"] or p["ISSUE_PIPELINE"] or
              not p["RS_ALLOC_STATIC_WRITE"] or p["DIRECT_DISPATCH_RELEASE_CREDITS"])):
