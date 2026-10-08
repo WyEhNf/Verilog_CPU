@@ -126,3 +126,5 @@ Tier2 balanced随后只跑一次六项官方perf（11.793秒，latency10），�
 | vvadd | 4524 | 7387 | 0.612427237 |
 
 该候选比D128 micro的geomean提高约5.7%，仍不足达标；剩余面积余量约853μm²，不能仅凭余量宣称D512可达。Tier1 inorder branchfix副本在这次perf完成后顺序开始完整PPA，保留默认Tier3原资源与执行路径。
+
+下一项Tier2结构候选 `configs/tier2_direct_memory.json` 保留balanced的ROB16/PRF40/RS3/LSQ8、I64及128项方向表，改用已经存在的直接dispatch分支（PIPELINE0/ELASTIC0），移除两row×两lane、每lane约160bit+tag的D包及其选择/恢复逻辑，为D256→512留出面积。已有32bit零store字段及compact target等会被优化，不能直接把700个声明bit都换算为实际面积。该分支关闭依赖弹性D包的fast-store资格，因此store吞吐与ready/PRF链频率仍可能受损；不把状态减少或周期提前宣称为实测收益。未缩减ROB/物理寄存器/LSQ，也不全局取消控制缓冲。候选尚未综合或CPU测试，默认Tier3的PIPELINE1/ELASTIC1与D1024不变。
