@@ -101,3 +101,28 @@ Tier1下一批 `configs/tier1_micro_frontend.json` 在micro配置上把I64→32�
 这个结果改变后续方向：仅靠缩容量的单发射乱序候选仍不能同时达成三项门槛，需要减少后端流水/控制成本，为缓存与在途指令留出空间。已排除无效的completion depth缩减思路：当前 `COMPLETION_BYPASS=2` 已不存completion FIFO，改变深度不会提供期望的面积收益，因此不为它单独测试。Tier2 balanced副本 `F:/CPU2026TierRuns/tier2_balanced_memory_20261008` 在本次Tier1 perf结束后开始完整PPA，目前没有完整指标。
 
 额外暴露已有 backend 的 `DISPATCH_PIPELINE` 到core/top，默认1还原此前hardcoded1，未启用直接分发。可选0必须同时关闭`DISPATCH_ELASTIC`，由冻结前校验拒绝矛盾组合。它只开放已有direct dispatch分支供后续容量与周期优化；这条分支也会关闭依赖弹性D包的fast-store shortcut，因此不能宣称性能自动改善。尚无直接分发候选测试，不改当前在测副本；默认Tier3保留原D pipeline和fast-store实现。
+
+## Tier2 balanced PPA 与 Tier1 流水单发射候选
+
+Tier2 balanced冻结源来自 `326142d4`，manifest SHA256 `420774aa713ef8ce634570bb9c3f6332a115dc5c375f171886d573abf2831c53`。完整PPA耗时815.657秒，面积 `17146.600825013506 μm²`、频率 `353.5911602209945 MHz`，组合 `10673.449380013504`、时序 `4199.6232`、SRAM `2273.528244999998 μm²`。report SHA256 `595fe7a028be42400368896a8af5243bd8150946bda883bfbed124e407724dba`。面积与频率门通过，一次构建67.696秒，可执行文件SHA256 `5cbdab2341af3a31002a3bda6fadff19b4d456b806c9b80b6205e9fa03d02181`；开始一次官方六项perf。
+
+针对Tier1容量缩减后的IPC不足，新增 `rtl/backend/rv32_inorder_backend.v`，仅 `SERIAL_BACKEND=2` 启用；原0乱序及1串行后端保留。单发射按序读架构RF、发射与退休，4项完成队列允许独立ALU在旧load/MDU未完成时前进。每个源扫描按年龄排序的在途写者，最年轻匹配写者决定ready/value，覆盖WAW与RAW；ALU/MDU/load响应以完整valid/slot/generation身份匹配并旁路。分支结果在下一条分配前解决，重定向同边沿禁止分配，不取消更老load/MDU；因此没有已发射的更年轻工作需要回滚。
+
+两项已提交store缓冲保留地址、原32位word、size及独立generation，接收ack后才回收，不依赖已复用的ROB身份。load等更老未提交store，且不能越过未发送store、同16B line的未完成store或MMIO；不同line普通load可以在旧store发送后继续。MMIO只在store缓冲最老行发送，halt等待缓冲排空；store字节mask与128位payload按原cache接口展开。该结构复用原ALU与32步共享迭代MDU，无ISA、FakeRAM或AXI时钟边沿替换。
+
+冻结 `F:/CPU2026TierRuns/tier1_inorder_memory_20261008` 时修改尚在暂存区，manifest base为398bc837但每文件实际SHA均记录；保留该首份快照。第一次lint调用因PowerShell把未引用的 `-I.` 拆分而未进入HDL检查，修正为Python参数数组后lint退出0，但发现分支反馈经过alu_fire/cache-ready与frontend/predictor/epoch形成组合循环告警。分支不可能是load，故分支feedback/redirect直接使用已完整验证的alu_live与branch位，移除冗余内存ready依赖。没有对首份快照综合或CPU测试。
+
+修正源码提交 `6125aff4` 后冻结 `F:/CPU2026TierRuns/tier1_inorder_memory_branchfix_20261008`，一次Verilator5.040原RTL lint退出0，无UNOPTFLAT、LATCH或Error。仍保留未使用执行输出和原参数宽度类告警；静态lint不代替功能验证。新profile用I64/FQ4/D256/MSHRD2/WAITERS4，FE1/BE1/ROB4；64项方向表、4项间接BTB与direct-target模式1，原OOO indexed-history模式2拒绝用于此后端。保留原前端response bypass/local PC/redirect request及Dcache word response，以避免串行模式1的禁用条件限制流水吞吐；默认0与原1的这些条件值保持相同。当前尚未综合、构建或测IPC。
+
+Tier2 balanced随后只跑一次六项官方perf（11.793秒，latency10），答案全部通过，IPC几何平均 `0.770462340024059`，仍低于0.845。log SHA256 `95d756f686699e079a337e58bc79505e3dfd496566ad486cdf79c541a2f0bc07`。不验收Tier2、不新增smoke；没有把独立Dcache容量因素结果相乘作为该组合的达标证据。
+
+| perf | 动态指令 | 周期 | IPC |
+|---|---:|---:|---:|
+| median | 6961 | 8777 | 0.793095591 |
+| multiply | 21722 | 19135 | 1.135197282 |
+| qsort | 139900 | 190952 | 0.732644853 |
+| rsort | 195719 | 356183 | 0.549490009 |
+| towers | 5278 | 5601 | 0.942331726 |
+| vvadd | 4524 | 7387 | 0.612427237 |
+
+该候选比D128 micro的geomean提高约5.7%，仍不足达标；剩余面积余量约853μm²，不能仅凭余量宣称D512可达。Tier1 inorder branchfix副本在这次perf完成后顺序开始完整PPA，保留默认Tier3原资源与执行路径。
