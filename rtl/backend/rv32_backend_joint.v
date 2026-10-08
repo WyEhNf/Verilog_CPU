@@ -15,6 +15,9 @@ module rv32_backend_joint #(
     // already bound admission on this edge; an extra credit register only
     // delays reuse after a release. The pipelined policy stays unchanged.
     parameter integer DIRECT_DISPATCH_CURRENT_CREDITS = 0,
+    // Read the pre-bundle RAT/PRF before admission so a qualified ready load
+    // needs only ROB/LSQ capacity. Earlier bundle writers still force RS use.
+    parameter integer DIRECT_LOAD_RS_CREDIT = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
@@ -243,7 +246,9 @@ module rv32_backend_joint #(
     wire [BE_WIDTH-1:0] dec_rd_we = trace_rd_we_i;
     wire [BE_WIDTH-1:0] dec_rs1_used = trace_rs1_used_i;
     wire [BE_WIDTH-1:0] dec_rs2_used = trace_rs2_used_i;
-    wire [BE_WIDTH-1:0] dec_rs_need = trace_valid_i;
+    wire [BE_WIDTH-1:0] preview_load_without_agu;
+    wire [2*BE_WIDTH*PAW-1:0] preview_read_phys;
+    wire [BE_WIDTH-1:0] dec_rs_need = trace_valid_i & ~preview_load_without_agu;
     wire [BE_WIDTH-1:0] dec_lsq_need = trace_is_load_i | trace_is_store_i;
     wire [(BE_WIDTH*5)-1:0] dec_rd = trace_rd_i;
     wire [(BE_WIDTH*5)-1:0] dec_rs1 = trace_rs1_i;
@@ -815,6 +820,13 @@ module rv32_backend_joint #(
         assign shared_store_addr = 32'b0;
     end endgenerate
     initial begin
+        if ((DIRECT_LOAD_RS_CREDIT!=0 && DIRECT_LOAD_RS_CREDIT!=1) ||
+            (DIRECT_LOAD_RS_CREDIT!=0 && (DIRECT_DISPATCH_CURRENT_CREDITS==0 ||
+             DISPATCH_PIPELINE!=0 || DISPATCH_ELASTIC!=0 || EARLY_LOAD_ADDRESS<2 ||
+             EARLY_STORE_ADDRESS==0 || STORE_ALLOC_EARLY_ADDRESS==0))) begin
+            $display("ERROR: load RS credits require current direct credits and allocation-edge load addresses");
+            $finish(1);
+        end
         if ((DIRECT_DISPATCH_CURRENT_CREDITS!=0 && DIRECT_DISPATCH_CURRENT_CREDITS!=1) ||
             (DIRECT_DISPATCH_CURRENT_CREDITS!=0 && (DISPATCH_PIPELINE!=0 || DISPATCH_ELASTIC!=0))) begin
             $display("ERROR: current queue credits require direct nonelastic dispatch");
@@ -1193,6 +1205,38 @@ module rv32_backend_joint #(
     localparam CURRENT_DISPATCH_CREDITS_ACTIVE =
         (DIRECT_DISPATCH_CURRENT_CREDITS!=0) && (DISPATCH_PIPELINE==0) &&
         (DISPATCH_ELASTIC==0);
+    localparam DIRECT_LOAD_RS_CREDIT_ACTIVE=(DIRECT_LOAD_RS_CREDIT!=0) &&
+        CURRENT_DISPATCH_CREDITS_ACTIVE && (EARLY_LOAD_ADDRESS>=2) &&
+        (EARLY_STORE_ADDRESS!=0) && (STORE_ALLOC_EARLY_ADDRESS!=0);
+    generate if(DIRECT_LOAD_RS_CREDIT_ACTIVE) begin:g_direct_operand_preview
+        for(genvar preview_port=0;preview_port<2*BE_WIDTH;preview_port=preview_port+1) begin:g_port
+            localparam integer PREVIEW_LANE=preview_port/2;
+            wire used=(preview_port%2==0) ? trace_rs1_used_i[PREVIEW_LANE] : trace_rs2_used_i[PREVIEW_LANE];
+            wire [4:0] arch=(preview_port%2==0) ?
+                trace_rs1_i[PREVIEW_LANE*5 +: 5] : trace_rs2_i[PREVIEW_LANE*5 +: 5];
+            wire [PAW-1:0] phys;
+            rv32_frequency_array_read #(.WIDTH(PAW),.ENTRIES(32),.INDEX_WIDTH(5)) rat_preview (
+                .rows_i(rat_state),.index_i(arch),.value_o(phys));
+            assign preview_read_phys[preview_port*PAW +: PAW]=(used && arch!=0) ? phys : PAW'(0);
+        end
+        for(genvar preview_lane=0;preview_lane<BE_WIDTH;preview_lane=preview_lane+1) begin:g_load
+            wire [BE_WIDTH-1:0] older_writer;
+            for(genvar older_lane=0;older_lane<BE_WIDTH;older_lane=older_lane+1) begin:g_dependency
+                // Independent of admission. If this lane is accepted, its
+                // whole earlier prefix was accepted and these RAWs are real.
+                assign older_writer[older_lane]=(older_lane<preview_lane) &&
+                    trace_rd_we_i[older_lane] && trace_rd_i[older_lane*5 +: 5]!=0 &&
+                    trace_rs1_used_i[preview_lane] &&
+                    trace_rd_i[older_lane*5 +: 5]==trace_rs1_i[preview_lane*5 +: 5];
+            end
+            assign preview_load_without_agu[preview_lane]=trace_is_load_i[preview_lane] &&
+                !trace_is_store_i[preview_lane] && !(|older_writer) &&
+                prf_read_ready[2*preview_lane];
+        end
+    end else begin:g_original_operand_admission
+        assign preview_read_phys=0;
+        assign preview_load_without_agu=0;
+    end endgenerate
     // Only count slots already free in registered state. This neither
     // anticipates a same-edge release nor reads an allocator's fire/ready.
     wire [CREDIT_WIDTH-1:0] admission_rob_credit = CURRENT_DISPATCH_CREDITS_ACTIVE ?
@@ -1290,8 +1334,10 @@ module rv32_backend_joint #(
                 assign lsq_alloc_addr[io_lane*32 +: 32]=32'b0;
             end
             assign prf_read_phys[(2*io_lane)*PAW +: PAW] =
+                DIRECT_LOAD_RS_CREDIT_ACTIVE ? preview_read_phys[(2*io_lane)*PAW +: PAW] :
                 d_src1_phys[io_lane*PAW +: PAW];
             assign prf_read_phys[(2*io_lane+1)*PAW +: PAW] =
+                DIRECT_LOAD_RS_CREDIT_ACTIVE ? preview_read_phys[(2*io_lane+1)*PAW +: PAW] :
                 d_src2_phys[io_lane*PAW +: PAW];
             if (RS_ISSUE_METADATA != 0) begin : g_inline_metadata
                 // {unsigned, size, prediction kind, target, taken, immediate}
@@ -1418,7 +1464,7 @@ module rv32_backend_joint #(
         ready_phys_used = 0;
         for (ready_lane = 0; ready_lane < BE_WIDTH; ready_lane = ready_lane + 1) begin
             ready_rob_used = ready_rob_used + 1;
-            ready_rs_used = ready_rs_used + 1;
+            ready_rs_used = ready_rs_used + (preview_load_without_agu[ready_lane] ? 0 : 1);
             if (trace_is_load_i[ready_lane] || trace_is_store_i[ready_lane])
                 ready_lsq_used = ready_lsq_used + 1;
             if (trace_rd_we_i[ready_lane] &&
@@ -1507,6 +1553,13 @@ module rv32_backend_joint #(
     // producer. Elastic mode admits only its actual D resource demand.
     wire [BE_WIDTH-1:0] load_without_agu = (EARLY_LOAD_ADDRESS>=2) ?
         (d_is_load & ~d_is_store & lsq_alloc_addr_valid) : {BE_WIDTH{1'b0}};
+`ifdef VERILATOR
+    generate if(DIRECT_LOAD_RS_CREDIT_ACTIVE) begin:g_check_direct_load_credit
+        always @(posedge clk_i) if(!reset_i && !flush_i &&
+            (|(dispatch_valid & preview_load_without_agu & ~load_without_agu)))
+            $fatal(1,"An admitted load without RS credit must use its authoritative allocation address");
+    end endgenerate
+`endif
 
     localparam PARALLEL_STORE_ADDRESS=(STORE_ALLOC_EARLY_ADDRESS==2) &&
         (STORE_ALLOC_IMM12!=0) && (PRF_READ_MUX_IMPL!=0);

@@ -279,3 +279,16 @@ configs/tier1_shared_window8.json保留FE1/BE1、INT1/CDB1、D128/I32双路cache
 
 
 从cdd8c1f6冻结F:/CPU2026TierRuns/tier1_shared_window8_20261008，manifest SHA256 b1af2e70e8552f150011730a8100aa62cd7bb6dd76abd30fcc96900f0efa9d29。一次原RTL静态lint退出0，无Error/LATCH/UNOPTFLAT，7.025秒，日志SHA256 9a024c69895a2aeacc4f0d41e84085fb4dcedc674498949b85967552c4f0fa3c。原有参数宽度等warning仍在，新信用localparam的WIDTHEXPAND已消失，未声称全部零warning。已顺序启动一次完整PPA，当前仍在运行；未开始构建、perf或CPU smoke。所有已测结果保留各自源码身份，不将旧数值用于扩容候选验收。
+
+
+## 窗口扩容面积失败，未进行 CPU 测试
+
+共享window8候选完整PPA耗时636.567秒，面积9619.738227000465μm²、频率391.13827349121465MHz；组合6008.155560000463、时序2368.6668、SRAM1242.9158670000008μm²。report SHA256 613046ec44443a92588ff8a290fd3604e953bc4eb35ac46a5fbf519dcda647ec，log SHA256 cf456d45282b506fe5a9ad330cc2c56ebc36fb673cd17a86f3587b1715b06cd4。面积超过9000，因此跳过构建/perf/smoke，未替代任何验收配置。阶段记录在Tier1_shared_window8_2026-10-08.json。不能把额外队列的容量收益当作实测IPC，不能乘历史单因素结果作达标推断。
+
+## 共享预读操作数与 ready-load RS 信用（待测）
+
+DIRECT_LOAD_RS_CREDIT默认0，1只适用于当前信用、direct nonelastic dispatch及已启用allocation-edge load address。每个读口用共享RAT的当前映射和原PRF读网络在资源分配前预读；与之前相同的ready/WB旁路/真实SRAM值不变。每lane检查所有更早原始lane的非零rd写者；有同bundle RAW时，保守要求RS槽，实际rename仍按最年轻在途写者分配物理ID，原依赖循环强制其ready为false，等待正确物理写回。没有RAW的接受lane，其preview源ID与实际rename源ID一致，读值/地址完全相同。未使用的源及x0预读P0。
+
+ready且无RAW的load在trace_ready/rename两处都不消耗RS信用，仍必须有ROB、LSQ和目的物理寄存器容量。实际LSQ地址有效与原load_without_agu仍控制资源和完成；Verilator边沿断言检查实际被接受且免RS信用的load必须具有权威分配地址。预读只读取寄存RAT和原PRF ready，没有读取rename_valid/alloc_fire，避免把分配资格反馈到预读。普通路径和默认Tier3都保持开关0。BE1/2/4都使用同一循环和同一CPU/backend，未引入宽度专用实现。
+
+下一候选configs/tier1_shared_load_window8.json沿用新RO8/PRF40，但LSQ保留已测credit候选的2槽。启用预读信用，保留I32/D128总cache容量；I/D采用已支持的单way几何，省去第二way的查询/端口/替换控制，为较大ROB留面积。它的关联度变化可能影响冲突，不能预先声称IPC提高或全指标不回退；只在完整同源码门槛和非回退证据成立后才会验收。此配置仍为未测候选，不切canonical、不改变默认Tier3资源。尚未冻结或测试。

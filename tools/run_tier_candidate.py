@@ -61,6 +61,10 @@ def validate_parameters(text, profile):
         raise ValueError("Elastic dispatch requires its pipeline; both flags must be 0 or 1")
     if p["DIRECT_DISPATCH_CURRENT_CREDITS"] not in (0, 1) or (p["DIRECT_DISPATCH_CURRENT_CREDITS"] and (p["DISPATCH_PIPELINE"] or p["DISPATCH_ELASTIC"])):
         raise ValueError("Current credits require direct nonelastic dispatch")
+    if p["DIRECT_LOAD_RS_CREDIT"] not in (0, 1) or (p["DIRECT_LOAD_RS_CREDIT"] and
+            (not p["DIRECT_DISPATCH_CURRENT_CREDITS"] or p["DISPATCH_PIPELINE"] or p["DISPATCH_ELASTIC"] or
+             p["EARLY_LOAD_ADDRESS"] < 2 or not p["EARLY_STORE_ADDRESS"] or not p["STORE_ALLOC_EARLY_ADDRESS"])):
+        raise ValueError("Load RS credits require current direct credits and allocation-edge load addresses")
     if p["FE_WIDTH"] not in (1, 2, 4) or p["BE_WIDTH"] not in (1, 2, 4):
         raise ValueError("Frontend/backend widths must be 1, 2 or 4")
     if not 1 <= p["INT_ISSUE_WIDTH"] <= p["BE_WIDTH"] or not 1 <= p["CDB_WIDTH"] <= p["BE_WIDTH"]:
