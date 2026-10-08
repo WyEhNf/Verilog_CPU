@@ -276,3 +276,6 @@ PPA门通过后构建一次41.377秒，exe SHA256 267449662812413acdd72eb3e0e43e
 ## 保留共享数据通路的窗口扩容（待测）
 
 configs/tier1_shared_window8.json保留FE1/BE1、INT1/CDB1、D128/I32双路cache、RS2、FQ2、直接分配/当前信用及真实同步PRF SRAM，仅ROB4→8、PHYS36→40、LSQ2→4。前一个候选释放信用滞后已经消除但IPC不足；增加重命名可用目的寄存器、两倍ROB/内存窗口，让更多独立操作跨越load等待，同时没有新增单发射专用实现。不是用每个参数的历史单因素数值乘出预测结果；真实面积、频率和IPC仍须同一冻结配置验证。此次扩容只属于未验收候选，不改变默认Tier3资源、参数或canonical Tier1。顺带把信用活跃常量改为布尔localparam，修复新WIDTHEXPAND，逻辑取值/时序不变；先前冻结副本不修改、不重测。
+
+
+从cdd8c1f6冻结F:/CPU2026TierRuns/tier1_shared_window8_20261008，manifest SHA256 b1af2e70e8552f150011730a8100aa62cd7bb6dd76abd30fcc96900f0efa9d29。一次原RTL静态lint退出0，无Error/LATCH/UNOPTFLAT，7.025秒，日志SHA256 9a024c69895a2aeacc4f0d41e84085fb4dcedc674498949b85967552c4f0fa3c。原有参数宽度等warning仍在，新信用localparam的WIDTHEXPAND已消失，未声称全部零warning。已顺序启动一次完整PPA，当前仍在运行；未开始构建、perf或CPU smoke。所有已测结果保留各自源码身份，不将旧数值用于扩容候选验收。
