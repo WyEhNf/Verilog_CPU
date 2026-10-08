@@ -53,12 +53,14 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
-    if p["SERIAL_BACKEND"] not in (0, 1, 2):
-        raise ValueError("Backend must be OoO(0), original serial(1), or pipelined inorder(2)")
+    if p["SERIAL_BACKEND"] not in (0, 1, 2, 3):
+        raise ValueError("Backend must be OoO(0), original serial(1), pipelined inorder(2), or lookup inorder(3)")
     if p["SERIAL_BACKEND"] != 0 and p["PREDICTOR_DIRECT_BRANCH_TARGET"] == 2:
         raise ValueError("Indexed-history metadata requires the OoO backend")
     if p["SERIAL_BACKEND"] == 2 and (p["BE_WIDTH"] != 1 or p["FE_WIDTH"] != 1):
         raise ValueError("The pipelined inorder profile currently requires FE1/BE1")
+    if p["SERIAL_BACKEND"] == 3 and (p["BE_WIDTH"] != 1 or p["DCACHE_TAG_SRAM"] != 1 or p["DCACHE_WORD_RESPONSE"] != 1):
+        raise ValueError("Lookup inorder requires BE1 and synchronous tag/word-response D-cache")
     if p["DISPATCH_PIPELINE"] not in (0, 1) or p["DISPATCH_ELASTIC"] not in (0, 1) or (p["DISPATCH_ELASTIC"] and not p["DISPATCH_PIPELINE"]):
         raise ValueError("Elastic dispatch requires its pipeline; both flags must be 0 or 1")
     if p["FE_WIDTH"] not in (1, 2, 4) or p["BE_WIDTH"] not in (1, 2, 4):

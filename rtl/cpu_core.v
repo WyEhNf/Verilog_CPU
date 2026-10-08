@@ -198,6 +198,11 @@ module cpu_core #(
         GENERATION_WIDTH;
 
     initial begin
+        if (SERIAL_BACKEND == 3 &&
+            (BE_WIDTH != 1 || DCACHE_TAG_SRAM != 1 || DCACHE_WORD_RESPONSE != 1 || ENABLE_CACHES == 0)) begin
+            $display("ERROR: lookup inorder requires BE1 and synchronous tag/word-response cache");
+            $finish(1);
+        end
         if ((RS_ISSUE_METADATA != 0 && RS_ISSUE_METADATA != 1) ||
             (EARLY_STORE_ADDRESS < 0 || EARLY_STORE_ADDRESS > 2) ||
             (RAT_RECOVERY_IMPL != 0 && RAT_RECOVERY_IMPL != 1)) begin
@@ -1187,6 +1192,42 @@ end
     assign branch_recovery_history = 8'b0;
     if(SERIAL_BACKEND==2) begin:g_pipelined
     rv32_inorder_backend #(.ROB_ENTRIES(ROB_ENTRIES), .BE_WIDTH(BE_WIDTH), .SHIFT_IMPL(SHIFT_IMPL),
+        .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL),
+        .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
+        .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
+        .trace_ready_o(trace_ready), .trace_pc_i(trace_pc), .trace_inst_i(trace_inst),
+        .trace_op_i(backend_op), .trace_imm_i(dec_imm), .trace_rd_i(dec_rd), .trace_rs1_i(backend_rs1),
+        .trace_rs2_i(backend_rs2), .trace_rd_we_i(dec_rd_we), .trace_rs1_used_i(backend_rs1_used),
+        .trace_rs2_used_i(dec_rs2_used & ~is_halt_trace), .trace_is_load_i(dec_load), .trace_is_store_i(dec_store),
+        .trace_is_branch_i(dec_branch | dec_jump), .trace_is_halt_i(is_halt_trace),
+        .trace_is_error_i(trace_valid & ~dec_legal), .trace_mem_size_i(dec_mem_size),
+        .trace_mem_unsigned_i(dec_mem_unsigned), .trace_store_data_i({BE_WIDTH*128{1'b0}}),
+        .trace_pred_taken_i(trace_pred_taken), .trace_pred_target_i(trace_pred_target),
+        .trace_pred_kind_i(trace_pred_kind), .dcache_req_valid_o(dcache_req_valid),
+        .dcache_req_ready_i(dcache_req_ready), .dcache_req_is_load_o(dcache_req_load),
+        .dcache_req_is_store_o(dcache_req_store), .dcache_req_addr_o(dcache_req_addr),
+        .dcache_req_size_o(dcache_req_size), .dcache_req_unsigned_o(dcache_req_unsigned),
+        .dcache_req_mask_o(dcache_req_mask), .dcache_req_wdata_o(dcache_req_wdata),
+        .dcache_req_rob_tag_o(dcache_req_rob_tag), .dcache_req_lsq_tag_o(dcache_req_lsq_tag),
+        .dcache_resp_valid_i(dcache_resp_valid), .dcache_resp_ready_o(dcache_resp_ready),
+        .dcache_resp_lsq_tag_i(dcache_resp_lsq_tag), .dcache_resp_addr_i(dcache_resp_addr),
+        .dcache_resp_line_data_i(dcache_resp_line), .dcache_resp_word_data_i(dcache_resp_word),
+        .dcache_resp_line_valid_i(dcache_resp_line_valid), .dcache_resp_error_i(dcache_resp_error),
+        .dcache_store_ack_valid_i(dcache_store_ack_valid), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag),
+        .dcache_store_ack_error_i(dcache_store_ack_error), .commit_ready_i(commit_ready),
+        .commit_valid_o(commit_valid), .commit_pc_o(commit_pc), .commit_inst_o(commit_inst),
+        .commit_rd_o(commit_rd), .commit_rd_we_o(commit_rd_we), .commit_value_o(commit_value),
+        .commit_is_store_o(commit_is_store), .commit_store_addr_o(commit_store_addr),
+        .commit_store_mask_o(commit_store_mask), .commit_store_data_o(commit_store_data),
+        .commit_tag_o(commit_tag), .redirect_valid_o(redirect_valid), .redirect_pc_o(redirect_pc),
+        .redirect_epoch_o(redirect_epoch), .halted_o(halted), .error_o(error),
+        .return_value_o(return_value), .branch_feedback_valid_o(branch_feedback_valid),
+        .branch_feedback_pc_o(branch_feedback_pc), .branch_feedback_kind_o(branch_feedback_kind),
+        .branch_feedback_taken_o(branch_feedback_taken), .branch_feedback_target_o(branch_feedback_target),
+        .branch_feedback_pred_taken_o(branch_feedback_pred_taken), .branch_feedback_pred_target_o(branch_feedback_pred_target)
+    );
+    end else if(SERIAL_BACKEND==3) begin:g_lookup
+    rv32_inorder_lookup_backend #(.ROB_ENTRIES(ROB_ENTRIES), .BE_WIDTH(BE_WIDTH), .SHIFT_IMPL(SHIFT_IMPL),
         .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL),
         .TAG_WIDTH(ROB_TAG_WIDTH)) backend (
         .clk_i(clk), .reset_i(reset), .flush_i(1'b0), .trace_valid_i(trace_valid),
