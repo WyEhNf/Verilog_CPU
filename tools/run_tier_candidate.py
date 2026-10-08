@@ -63,7 +63,7 @@ def validate_parameters(text, profile):
     if p["LSQ_PHASED_DATA_OWNER"] not in (0,1):
         raise ValueError("LSQ phased data owner is 0/1")
     if p["DCACHE_NARROW_REQUEST_WORD"] not in (0,1) or (p["DCACHE_NARROW_REQUEST_WORD"] and
-            (not p["ENABLE_CACHES"] or p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"] or p["DCACHE_REQUEST_PIPELINE"])):
+            (p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"] or p["DCACHE_REQUEST_PIPELINE"])):
         raise ValueError("Narrow cache request requires unpipelined synchronous nonblocking cache query")
     if p["MMIO_SAVED_ROUTE_CLASS"] not in (0,1) or (p["MMIO_SAVED_ROUTE_CLASS"] and not p["LSQ_SAVED_REQUEST_QUERY"]):
         raise ValueError("Saved MMIO routing requires saved LSQ request classification")
