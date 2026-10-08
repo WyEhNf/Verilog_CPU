@@ -56,8 +56,12 @@ def validate_parameters(text, profile):
     if p["LSQ_SAVED_REQUEST_QUERY"] not in (0,1) or (p["LSQ_SAVED_REQUEST_QUERY"] and
             (p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"] or not p["DCACHE_WAY_PARALLEL_QUERY"])):
         raise ValueError("Saved LSQ request query requires registered parallel SRAM cache query")
+    if p["LSQ_PHASED_DATA_OWNER"] not in (0,1):
+        raise ValueError("LSQ phased data owner is 0/1")
     if p["MMIO_WRITE_CAPACITY_READY"] not in (0,1) or (p["MMIO_WRITE_CAPACITY_READY"] and not p["LSQ_SAVED_REQUEST_QUERY"]):
         raise ValueError("MMIO write capacity ready requires saved LSQ request classification")
+    if p["PRF_SRAM_RAW_WRITE"] not in (0,1) or (p["PRF_SRAM_RAW_WRITE"] and not p["PRF_VALUE_SRAM"]):
+        raise ValueError("PRF raw write data requires SRAM storage")
     if p["PRF_SRAM_PORT_FORWARD"] not in (0,1) or (p["PRF_SRAM_PORT_FORWARD"] and
             (not p["PRF_VALUE_SRAM"] or not p["PRF_READ_MUX_IMPL"])):
         raise ValueError("PRF SRAM port forwarding requires SRAM and parallel reads")

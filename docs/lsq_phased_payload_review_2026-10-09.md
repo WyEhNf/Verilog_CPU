@@ -50,3 +50,16 @@ If safe and useful, three banks becoming one remove 64 FF bits per LSQ row
 (256 bits for LSQ4). This is a structural count only; selector changes and
 mapping may offset savings. No area, frequency or IPC improvement is claimed.
 It remains part of the same parameterized LSQ at every width.
+
+## Implementation follow-through
+
+The review above is preserved as the pre-implementation argument. The earlier
+PRF-port/saved-query PPA completed at 9352.973215 um2 / 212.757116 MHz and was
+rejected. `LSQ_PHASED_DATA_OWNER=1` now implements the shared word, default off.
+The result selector drops its unused allocation-zero cone and the forwarding
+selector becomes its sole request event; phase selection owns allocation
+zeroing and highest-priority actual allocation. One paired BE2/LSQ4 fixture
+passed 610 ns of public cycle/payload comparisons, including a full queue's
+head load pop and same-row store allocation, followed by a stale response.
+See `reports/Tier_shared_LSQ_phased_payload_protocol_2026-10-09.json` for exact
+frozen inputs and scope. No CPU metrics are established by this sample.

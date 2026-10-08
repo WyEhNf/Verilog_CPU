@@ -13,6 +13,7 @@ module rv32_lsq #(
     parameter integer SINGLE_GENERATION_OWNER = 0,
     parameter integer ALLOC_LOAD_REQUEST_BYPASS = 0,
     parameter integer SAVED_REQUEST_QUERY = 0,
+    parameter integer PHASED_DATA_OWNER = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -262,6 +263,9 @@ module rv32_lsq #(
     // Store payloads are kept in access-relative form.  The cache-facing
     // 128-bit line representation is reconstructed only at the boundary.
     wire [31:0] data_mem [0:LSQ_ENTRIES-1];
+    wire [31:0] phased_word [0:LSQ_ENTRIES-1];
+    wire [31:0] phased_write_data [0:LSQ_ENTRIES-1];
+    wire phased_write_enable [0:LSQ_ENTRIES-1];
     reg [31:0] data_mem_write_data [0:LSQ_ENTRIES-1];
     reg data_mem_write_enable [0:LSQ_ENTRIES-1];
     wire [3:0] mask_mem [0:LSQ_ENTRIES-1];
@@ -1306,6 +1310,8 @@ module rv32_lsq #(
                 else $fatal(1,"Fresh load forwarded without owned store");
     end
 `endif
+    initial if(PHASED_DATA_OWNER!=0 && PHASED_DATA_OWNER!=1)
+        $fatal(1,"PHASED_DATA_OWNER must be 0 or 1");
     initial if(SAVED_REQUEST_QUERY!=0 && SAVED_REQUEST_QUERY!=1)
         $fatal(1,"SAVED_REQUEST_QUERY must be 0 or 1");
     assign dcache_req_addr_o=selected_addr;
@@ -2173,10 +2179,51 @@ module rv32_lsq #(
                 .events_i(address_events),.values_i(address_values),.write_o(address_write),.value_o(address_value));
             rv32_frequency_event_select #(.WIDTH(32),.EVENTS(DATA_EVENTS)) data_selector (
                 .events_i(data_events),.values_i(data_values),.write_o(data_write),.value_o(data_value));
+            if(PHASED_DATA_OWNER!=0) begin:g_phased_select
+                wire [3:0] phases;
+                wire [127:0] phase_values;
+                wire allocation_store,unused_allocation_write;
+                rv32_frequency_event_select #(.WIDTH(1),.EVENTS(BE_WIDTH)) class_selector (
+                    .events_i(allocations),.values_i(alloc_is_store_i),
+                    .write_o(unused_allocation_write),.value_o(allocation_store));
+                // Allocations own the next edge, even when an old response or
+                // report releases this same physical row. Old consumers still
+                // read the retained word before that edge.
+                assign phases={rob_tag_write,
+                    valid_mem[payload_row] && load_mem[payload_row] && result_write,
+                    valid_mem[payload_row] && load_mem[payload_row] && forward_write,
+                    valid_mem[payload_row] && store_mem[payload_row] && data_write};
+                assign phase_values={allocation_store ? data_value : 32'b0,
+                                     result_value,forward_value,data_value};
+                rv32_frequency_event_select #(.WIDTH(32),.EVENTS(4)) phase_selector (
+                    .events_i(phases),.values_i(phase_values),
+                    .write_o(phased_write_enable[payload_row]),.value_o(phased_write_data[payload_row]));
+                // Allocation zeroing belongs to phase_selector. Removing the
+                // two unused original allocation-selector cones is deliberate.
+                rv32_frequency_event_select #(.WIDTH(32),.EVENTS(2)) result_selector (
+                    .events_i(result_events[1:0]),.values_i(result_values[63:0]),
+                    .write_o(result_write),.value_o(result_value));
+                assign forward_write=forward_events[0];
+                assign forward_value=forward_values[31:0];
+`ifdef VERILATOR
+                always @(posedge clk_i) if(!reset_i && !flush_i) begin
+                    if(!rob_tag_write && valid_mem[payload_row] && load_mem[payload_row])
+                        assert(!(result_write && forward_write))
+                            else $fatal(1,"LSQ forward capture overlaps load completion");
+                    for(integer check_lane=0;check_lane<BE_WIDTH;check_lane=check_lane+1)
+                        if(allocations[check_lane])
+                            assert(alloc_is_load_i[check_lane]!=alloc_is_store_i[check_lane])
+                                else $fatal(1,"Phased LSQ allocation has ambiguous instruction class");
+                end
+`endif
+            end else begin:g_independent_select
+            assign phased_write_enable[payload_row]=1'b0;
+            assign phased_write_data[payload_row]=32'b0;
             rv32_frequency_event_select #(.WIDTH(32),.EVENTS(RESULT_EVENTS)) result_selector (
                 .events_i(result_events),.values_i(result_values),.write_o(result_write),.value_o(result_value));
             rv32_frequency_event_select #(.WIDTH(32),.EVENTS(FORWARD_EVENTS)) forward_selector (
                 .events_i(forward_events),.values_i(forward_values),.write_o(forward_write),.value_o(forward_value));
+            end
             rv32_frequency_event_select #(.WIDTH(ROB_TAG_WIDTH),.EVENTS(BE_WIDTH)) tag_selector (
                 .events_i(allocations),.values_i(rob_tag_values),.write_o(rob_tag_write),.value_o(rob_tag_value));
             always @* begin
@@ -2550,9 +2597,19 @@ module rv32_lsq #(
         rv32_lsq_owned_field #(.WIDTH(31+1)) addr_mem_owner (
             .clk_i(clk_i),.write_i(addr_mem_write_enable[storage_row]),
             .data_i(addr_mem_write_data[storage_row]),.data_o(addr_mem[storage_row]));
+        if(PHASED_DATA_OWNER!=0) begin:g_phased_payload
+            rv32_lsq_owned_field #(.WIDTH(32)) word_owner (
+                .clk_i(clk_i),.write_i(phased_write_enable[storage_row]),
+                .data_i(phased_write_data[storage_row]),.data_o(phased_word[storage_row]));
+            assign data_mem[storage_row]=phased_word[storage_row];
+            assign complete_value_mem[storage_row]=phased_word[storage_row];
+            assign forward_data_mem[storage_row]=phased_word[storage_row];
+        end else begin:g_store_operand
+        assign phased_word[storage_row]=32'b0;
         rv32_lsq_owned_field #(.WIDTH(31+1)) data_mem_owner (
             .clk_i(clk_i),.write_i(data_mem_write_enable[storage_row]),
             .data_i(data_mem_write_data[storage_row]),.data_o(data_mem[storage_row]));
+        end
         rv32_lsq_owned_field #(.WIDTH(3+1)) mask_mem_owner (
             .clk_i(clk_i),.write_i(mask_mem_write_enable[storage_row]),
             .data_i(mask_mem_write_data[storage_row]),.data_o(mask_mem[storage_row]));
@@ -2568,18 +2625,22 @@ module rv32_lsq #(
         rv32_lsq_owned_field #(.WIDTH(1)) load_reported_mem_owner (
             .clk_i(clk_i),.write_i(load_reported_mem_write_enable[storage_row]),
             .data_i(load_reported_mem_write_data[storage_row]),.data_o(load_reported_mem[storage_row]));
+        if(PHASED_DATA_OWNER==0) begin:g_load_result
         rv32_lsq_owned_field #(.WIDTH(31+1)) complete_value_mem_owner (
             .clk_i(clk_i),.write_i(complete_value_mem_write_enable[storage_row]),
             .data_i(complete_value_mem_write_data[storage_row]),.data_o(complete_value_mem[storage_row]));
+        end
         rv32_lsq_owned_field #(.WIDTH(1)) complete_error_mem_owner (
             .clk_i(clk_i),.write_i(complete_error_mem_write_enable[storage_row]),
             .data_i(complete_error_mem_write_data[storage_row]),.data_o(complete_error_mem[storage_row]));
         rv32_lsq_owned_field #(.WIDTH(3+1)) forward_mask_mem_owner (
             .clk_i(clk_i),.write_i(forward_mask_mem_write_enable[storage_row]),
             .data_i(forward_mask_mem_write_data[storage_row]),.data_o(forward_mask_mem[storage_row]));
+        if(PHASED_DATA_OWNER==0) begin:g_load_forward
         rv32_lsq_owned_field #(.WIDTH(31+1)) forward_data_mem_owner (
             .clk_i(clk_i),.write_i(forward_data_mem_write_enable[storage_row]),
             .data_i(forward_data_mem_write_data[storage_row]),.data_o(forward_data_mem[storage_row]));
+        end
         rv32_lsq_owned_field #(.WIDTH(1)) store_commit_mem_owner (
             .clk_i(clk_i),.write_i(store_commit_mem_write_enable[storage_row]),
             .data_i(store_commit_mem_write_data[storage_row]),.data_o(store_commit_mem[storage_row]));

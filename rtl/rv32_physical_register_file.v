@@ -13,6 +13,7 @@ module rv32_physical_register_file #(
     parameter integer LOCAL_VALUE_ROWS = 0,
     parameter integer VALUE_SRAM = 0,
     parameter integer SRAM_PORT_FORWARD = 0,
+    parameter integer SRAM_RAW_WRITE = 0,
     // Optional combination output for even allocation read ports only.
     // The original read data/ready and storage updates remain independent.
     parameter STORE_ADDRESS_READ = 0,
@@ -49,6 +50,8 @@ module rv32_physical_register_file #(
     wire [PHYS_REGS-1:0] ready;
 
     initial begin
+        if((SRAM_RAW_WRITE!=0 && SRAM_RAW_WRITE!=1) || (SRAM_RAW_WRITE!=0 && (VALUE_SRAM==0 || LOCAL_VALUE_ROWS==0)))
+            $fatal(1,"Raw SRAM write data requires local SRAM rows");
         if((SRAM_PORT_FORWARD!=0 && SRAM_PORT_FORWARD!=1) ||
            (SRAM_PORT_FORWARD!=0 && (VALUE_SRAM==0 || LOCAL_VALUE_ROWS==0 || READ_MUX_IMPL==0)))
             $fatal(1,"SRAM port forwarding requires SRAM/local/parallel read policy");
@@ -173,7 +176,7 @@ module rv32_physical_register_file #(
                     assign recent_matches[owner_lane]=recent_valids[DOMAIN*BE_WIDTH+owner_lane] &&
                         recent_addresses[(DOMAIN*BE_WIDTH+owner_lane)*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==owner_row;
                 end
-                rv32_prf_value_row #(.LANES(BE_WIDTH),.VALUE_SRAM(VALUE_SRAM),.RAW_SRAM_OUTPUT(SRAM_PORT_FORWARD)) contents (
+                rv32_prf_value_row #(.LANES(BE_WIDTH),.VALUE_SRAM(VALUE_SRAM),.RAW_SRAM_OUTPUT(SRAM_PORT_FORWARD),.RAW_SRAM_WRITE(SRAM_RAW_WRITE)) contents (
                     .clk_i(clk_i),.reset_i(reset_views[owner_row]),.alloc_i(|allocations),.write_matches_i(writes),
                     .write_values_i(write_values[DOMAIN*BE_WIDTH*32 +: BE_WIDTH*32]),
                     .recent_matches_i(recent_matches),.recent_values_i(recent_values[DOMAIN*BE_WIDTH*32 +: BE_WIDTH*32]),
