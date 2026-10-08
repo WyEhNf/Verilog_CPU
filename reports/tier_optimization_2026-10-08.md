@@ -128,3 +128,11 @@ Tier2 balanced随后只跑一次六项官方perf（11.793秒，latency10），�
 该候选比D128 micro的geomean提高约5.7%，仍不足达标；剩余面积余量约853μm²，不能仅凭余量宣称D512可达。Tier1 inorder branchfix副本在这次perf完成后顺序开始完整PPA，保留默认Tier3原资源与执行路径。
 
 下一项Tier2结构候选 `configs/tier2_direct_memory.json` 保留balanced的ROB16/PRF40/RS3/LSQ8、I64及128项方向表，改用已经存在的直接dispatch分支（PIPELINE0/ELASTIC0），移除两row×两lane、每lane约160bit+tag的D包及其选择/恢复逻辑，为D256→512留出面积。已有32bit零store字段及compact target等会被优化，不能直接把700个声明bit都换算为实际面积。该分支关闭依赖弹性D包的fast-store资格，因此store吞吐与ready/PRF链频率仍可能受损；不把状态减少或周期提前宣称为实测收益。未缩减ROB/物理寄存器/LSQ，也不全局取消控制缓冲。候选尚未综合或CPU测试，默认Tier3的PIPELINE1/ELASTIC1与D1024不变。
+
+### 通用综合解析的默认标签修复
+
+Tier1 branchfix完整综合在通用read_verilog阶段退出（233.964秒，manifest SHA256 `f17821ff64d01be295ed7e9d31a7b7f7a16c53eb371fdae0b573411f63dc92d2`，log SHA256 `3eaa58b0e05d1bd470e2da1a9002da27ba5a45a75ad653c5e74bd4776da658e9`），没有网表、面积或频率指标。新模块默认ROB4仍借用原ROB32标签默认16，触发其TAG_WIDTH==SW+11检查；top覆盖13是正确的，因此先前top级Verilator静态检查未发现这个通用默认实例问题。提交 `7283a8ef` 把新模块默认标签改为 `11+$clog2(ROB_ENTRIES)`，不改变top覆写的实际13位标签。
+
+一次单模块Yosys read_verilog检查在缺少运行时PATH的直接shell调用中未加载工具（退出-1073741515，不是HDL错误）；配置与原runner相同的runtime/build PATH后，静态read_verilog退出0，只保留正常的数组到寄存器展开提示。未改变官方综合脚本或规避参数检查。
+
+从7283a8ef冻结修正版 `F:/CPU2026TierRuns/tier1_inorder_memory_tagfix_20261008`，顺序重新开始完整PPA。旧branchfix结果原样保留，不重跑或覆盖它。先前未测的Tier2 direct副本也含错误模块默认值，因此不对其启动综合；从修正版另冻 `F:/CPU2026TierRuns/tier2_direct_memory_tagfix_20261008` 等待Tier1结束。默认Tier3所有架构参数与分支仍为原值；解析修复也确保新增但不使用的模块不会令默认课程综合提前退出。
