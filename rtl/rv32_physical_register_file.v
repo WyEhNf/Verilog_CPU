@@ -12,6 +12,7 @@ module rv32_physical_register_file #(
     parameter integer READ_MUX_IMPL = 0,
     parameter integer LOCAL_VALUE_ROWS = 0,
     parameter integer VALUE_SRAM = 0,
+    parameter integer SRAM_PORT_FORWARD = 0,
     // Optional combination output for even allocation read ports only.
     // The original read data/ready and storage updates remain independent.
     parameter STORE_ADDRESS_READ = 0,
@@ -48,6 +49,9 @@ module rv32_physical_register_file #(
     wire [PHYS_REGS-1:0] ready;
 
     initial begin
+        if((SRAM_PORT_FORWARD!=0 && SRAM_PORT_FORWARD!=1) ||
+           (SRAM_PORT_FORWARD!=0 && (VALUE_SRAM==0 || LOCAL_VALUE_ROWS==0 || READ_MUX_IMPL==0)))
+            $fatal(1,"SRAM port forwarding requires SRAM/local/parallel read policy");
         if ((VALUE_SRAM!=0 && VALUE_SRAM!=1) || (VALUE_SRAM!=0 && LOCAL_VALUE_ROWS==0)) begin
             $display("ERROR: SRAM values require local PRF row ownership");
             $finish(1);
@@ -169,7 +173,7 @@ module rv32_physical_register_file #(
                     assign recent_matches[owner_lane]=recent_valids[DOMAIN*BE_WIDTH+owner_lane] &&
                         recent_addresses[(DOMAIN*BE_WIDTH+owner_lane)*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==owner_row;
                 end
-                rv32_prf_value_row #(.LANES(BE_WIDTH),.VALUE_SRAM(VALUE_SRAM)) contents (
+                rv32_prf_value_row #(.LANES(BE_WIDTH),.VALUE_SRAM(VALUE_SRAM),.RAW_SRAM_OUTPUT(SRAM_PORT_FORWARD)) contents (
                     .clk_i(clk_i),.reset_i(reset_views[owner_row]),.alloc_i(|allocations),.write_matches_i(writes),
                     .write_values_i(write_values[DOMAIN*BE_WIDTH*32 +: BE_WIDTH*32]),
                     .recent_matches_i(recent_matches),.recent_values_i(recent_values[DOMAIN*BE_WIDTH*32 +: BE_WIDTH*32]),
@@ -228,6 +232,27 @@ module rv32_physical_register_file #(
 `ifdef CPU2026_WORD_SIM
             end
 `endif
+            wire [31:0] stored_value;
+            if(SRAM_PORT_FORWARD!=0) begin:g_recent_port
+                localparam integer DOMAIN=(rp*READ_DOMAINS)/(2*BE_WIDTH);
+                wire [BE_WIDTH-1:0] previous_matches;
+                wire [31:0] previous_value;
+                wire previous_write;
+                wire [1:0] previous_select;
+                for(genvar recent_lane=0;recent_lane<BE_WIDTH;recent_lane=recent_lane+1) begin:g_match
+                    assign previous_matches[recent_lane]=legal && recent_valids[DOMAIN*BE_WIDTH+recent_lane] &&
+                        recent_addresses[(DOMAIN*BE_WIDTH+recent_lane)*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==address;
+                end
+                rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH)) previous_selector (
+                    .events_i(previous_matches),.values_i(recent_values[DOMAIN*BE_WIDTH*32 +: BE_WIDTH*32]),
+                    .write_o(previous_write),.value_o(previous_value));
+                rv32_frequency_control_tree #(.LEAVES(2)) previous_choice_tree (
+                    .signal_i(previous_write),.views_o(previous_select));
+                assign stored_value={previous_select[1]?previous_value[31:16]:stored_tree[1][31:16],
+                                     previous_select[0]?previous_value[15:0]:stored_tree[1][15:0]};
+            end else begin:g_recent_row
+                assign stored_value=stored_tree[1];
+            end
             for(wl=0;wl<BE_WIDTH;wl=wl+1) begin:g_bypass
                 assign bypass_match[wl]=legal && write_valid_i[wl] &&
                     write_phys_i[wl*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]==address;
@@ -252,7 +277,7 @@ module rv32_physical_register_file #(
                     assign address_events[0]=!bypass_write;
                     wire [2:0] stored_class_flags;
                     rv32_frequency_add_simm12 #(.CLASS_COMPARE(STORE_CLASS_COMPARE)) stored_address (
-                        .base_i(stored_tree[1]),
+                        .base_i(stored_value),
                         .immediate_i(store_offset_i[(rp/2)*12 +: 12]),
                         .sum_o(address_values[0 +: 32]),.class_flags_o(stored_class_flags));
                     if(STORE_SAVED_QUERY!=0) begin:g_saved_address_flags
@@ -308,7 +333,7 @@ module rv32_physical_register_file #(
                 end
             end
             always @* begin
-                read_data_o[rp*32 +: 32]={bypass_select[1]?bypass_value[31:16]:stored_tree[1][31:16],bypass_select[0]?bypass_value[15:0]:stored_tree[1][15:0]};
+                read_data_o[rp*32 +: 32]={bypass_select[1]?bypass_value[31:16]:stored_value[31:16],bypass_select[0]?bypass_value[15:0]:stored_value[15:0]};
                 read_ready_o[rp]=(address==0) || ready_tree[1] || bypass_write;
             end
         end

@@ -7,9 +7,10 @@
 // Forwarding temporaries also retain their original admission/load gating.
 (* keep_hierarchy = 1 *)
 module rv32_lsq_request_owner #(
-    parameter integer TAG_WIDTH=17,ROB_TAG_WIDTH=17
+    parameter integer TAG_WIDTH=17,ROB_TAG_WIDTH=17, FRESH_NO_FORWARD=0
 ) (
     input wire flush_i,recovery_i,found_i,wait_i,load_i,ready_i,
+    input wire fresh_no_forward_i,
     input wire [1:0] size_i,
     input wire unsigned_i,
     input wire [31:0] address_i,store_data_i,forward_data_i,
@@ -46,7 +47,7 @@ module rv32_lsq_request_owner #(
     endfunction
     wire [3:0] access_mask=decode_access_mask(size_i);
     wire incomplete_forward=(forward_mask_i & access_mask)!=access_mask;
-    wire request_valid=admitted && (!load_i || incomplete_forward);
+    wire request_valid=admitted && (!load_i || ((FRESH_NO_FORWARD!=0) && fresh_no_forward_i) || incomplete_forward);
     wire [2:0] forward_enable;
     wire [VALID_LEAVES-1:0] valid_views;
     wire [3:0] load_views;

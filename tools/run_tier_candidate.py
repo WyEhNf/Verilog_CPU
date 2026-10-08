@@ -53,6 +53,12 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["LSQ_SAVED_REQUEST_QUERY"] not in (0,1) or (p["LSQ_SAVED_REQUEST_QUERY"] and
+            (p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"] or not p["DCACHE_WAY_PARALLEL_QUERY"])):
+        raise ValueError("Saved LSQ request query requires registered parallel SRAM cache query")
+    if p["PRF_SRAM_PORT_FORWARD"] not in (0,1) or (p["PRF_SRAM_PORT_FORWARD"] and
+            (not p["PRF_VALUE_SRAM"] or not p["PRF_READ_MUX_IMPL"])):
+        raise ValueError("PRF SRAM port forwarding requires SRAM and parallel reads")
     if p["ROB_STORE_RETIRE_ADMISSION_BYPASS"] not in (0,1):
         raise ValueError("ROB store retirement admission bypass is 0/1")
     if p["ROB_COMPLETION_COMMIT_BYPASS"] not in (0,1):

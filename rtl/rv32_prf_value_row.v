@@ -3,7 +3,7 @@
 
 // Highest valid lane wins. Value payload has no later reset mux; the final
 // write enable already excludes reset before its priced local driver.
-module rv32_prf_value_row #(parameter integer LANES=4, parameter integer VALUE_SRAM=0) (
+module rv32_prf_value_row #(parameter integer LANES=4, parameter integer VALUE_SRAM=0, parameter integer RAW_SRAM_OUTPUT=0) (
     input wire clk_i,reset_i,alloc_i,
     input wire [LANES-1:0] write_matches_i,
     input wire [LANES*32-1:0] write_values_i,
@@ -25,6 +25,9 @@ module rv32_prf_value_row #(parameter integer LANES=4, parameter integer VALUE_S
         sram_fakeram #(.DEPTH(1),.WIDTH(32)) storage (
             .clk(clk_i),.en(!reset_i),.we(write_event),.wmask(1'b1),
             .addr(1'b0),.wdata(next_value),.rdata(stored_value));
+        if(RAW_SRAM_OUTPUT!=0) begin:g_raw_word
+            assign value_o=stored_value;
+        end else begin:g_row_forward
         rv32_frequency_event_select #(.WIDTH(32),.EVENTS(LANES)) recent_selector (
             .events_i(recent_matches_i),.values_i(recent_values_i),
             .write_o(recent_write),.value_o(recent_value));
@@ -33,6 +36,7 @@ module rv32_prf_value_row #(parameter integer LANES=4, parameter integer VALUE_S
             .signal_i(recent_write),.views_o(recent_views));
         assign value_o={recent_views[1] ? recent_value[31:16] : stored_value[31:16],
                        recent_views[0] ? recent_value[15:0] : stored_value[15:0]};
+        end
     end else begin:g_ff
         reg [31:0] stored_value;
         wire [1:0] write_views;

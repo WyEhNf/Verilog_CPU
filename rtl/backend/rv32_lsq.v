@@ -12,6 +12,7 @@ module rv32_lsq #(
     parameter integer RELEASE_CREDITS = 0,
     parameter integer SINGLE_GENERATION_OWNER = 0,
     parameter integer ALLOC_LOAD_REQUEST_BYPASS = 0,
+    parameter integer SAVED_REQUEST_QUERY = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -139,6 +140,7 @@ module rv32_lsq #(
     output wire                         dcache_req_is_load_o,
     output wire                         dcache_req_is_store_o,
     output wire [31:0]                  dcache_req_addr_o,
+    output wire                         dcache_req_mmio_class_o,
     output wire [1:0]                   dcache_req_size_o,
     output wire                         dcache_req_unsigned_o,
     output wire [15:0]                  dcache_req_mask_o,
@@ -778,18 +780,27 @@ module rv32_lsq #(
     wire [TAG_WIDTH-1:0] selected_lsq_tag;
     assign {selected_slot,selected_lsq_tag,selected_rob_tag,selected_addr,
             selected_load,selected_size,selected_unsigned,selected_store_mask,selected_store_data}=visible_selection_packet;
+    // Fresh offers have no valid old stores, so forwarding/hazard queries
+    // belong exclusively to the existing packet. Do not query fresh addresses.
+    wire [SLOT_WIDTH-1:0] forwarding_query_slot=(SAVED_REQUEST_QUERY!=0) ?
+        existing_selection_packet[SELECTION_PAYLOAD_WIDTH-1 -: SLOT_WIDTH] : selected_slot;
+    wire [31:0] forwarding_query_addr=(SAVED_REQUEST_QUERY!=0) ?
+        existing_selection_packet[40 +: 32] : selected_addr;
+    wire [1:0] forwarding_query_size=(SAVED_REQUEST_QUERY!=0) ?
+        existing_selection_packet[37 +: 2] : selected_size;
+    wire [SLOT_WIDTH-1:0] forwarding_query_age=forwarding_query_slot-head_query_views[LSQ_ENTRIES*SLOT_WIDTH +: SLOT_WIDTH];
     wire [SLOT_WIDTH-1:0] selected_age=selected_slot-head_query_views[LSQ_ENTRIES*SLOT_WIDTH +: SLOT_WIDTH];
     localparam integer FORWARD_ORDER_WIDTH=SLOT_WIDTH+1;
     wire [LSQ_ENTRIES*FORWARD_ORDER_WIDTH-1:0] selected_order_views;
-    wire selected_wrap=selected_slot<head_query_views[LSQ_ENTRIES*SLOT_WIDTH +: SLOT_WIDTH];
+    wire selected_wrap=forwarding_query_slot<head_query_views[LSQ_ENTRIES*SLOT_WIDTH +: SLOT_WIDTH];
     rv32_frequency_control_tree #(.WIDTH(FORWARD_ORDER_WIDTH),.LEAVES(LSQ_ENTRIES)) selected_order_tree (
-        .signal_i({selected_wrap,selected_slot}),.views_o(selected_order_views));
+        .signal_i({selected_wrap,forwarding_query_slot}),.views_o(selected_order_views));
     // A forwarding row consumes its own address + decoded byte-mask view.
     // Raw selection FFs no longer drive every row's overlap/data formatter.
     localparam integer FORWARD_QUERY_WIDTH=36;
     wire [LSQ_ENTRIES*FORWARD_QUERY_WIDTH-1:0] forward_query_views;
     rv32_frequency_control_tree #(.WIDTH(FORWARD_QUERY_WIDTH),.LEAVES(LSQ_ENTRIES)) forward_query_tree (
-        .signal_i({selected_addr,access_mask(selected_size)}),.views_o(forward_query_views));
+        .signal_i({forwarding_query_addr,access_mask(forwarding_query_size)}),.views_o(forward_query_views));
     wire selection_done=(selection_live || selection_direct_bypass) && (request_fire ||
         (selected_load && candidate_found && ((fwd_mask & target_mask)==target_mask)));
     wire direct_selection_done=selection_direct_bypass && selection_done;
@@ -938,7 +949,7 @@ module rv32_lsq #(
             assign store_overlap[age_slot] =
                 valid_mem[age_slot] && store_mem[age_slot] &&
                 addr_ready_mem[age_slot] && data_ready_mem[age_slot] &&
-                (CIRCULAR_ORDER_POWER2 ? older_than_selected : (entry_age[age_slot] < selected_age)) &&
+                (CIRCULAR_ORDER_POWER2 ? older_than_selected : (entry_age[age_slot] < forwarding_query_age)) &&
                 (addr_mem[age_slot][31:4] == local_load_addr[31:4]) ? local_overlap : 4'b0;
         end
     endgenerate
@@ -1277,14 +1288,34 @@ module rv32_lsq #(
         forwarding_hold_data[0 +: 16]:tree_forward_data[0 +: 16];
     assign raw_forward_data[16 +: 16]=saved_forward_views[1]?
         forwarding_hold_data[16 +: 16]:tree_forward_data[16 +: 16];
+    // The live-store certificate also suppresses an invalid stale exit packet
+    // when a new load bypasses allocation. Every actual store owns an old row.
+    assign dcache_req_mmio_class_o=(SAVED_REQUEST_QUERY!=0) && (|allocation_present_stores) &&
+        !existing_selection_packet[39] && existing_selection_packet[40 +: 32]==32'h80000000 &&
+        existing_selection_packet[32 +: 4]==4'hf;
+    wire fresh_without_forward=(SAVED_REQUEST_QUERY!=0) && allocation_request_offer;
+    wire [3:0] owner_forward_mask=fresh_without_forward ? 4'b0 : raw_forward_mask;
+    wire [31:0] owner_forward_data=fresh_without_forward ? 32'b0 : raw_forward_data;
+`ifdef VERILATOR
+    always @(posedge clk_i) if(!reset_i && !flush_i && SAVED_REQUEST_QUERY!=0) begin
+        if(dcache_req_valid_o)
+            assert(dcache_req_mmio_class_o==(dcache_req_is_store_o && dcache_req_addr_o==32'h80000000 && dcache_req_mask_o==16'h000f))
+                else $fatal(1,"LSQ saved MMIO class differs on valid request");
+        if(fresh_without_forward)
+            assert(!( |allocation_present_stores) && selected_load && raw_forward_mask==0)
+                else $fatal(1,"Fresh load forwarded without owned store");
+    end
+`endif
+    initial if(SAVED_REQUEST_QUERY!=0 && SAVED_REQUEST_QUERY!=1)
+        $fatal(1,"SAVED_REQUEST_QUERY must be 0 or 1");
     assign dcache_req_addr_o=selected_addr;
     (* keep_hierarchy = 1 *)
-    rv32_lsq_request_owner #(.TAG_WIDTH(TAG_WIDTH),.ROB_TAG_WIDTH(ROB_TAG_WIDTH)) request_owner (
+    rv32_lsq_request_owner #(.FRESH_NO_FORWARD(SAVED_REQUEST_QUERY),.TAG_WIDTH(TAG_WIDTH),.ROB_TAG_WIDTH(ROB_TAG_WIDTH)) request_owner (
         .flush_i(flush_i),.recovery_i(recovery_valid_i),.found_i(candidate_found || allocation_request_offer),
         .wait_i(allocation_request_offer ? 1'b0 : candidate_wait),.load_i(selected_load),.ready_i(dcache_req_ready_i),
         .size_i(selected_size),.unsigned_i(selected_unsigned),.address_i(selected_addr),
         .store_data_i(selected_store_data),.store_mask_i(selected_store_mask),
-        .forward_data_i(raw_forward_data),.forward_mask_i(raw_forward_mask),
+        .fresh_no_forward_i(fresh_without_forward),.forward_data_i(owner_forward_data),.forward_mask_i(owner_forward_mask),
         .rob_tag_i(selected_rob_tag),.lsq_tag_i(selected_lsq_tag),
         .valid_o(dcache_req_valid_o),.load_o(dcache_req_is_load_o),.store_o(dcache_req_is_store_o),
         .unsigned_o(dcache_req_unsigned_o),.fire_o(request_fire),.size_o(dcache_req_size_o),
