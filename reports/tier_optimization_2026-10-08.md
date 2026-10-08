@@ -68,6 +68,8 @@ Tier2 副本 `F:/CPU2026TierRuns/tier2_compact_20261008` 的第一次完整综�
 
 为该候选暴露 `DCACHE_WAITERS`，顶层/core均默认8并转发至原Dcache `WAITER_ENTRIES`；等待槽仅改变背压容量，旧路响应仍由原完整LSQ代际过滤。间接BTB扩展支持4/8项，原PC索引与8位折叠身份算法已按容量参数化，不改查询/训练配对或执行完整目标检查；每bank至少2行以防零宽索引，默认16项无变化。冻结前额外校验两侧非阻塞MSHR范围、合法总线line/word容量及响应模式。没有启用不支持的FIFO深度1或写line容量1，也没有以固定4KiB且会映射大寄存器阵列的旧阻塞Dcache替代当前FakeRAM配置。
 
-Tier1 micro副本 `F:/CPU2026TierRuns/tier1_micro_ooo_20261008` 基于 `1dde728c`，manifest SHA256 `15c4fe0e49ccb79753a44e8abadffbfaacf7d05a2193918eaf25055679aa95a2`，已开始完整PPA，当前尚无完整结果。与已完成的三份有效候选一样，只有面积/频率同时达标才继续仿真。
+Tier1 micro副本 `F:/CPU2026TierRuns/tier1_micro_ooo_20261008` 基于 `1dde728c`，manifest SHA256 `15c4fe0e49ccb79753a44e8abadffbfaacf7d05a2193918eaf25055679aa95a2`。完整综合/STA已完成，耗时691.522秒：含SRAM面积 `9278.840886999424 μm²`、频率 `347.35413839891453 MHz`。组合 `5601.825539999425`、时序 `2771.3664`、SRAM `905.648946999999 μm²`；report SHA256 `f9fe70a9481c289b8e29d1d7f7edf30c63e23040ecc7b8fc71e174e76cbccafe`。面积距上限仍差 `278.840886999424 μm²`，因此跳过构建、IPC和正确性。相比首轮有效单发射配置，面积减少约24.5%、频率约347MHz保持达标，但仍不宣称Tier1完成。
 
-Tier2对应资源候选 `configs/tier2_micro_ooo.json` 尚未测量：保留ROB16/RS4/LSQ8和256项混合方向表，把间接BTB16→4、等待槽8→4、D256→128、PRF40→38（仍6个额外物理寄存器），响应FIFO改原单槽模式0。优先保留有助双发射吞吐的ROB与方向表，期望由缓存/等待槽/响应载荷/间接预测资源弥补1886 μm²面积缺口；不凭资源数推算IPC或宣称通过。默认Tier3仍未缩减任何上述资源。
+Tier2对应资源候选 `configs/tier2_micro_ooo.json`：保留ROB16/RS4/LSQ8和256项混合方向表，把间接BTB16→4、等待槽8→4、D256→128、PRF40→38（仍6个额外物理寄存器），响应FIFO改原单槽模式0。优先保留有助双发射吞吐的ROB与方向表，期望由缓存/等待槽/响应载荷/间接预测资源弥补1886 μm²面积缺口；不凭资源数推算IPC或宣称通过。副本 `F:/CPU2026TierRuns/tier2_micro_ooo_20261008` 基于 `32154ce5`，在Tier1 micro完整PPA结束后开始顺序综合，目前尚无完整结果。默认Tier3仍未缩减任何上述资源。
+
+Tier1下一批 `configs/tier1_micro_frontend.json` 在micro配置上把I64→32、FQ4→2，保留16行真实SRAM loop filter与原8项AXI word metadata queue，以免256MiB RAM latency10下额外限制总线在途字数。只有该整个候选冻结后才做一次PPA；尚未测量。已排除无效的completion depth缩减思路：当前 `COMPLETION_BYPASS=2` 已不存completion FIFO，改变深度不会提供期望的面积收益，因此不为它单独测试。
