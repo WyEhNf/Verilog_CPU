@@ -189,3 +189,10 @@ Tier1 inorder tagfix完整PPA耗时542.349秒，manifest SHA256 `90e3943a5c3cf45
 Tier2 lookup isolated完整PPA结束，628.212秒，manifest SHA256 `5cc5b4042aeadef56ef6e001c27b511f0aee71123c838157aeae93a64fa1d09b`，report SHA256 `59b8523ec0034bae304ed4aa5e4b8c871ec3ed0e90ee25c2e025e861f908811c`。面积 `21421.329662000047 μm²`、频率 `256.19214410808104 MHz`，组合 `9145.202940000045`、时序 `4348.3392`、SRAM `7927.787522000003 μm²`。面积与频率均失败，跳过build/perf/smoke；未替代Tier1或默认Tier3。
 
 实际STA首路径从Dcache metadata状态经过cache响应资格、ROB load旁路、架构producer查询、提前AGU，再经过core的泛用MMIO谓词到状态FF，数据到达约3.84ns。64个Dcache metadata bank合计面积3054.59748μm²；更大容量与在途资源的总逻辑成本超过先前预算，不能把新结构当作已经节省面积。后续候选需同时减少实际缓存/等待槽成本，并切断load数据到仅用于store的MMIO控制路径；此次失败不追加CPU测试。
+
+
+下一批源码62242541与配置 `configs/tier2_inorder_store_control.json` 使用独立lookup后端。仅在SERIAL_BACKEND3且DCACHE_REQUEST_PIPELINE0时，core采用后端直接输出的MMIO退出谓词：候选已提交store、非halt/error、地址精确0x80000000、size生成四字节mask。这个谓词与泛用接口的valid/store/address/mask四项条件等价，但不读取提前load地址或load request valid。若使用已寄存request接口，仍以保存后的原payload资格判断。mode0/1/2路径与原谓词不变，Tier1模块未修改。
+
+资源调整为D512/MSHRD2/WAITERS4、FQ4、word queue8、AXI response FIFO0、128项方向表，保留FE2/BE1/ROB8/I128/MSHRI4与提前load。D容量少于上次未达标候选，不能据此宣称IPC提升；它仍比已验收Tier1的D256更大。收益仅以新冻结副本实测确认，不能替换默认Tier3或验收记录。
+
+冻结 `F:/CPU2026TierRuns/tier2_inorder_store_control_20261008`，一次top静态lint退出0，无Error、LATCH或UNOPTFLAT。顺序开始一次完整PPA，尚无结果；此前失败候选没有构建或CPU测试。
