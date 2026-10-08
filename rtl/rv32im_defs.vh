@@ -6,6 +6,8 @@
 `define RV32IM_BE_WIDTH_DEFAULT 1
 `define RV32IM_PHYS_REGS_DEFAULT 64
 `define RV32IM_ROB_ENTRIES_DEFAULT 32
+// 0 retains explicit fanout trees; 1 lets synthesis optimize compact profiles.
+`define RV32IM_COMPACT_CONTROL_DEFAULT 0
 
 // Shared scalar widths.
 `define RV32IM_OP_WIDTH 6

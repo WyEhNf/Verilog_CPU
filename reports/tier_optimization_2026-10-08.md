@@ -32,7 +32,11 @@
 
 修正后的唯一 Tier1 候选为 `F:/CPU2026TierRuns/tier1_compact_btb16_20261008`。继续使用原生 Windows Yosys0.63/固定 ABC/OpenSTA3.1/五份 ASAP7 RVT TT 与全部实际 FakeRAM；2 ns 映射目标，实际 Fmax 按原课程最低周期搜索。只有完整 PPA 通过才继续该候选的构建、六项 IPC 和一个小 correctness。
 
-Tier2 副本 `F:/CPU2026TierRuns/tier2_compact_20261008` 已冻结，尚未开始综合、仿真、正确性或 IPC。`tools/run_tier_candidate.py` 显式分阶段运行、拒绝覆盖已有阶段和源码，记录工具/库/源码/可执行文件身份；构建使用原官方 simulator 与原生 Verilator5.040，Windows time-zero host shim 保持原驱动不变。
+Tier2 副本 `F:/CPU2026TierRuns/tier2_compact_20261008` 已冻结，随后开始第一次综合；尚无完整 PPA，未构建或运行 IPC/正确性。`tools/run_tier_candidate.py` 显式分阶段运行、拒绝覆盖已有阶段和源码，记录工具/库/源码/可执行文件身份；构建使用原官方 simulator 与原生 Verilator5.040，Windows time-zero host shim 保持原驱动不变。
+
+修正后的 Tier1 完整综合/STA 已成功完成（649.658 秒），但面积门未通过：含 SRAM 面积 `12288.756519002882 μm²`，频率 `347.4720054292501 MHz`，最小周期 `2.8779296875 ns`。面积由组合逻辑 `7389.7272000028825`、时序逻辑 `3536.5248`、75个 SRAM 实例 `1362.5045189999983 μm²` 组成。manifest SHA256 `e1bec6a8eb8906ca17f459c482fa96938585f127dd9dd7ca44eaf4764de5a874`，report SHA256 `3aa0e358dae80b0ccc6f1e60d65c5984f92b3501e55349011e1d5804dac5c1e1`。超过面积上限 `3288.756519002882 μm²`，因此跳过该候选 CPU 构建、IPC 与 smoke；原结果保留。
+
+只读网表检查发现 18,089 个显式控制反相器，合计约 `791.213 μm²`；此外 `keep` 控制消费者可能保留本可删除的上游状态/逻辑。展开前的 RS 大量 legacy 寄存器已被映射删除，不能把展开寄存器总数当作实际双份存储，更不能据此宣称面积收益。
 
 ## 500 MHz 路径依据
 
@@ -47,3 +51,9 @@ Tier2 副本 `F:/CPU2026TierRuns/tier2_compact_20261008` 已冻结，尚未开�
 默认8位下，原表项数256、索引宽8-bank、原PC切片[9:2+bank]及query/training切片[7:bank]完全还原。小表只改变预测资源/aliasing，执行阶段依旧检查原完整目标并恢复错误预测，ISA/ROB/AXI/时钟边沿无变化。单发射关闭hybrid时256→64项减少576个counter/trained状态位及相应更新/查询逻辑；尚未换算为面积或IPC收益。
 
 该源码仅做审阅与 `git diff --check`，未开始第二轮HDL/形式/CPU仿真/综合/STA；没有改变当前正在测量的冻结源、工具或结果。初始Tier1/Tier2配置仍用256项，待原完整面积结果判断是否需要小表再组成下一批。源候选不是已验收的Tier3新硬件版本；历史 A109 的 PPA 不外推给新增参数后的当前源码。
+
+## 面向紧凑配置的控制树策略
+
+新增 `RV32IM_COMPACT_CONTROL_DEFAULT`（根和 RTL 头文件均默认0）与控制树 `COMPACT_CONTROL` 参数。默认0生成原显式反相树；可选1直接分发同值信号，由原课程综合器决定共享、扇出及删去未使用控制的上游逻辑。两种策略的组合值和时钟边沿一致，不改变队列、恢复或缓存协议。原仿真 `CPU2026_WORD_SIM` 的同值分发分支保持不变。面积与高扇出时序代价仍需实际 PPA 判断。
+
+`configs/tier1_area_control.json` 保留首轮有效 Tier1 的队列/缓存容量，同时选择64项方向表和控制策略1，组成一次结构候选。冻结工具只在该独立副本的两个头文件中改宏；默认 Tier3 不启用。没有把约791 μm²反相器面积直接当作全部收益，也未假设能补足3289 μm²缺口。目前仅完成代码审阅和diff检查；新候选尚未综合或仿真。

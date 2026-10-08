@@ -119,7 +119,9 @@ The [official course requirements](https://github.com/ACMClassCourse-2025/RISC-V
 
 [Tier1](configs/tier1.json) and [Tier2](configs/tier2.json) define initial independent area candidates: single issue and dual issue respectively. Both retain the out-of-order backend, register renaming, in-order retirement, RV32IM and the original AXI/SRAM interfaces. They are **unverified candidates**, not achieved tiers. [Tier3](configs/tier3.json) retains the source defaults. No reduced configuration replaces the default Tier3 CPU.
 
-`tools/run_tier_candidate.py` freezes the current tracked RTL and official scripts into a new directory, applies only the listed top-level parameter defaults there, and records source/tool/library hashes. Select each measurement phase explicitly; it never starts a sweep or a full correctness suite. The native Windows defaults can be replaced with `--host-config` during preparation.
+`tools/run_tier_candidate.py` freezes the current tracked RTL and official scripts into a new directory, applies the listed top-level parameter defaults there, and records source/tool/library hashes. An explicit `compact_control: 1` profile also sets the identical control-tree policy macro in both copied headers, allowing synthesis to optimize fanout and delete unused source cones. The default policy retains the original explicit trees. Select each measurement phase explicitly; it never starts a sweep or a full correctness suite. The native Windows defaults can be replaced with `--host-config` during preparation.
+
+The first legal Tier1 candidate measured **12,288.76 μm² / 347.47 MHz**, exceeding its area limit, so its build and IPC phases were skipped. [Tier1 area-control candidate](configs/tier1_area_control.json) combines a 64-entry direction table with the optional compact control policy; it is not yet measured. See [optimization evidence](reports/tier_optimization_2026-10-08.md) for frozen runs and acceptance status.
 
 ```powershell
 python tools/run_tier_candidate.py prepare --profile configs/tier1.json --out F:/CPU2026TierRuns/NEW_TIER1

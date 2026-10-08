@@ -47,6 +47,8 @@ def validate_parameters(text, profile):
     """Reject unsupported geometry before an expensive HDL elaboration."""
     defaults = {k: int(v) for k, v in re.findall(r"\b([A-Z][A-Z0-9_]*)\s*=\s*([0-9]+)", text)}
     overrides = profile["parameters"]
+    if type(profile.get("compact_control", 0)) is not int or profile.get("compact_control", 0) not in (0, 1):
+        raise ValueError("Compact control policy must be 0 or 1")
     for key, value in overrides.items():
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
@@ -103,6 +105,14 @@ def prepare(out, profile, host):
         if count != 1:
             raise ValueError("Missing parameter: " + key)
     top.write_text(text, encoding="utf-8", newline="")
+    if profile.get("compact_control", 0):
+        for name in ("rv32im_defs.vh", "rtl/rv32im_defs.vh"):
+            header = source / name
+            content, count = re.subn(r"(`define RV32IM_COMPACT_CONTROL_DEFAULT )0\b", r"\g<1>1",
+                                    header.read_text(encoding="utf-8"))
+            if count != 1:
+                raise ValueError("Missing compact control policy in " + name)
+            header.write_text(content, encoding="utf-8", newline="")
     # Submodules have no tracked files in the parent repository's ls-files.
     cases = ROOT / "testcases"
     testcase_commit = subprocess.check_output(["git", "-C", str(cases), "rev-parse", "HEAD"], text=True).strip()
