@@ -203,3 +203,9 @@ The owner policy now also selects L0 SRAM data banks using registered `fast_vali
 共用双发射后端在完整保留 ROB16 / PRF40 / RS3 / LSQ4、I64 / D512 容量的前提下，用寄存的 fetch payload 所属项选择 SRAM 数据，避免将晚到的 epoch/live 校验送入宽数据选择；公开 valid、epoch、完整 ROB/LSQ 代际检查未放宽。迭代 MDU 同时复用除零恢复算法的余数，去掉只为 REM/REMU 除零保留的原始被除数副本。
 
 这份冻结源码的 IPC 与上一 owner 候选完全一致（六项 cycles：8534 / 17439 / 162821 / 294021 / 6301 / 5592），面积从 18,002.938452 降至 **17,997.018972 μm²**，频率从 282.951091 提升至 **355.679055 MHz**。本轮仅构建一次、跑一次六项 perf、一次完整 PPA，并在三项门槛都通过后跑一次 array1 小样例，未运行全量 CPU 正确性套件。`DIRECT_DISPATCH_RELEASE_CREDITS` 的后续实验不属于此测量源码。
+
+### 共用 LSQ 分配拍 load 请求（2026-10-09，待测候选）
+
+`LSQ_ALLOC_LOAD_REQUEST_BYPASS=1` 在没有保存的选择请求、没有旧候选、没有任何旧 store（包括已知地址的 store），且没有更早同拍 store 时，用实际接受的新 load 分配标签和地址提出缓存请求。请求当拍被接受时，新行的 sent/wait 状态一并建立，不再保存重复选择票据；背压时由现有选择寄存器保存首个请求，下一拍继续原有完整 LSQ 代际检查和响应路径。没有增加请求端口或放宽 speculative store 规则，默认关闭。
+
+有限双发射四行样例通过：分配拍 word load、背压 byte load、一次请求、完整响应标签/物理目的寄存器/值，以及旧 store 和恢复边界。初次包装脚本因期望成功标记错误而报失败，日志中实际 RTL 样例通过；包装标记已修正，没有重复编译/执行。精确冻结输入和限制见 `reports/Tier_shared_alloc_load_request_protocol_2026-10-09.json`。`configs/tier1_shared_alloc_load_request.json` 保留上一最佳共用 Tier1 窗口和缓存，关闭失败的释放资源实验；尚未做 CPU 性能或 PPA 评估。

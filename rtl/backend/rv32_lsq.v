@@ -8,6 +8,7 @@
 // retire past cache latency while the LSQ doubles as a store buffer.
 module rv32_lsq #(
     parameter integer RELEASE_CREDITS = 0,
+    parameter integer ALLOC_LOAD_REQUEST_BYPASS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -744,11 +745,18 @@ module rv32_lsq #(
         for(genvar selection_word=0;selection_word<VISIBLE_SELECTION_WORDS;selection_word=selection_word+1) begin:g_word
             localparam integer LOW=selection_word*16;
             localparam integer BITS=(SELECTION_PAYLOAD_WIDTH-LOW>=16)?16:SELECTION_PAYLOAD_WIDTH-LOW;
-            assign visible_selection_packet[LOW +: BITS]=direct_views[selection_word]?
+            assign existing_selection_packet[LOW +: BITS]=direct_views[selection_word]?
                 normal_selection_packet[LOW +: BITS]:held_selection_packet[LOW +: BITS];
         end
     end else begin:g_unregistered_selection
-        assign visible_selection_packet=normal_selection_packet;
+        assign existing_selection_packet=normal_selection_packet;
+    end endgenerate
+    wire [SELECTION_PAYLOAD_WIDTH-1:0] existing_selection_packet;
+    wire allocation_request_offer;
+    generate if(ALLOC_LOAD_REQUEST_BYPASS!=0) begin:g_alloc_request_payload
+        assign visible_selection_packet=allocation_request_offer ? allocation_load_packet : existing_selection_packet;
+    end else begin:g_original_request_payload
+        assign visible_selection_packet=existing_selection_packet;
     end endgenerate
     wire [SLOT_WIDTH-1:0] selected_slot;
     wire [31:0] selected_addr;
@@ -784,18 +792,24 @@ module rv32_lsq #(
     wire [BE_WIDTH-1:0] allocation_prior_unresolved_store,allocation_load_match,allocation_load_grant;
     wire [BE_WIDTH*SELECTION_PAYLOAD_WIDTH-1:0] allocation_load_values;
     wire allocation_load_found;
+    wire [LSQ_ENTRIES-1:0] allocation_present_stores;
+    wire [BE_WIDTH-1:0] allocation_prior_store;
     wire [SELECTION_PAYLOAD_WIDTH-1:0] allocation_load_packet;
     genvar early_row,early_lane;
     generate
         for(early_row=0;early_row<LSQ_ENTRIES;early_row=early_row+1) begin:g_allocation_store_guard
+            assign allocation_present_stores[early_row]=valid_mem[early_row] && store_mem[early_row];
             assign allocation_unresolved_stores[early_row]=valid_mem[early_row] && store_mem[early_row] &&
                 (!addr_ready_mem[early_row] || !data_ready_mem[early_row]);
         end
         for(early_lane=0;early_lane<BE_WIDTH;early_lane=early_lane+1) begin:g_allocation_load_selection
             if(early_lane==0) begin:g_first
                 assign allocation_prior_unresolved_store[early_lane]=1'b0;
+                assign allocation_prior_store[early_lane]=1'b0;
                 assign allocation_load_grant[early_lane]=allocation_load_match[early_lane];
             end else begin:g_later
+                assign allocation_prior_store[early_lane]=allocation_prior_store[early_lane-1] ||
+                    (alloc_fire_o[early_lane-1] && alloc_is_store_i[early_lane-1]);
                 assign allocation_prior_unresolved_store[early_lane]=allocation_prior_unresolved_store[early_lane-1] ||
                     (alloc_fire_o[early_lane-1] && alloc_is_store_i[early_lane-1] &&
                      (!alloc_addr_valid_i[early_lane-1] || !alloc_data_valid_i[early_lane-1]));
@@ -817,9 +831,21 @@ module rv32_lsq #(
     rv32_frequency_event_select #(.WIDTH(SELECTION_PAYLOAD_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) allocation_load_selector (
         .events_i(allocation_load_grant),.values_i(allocation_load_values),
         .write_o(allocation_load_found),.value_o(allocation_load_packet));
+    wire [BE_WIDTH-1:0] allocation_offer_blocked;
+    for(genvar offer_lane=0;offer_lane<BE_WIDTH;offer_lane=offer_lane+1) begin:g_alloc_request_guard
+        assign allocation_offer_blocked[offer_lane]=allocation_load_grant[offer_lane] && allocation_prior_store[offer_lane];
+    end
+    // No old request or store competes with this fresh owner. The tag and
+    // address are from the exact allocation, not an unowned prediction.
+    assign allocation_request_offer=(ALLOC_LOAD_REQUEST_BYPASS!=0) &&
+        (REQUEST_PIPELINE!=0) && !reset_i && !flush_i && !recovery_valid_i &&
+        !selection_valid && !pick_valid[1] && allocation_load_found &&
+        !(|allocation_present_stores) && !(|allocation_offer_blocked);
+    wire allocation_request_fire=allocation_request_offer && request_fire;
+    wire old_request_fire=request_fire && !allocation_request_offer;
     wire selection_input_fire=(REQUEST_PIPELINE!=0) && !reset_i && !flush_i && !recovery_valid_i &&
         (!selection_valid || selection_discard || selection_done) &&
-        (pick_valid[1] || allocation_load_found) && !direct_selection_done;
+        (pick_valid[1] || allocation_load_found) && !direct_selection_done && !allocation_request_fire;
     wire [SELECTION_PAYLOAD_WIDTH-1:0] normal_selection_packet={
         pick_slot[1],make_lsq_tag(32'(pick_slot[1]),pick_generation),pick_rob_tag,
         pick_addr[1],pick_load,pick_size,pick_unsigned,pick_store_mask,pick_store_data};
@@ -1221,6 +1247,11 @@ module rv32_lsq #(
         response_fire = dcache_resp_valid_i && response_match;
     end
 
+`ifdef VERILATOR
+    always @(posedge clk_i) if(!reset_i && allocation_request_offer)
+        assert((|alloc_fire_o) && selected_load && !(|allocation_present_stores))
+            else $fatal(1,"Unowned allocation load request");
+`endif
     // Admission is resolved beside bounded output groups. No new state.
     wire [2:0] saved_forward_views;
     rv32_frequency_control_tree #(.LEAVES(3)) saved_forward_tree (
@@ -1235,8 +1266,8 @@ module rv32_lsq #(
     assign dcache_req_addr_o=selected_addr;
     (* keep_hierarchy = 1 *)
     rv32_lsq_request_owner #(.TAG_WIDTH(TAG_WIDTH),.ROB_TAG_WIDTH(ROB_TAG_WIDTH)) request_owner (
-        .flush_i(flush_i),.recovery_i(recovery_valid_i),.found_i(candidate_found),
-        .wait_i(candidate_wait),.load_i(selected_load),.ready_i(dcache_req_ready_i),
+        .flush_i(flush_i),.recovery_i(recovery_valid_i),.found_i(candidate_found || allocation_request_offer),
+        .wait_i(allocation_request_offer ? 1'b0 : candidate_wait),.load_i(selected_load),.ready_i(dcache_req_ready_i),
         .size_i(selected_size),.unsigned_i(selected_unsigned),.address_i(selected_addr),
         .store_data_i(selected_store_data),.store_mask_i(selected_store_mask),
         .forward_data_i(raw_forward_data),.forward_mask_i(raw_forward_mask),
@@ -2067,7 +2098,7 @@ module rv32_lsq #(
             assign result_events[1]=enabled && response_fire && response_slot_views[payload_row*SLOT_WIDTH +: SLOT_WIDTH]==payload_row &&
                 (!recovery || !(row_age>local_branch_age && 16'(row_age)<local_recovery_occupancy));
             assign result_values[32 +: 32]=payload_response_value;
-            assign forward_events[0]=normal && request_fire && candidate==payload_row && load_mem[payload_row];
+            assign forward_events[0]=normal && old_request_fire && candidate==payload_row && load_mem[payload_row];
             assign forward_values[0 +: 32]=fwd_data;
             for(payload_lane=0;payload_lane<BE_WIDTH;payload_lane=payload_lane+1) begin:g_lane
                 assign allocations[payload_lane]=normal && allocation_fire_views[(payload_row/4)*BE_WIDTH+payload_lane] &&
@@ -2175,7 +2206,7 @@ module rv32_lsq #(
     wire metadata_forward=candidate_found && candidate_load &&
         !candidate_sent && !candidate_complete && ((fwd_mask & target_mask)==target_mask);
     rv32_frequency_control_tree #(.WIDTH(7),.LEAVES(LSQ_ENTRIES)) metadata_event_tree (
-        .signal_i({metadata_pop,metadata_forward,request_fire,response_fire,dcache_store_ack_valid_i,
+        .signal_i({metadata_pop,metadata_forward,old_request_fire,response_fire,dcache_store_ack_valid_i,
                    load_complete_valid_o && load_complete_ready_i,store_commit_valid_i && store_commit_ready_o}),
         .views_o(metadata_events));
     genvar metadata_row,metadata_lane;
@@ -2237,6 +2268,7 @@ module rv32_lsq #(
              request_sent_mem[metadata_row] && response_wait_mem[metadata_row]);
         wire response_event=metadata_events[metadata_row*7+3] && response_slot_views[metadata_row*SLOT_WIDTH +: SLOT_WIDTH]==metadata_row;
         wire request_event=metadata_events[metadata_row*7+4] && candidate==metadata_row;
+        wire allocated_request=allocation_request_fire && selected_slot==metadata_row;
         wire forward_event=metadata_events[metadata_row*7+5] && candidate==metadata_row;
         // Compare against the predecessor constant before the late pop
         // event. Both cleared rows and the scalar head/count share one count.
@@ -2374,8 +2406,8 @@ module rv32_lsq #(
                 if(allocated) begin
                     valid_mem_write_data[metadata_row]=1'b1; valid_mem_write_enable[metadata_row]=1'b1;
                     retired_mem_write_data[metadata_row]=1'b0; retired_mem_write_enable[metadata_row]=1'b1;
-                    request_sent_mem_write_data[metadata_row]=1'b0; request_sent_mem_write_enable[metadata_row]=1'b1;
-                    response_wait_mem_write_data[metadata_row]=1'b0; response_wait_mem_write_enable[metadata_row]=1'b1;
+                    request_sent_mem_write_data[metadata_row]=allocated_request; request_sent_mem_write_enable[metadata_row]=1'b1;
+                    response_wait_mem_write_data[metadata_row]=allocated_request; response_wait_mem_write_enable[metadata_row]=1'b1;
                     complete_mem_write_data[metadata_row]=1'b0; complete_mem_write_enable[metadata_row]=1'b1;
                     load_reported_mem_write_data[metadata_row]=1'b0; load_reported_mem_write_enable[metadata_row]=1'b1;
                     complete_error_mem_write_data[metadata_row]=1'b0; complete_error_mem_write_enable[metadata_row]=1'b1;
