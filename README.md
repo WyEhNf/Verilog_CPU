@@ -193,3 +193,5 @@ The owner policy now also selects L0 SRAM data banks using registered `fast_vali
 `DIRECT_DISPATCH_RELEASE_CREDITS=1` 是同一套 `cpu_core` / `rv32_backend_joint` 的可选参数，要求直接非弹性派遣、当前资源计数和静态 RS 分配。ROB 仅借用已就绪、非 store、非终止、非异常的退休前缀；LSQ 仅借用已有完成且已报告的 load，或已保存 ACK 且真正被接收的队头 store；RS 仅借用实际发射握手释放的有效行。恢复边界禁止借用，物理寄存器回收不借用。三个实际分配器与派遣资源计数同步扩展，保留完整代际标签，新分配覆盖旧行释放。参数默认关闭。
 
 一个有限双发射四行协议样例通过，覆盖满 ROB/RS/LSQ 的同拍复用、退休/发射/ACK 背压、旧 ROB completion 与 LSQ ACK 标签，以及 RS 新 payload 和顺序。记录见 `reports/Tier_shared_release_credit_protocol_2026-10-09.json`；这不是完整正确性或性能达标证明。`configs/tier1_shared_release_credits.json` 仍为待测候选，未替换正式配置。
+
+上述 Tier1 复用候选已完成一次 lint、构建和六项性能评估：IPC **0.5465218502**，低于此前共用 owner 配置的 **0.5480119195**，也低于 Tier1 的 **0.6000**。各项 cycles 为 13381 / 24673 / 256888 / 499808 / 9423 / 9288；六项答案与完整代际/释放断言均通过，但该候选因性能回退被拒绝，没有运行 PPA 或 CPU smoke，也没有替换任何正式配置。结果见 `reports/Tier1_shared_release_credits_2026-10-09.json`。
