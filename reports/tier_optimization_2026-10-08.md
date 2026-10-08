@@ -32,7 +32,7 @@
 
 修正后的唯一 Tier1 候选为 `F:/CPU2026TierRuns/tier1_compact_btb16_20261008`。继续使用原生 Windows Yosys0.63/固定 ABC/OpenSTA3.1/五份 ASAP7 RVT TT 与全部实际 FakeRAM；2 ns 映射目标，实际 Fmax 按原课程最低周期搜索。只有完整 PPA 通过才继续该候选的构建、六项 IPC 和一个小 correctness。
 
-Tier2 副本 `F:/CPU2026TierRuns/tier2_compact_20261008` 已冻结，随后开始第一次综合；尚无完整 PPA，未构建或运行 IPC/正确性。`tools/run_tier_candidate.py` 显式分阶段运行、拒绝覆盖已有阶段和源码，记录工具/库/源码/可执行文件身份；构建使用原官方 simulator 与原生 Verilator5.040，Windows time-zero host shim 保持原驱动不变。
+Tier2 副本 `F:/CPU2026TierRuns/tier2_compact_20261008` 的第一次完整综合/STA 已成功完成（784.990 秒），但面积门未通过：含 SRAM 面积 `19886.021862009184 μm²`，频率 `337.95379537953795 MHz`，超过面积上限 `1886.021862009184 μm²`。组合逻辑 `12285.06426000918`、时序逻辑 `4983.444`、SRAM `2617.513602000002 μm²`。manifest SHA256 `f6cad3acb2e780c9453f3fe862439d5d3ec7a29a63ac6143e115e384310bfbbe`，report SHA256 `acdd84e751b0b2c400e630a5a556a0ca6d0e6af81bcc88a3c8b36e5b5a2469a4`。未构建或运行 IPC/正确性，原结果保留。`tools/run_tier_candidate.py` 显式分阶段运行、拒绝覆盖已有阶段和源码，记录工具/库/源码/可执行文件身份；构建使用原官方 simulator 与原生 Verilator5.040，Windows time-zero host shim 保持原驱动不变。构建入口现在强制完整 PPA 通过，并核对报告身份。
 
 修正后的 Tier1 完整综合/STA 已成功完成（649.658 秒），但面积门未通过：含 SRAM 面积 `12288.756519002882 μm²`，频率 `347.4720054292501 MHz`，最小周期 `2.8779296875 ns`。面积由组合逻辑 `7389.7272000028825`、时序逻辑 `3536.5248`、75个 SRAM 实例 `1362.5045189999983 μm²` 组成。manifest SHA256 `e1bec6a8eb8906ca17f459c482fa96938585f127dd9dd7ca44eaf4764de5a874`，report SHA256 `3aa0e358dae80b0ccc6f1e60d65c5984f92b3501e55349011e1d5804dac5c1e1`。超过面积上限 `3288.756519002882 μm²`，因此跳过该候选 CPU 构建、IPC 与 smoke；原结果保留。
 
@@ -56,4 +56,6 @@ Tier2 副本 `F:/CPU2026TierRuns/tier2_compact_20261008` 已冻结，随后开�
 
 新增 `RV32IM_COMPACT_CONTROL_DEFAULT`（根和 RTL 头文件均默认0）与控制树 `COMPACT_CONTROL` 参数。默认0生成原显式反相树；可选1直接分发同值信号，由原课程综合器决定共享、扇出及删去未使用控制的上游逻辑。两种策略的组合值和时钟边沿一致，不改变队列、恢复或缓存协议。原仿真 `CPU2026_WORD_SIM` 的同值分发分支保持不变。面积与高扇出时序代价仍需实际 PPA 判断。
 
-`configs/tier1_area_control.json` 保留首轮有效 Tier1 的队列/缓存容量，同时选择64项方向表和控制策略1，组成一次结构候选。冻结工具只在该独立副本的两个头文件中改宏；默认 Tier3 不启用。没有把约791 μm²反相器面积直接当作全部收益，也未假设能补足3289 μm²缺口。目前仅完成代码审阅和diff检查；新候选尚未综合或仿真。
+`configs/tier1_area_control.json` 保留首轮有效 Tier1 的队列/缓存容量，同时选择64项方向表和控制策略1，组成一次结构候选。冻结副本 `F:/CPU2026TierRuns/tier1_area_control_20261008` 来自提交 `69aa79abc04f43db32c8880bb67ef890c0893eda`，在Tier2首轮结束后开始第二轮Tier1完整综合，目前在测量中，无完整指标且未仿真。冻结工具只在该独立副本的两个头文件中改宏；默认 Tier3 不启用。没有把约791 μm²反相器面积直接当作全部收益，也未假设能补足3289 μm²缺口。
+
+`configs/tier2_area_control.json` 是接下来的结构候选：保留首轮Tier2原全部队列/缓存/256项混合预测器，仅启用控制策略1。它尚未测量；是否启动其综合，依据当前Tier1结构候选的收益决定，不并行堆叠测试。
