@@ -837,7 +837,7 @@ module rv32_backend_joint #(
             $display("ERROR: load RS credits require current direct credits and allocation-edge load addresses");
             $finish(1);
         end
-        if ((RS_ALLOC_EMPTY_BYPASS!=0 && RS_ALLOC_EMPTY_BYPASS!=1) ||
+        if ((RS_ALLOC_EMPTY_BYPASS<0 || RS_ALLOC_EMPTY_BYPASS>2) ||
             (RS_ALLOC_EMPTY_BYPASS!=0 && (DISPATCH_PIPELINE!=0 || DISPATCH_ELASTIC!=0 ||
              ISSUE_PIPELINE!=0 || RS_ALLOC_STATIC_WRITE==0 || DIRECT_DISPATCH_RELEASE_CREDITS!=0)))
             $fatal(1,"Empty RS bypass requires direct static dispatch without release credits");

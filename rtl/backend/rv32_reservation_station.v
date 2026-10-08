@@ -5,6 +5,7 @@
 // The class-specific instances share this state/selection contract.
 module rv32_reservation_station #(
     parameter integer RELEASE_CREDITS = 0,
+    // 0: saved rows only; 1: empty queue fallthrough; 2: fill unused issue lanes.
     parameter integer ALLOC_EMPTY_BYPASS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ENTRIES = 8,
@@ -688,6 +689,12 @@ end
     // transitions to the original registered owner with identical payload.
     wire empty_allocation_issue=(ALLOC_EMPTY_BYPASS!=0) && !reset_i &&
         !flush_valid_i && occupancy_reg==0;
+    wire [COUNT_WIDTH-1:0] stored_ready_count;
+    generate if(ALLOC_EMPTY_BYPASS==2) begin:g_ready_lane_capacity
+        assign stored_ready_count=count_remaining_bits(ready_candidates);
+    end else begin:g_empty_lane_capacity
+        assign stored_ready_count=0;
+    end endgenerate
     wire [BE_WIDTH-1:0] incoming_ready;
     wire [ALLOC_COUNT_WIDTH-1:0] incoming_rank [0:BE_WIDTH];
     assign incoming_rank[0]=0;
@@ -697,7 +704,8 @@ end
             alloc_src1_ready_i[incoming_lane] && alloc_src2_ready_i[incoming_lane];
         assign incoming_rank[incoming_lane+1]=incoming_rank[incoming_lane]+ALLOC_COUNT_WIDTH'(incoming_ready[incoming_lane]);
     end
-    initial if(ALLOC_EMPTY_BYPASS!=0 && (ALLOC_STATIC_WRITE==0 || RELEASE_CREDITS!=0))
+    initial if(ALLOC_EMPTY_BYPASS<0 || ALLOC_EMPTY_BYPASS>2 ||
+        (ALLOC_EMPTY_BYPASS!=0 && (ALLOC_STATIC_WRITE==0 || RELEASE_CREDITS!=0)))
         $fatal(1,"Empty RS bypass requires static allocation without release credits");
     genvar issue_lane,issue_row,issue_word,issue_node;
     generate for(issue_lane=0;issue_lane<BE_WIDTH;issue_lane=issue_lane+1) begin:g_issue_payload
@@ -745,7 +753,8 @@ end
             wire fresh_valid;
             wire [ISSUE_BASE_DATA_WIDTH-1:0] fresh_payload;
             for(genvar fresh_lane=0;fresh_lane<BE_WIDTH;fresh_lane=fresh_lane+1) begin:g_lane
-                assign grants[fresh_lane]=incoming_ready[fresh_lane] && incoming_rank[fresh_lane]==issue_lane;
+                assign grants[fresh_lane]=incoming_ready[fresh_lane] &&
+                    32'(incoming_rank[fresh_lane])+32'(stored_ready_count)==issue_lane;
                 assign values[fresh_lane*ISSUE_BASE_DATA_WIDTH +: ISSUE_BASE_DATA_WIDTH]={
                     alloc_op_i[fresh_lane*OP_WIDTH +: OP_WIDTH],alloc_pc_i[fresh_lane*32 +: 32],
                     alloc_rob_tag_i[fresh_lane*TAG_WIDTH +: TAG_WIDTH],alloc_phys_rd_i[fresh_lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
@@ -757,9 +766,14 @@ end
                 .events_i(grants),.values_i(values),.write_o(fresh_valid),.value_o(fresh_payload));
             // Allocation is inhibited during recovery. Fresh rows have no
             // old-row recovery qualification/cancel sidebands to inherit.
-            assign selected_issue_payload=empty_allocation_issue ?
+            // Saved ready rows always occupy the earlier issue lanes. Fresh
+            // ready allocations may use only a lane left empty by that set.
+            // No downstream ready signal changes either arbitration rank.
+            wire fresh_lane_allowed=(ALLOC_EMPTY_BYPASS==2) ?
+                (!reset_i && !flush_valid_i && !(|selections)) : empty_allocation_issue;
+            assign selected_issue_payload=fresh_lane_allowed ?
                 ISSUE_DATA_WIDTH'(fresh_payload) : payload_tree[1];
-            assign issue_valid_o[issue_lane]=empty_allocation_issue ? fresh_valid : (|selections);
+            assign issue_valid_o[issue_lane]=fresh_lane_allowed ? fresh_valid : (|selections);
         end else begin:g_original_registered_issue
             assign selected_issue_payload=payload_tree[1];
             assign issue_valid_o[issue_lane]=|selections;
