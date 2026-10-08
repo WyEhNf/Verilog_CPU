@@ -7,6 +7,7 @@
 // accumulate in the queue and drain in program order, allowing the ROB to
 // retire past cache latency while the LSQ doubles as a store buffer.
 module rv32_lsq #(
+    parameter integer RELEASE_CREDITS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -85,6 +86,7 @@ module rv32_lsq #(
 
     input  wire [BE_WIDTH-1:0]           alloc_valid_i,
     input  wire [BE_WIDTH-1:0]           alloc_plan_valid_i,
+    output wire                         allocation_release_o,
     output wire                         alloc_ready_o,
     output reg  [BE_WIDTH-1:0]           alloc_fire_o,
     output reg  [ALLOC_COUNT_WIDTH-1:0]  alloc_count_o,
@@ -1172,7 +1174,7 @@ module rv32_lsq #(
     always @* begin
         // Allocation/response temporaries retain unconditional defaults.
         alloc_slot = 0;
-        free_count_calc = LSQ_ENTRIES - 32'(occupancy_reg);
+        free_count_calc = LSQ_ENTRIES - 32'(occupancy_reg) + 32'(allocation_release_o);
         alloc_fire_o = {BE_WIDTH{1'b0}};
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
         alloc_lsq_tag_o = {(BE_WIDTH*TAG_WIDTH){1'b0}};
@@ -2125,6 +2127,16 @@ module rv32_lsq #(
            ((LOAD_COMPLETION_BYPASS==2) && fast_head_present && head_report_accepted))) ||
          (head_store && store_ack_ready_i &&
           (head_ack || ((HEAD_STORE_ACK_ACTIVE!=0) && fast_head_store_ack_present && store_ack_valid_o))));
+    // Registered publication/ACK certifies one head pop. Current response,
+    // report and cache ACK paths cannot manufacture allocation capacity.
+    assign allocation_release_o=(RELEASE_CREDITS!=0) && !reset_i && !flush_i &&
+        !recovery_valid_i && occupancy_reg!=0 && head_valid &&
+        ((head_load && head_complete && head_reported) ||
+         (head_store && head_ack && store_ack_ready_i));
+`ifdef VERILATOR
+    always @(posedge clk_i) if(!reset_i && allocation_release_o)
+        assert(metadata_pop) else $fatal(1,"LSQ release credit without head pop");
+`endif
     wire metadata_second_pop;
     wire [LSQ_ENTRIES-1:0] second_pop_views;
     wire [1:0] metadata_pop_count=metadata_pop?

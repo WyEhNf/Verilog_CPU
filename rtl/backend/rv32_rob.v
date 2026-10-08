@@ -4,6 +4,7 @@
 // Generation-qualified reorder buffer.  The interface deliberately keeps
 // architectural commit separate from store visibility and branch recovery.
 module rv32_rob #(
+    parameter integer RELEASE_CREDITS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
@@ -66,6 +67,7 @@ module rv32_rob #(
     input  wire [BE_WIDTH-1:0]           alloc_is_halt_i,
     input  wire [BE_WIDTH-1:0]           alloc_is_error_i,
     input  wire [(BE_WIDTH*CHECKPOINT_WIDTH)-1:0] alloc_checkpoint_i,
+    output wire [((BE_WIDTH<=1)?1:$clog2(BE_WIDTH+1))-1:0] allocation_release_count_o,
     output wire                         alloc_ready_o,
     output reg  [BE_WIDTH-1:0]           alloc_fire_o,
     output reg  [(BE_WIDTH*TAG_WIDTH)-1:0] alloc_tag_o,
@@ -1104,6 +1106,29 @@ end
         assign prefix_admission_tag=0;
     end endgenerate
 
+    // A ready non-store head prefix is guaranteed to retire on this edge.
+    // Do not borrow stores, terminals, current completion, or recovery edges.
+    // In particular this certificate has no allocation or LSQ ready input.
+    wire [BE_WIDTH:0] release_prefix;
+    assign release_prefix[0]=(RELEASE_CREDITS!=0) && !reset_i && commit_ready_i &&
+        !halted_o && !error_o && !recovery_hold_i && !recovery_hold &&
+        !(|recovery_valid_i) && !recovery_apply_i;
+    wire [ALLOC_COUNT_WIDTH-1:0] release_count_tree [0:BE_WIDTH];
+    assign release_count_tree[0]=0;
+    for(genvar release_lane=0;release_lane<BE_WIDTH;release_lane=release_lane+1) begin:g_release_credit
+        assign release_prefix[release_lane+1]=release_prefix[release_lane] &&
+            head_valid[release_lane] && head_ready[release_lane] &&
+            !head_store[release_lane] && !head_halt[release_lane] && !head_error[release_lane];
+        assign release_count_tree[release_lane+1]=release_count_tree[release_lane]+
+            ALLOC_COUNT_WIDTH'(release_prefix[release_lane+1]);
+    end
+    assign allocation_release_count_o=release_count_tree[BE_WIDTH];
+`ifdef VERILATOR
+    always @(posedge clk_i) if(!reset_i && RELEASE_CREDITS!=0)
+        assert(32'(allocation_release_count_o)<= (commit_ready_i ? pop_count : 0))
+            else $fatal(1,"ROB release credit exceeds actual retirement");
+`endif
+
     // Allocation and all observable outputs are evaluated from old state.
     always @* begin
         commit_lane = 0;
@@ -1112,7 +1137,7 @@ end
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
         prefix_open = !recovery_hold;
         allocation_count = 0;
-        free_entries = ROB_ENTRIES - 32'(occupancy_reg);
+        free_entries = ROB_ENTRIES - 32'(occupancy_reg) + 32'(allocation_release_count_o);
         alloc_slot = 0;
         for (alloc_lane = 0; alloc_lane < BE_WIDTH; alloc_lane = alloc_lane + 1) begin
             if (prefix_open && alloc_valid_i[alloc_lane] && (allocation_count < free_entries)) begin

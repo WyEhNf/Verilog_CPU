@@ -4,6 +4,7 @@
 // Parameterized reservation station used for INT, MUL and DIV classes.
 // The class-specific instances share this state/selection contract.
 module rv32_reservation_station #(
+    parameter integer RELEASE_CREDITS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ENTRIES = 8,
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
@@ -51,6 +52,7 @@ module rv32_reservation_station #(
     input  wire [BE_WIDTH-1:0]           alloc_src2_ready_i,
     input  wire [(BE_WIDTH*STORE_DATA_WIDTH)-1:0] alloc_store_data_i,
     input  wire [(BE_WIDTH*METADATA_WIDTH)-1:0] alloc_metadata_i,
+    output wire [((BE_WIDTH<=1)?1:$clog2(BE_WIDTH+1))-1:0] allocation_release_count_o,
     output wire                         alloc_ready_o,
     output reg  [BE_WIDTH-1:0]           alloc_fire_o,
     output reg  [((BE_WIDTH <= 1) ? 1 : $clog2(BE_WIDTH + 1))-1:0] alloc_count_o,
@@ -376,6 +378,13 @@ end
     end
 
     wire [ENTRIES-1:0] issue_release_mask;
+    wire [ENTRIES-1:0] allocation_available_rows;
+    wire [ENTRIES-1:0] allocation_released_rows=valid_entries & issue_release_mask &
+        {ENTRIES{(RELEASE_CREDITS!=0) && !reset_i && !flush_valid_i}};
+    assign allocation_release_count_o=ALLOC_COUNT_WIDTH'(count_remaining_bits(allocation_released_rows));
+    assign allocation_available_rows=~valid_entries | allocation_released_rows;
+    initial if(RELEASE_CREDITS!=0 && ALLOC_STATIC_WRITE==0)
+        $fatal(1,"RS release credits require static row allocation");
     genvar export_lane,export_row;
     generate
         for(export_lane=0;export_lane<BE_WIDTH;export_lane=export_lane+1) begin:g_allocation_identity
@@ -420,7 +429,7 @@ end
             wire [COUNT_WIDTH-1:0] tree [1:2*SLOT_LEAVES-1];
             for(rank_source=0;rank_source<SLOT_LEAVES;rank_source=rank_source+1) begin:g_leaf
                 if(rank_source<rank_row) begin : g_named_360_41
-assign tree[SLOT_LEAVES+rank_source]=COUNT_WIDTH'(!valid_mem[rank_source]);
+assign tree[SLOT_LEAVES+rank_source]=COUNT_WIDTH'(allocation_available_rows[rank_source]);
 end
                 else begin : g_named_361_21
 assign tree[SLOT_LEAVES+rank_source]=0;
@@ -431,7 +440,7 @@ end
             end
             assign free_before[rank_row]=tree[1];
             for(local_rank_lane=0;local_rank_lane<BE_WIDTH;local_rank_lane=local_rank_lane+1) begin:g_grant
-                assign slot_grants[rank_row][local_rank_lane]=!valid_mem[rank_row] &&
+                assign slot_grants[rank_row][local_rank_lane]=allocation_available_rows[rank_row] &&
                     alloc_fire_o[local_rank_lane] && free_before[rank_row]==accepted_before[local_rank_lane];
             end
         end
@@ -633,7 +642,7 @@ end
             rv32_rs_payload_row #(.OP_WIDTH(OP_WIDTH),.TAG_WIDTH(TAG_WIDTH),.SOURCE_TAG_WIDTH(SOURCE_TAG_WIDTH),
                 .PHYS_ADDR_WIDTH(PHYS_ADDR_WIDTH),.STORE_DATA_WIDTH(STORE_DATA_WIDTH),
                 .METADATA_WIDTH(METADATA_WIDTH),.AGE_WIDTH(AGE_WIDTH),
-                .PAYLOAD_WIDTH(ALLOC_PAYLOAD_WIDTH)) row (
+                .PAYLOAD_WIDTH(ALLOC_PAYLOAD_WIDTH),.ALLOC_ISSUE_REPLACE(RELEASE_CREDITS)) row (
                 .clk_i(clk_i),.reset_i(reset_i),.flush_i(flush_valid_i),
                 .kill_i(flush_kill_mask_i[owner_row] ||
                     ((RECOVERY_ISSUE_RELEASE!=0) && issue_release_mask[owner_row])),
@@ -785,7 +794,7 @@ end
         alloc_fire_o = {BE_WIDTH{1'b0}};
         alloc_count_o = {ALLOC_COUNT_WIDTH{1'b0}};
         allocation_count = 0;
-        free_entries = ENTRIES - 32'(occupancy_reg);
+        free_entries = ENTRIES - 32'(occupancy_reg) + 32'(allocation_release_count_o);
         prefix_open = 1'b1;
         for (lane = 0; lane < BE_WIDTH; lane = lane + 1) begin
             if (prefix_open && alloc_valid_i[lane] && (allocation_count < free_entries)) begin
@@ -966,7 +975,8 @@ end
                 end
                 for (issue_slot = 0; issue_slot < BE_WIDTH; issue_slot = issue_slot + 1)
                 begin
-                    if (issue_valid_o[issue_slot] && issue_ready_i[issue_slot])
+                    if (issue_valid_o[issue_slot] && issue_ready_i[issue_slot] &&
+                        !((RELEASE_CREDITS!=0) && alloc_row_write[issue_slot_o[(issue_slot*SLOT_WIDTH) +: SLOT_WIDTH]]))
                     begin
                         valid_mem[issue_slot_o[(issue_slot*SLOT_WIDTH) +: SLOT_WIDTH]] <= 1'b0;
                         target_live_mem_legacy[issue_slot_o[(issue_slot*SLOT_WIDTH) +: SLOT_WIDTH]] <= 1'b0;

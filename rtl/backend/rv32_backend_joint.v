@@ -16,6 +16,8 @@ module rv32_backend_joint #(
     // already bound admission on this edge; an extra credit register only
     // delays reuse after a release. The pipelined policy stays unchanged.
     parameter integer DIRECT_DISPATCH_CURRENT_CREDITS = 0,
+    // Borrow only releases guaranteed by saved owners and real handshakes.
+    parameter integer DIRECT_DISPATCH_RELEASE_CREDITS = 0,
     // Read the pre-bundle RAT/PRF before admission so a qualified ready load
     // needs only ROB/LSQ capacity. Earlier bundle writers still force RS use.
     parameter integer DIRECT_LOAD_RS_CREDIT = 0,
@@ -833,6 +835,10 @@ module rv32_backend_joint #(
             $display("ERROR: load RS credits require current direct credits and allocation-edge load addresses");
             $finish(1);
         end
+        if ((DIRECT_DISPATCH_RELEASE_CREDITS!=0 && DIRECT_DISPATCH_RELEASE_CREDITS!=1) ||
+            (DIRECT_DISPATCH_RELEASE_CREDITS!=0 &&
+             (DIRECT_DISPATCH_CURRENT_CREDITS==0 || DISPATCH_PIPELINE!=0 || DISPATCH_ELASTIC!=0 || RS_ALLOC_STATIC_WRITE==0)))
+            $fatal(1,"Release credits require current direct credits and static RS allocation");
         if ((DIRECT_DISPATCH_CURRENT_CREDITS!=0 && DIRECT_DISPATCH_CURRENT_CREDITS!=1) ||
             (DIRECT_DISPATCH_CURRENT_CREDITS!=0 && (DISPATCH_PIPELINE!=0 || DISPATCH_ELASTIC!=0))) begin
             $display("ERROR: current queue credits require direct nonelastic dispatch");
@@ -1243,14 +1249,20 @@ module rv32_backend_joint #(
         assign preview_read_phys=0;
         assign preview_load_without_agu=0;
     end endgenerate
-    // Only count slots already free in registered state. This neither
-    // anticipates a same-edge release nor reads an allocator's fire/ready.
+    // Release credits are independently certified by each real allocator.
+    // No allocator fire/ready feeds admission, and physical reclamation is not
+    // borrowed. Disabled policy uses only the original registered free slots.
+    wire [CREDIT_WIDTH-1:0] rob_release_credit,rs_release_credit;
+    wire lsq_release_credit;
+    wire [15:0] direct_rob_free=rob_free_count+16'(rob_release_credit);
+    wire [15:0] direct_rs_free=rs_free_count+16'(rs_release_credit);
+    wire [15:0] direct_lsq_free=lsq_free_count+16'(lsq_release_credit);
     wire [CREDIT_WIDTH-1:0] admission_rob_credit = CURRENT_DISPATCH_CREDITS_ACTIVE ?
-        ((!reset_i && !flush_i) ? bounded_credit(rob_free_count,0) : CREDIT_WIDTH'(0)) : rob_credit;
+        ((!reset_i && !flush_i) ? bounded_credit(direct_rob_free,0) : CREDIT_WIDTH'(0)) : rob_credit;
     wire [CREDIT_WIDTH-1:0] admission_rs_credit = CURRENT_DISPATCH_CREDITS_ACTIVE ?
-        ((!reset_i && !flush_i) ? bounded_credit(rs_free_count,0) : CREDIT_WIDTH'(0)) : rs_credit;
+        ((!reset_i && !flush_i) ? bounded_credit(direct_rs_free,0) : CREDIT_WIDTH'(0)) : rs_credit;
     wire [CREDIT_WIDTH-1:0] admission_lsq_credit = CURRENT_DISPATCH_CREDITS_ACTIVE ?
-        ((!reset_i && !flush_i) ? bounded_credit(lsq_free_count,0) : CREDIT_WIDTH'(0)) : lsq_credit;
+        ((!reset_i && !flush_i) ? bounded_credit(direct_lsq_free,0) : CREDIT_WIDTH'(0)) : lsq_credit;
     // The original registered policy advertises F - accepted and omits
     // releases. Keep it for default/pipelined dispatch profiles.
     // At the next edge actual free slots F' = F - accepted + releases.
@@ -2184,7 +2196,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rob #(.BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STAGED_RECOVERY(RECOVERY_DIRECT_ACTIVE==0), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .RECLAIM_UNIQUE_DESTINATIONS(ROB_UNIQUE_RECLAIM_COUNT), .FAST_STORE_COMPLETE(FAST_STORE_COMPLETE_ACTIVE), .FAST_STORE_IDENTITY_PRESELECT(FAST_STORE_IDENTITY_PRESELECT), .FAST_STORE_BATCH(FAST_STORE_BATCH_ACTIVE), .STORE_PREFIX_ADMISSION(ROB_STORE_PREFIX_ADMISSION), .RECOVERY_ROW_LIVE_QUALIFY(ROB_RECOVERY_ROW_LIVE_QUALIFY), .OCCUPANCY_DISTRIBUTE(ROB_OCCUPANCY_DISTRIBUTE), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .LEGACY_HALT_PAYLOAD(ROB_LEGACY_HALT_PAYLOAD), .RETURN_VALUE_ENABLE(ROB_RETURN_VALUE_ENABLE), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
+    rv32_rob #(.RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STAGED_RECOVERY(RECOVERY_DIRECT_ACTIVE==0), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .RECLAIM_UNIQUE_DESTINATIONS(ROB_UNIQUE_RECLAIM_COUNT), .FAST_STORE_COMPLETE(FAST_STORE_COMPLETE_ACTIVE), .FAST_STORE_IDENTITY_PRESELECT(FAST_STORE_IDENTITY_PRESELECT), .FAST_STORE_BATCH(FAST_STORE_BATCH_ACTIVE), .STORE_PREFIX_ADMISSION(ROB_STORE_PREFIX_ADMISSION), .RECOVERY_ROW_LIVE_QUALIFY(ROB_RECOVERY_ROW_LIVE_QUALIFY), .OCCUPANCY_DISTRIBUTE(ROB_OCCUPANCY_DISTRIBUTE), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .LEGACY_HALT_PAYLOAD(ROB_LEGACY_HALT_PAYLOAD), .RETURN_VALUE_ENABLE(ROB_RETURN_VALUE_ENABLE), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rob_alloc_valid), .alloc_pc_i(rob_alloc_pc), .alloc_inst_i(rob_alloc_inst), .alloc_rd_i(rob_alloc_rd),
         .alloc_rd_we_i(rename_rd_we), .alloc_old_phys_i(rob_alloc_old_phys), .alloc_new_phys_i(rob_alloc_new_phys), .alloc_is_store_i(rob_alloc_is_store),
         .alloc_is_branch_i(rob_alloc_is_branch), .alloc_is_halt_i(rob_alloc_is_halt), .alloc_is_error_i(rob_alloc_is_error), .alloc_checkpoint_i(rob_alloc_checkpoint),
@@ -2197,7 +2209,7 @@ module rv32_backend_joint #(
         .store_commit_valid_o(rob_store_commit_valid), .store_commit_ready_i(rob_store_commit_ready), .store_commit_tag_o(rob_store_commit_tag), .store_commit_addr_o(rob_store_commit_addr), .store_commit_mask_o(rob_store_commit_mask), .store_commit_data_o(rob_store_commit_data), .store_ack_valid_i(rob_store_ack_valid), .store_ack_tag_i(rob_store_ack_tag), .store_ack_error_i(lsq_store_ack_error),
         .recovery_valid_i({ {(BE_WIDTH-1){1'b0}}, branch_pending }), .recovery_tag_i({ {(BE_WIDTH-1)*TAG_WIDTH{1'b0}}, recovery_tag_views[0 +: TAG_WIDTH] }), .recovery_pc_i({ {(BE_WIDTH-1)*32{1'b0}}, branch_pending_pc }),
         .recovery_apply_i(recovery_descriptor_valid), .recovery_hold_i(branch_busy_domains[3]),
-        .recovery_preview_valid_o(rob_recovery_preview), .recovery_accept_o(rob_recovery_accept_source), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head_source), .head_domains_o(rob_registered_head_views), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation), .entry_new_phys_o(rob_entry_new_phys), .entry_rd_we_o(rob_entry_rd_we), .entry_rd_o(rob_entry_rd), .entry_old_phys_o(rob_entry_old_phys)
+        .recovery_preview_valid_o(rob_recovery_preview), .recovery_accept_o(rob_recovery_accept_source), .redirect_valid_o(rob_redirect_valid), .redirect_pc_o(rob_redirect_pc), .redirect_epoch_o(rob_redirect_epoch), .checkpoint_restore_valid_o(rob_checkpoint_restore_valid), .checkpoint_restore_o(rob_checkpoint_restore), .recovery_rd_we_o(rob_recovery_rd_we), .recovery_rd_o(rob_recovery_rd), .recovery_new_phys_o(rob_recovery_new_phys), .recovery_reclaim_bitmap_o(rob_recovery_reclaim_bitmap), .recovery_reclaim_count_o(rob_recovery_reclaim_count), .halted_o(halted_o), .error_o(error_o), .return_value_o(return_value_o), .head_o(rob_head_source), .head_domains_o(rob_registered_head_views), .tail_o(rob_tail), .occupancy_o(rob_occupancy), .allocation_release_count_o(rob_release_credit), .entry_valid_o(rob_entry_valid), .entry_generation_o(rob_entry_generation), .entry_new_phys_o(rob_entry_new_phys), .entry_rd_we_o(rob_entry_rd_we), .entry_rd_o(rob_entry_rd), .entry_old_phys_o(rob_entry_old_phys)
     );
 
     // The new edge uses the direct RS contract and selective execution
@@ -2290,7 +2302,7 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] raw_rs_issue_store;
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] raw_rs_issue_metadata;
     wire [BE_WIDTH*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))-1:0] raw_rs_issue_slot;
-    rv32_reservation_station #(.BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_QUALIFICATION(RS_ROW_QUALIFICATION_ACTIVE), .ISSUE_RECOVERY_CANCEL(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) rs (
+    rv32_reservation_station #(.RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_QUALIFICATION(RS_ROW_QUALIFICATION_ACTIVE), .ISSUE_RECOVERY_CANCEL(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) rs (
         .entry_issue_cancel_i(rs_entry_issue_cancel), .issue_cancel_o(raw_rs_issue_cancel),
         .entry_recovery_qualified_i(rs_entry_recovery_qualified),
         .issue_recovery_qualified_o(raw_rs_issue_recovery_qualified),
@@ -2299,7 +2311,7 @@ module rv32_backend_joint #(
         .alloc_slot_o(rs_alloc_slot),.entry_release_o(rs_entry_release),
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rs_alloc_valid), .alloc_op_i(d_op), .alloc_pc_i(d_pc), .alloc_rob_tag_i(d_tag), .alloc_target_live_i(d_valid), .alloc_phys_rd_i(d_new_phys),
         .alloc_src1_value_i(rs_src1_value), .alloc_src1_tag_i(rs_source1_identity), .alloc_src1_ready_i(rs_src1_ready), .alloc_src2_value_i(rs_src2_value), .alloc_src2_tag_i(rs_source2_identity), .alloc_src2_ready_i(rs_src2_ready), .alloc_store_data_i(d_store_data), .alloc_ready_o(rs_alloc_ready), .alloc_fire_o(rs_alloc_fire), .alloc_count_o(rs_alloc_count),
-        .wake_valid_i(rs_wake_valid), .wake_tag_i(rs_wake_tag), .wake_value_i(rs_wake_value), .issue_ready_i(raw_rs_issue_ready), .issue_valid_o(raw_rs_issue_valid), .issue_op_o(raw_rs_issue_op), .issue_pc_o(raw_rs_issue_pc), .issue_rob_tag_o(raw_rs_issue_tag), .issue_phys_rd_o(raw_rs_issue_phys), .issue_src1_value_o(raw_rs_issue_src1), .issue_src2_value_o(raw_rs_issue_src2), .issue_store_data_o(raw_rs_issue_store), .issue_slot_o(raw_rs_issue_slot), .flush_valid_i(flush_i || recovery_domains[4]), .flush_kill_mask_i(rs_flush_kill_mask), .entry_valid_o(rs_entry_valid), .entry_rob_tag_o(rs_entry_rob_tag), .occupancy_o(rs_occupancy)
+        .wake_valid_i(rs_wake_valid), .wake_tag_i(rs_wake_tag), .wake_value_i(rs_wake_value), .issue_ready_i(raw_rs_issue_ready), .issue_valid_o(raw_rs_issue_valid), .issue_op_o(raw_rs_issue_op), .issue_pc_o(raw_rs_issue_pc), .issue_rob_tag_o(raw_rs_issue_tag), .issue_phys_rd_o(raw_rs_issue_phys), .issue_src1_value_o(raw_rs_issue_src1), .issue_src2_value_o(raw_rs_issue_src2), .issue_store_data_o(raw_rs_issue_store), .issue_slot_o(raw_rs_issue_slot), .flush_valid_i(flush_i || recovery_domains[4]), .flush_kill_mask_i(rs_flush_kill_mask), .entry_valid_o(rs_entry_valid), .entry_rob_tag_o(rs_entry_rob_tag), .occupancy_o(rs_occupancy), .allocation_release_count_o(rs_release_credit)
     );
 
     genvar pipe_lane;
@@ -2395,7 +2407,7 @@ module rv32_backend_joint #(
     );
 
     wire [(((LSQ_ENTRIES) <= 1) ? 1 : $clog2((LSQ_ENTRIES)))-1:0] unused_lsq_tail_o;
-    rv32_lsq #(.BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .ACK_SOURCE_QUERY(LSQ_STORE_ACK_SOURCE_QUERY), .HEAD_STORE_ACK_BYPASS(LSQ_HEAD_STORE_ACK_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .SAVED_REPORT_PRIORITY(LSQ_SAVED_REPORT_PRIORITY), .HEAD_LOAD_IDENTITY_QUERY(LSQ_HEAD_LOAD_IDENTITY_QUERY), .HELD_LOAD_IDENTITY_QUERY(LSQ_HELD_LOAD_IDENTITY_QUERY), .HEAD_LOAD_PACKET_PRESELECT(LSQ_HEAD_LOAD_PACKET_PRESELECT), .SAVED_IDENTITY_WORD_MASK(LSQ_SAVED_IDENTITY_WORD_MASK), .SAVED_IDENTITY_BALANCED_MERGE(LSQ_SAVED_IDENTITY_BALANCED_MERGE), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .ALLOC_SLOT_PRESELECT(LSQ_ALLOC_SLOT_PRESELECT_ACTIVE), .ALLOC_PAYLOAD_PRESELECT(LSQ_ALLOC_PAYLOAD_PRESELECT_ACTIVE), .ALLOC_FIRE_DISTRIBUTE(LSQ_ALLOC_FIRE_DISTRIBUTE), .RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .SECOND_REPORT_RECLAIM(LSQ_SECOND_REPORT_RECLAIM), .EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .COMMITTED_STORE_BYPASS(LSQ_COMMITTED_STORE_BYPASS), .PICK_LOCAL_VALIDITY(LSQ_PICK_LOCAL_VALIDITY), .FORWARD_ONEHOT(LSQ_FORWARD_ONEHOT), .PICK_ONEHOT(LSQ_PICK_ONEHOT), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .RESPONSE_SOURCE_QUERY(LSQ_RESPONSE_SOURCE_QUERY), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
+    rv32_lsq #(.RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .ACK_SOURCE_QUERY(LSQ_STORE_ACK_SOURCE_QUERY), .HEAD_STORE_ACK_BYPASS(LSQ_HEAD_STORE_ACK_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .SAVED_REPORT_PRIORITY(LSQ_SAVED_REPORT_PRIORITY), .HEAD_LOAD_IDENTITY_QUERY(LSQ_HEAD_LOAD_IDENTITY_QUERY), .HELD_LOAD_IDENTITY_QUERY(LSQ_HELD_LOAD_IDENTITY_QUERY), .HEAD_LOAD_PACKET_PRESELECT(LSQ_HEAD_LOAD_PACKET_PRESELECT), .SAVED_IDENTITY_WORD_MASK(LSQ_SAVED_IDENTITY_WORD_MASK), .SAVED_IDENTITY_BALANCED_MERGE(LSQ_SAVED_IDENTITY_BALANCED_MERGE), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .ALLOC_SLOT_PRESELECT(LSQ_ALLOC_SLOT_PRESELECT_ACTIVE), .ALLOC_PAYLOAD_PRESELECT(LSQ_ALLOC_PAYLOAD_PRESELECT_ACTIVE), .ALLOC_FIRE_DISTRIBUTE(LSQ_ALLOC_FIRE_DISTRIBUTE), .RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .SECOND_REPORT_RECLAIM(LSQ_SECOND_REPORT_RECLAIM), .EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .COMMITTED_STORE_BYPASS(LSQ_COMMITTED_STORE_BYPASS), .PICK_LOCAL_VALIDITY(LSQ_PICK_LOCAL_VALIDITY), .FORWARD_ONEHOT(LSQ_FORWARD_ONEHOT), .PICK_ONEHOT(LSQ_PICK_ONEHOT), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .RESPONSE_SOURCE_QUERY(LSQ_RESPONSE_SOURCE_QUERY), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
         .early_addr_valid_i(shared_store_addr_valid), .early_addr_tag_i(shared_store_addr_tag),
         .early_addr_i(shared_store_addr), .store_addr_pending_o(lsq_store_addr_pending),
         .store_addr_rob_tag_o(lsq_store_addr_rob_tag), .store_addr_lsq_tag_o(lsq_store_addr_lsq_tag),
@@ -2409,7 +2421,7 @@ module rv32_backend_joint #(
         .load_report_held_identity_tag_o(lsq_report_held_identity_tag),
         .load_report_held_identity_query_o(lsq_report_held_identity_query),
         .load_report_identity_held_o(lsq_report_identity_held),
-        .load_report_identity_head_o(lsq_report_identity_head), .load_complete_lsq_tag_o(lsq_load_complete_lsq_tag), .load_complete_value_o(lsq_load_complete_value), .load_complete_phys_rd_o(lsq_load_complete_phys), .load_complete_unretired_o(lsq_load_complete_unretired), .load_complete_cancel_o(lsq_load_complete_cancel), .report_recovery_packet_i(execution_recovery_views[(BE_WIDTH+1)*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .load_complete_error_o(lsq_load_complete_error), .dcache_store_ack_valid_i(dcache_store_ack_valid_i), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag_i), .dcache_store_ack_error_i(dcache_store_ack_error_i), .store_ack_valid_o(lsq_store_ack_valid), .store_ack_ready_i(1'b1), .store_ack_query_valid_i(store_ack_query_valid_i), .store_ack_query_tag_i(store_ack_query_tag_i), .store_ack_rob_tag_o(lsq_store_ack_rob_tag), .store_ack_rob_query_tag_o(lsq_store_ack_rob_query_tag), .store_ack_lsq_tag_o(lsq_store_ack_lsq_tag), .store_ack_error_o(lsq_store_ack_error), .occupancy_o(lsq_occupancy), .tail_o(unused_lsq_tail_o)
+        .load_report_identity_head_o(lsq_report_identity_head), .load_complete_lsq_tag_o(lsq_load_complete_lsq_tag), .load_complete_value_o(lsq_load_complete_value), .load_complete_phys_rd_o(lsq_load_complete_phys), .load_complete_unretired_o(lsq_load_complete_unretired), .load_complete_cancel_o(lsq_load_complete_cancel), .report_recovery_packet_i(execution_recovery_views[(BE_WIDTH+1)*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .load_complete_error_o(lsq_load_complete_error), .dcache_store_ack_valid_i(dcache_store_ack_valid_i), .dcache_store_ack_lsq_tag_i(dcache_store_ack_lsq_tag_i), .dcache_store_ack_error_i(dcache_store_ack_error_i), .store_ack_valid_o(lsq_store_ack_valid), .store_ack_ready_i(1'b1), .store_ack_query_valid_i(store_ack_query_valid_i), .store_ack_query_tag_i(store_ack_query_tag_i), .store_ack_rob_tag_o(lsq_store_ack_rob_tag), .store_ack_rob_query_tag_o(lsq_store_ack_rob_query_tag), .store_ack_lsq_tag_o(lsq_store_ack_lsq_tag), .store_ack_error_o(lsq_store_ack_error), .occupancy_o(lsq_occupancy), .allocation_release_o(lsq_release_credit), .tail_o(unused_lsq_tail_o)
     );
 
     // Keep producer positions fixed.  The completion network already skips

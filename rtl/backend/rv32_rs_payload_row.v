@@ -4,6 +4,7 @@
 // Each row owns its final data writes. Wide metadata has no reset/flush
 // feedback mux after its qualified and priced local write driver.
 module rv32_rs_payload_row #(
+    parameter integer ALLOC_ISSUE_REPLACE=0,
     parameter integer OP_WIDTH=6,TAG_WIDTH=17,PHYS_ADDR_WIDTH=6,
     parameter integer SOURCE_TAG_WIDTH=TAG_WIDTH,
     parameter integer STORE_DATA_WIDTH=32,METADATA_WIDTH=70,AGE_WIDTH=8,
@@ -96,7 +97,7 @@ module rv32_rs_payload_row #(
                 if(wake2_write)
                     src2_ready_o<=1;
             end
-            if((flush_i && kill_i) || (!flush_i && issue_i))
+            if((flush_i && kill_i) || (!flush_i && issue_i && !((ALLOC_ISSUE_REPLACE!=0) && allocation)))
                 target_live_o<=0;
         end
     end
