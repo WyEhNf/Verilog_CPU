@@ -770,7 +770,21 @@ module rv32_lsq #(
     wire [SELECTION_PAYLOAD_WIDTH-1:0] existing_selection_packet;
     wire allocation_request_offer;
     generate if(ALLOC_LOAD_REQUEST_BYPASS!=0) begin:g_alloc_request_payload
-        assign visible_selection_packet=allocation_request_offer ? allocation_load_packet : existing_selection_packet;
+        if(SAVED_REQUEST_QUERY!=0) begin:g_distributed_offer
+            // The exact allocation certificate selects <=16 packet bits per
+            // leaf instead of driving every visible payload mux directly.
+            wire [VISIBLE_SELECTION_WORDS-1:0] offer_views;
+            rv32_frequency_control_tree #(.LEAVES(VISIBLE_SELECTION_WORDS)) offer_tree (
+                .signal_i(allocation_request_offer),.views_o(offer_views));
+            for(genvar offer_word=0;offer_word<VISIBLE_SELECTION_WORDS;offer_word=offer_word+1) begin:g_word
+                localparam integer LOW=offer_word*16;
+                localparam integer BITS=(SELECTION_PAYLOAD_WIDTH-LOW>=16)?16:SELECTION_PAYLOAD_WIDTH-LOW;
+                assign visible_selection_packet[LOW +: BITS]=offer_views[offer_word] ?
+                    allocation_load_packet[LOW +: BITS]:existing_selection_packet[LOW +: BITS];
+            end
+        end else begin:g_original_offer
+            assign visible_selection_packet=allocation_request_offer ? allocation_load_packet : existing_selection_packet;
+        end
     end else begin:g_original_request_payload
         assign visible_selection_packet=existing_selection_packet;
     end endgenerate

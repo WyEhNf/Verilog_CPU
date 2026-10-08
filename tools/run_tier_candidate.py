@@ -58,6 +58,8 @@ def validate_parameters(text, profile):
         raise ValueError("Saved LSQ request query requires registered parallel SRAM cache query")
     if p["LSQ_PHASED_DATA_OWNER"] not in (0,1):
         raise ValueError("LSQ phased data owner is 0/1")
+    if p["MMIO_SAVED_ROUTE_CLASS"] not in (0,1) or (p["MMIO_SAVED_ROUTE_CLASS"] and not p["LSQ_SAVED_REQUEST_QUERY"]):
+        raise ValueError("Saved MMIO routing requires saved LSQ request classification")
     if p["MMIO_WRITE_CAPACITY_READY"] not in (0,1) or (p["MMIO_WRITE_CAPACITY_READY"] and not p["LSQ_SAVED_REQUEST_QUERY"]):
         raise ValueError("MMIO write capacity ready requires saved LSQ request classification")
     if p["PRF_SRAM_RAW_WRITE"] not in (0,1) or (p["PRF_SRAM_RAW_WRITE"] and not p["PRF_VALUE_SRAM"]):

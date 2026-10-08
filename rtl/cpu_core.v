@@ -59,6 +59,7 @@ module cpu_core #(
     parameter integer LSQ_SAVED_REQUEST_QUERY = 0,
     parameter integer LSQ_PHASED_DATA_OWNER = 0,
     parameter integer MMIO_WRITE_CAPACITY_READY = 0,
+    parameter integer MMIO_SAVED_ROUTE_CLASS = 0,
     parameter integer LSQ_ALLOC_SLOT_PRESELECT = 0,
     parameter integer LSQ_ALLOC_PAYLOAD_PRESELECT = 0,
     parameter integer LSQ_ALLOC_FIRE_DISTRIBUTE = 0,
@@ -225,6 +226,9 @@ module cpu_core #(
         GENERATION_WIDTH;
 
     initial begin
+        if((MMIO_SAVED_ROUTE_CLASS!=0 && MMIO_SAVED_ROUTE_CLASS!=1) ||
+           (MMIO_SAVED_ROUTE_CLASS!=0 && LSQ_SAVED_REQUEST_QUERY==0))
+            $fatal(1,"MMIO saved route class requires saved LSQ request classification");
         if((MMIO_WRITE_CAPACITY_READY!=0 && MMIO_WRITE_CAPACITY_READY!=1) ||
            (MMIO_WRITE_CAPACITY_READY!=0 && LSQ_SAVED_REQUEST_QUERY==0))
             $fatal(1,"MMIO write capacity ready requires saved LSQ request classification");
@@ -722,24 +726,32 @@ module cpu_core #(
     // An exit store is an uncached architectural side effect. It must reach
     // the external data port with its full 32-bit payload before the ROB may
     // retire it; ordinary cache write-back must not absorb this MMIO access.
-    wire mmio_exit_request = memory_dreq_valid && memory_dreq_store &&
+    wire original_mmio_exit_request = memory_dreq_valid && memory_dreq_store &&
                              (memory_dreq_addr == 32'h80000000) &&
                              (memory_dreq_mask == 16'h000f);
+    // On every valid request the saved class is equal to the original exact
+    // address/store/mask predicate. Invalid stale packets remain qualified
+    // off. Reuse that class before the fresh size/mask payload mux.
+    wire mmio_exit_request = (MMIO_SAVED_ROUTE_CLASS!=0) ?
+        (memory_dreq_valid && mmio_ready_class) : original_mmio_exit_request;
     // Qualify once, then partition the final request consumers. The
     // acknowledgement retains the original predicate and capture edge.
     wire [16:0] mmio_exit_views;
     rv32_frequency_control_tree #(.LEAVES(17)) mmio_exit_request_tree (
         .signal_i(mmio_exit_request),.views_o(mmio_exit_views));
     wire normal_memory_dreq_valid = memory_dreq_valid && !mmio_exit_views[0];
-    // Only ready uses unqualified payload classification. Bus routing, exit
-    // valid and ACK capture keep the original valid-qualified predicate.
+    // The default uses this class only for ready. Optional routing reuse
+    // remains valid-qualified and must equal the original exact predicate.
     wire mmio_ready_class=(LSQ_SAVED_REQUEST_QUERY!=0) ?
         ((DCACHE_REQUEST_PIPELINE!=0) ?
          (memory_dreq_store && memory_dreq_addr==32'h80000000 && memory_dreq_mask==16'h000f) :
          dcache_req_mmio_class) : mmio_exit_views[1];
 `ifdef VERILATOR
     always @(posedge clk) if(!reset && LSQ_SAVED_REQUEST_QUERY!=0 && memory_dreq_valid)
-        assert(mmio_ready_class==mmio_exit_request) else $fatal(1,"MMIO ready classification mismatch");
+        assert(mmio_ready_class==original_mmio_exit_request) else $fatal(1,"MMIO ready classification mismatch");
+    always @(posedge clk) if(!reset && MMIO_SAVED_ROUTE_CLASS!=0)
+        assert(mmio_exit_request==original_mmio_exit_request)
+            else $fatal(1,"Saved MMIO routing changed qualified exit predicate");
 `endif
     wire mmio_capacity_ready=(MMIO_WRITE_CAPACITY_READY!=0) ?
         mem_d_write_capacity_ready : mem_d_req_ready;
