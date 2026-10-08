@@ -226,4 +226,6 @@ The owner policy now also selects L0 SRAM data banks using registered `fast_vali
 
 `RS_ALLOC_EMPTY_BYPASS=2` 扩展同一套参数化 RS：所有已保存且已就绪的老项保持原有发射优先级；实际接受且已就绪的新分配，按分配顺序填入老就绪项未占用的发射 lane。下游 ready 不参与排序，未发射的新项仍按原有行分配保存；物理窗口和完整标签不变。模式 0 保留默认路径，模式 1 保留此前仅空队列直通策略；仍要求直接静态派遣、无额外 issue stage，且不与释放资源实验同时启用。
 
-一次有限双发射四行样例通过，补充覆盖老就绪项先发射、新项填余下通道，以及旧未就绪项与新就绪项同时存在时的保存、发射和源标签唤醒。此前空队列/背压和恢复边界样例也包含在同一个有限样例中。记录见 `reports/Tier_shared_rs_lane_fill_protocol_2026-10-09.json`；`configs/tier1_shared_fill_rs_lanes.json` 尚未测 CPU IPC 或 PPA。
+一次有限双发射四行样例通过，补充覆盖老就绪项先发射、新项填余下通道，以及旧未就绪项与新就绪项同时存在时的保存、发射和源标签唤醒。此前空队列/背压和恢复边界样例也包含在同一个有限样例中。记录见 `reports/Tier_shared_rs_lane_fill_protocol_2026-10-09.json`；`configs/tier1_shared_fill_rs_lanes.json` 已做一次性能评估，结果见下段，未做 PPA。
+
+模式 2 的原始 RTL lint 无 error/latch/UNOPTFLAT，一次构建及六项答案/动态指令数/分配请求断言通过。IPC **0.5731794429**，低于模式 1 的 **0.5732005398**；四项 cycles 不变，qsort 多 54 cycles，rsort 少 2 cycles。该候选无收益且未达 0.6000，拒绝采用，跳过 PPA 和 CPU smoke。记录见 `reports/Tier1_shared_rs_lane_fill_2026-10-09.json`。
