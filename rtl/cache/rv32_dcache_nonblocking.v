@@ -17,6 +17,9 @@ module rv32_dcache_nonblocking #(
     parameter integer CACHE_WAYS = 1,
     parameter integer INDEX_HASH = 0,
     parameter integer STORE_MERGE_DELAY = 0,
+    // Cold store misses write enabled bytes without allocating a cache line.
+    // The store remains owned by its MSHR until the memory write response.
+    parameter integer STORE_MISS_WRITE_AROUND = 0,
     parameter integer TAG_SRAM = 0,
     // 0: legacy dynamic writes; 1: flat static enables; 2: functional state banks.
     parameter integer STATIC_UPDATES = 0,
@@ -110,6 +113,7 @@ module rv32_dcache_nonblocking #(
     wire unused_legacy_lru_way_mem_bits = &{1'b0, legacy_lru_way_mem};
 
     localparam integer CACHE_ENTRY_WIDTH = $clog2(CACHE_LINES);
+    localparam integer WAITER_SLOT_WIDTH=(WAITER_ENTRIES<=1)?1:$clog2(WAITER_ENTRIES);
     localparam LOCAL_METADATA_ACTIVE = LOCAL_METADATA_QUERY != 0 &&
                                                STATIC_UPDATES == 2 && TAG_SRAM != 0;
 
@@ -118,6 +122,24 @@ module rv32_dcache_nonblocking #(
     reg mshr_store [0:MSHR_ENTRIES-1];
     reg mshr_prefetch [0:MSHR_ENTRIES-1];
     reg mshr_writeback [0:MSHR_ENTRIES-1];
+    wire mshr_writearound [0:MSHR_ENTRIES-1];
+    wire [MSHR_ENTRIES-1:0] writearound_rows;
+    wire query_matching_writearound, query_send_writearound, query_response_writearound;
+    for (genvar around_row=0;around_row<MSHR_ENTRIES;around_row=around_row+1) begin:g_around_views
+        assign writearound_rows[around_row]=mshr_writearound[around_row];
+    end
+    generate if (STORE_MISS_WRITE_AROUND != 0) begin:g_around_reads
+    rv32_frequency_array_read #(.WIDTH(1),.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(3)) around_matching_read (
+        .rows_i(writearound_rows),.index_i(matching_index),.value_o(query_matching_writearound));
+    rv32_frequency_array_read #(.WIDTH(1),.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(3)) around_send_read (
+        .rows_i(writearound_rows),.index_i(send_index),.value_o(query_send_writearound));
+    rv32_frequency_array_read #(.WIDTH(1),.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(8)) around_response_read (
+        .rows_i(writearound_rows),.index_i(mem_resp_id_i),.value_o(query_response_writearound));
+    end else begin:g_no_around_reads
+        assign query_matching_writearound=1'b0;
+        assign query_send_writearound=1'b0;
+        assign query_response_writearound=1'b0;
+    end endgenerate
     localparam integer MERGE_COUNT_WIDTH = (STORE_MERGE_DELAY < 1) ? 1 :
                                           $clog2(STORE_MERGE_DELAY + 1);
     localparam [MERGE_COUNT_WIDTH-1:0] MERGE_DELAY = MERGE_COUNT_WIDTH'(STORE_MERGE_DELAY);
@@ -642,12 +664,12 @@ module rv32_dcache_nonblocking #(
             assign send_candidates[scan_mshr]=mshr_valid[scan_mshr] && !mshr_sent[scan_mshr] &&
                 (mshr_writeback[scan_mshr] || !mshr_store[scan_mshr] || STORE_MERGE_DELAY==0 ||
                  mshr_rfo_offered[scan_mshr] || (mshr_merge_delay[scan_mshr]==0 && mshr_mask[scan_mshr]!=16'hffff));
-            assign matching_candidates[scan_mshr]=mshr_valid[scan_mshr] && !mshr_writeback[scan_mshr] &&
+            assign matching_candidates[scan_mshr]=mshr_valid[scan_mshr] && (!mshr_writeback[scan_mshr] || mshr_writearound[scan_mshr]) &&
                 {mshr_addr[scan_mshr][31:4],4'b0}==request_line_addr;
-            assign prefetch_present_candidates[scan_mshr]=mshr_valid[scan_mshr] && !mshr_writeback[scan_mshr] &&
+            assign prefetch_present_candidates[scan_mshr]=mshr_valid[scan_mshr] && (!mshr_writeback[scan_mshr] || mshr_writearound[scan_mshr]) &&
                 {mshr_addr[scan_mshr][31:4],4'b0}==prefetch_line_addr;
-            assign request_conflict_candidates[scan_mshr]=mshr_valid[scan_mshr] && cache_index(mshr_addr[scan_mshr])==request_index;
-            assign prefetch_conflict_candidates[scan_mshr]=mshr_valid[scan_mshr] && cache_index(mshr_addr[scan_mshr])==prefetch_index;
+            assign request_conflict_candidates[scan_mshr]=mshr_valid[scan_mshr] && !mshr_writearound[scan_mshr] && cache_index(mshr_addr[scan_mshr])==request_index;
+            assign prefetch_conflict_candidates[scan_mshr]=mshr_valid[scan_mshr] && !mshr_writearound[scan_mshr] && cache_index(mshr_addr[scan_mshr])==prefetch_index;
         end
         for(scan_waiter=0;scan_waiter<WAITER_ENTRIES;scan_waiter=scan_waiter+1) begin:g_waiter_candidates
             assign waiter_free_candidates[scan_waiter]=!waiter_valid[scan_waiter];
@@ -731,10 +753,9 @@ module rv32_dcache_nonblocking #(
                                  !query_response_mshr_prefetch) ||
                                 (response_writeback_failed &&
                                  !query_response_mshr_store));
-    // A committed store is acknowledged when its bytes are absorbed into an
-    // MSHR.  The MSHR is the durable store buffer, so its later refill does
-    // not produce a second LSQ acknowledgement.
-    wire response_emits_store = 1'b0;
+    // Allocating stores acknowledge durable MSHR absorption once. Around
+    // stores instead reserve the ACK output when their memory write returns.
+    wire response_emits_store = mem_resp_valid_i && response_found && query_response_writearound;
     wire matching_store_covers_load = matching_found &&
         query_matching_mshr_store &&
         ((query_matching_mshr_mask & core_req_mask) ==
@@ -758,7 +779,7 @@ module rv32_dcache_nonblocking #(
                                 (matching_store_covers_load ?
                                  (resp_slot_free &&
                                   !waiter_load_ready_found &&
-                                  !response_emits_load) : waiter_free_found) :
+                                  !response_emits_load) : (!query_matching_writearound && waiter_free_found)) :
                                 waiter_free_found)) &&
                               !(mem_resp_valid_i && response_found &&
                                 (response_index == 32'(matching_index)))) :
@@ -769,15 +790,16 @@ module rv32_dcache_nonblocking #(
                             (request_hit ? !request_index_conflict :
                              (matching_found ?
                               ((matching_prefetch ||
-                                query_matching_mshr_store) &&
+                                query_matching_mshr_store) && !query_matching_writearound &&
                                !(mem_resp_valid_i && response_found &&
                                  (response_index == 32'(matching_index)))) :
                               (free_found && !request_index_conflict)));
     assign request_fire = core_req_valid && core_req_ready;
     wire response_needs_output = response_found &&
-                                 (query_response_mshr_store ? 1'b0 :
-                                  (query_response_mshr_prefetch ? 1'b0 :
-                                   !resp_slot_free));
+                                  (query_response_writearound ? !ack_slot_free :
+                                   (query_response_mshr_store ? 1'b0 :
+                                    (query_response_mshr_prefetch ? 1'b0 :
+                                     !resp_slot_free)));
     wire demand_response_fire = mem_resp_valid_i && mem_resp_ready_o &&
                                 response_found &&
                                 !query_response_mshr_writeback &&
@@ -788,7 +810,9 @@ module rv32_dcache_nonblocking #(
                                !query_response_mshr_writeback &&
                                query_response_mshr_store;
 
-    assign request_dirty_victim = !request_hit && !matching_found &&
+    wire request_writearound_new = (STORE_MISS_WRITE_AROUND != 0) &&
+        request_is_store && !request_hit && !matching_found;
+    assign request_dirty_victim = !request_hit && !matching_found && !request_writearound_new &&
         request_victim_valid && request_victim_dirty;
     wire request_needs_array = (TAG_SRAM != 0) ?
         (request_hit && request_is_store) : (request_hit || request_dirty_victim);
@@ -902,7 +926,7 @@ module rv32_dcache_nonblocking #(
     // ownership into an MSHR. Do not add a second registered reply cycle.
     // If the consumer is stalled, retain the acknowledgement exactly once.
     wire bypass_store_ack = (TAG_SRAM != 0) && request_fire &&
-                            request_is_store && !ack_valid_reg;
+                             request_is_store && !request_writearound_new && !ack_valid_reg;
     assign dcache_store_ack_valid_o = ack_valid_reg || bypass_store_ack;
     wire [RESPONSE_TAG_WORDS:0] ack_output_views;
     rv32_frequency_control_tree #(.LEAVES(RESPONSE_TAG_WORDS+1)) ack_output_tree (
@@ -957,7 +981,7 @@ module rv32_dcache_nonblocking #(
         end
     endgenerate
     assign mem_req_wmask_o = send_found && query_send_mshr_writeback ?
-                             16'hffff : 16'd0;
+                             (query_send_writearound ? query_send_mshr_mask : 16'hffff) : 16'd0;
     assign mem_req_id_o = send_found ? 8'(send_index) : 8'd0;
     assign mem_resp_ready_o = response_found && !response_needs_output &&
         !(hit_coissue_holds_slot && response_emits_load);
@@ -1168,7 +1192,7 @@ module rv32_dcache_nonblocking #(
             else if (request_is_store && matching_found && query_matching_mshr_store)
                 static_request_action = 4'd7;
             else
-                static_request_action = 4'd8;
+                static_request_action = request_writearound_new ? 4'd9 : 4'd8;
         end
     end
     wire static_prefetch_allocate = (static_request_action == 4'd8) &&
@@ -1267,7 +1291,7 @@ module rv32_dcache_nonblocking #(
             assign mshr_wdata[update_mshr] = static_mshr_wdata[update_mshr];
             (* keep = 1 *) wire write_zero = static_prefetch_allocate && second_free_index == update_mshr;
             (* keep = 1 *) wire write_word =
-                ((static_request_action == 4'd8) && free_index == update_mshr) ||
+                ((static_request_action == 4'd8 || (STORE_MISS_WRITE_AROUND != 0 && static_request_action == 4'd9)) && free_index == update_mshr) ||
                 ((static_request_action == 4'd6) && matching_index == update_mshr);
             (* keep = 1 *) wire merge_word = (static_request_action == 4'd7) && matching_index == update_mshr;
             for (update_byte = 0; update_byte < 16; update_byte = update_byte + 1) begin : g_byte
@@ -1425,7 +1449,8 @@ module rv32_dcache_nonblocking #(
         end
 `endif
         for (update_mshr = 0; update_mshr < MSHR_ENTRIES; update_mshr = update_mshr + 1) begin : g_mshr_data
-            rv32_dcache_mshr_data_bank #(.MSHR_ID(update_mshr)) state_bank (
+            rv32_dcache_mshr_data_bank #(.MSHR_ID(update_mshr),
+                .STORE_MISS_WRITE_AROUND(STORE_MISS_WRITE_AROUND)) state_bank (
                 .clk_i(clk_i), .reset_i(reset_i), .request_action_i(static_request_action),
                 .prefetch_allocate_i(static_prefetch_allocate), .second_free_i(second_free_index[2:0]),
                 .free_i(free_index[2:0]), .matching_i(matching_index[2:0]),
@@ -1458,7 +1483,8 @@ module rv32_dcache_nonblocking #(
         wire load_promote=!local_reset && action==4'd4 && matching_slot==payload_mshr;
         wire store_promote=!local_reset && action==4'd6 && matching_slot==payload_mshr;
         wire store_merge=!local_reset && action==4'd7 && matching_slot==payload_mshr;
-        wire demand_allocate=!local_reset && action==4'd8 && free_slot==payload_mshr;
+        wire around_allocate=(STORE_MISS_WRITE_AROUND != 0) && action==4'd9;
+        wire demand_allocate=!local_reset && (action==4'd8 || around_allocate) && free_slot==payload_mshr;
         wire prefetch_new=!local_reset && prefetch_allocate && second_slot==payload_mshr;
         wire demand_write;
         wire [MSHR_DEMAND_WIDTH-1:0] demand_next,demand_saved;
@@ -1490,7 +1516,8 @@ module rv32_dcache_nonblocking #(
         rv32_frequency_event_select #(.WIDTH(MSHR_VICTIM_WIDTH),.EVENTS(2)) victim_selector (
             .events_i({prefetch_new,demand_allocate}),
             .values_i({prefetch_victim_entry,32'b0,request_victim_entry,
-                victim_line_address(request_tags[(32'(request_victim_entry)%CACHE_WAYS)*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH],request_index)}),
+                (around_allocate ? request_line_addr :
+                 victim_line_address(request_tags[(32'(request_victim_entry)%CACHE_WAYS)*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH],request_index))}),
             .write_o(victim_write),.value_o(victim_next));
         rv32_frequency_word_bank #(.WIDTH(MSHR_VICTIM_WIDTH)) victim_owner (
             .clk_i(clk_i),.write_i(victim_write),.data_i(victim_next),.data_o(victim_saved));
@@ -1501,7 +1528,8 @@ module rv32_dcache_nonblocking #(
         wire victim_data_write;
         wire [127:0] victim_data_next;
         wire deferred_capture=!local_reset && victim_copy && victim_mshr_reg==payload_mshr;
-        wire [127:0] allocated_victim=(request_dirty_victim && TAG_SRAM!=0)?data_rdata:128'b0;
+        wire [127:0] allocated_victim=around_allocate ? core_req_wdata :
+            ((request_dirty_victim && TAG_SRAM!=0)?data_rdata:128'b0);
         rv32_frequency_event_select #(.WIDTH(128),.EVENTS(3)) victim_data_selector (
             .events_i({prefetch_new,demand_allocate,deferred_capture}),
             .values_i({128'b0,allocated_victim,data_rdata}),
@@ -1510,7 +1538,6 @@ module rv32_dcache_nonblocking #(
             .clk_i(clk_i),.write_i(victim_data_write),.data_i(victim_data_next),.data_o(mshr_victim_data[payload_mshr]));
     end endgenerate
 
-    localparam integer WAITER_SLOT_WIDTH=(WAITER_ENTRIES<=1)?1:$clog2(WAITER_ENTRIES);
     localparam integer WAITER_DOMAINS=(WAITER_ENTRIES+3)/4;
     localparam integer WAITER_META_WIDTH=TAG_WIDTH+38;
     localparam integer WAITER_EVENT_WIDTH=13+3*WAITER_SLOT_WIDTH;
@@ -1518,7 +1545,8 @@ module rv32_dcache_nonblocking #(
     wire waiter_load_consume=resp_slot_free && waiter_load_ready_found &&
         !((HIT_RESPONSE_COISSUE!=0)?load_response_capture:demand_response_fire) &&
         !hit_coissue_holds_slot;
-    wire waiter_store_consume=ack_slot_free && waiter_store_ready_found && !store_response_fire;
+    wire waiter_store_consume=ack_slot_free && waiter_store_ready_found &&
+        !store_response_fire && !response_emits_store;
     wire [WAITER_EVENT_WIDTH*WAITER_DOMAINS-1:0] waiter_event_views;
     rv32_frequency_control_tree #(.WIDTH(WAITER_EVENT_WIDTH),.LEAVES(WAITER_DOMAINS)) waiter_event_tree (
         .signal_i({reset_i,waiter_allocate_event,local_array_write,store_response_fire,demand_response_fire,
@@ -1634,9 +1662,23 @@ module rv32_dcache_nonblocking #(
             mshr_lifecycle_views[(lifecycle_mshr/4)*MSHR_LIFECYCLE_WIDTH +: MSHR_LIFECYCLE_WIDTH];
         wire load_promote=action==4'd4 && matching_slot==lifecycle_mshr;
         wire store_promote=action==4'd6 && matching_slot==lifecycle_mshr;
-        wire demand_allocate=action==4'd8 && free_slot==lifecycle_mshr;
+        wire around_allocate=(STORE_MISS_WRITE_AROUND != 0) && action==4'd9;
+        wire demand_allocate=(action==4'd8 || around_allocate) && free_slot==lifecycle_mshr;
         wire prefetch_new=prefetch_allocate && second_slot==lifecycle_mshr;
         wire accept_response=response_accept && response_slot==lifecycle_mshr;
+        // Disabled policy adds no state. An around transaction never merges
+        // later stores, so its write payload remains stable under backpressure.
+        if (STORE_MISS_WRITE_AROUND != 0) begin:g_around_owner
+            reg around;
+            assign mshr_writearound[lifecycle_mshr]=around;
+            always @(posedge clk_i) begin
+                if(local_reset) around<=1'b0;
+                else if(prefetch_new) around<=1'b0;
+                else if(demand_allocate) around<=(action==4'd9);
+            end
+        end else begin:g_no_around
+            assign mshr_writearound[lifecycle_mshr]=1'b0;
+        end
         always @(posedge clk_i) begin
             if(local_reset) begin
                 mshr_valid[lifecycle_mshr]<=1'b0;
@@ -1663,7 +1705,7 @@ module rv32_dcache_nonblocking #(
                     mshr_merge_delay[lifecycle_mshr]<=request_store?MERGE_DELAY:0;
                     mshr_store[lifecycle_mshr]<=request_store;
                     mshr_prefetch[lifecycle_mshr]<=1'b0;
-                    mshr_writeback[lifecycle_mshr]<=dirty_victim;
+                    mshr_writeback[lifecycle_mshr]<=dirty_victim || around_allocate;
                 end
                 if(prefetch_new) begin
                     mshr_valid[lifecycle_mshr]<=1'b1;
@@ -1680,7 +1722,7 @@ module rv32_dcache_nonblocking #(
                 // successful victim writeback retains its demand transaction.
                 if(accept_response) begin
                     mshr_sent[lifecycle_mshr]<=1'b0;
-                    if(mshr_writeback[lifecycle_mshr] && response_success)
+                    if(mshr_writeback[lifecycle_mshr] && !mshr_writearound[lifecycle_mshr] && response_success)
                         mshr_writeback[lifecycle_mshr]<=1'b0;
                     else mshr_valid[lifecycle_mshr]<=1'b0;
                 end
@@ -1696,6 +1738,8 @@ module rv32_dcache_nonblocking #(
         query_response_mshr_writeback && (mem_resp_error_i || !response_matches);
     wire response_failed_load=response_victim_failure && !query_response_mshr_store;
     wire response_failed_store=response_victim_failure && query_response_mshr_store;
+    wire response_around_store=!reset_i && mem_resp_valid_i && mem_resp_ready_o &&
+        response_found && query_response_writearound;
     wire response_demand_capture=!reset_i && demand_response_fire;
     wire response_metadata_write;
     wire [DCACHE_RESPONSE_META_WIDTH-1:0] response_metadata_next,response_metadata_saved;
@@ -1768,8 +1812,9 @@ module rv32_dcache_nonblocking #(
     wire ack_payload_write;
     wire [TAG_WIDTH:0] ack_payload_next,ack_payload_saved;
     rv32_frequency_event_select #(.WIDTH(TAG_WIDTH+1),.EVENTS(3)) acknowledgement_selector (
-        .events_i({response_failed_store,!reset_i && waiter_store_consume,!reset_i && request_fire && request_is_store}),
-        .values_i({query_response_mshr_lsq,1'b1,
+        .events_i({response_failed_store || response_around_store,!reset_i && waiter_store_consume,
+                   !reset_i && request_fire && request_is_store && !request_writearound_new}),
+        .values_i({query_response_mshr_lsq,((STORE_MISS_WRITE_AROUND != 0) ? (mem_resp_error_i || !response_matches) : 1'b1),
                    query_waiter_store_waiter_lsq,query_waiter_store_waiter_error,core_req_lsq_tag,1'b0}),
         .write_o(ack_payload_write),.value_o(ack_payload_next));
     rv32_frequency_word_bank #(.WIDTH(TAG_WIDTH+1)) acknowledgement_owner (
@@ -1891,12 +1936,12 @@ module rv32_dcache_nonblocking #(
                                                     victim_mshr_reg <= free_index[2:0];
                                                 end
                                             end
-                                            if (STATIC_UPDATES == 0)
+                                            if (STATIC_UPDATES == 0 && !request_writearound_new)
                                             begin
                                                 legacy_valid_bits[request_victim_entry] <= 1'b0;
                                                 legacy_dirty_bits[request_victim_entry] <= 1'b0;
                                             end
-                                            if (STATIC_UPDATES == 0 && CACHE_WAYS == 2)
+                                            if (STATIC_UPDATES == 0 && CACHE_WAYS == 2 && !request_writearound_new)
                                                 legacy_lru_way_mem[request_index] <= !request_victim_entry[0];
                                             if ((PREFETCH != 0) && request_is_load &&
                                             second_free_found && !prefetch_cache_hit &&
@@ -1916,7 +1961,7 @@ module rv32_dcache_nonblocking #(
                                                     legacy_lru_way_mem[prefetch_index] <= !prefetch_victim_entry[0];
                                             end
                                         end
-                if (request_is_store)
+                if (request_is_store && !request_writearound_new)
                 begin
                     ack_valid_reg <= !(bypass_store_ack && dcache_store_ack_ready_i);
                 end
@@ -1938,14 +1983,17 @@ module rv32_dcache_nonblocking #(
             begin
                 resp_valid_reg <= 1'b1;
             end
-            if (ack_slot_free && waiter_store_ready_found &&
-            !store_response_fire)
+            if (waiter_store_consume)
             begin
                 ack_valid_reg <= 1'b1;
             end
             if (mem_resp_valid_i && mem_resp_ready_o)
             begin
-                if (query_response_mshr_writeback &&
+                if (query_response_writearound)
+                begin
+                    ack_valid_reg <= 1'b1;
+                end
+                else if (query_response_mshr_writeback &&
                 !mem_resp_error_i && response_matches)
                 begin
                     event_writeback_o <= 1'b1;
@@ -2016,6 +2064,7 @@ module rv32_dcache_nonblocking #(
             (INDEX_HASH != 0 && INDEX_HASH != 1) || CACHE_LINES < 16 ||
             ((CACHE_WAYS != 1) && (CACHE_WAYS != 2)) ||
             STORE_MERGE_DELAY < 0 || STORE_MERGE_DELAY > 255 ||
+            (STORE_MISS_WRITE_AROUND != 0 && STORE_MISS_WRITE_AROUND != 1) ||
             (TAG_SRAM != 0 && TAG_SRAM != 1) ||
             (STATIC_UPDATES < 0 || STATIC_UPDATES > 2) ||
             (LOCAL_METADATA_QUERY != 0 && LOCAL_METADATA_QUERY != 1) ||

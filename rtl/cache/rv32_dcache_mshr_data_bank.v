@@ -5,7 +5,8 @@
 // and zero > write > merge priority. This is not the cache's data array.
 (* keep_hierarchy = 1 *)
 module rv32_dcache_mshr_data_bank #(
-    parameter integer MSHR_ID = 0
+    parameter integer MSHR_ID = 0,
+    parameter integer STORE_MISS_WRITE_AROUND = 0
 ) (
     input wire clk_i,
     input wire reset_i,
@@ -19,7 +20,8 @@ module rv32_dcache_mshr_data_bank #(
     output wire [127:0] data_o
 );
     wire write_zero = prefetch_allocate_i && 32'(second_free_i) == MSHR_ID;
-    wire write_word = (request_action_i == 4'd8 && 32'(free_i) == MSHR_ID) ||
+    wire write_word = ((request_action_i == 4'd8 ||
+                       (STORE_MISS_WRITE_AROUND != 0 && request_action_i == 4'd9)) && 32'(free_i) == MSHR_ID) ||
                       (request_action_i == 4'd6 && 32'(matching_i) == MSHR_ID);
     wire merge_word = request_action_i == 4'd7 && 32'(matching_i) == MSHR_ID;
     wire [15:0] zero_views;

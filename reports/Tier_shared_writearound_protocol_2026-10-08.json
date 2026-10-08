@@ -1,0 +1,85 @@
+{
+  "status": "PASS",
+  "elapsed_seconds": 48.89300290000392,
+  "results": [
+    {
+      "name": "tag0_mode0",
+      "status": "PASS",
+      "compile_log_sha256": "cdc013967888aa9a558a7a14094c6f803bee5da19e49261d2a321ab5710798a3",
+      "simulation_log_sha256": "74ad06044251db383abbe2fdab0c28c8eaf411174706adbdfde260a47ce0812e"
+    },
+    {
+      "name": "tag1_mode2",
+      "status": "PASS",
+      "compile_log_sha256": "e421b4ae08e3288b6d0d2f7c1441206cc4d942bfe9ab13f90525af205131d355",
+      "simulation_log_sha256": "b636829a9770eba0b2540de41412665df0d9a304ff9956598ec810c80f071b21"
+    }
+  ],
+  "input_sha256": {
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32im_fifo.v": "b3aede7b42f38f487ba663e484af22a931752bcb7a039365600d24da746ab7f6",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32im_prefix_alloc.v": "8e7a5fcb64fe73a81ff6447a03bd52d6377165772d2c777cf9803e112f6e008f",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32im_priority_select.v": "235effc1247c438fdde9af0454d8eee1826267861f0322f54cc538a9547b1e07",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32im_skid_buffer.v": "badf825930c31b90391b2ab5f256d165c4fb30436c1db0876dbdb2c460840c91",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32im_tag_compare.v": "6c937d7c532803700fe70c2d1308100bfcdb8702deedeba3a48cec6e543c3c2b",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_asap7_fanout.v": "1cd8bf90cd721f100a01e410dfbc89eb0a428ad361c0f43b3b711380ae3a8b17",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_control_register_bank.v": "1b03645d6917db1a385e55c823c8d4afdd6f04086de1ace890b0d0106a0eb15f",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_execution_recovery_cancel.v": "2f1d2226bb8d4997207b5d4092bcfb0edfb633e794f864cbdeb625e9943f7f84",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_add32_select.v": "cf1c2d516d26eefd9b0416339af7489516e4dbbb6388fd3171083698223e0676",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_add64_select.v": "e78e9acef1b179651c17f296fb35fe1a5b27f5ad9f8c0b4f810001d6cb624fcc",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_add_simm12.v": "9e5acba80569c4c03f410e53d8fce3e236216727af7bde09ee34c3a891934327",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_array_read.v": "47a708bda1aa7075e773ddae480aa67e44c56c743b73932144ca2741d49a4a3e",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_array_read_bank_masks.v": "8659e7a0c1bb7b8cc12aa74864261f6cfe8ee2641dbb6b382b6d99ffa3d4ab81",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_barrel32.v": "62dd16d18975fdd119257532fd3ea6a0a78ec21e811f3590370f695acc520c31",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_control_tree.v": "c08a437339a7a3faa14b8cc8dc0fc1534aa90c4209630c77eb12787242391791",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_event_select.v": "e8e3e3f2cd245028cad44252036fcc98ca5d7da4ed73996882c34824af3c585b",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_first_two.v": "4accc95ff11053e3b087c2bc73a9426fdc3e91fc9b10e4ce32747772890da0ab",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_inversion.v": "7342316b6cbbd1d8de73e332004f88640f6ded8d409fa16008dfafc0203f1ffe",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_line_extract32.v": "0d8f7f2e08457fa1a08a2b0d165ed579eef7750f2bbf7f2205de37043b36b591",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_line_insert32.v": "68e47fec1b95a0852e0577746399c96ce7dbced8a37287d652f200d1804f2eea",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_narrow_array_read.v": "f1ef9fc54ba24b1283492f8025695a2fdd612ef7ed7331d627156908b883b02a",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_negative_subtree.v": "c2f23713812b3b1f611edd0af2c7afdeb99bc914e93aa8dbca59ecbc29c12b49",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\common\\rv32_frequency_word_bank.v": "33e7619519d7d6f16ac70701b6fdf03e1e2db92d962f8306ce82932c5d7c3940",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_cache_stats.v": "5d766279f38825a6c72c3b4b5f35cbbebb5cca2c8e582f56701697e98a1dfa17",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_dcache.v": "552ce891e5a23b7c321c5dbb6138ee8bbc2d6b34b14ed11b0699469dc33ce837",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_dcache_command_line.v": "e875860850f580aceedc70cb15f6767e3f7fa3b9b56c3c84750960056594df89",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_dcache_command_word.v": "360254d5685815d76382e9d1e1c4a859a72cb3908260f8a5855e7700fc93d261",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_dcache_control_banks.v": "1f6e2670b6f24f3811584ef0408515a367f8bb0d6e9d71f8bd04ab8a4ce5f4df",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_dcache_metadata_bank.v": "dd275c6d9e396dd17ebaae5d3c885f322b20b14742b755207bd0caa03bda5a8c",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_dcache_metadata_word.v": "e5089ebbf5291632b00664680f116b4e92f764271cb528cb29be044a3074d3f3",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_dcache_mshr_data_bank.v": "94df2b5819612f1abd07e00cbb2b97475aab2ce02ea26d0fe2a39b42cd966a88",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_dcache_nonblocking.v": "bf9755b00e7c4a951d37f6fdc148c23ee13aa20eccd4826c2dcad683f869843d",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_icache.v": "bf9e8b9f0f8483dbc8599d064422c90a3d496a78e5812ec3ad4bcadbef9aaac1",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_icache_mshr_state_bank.v": "c5142986c53865d6e1cdca84e79ca7352c5f4b553c67af10d891611b71e92ca2",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_icache_nonblocking.v": "21c7dbe1ce03d3bdfc6ae4c2a84dc23c59c3027d8de09b1a51831fb5fa5a2650",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_icache_query_queue.v": "d3f8314cdd003f9cb3cbc3b83f595aaeccd2b8722b729c5160d17a0901f425cf",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\cache\\rv32_instruction_line_filter.v": "f8f045f5c55fb2220edb8c7cbabee892ee0c0c5fb708d8a5aba5ea4623d8cf64",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\rtl\\rv32im_defs.vh": "84505a26111e8e8ad58f81e0c676d26186bf469c7bb6e26ddb746418d98d6156",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\scripts\\ram\\sram_fakeram.sv": "633f573eab26e6f8cfcdde57b844441579540e381d6622bf9684065be3a6d37e",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\tb\\unit\\rv32_dcache_writearound_tb.v": "0d036148cf2feef4ca1c5aad01036d7f6987ce758e93d26275b40312800f603d",
+    "F:\\CPU2026TierRuns\\dcache_writearound_sample_20261008_native_r2\\source\\tools\\test_dcache_writearound_sample.py": "dceb820124cdcea725da923888d17d2f135e4b878351cee85bb9b2bc9991853b",
+    "F:\\CPU2026CourseTools\\win5040\\source_release\\verilator-5.040\\bin\\verilator_bin.exe": "798b1da737c08a316f63195b6c1a4c9646f118788182fb1165d100a7c1e46661"
+  },
+  "proves_whole_cache": false,
+  "proves_whole_cpu": false,
+  "claims_cpu_ppa": false,
+  "simulator": "native Verilator two-state, original SRAM, WORD_SIM scheduling",
+  "scope": "two small directed write-around ownership/traffic samples; no four-state SRAM claim",
+  "frozen_directory": "F:/CPU2026TierRuns/dcache_writearound_sample_20261008_native_r2",
+  "sample_report_sha256": "e9c25e8ee776699ae1690adb4c002f957a31f161a378fce0f7be85e8451293b9",
+  "not_a_cpu_acceptance": true,
+  "source_scope": "Protocol sample precedes final default-off generate/parameter guards; enabled algorithm unchanged, final candidate source must be measured separately.",
+  "earlier_compile_attempts": [
+    {
+      "directory": "dcache_writearound_sample_20261008",
+      "result": "Icarus forward parameter binding failed before simulation"
+    },
+    {
+      "directory": "dcache_writearound_sample_20261008_r2",
+      "result": "Icarus forward wire binding failed before simulation"
+    },
+    {
+      "directory": "dcache_writearound_sample_20261008_native",
+      "result": "Native C++ link driver failed before simulation"
+    }
+  ]
+}
