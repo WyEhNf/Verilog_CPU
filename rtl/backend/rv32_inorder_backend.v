@@ -7,7 +7,7 @@ module rv32_inorder_backend #(
     parameter integer BE_WIDTH = 1,
     parameter integer SHIFT_IMPL = 1,
     parameter integer ROB_ENTRIES = 4,
-    parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT
+    parameter integer TAG_WIDTH = 11+$clog2(ROB_ENTRIES)
 ) (
     input  wire                         clk_i,
     input  wire                         reset_i,
