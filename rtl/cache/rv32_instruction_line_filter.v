@@ -144,7 +144,10 @@ rv32_frequency_event_select #(.WIDTH(RESPONSE_WIDTH),.EVENTS(2),.PRIORITY(0)) re
                     .wdata(primary_resp_line_data_i[data_lane*16 +: 16]),
                     .rdata(bank_data[bank*128+data_lane*16 +: 16]));
             end
-            assign response_banks[bank]=fast_live && fast_pc[4 +: SRAM_BANK_WIDTH]==BANK;
+            // Bank data follows the same registered fast response owner.
+            // Epoch qualification remains on public VALID, not its wide bits.
+            assign response_banks[bank]=((OWNER_PAYLOAD_SELECT!=0)?fast_valid:fast_live) &&
+                fast_pc[4 +: SRAM_BANK_WIDTH]==BANK;
         end
 wire  unused_response_read_write_o;
 rv32_frequency_event_select #(.WIDTH(128),.EVENTS(SRAM_BANKS),.PRIORITY(0)) response_read (

@@ -5,6 +5,7 @@
 // in the single MDU issue path, so they share one 65-bit shift state and one
 // 32-bit operand register instead of retaining two complete datapaths.
 module rv32m_mdu_iterative #(
+    parameter integer DIVZERO_REMAINDER_REUSE = 0,
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
@@ -135,7 +136,7 @@ module rv32m_mdu_iterative #(
     wire [31:0] finishing_corrected=finishing_negate?finishing_correction[31:0]:finishing_magnitude;
     wire operation_is_remainder=(operation==`RV32IM_OP_REM || operation==`RV32IM_OP_REMU);
     wire [31:0] finishing_value=(!mode_mul && divide_zero)?
-        (operation_is_remainder?original_a:32'hffffffff):
+        (operation_is_remainder?((DIVZERO_REMAINDER_REUSE!=0)?finishing_corrected:original_a):32'hffffffff):
         ((!mode_mul && signed_overflow)?
          ((operation==`RV32IM_OP_REM)?32'b0:32'h80000000):finishing_corrected);
     function automatic [32:0] prefix_add32;
@@ -234,7 +235,7 @@ module rv32m_mdu_iterative #(
             final_value = corrected_result;
         end else if (divide_zero) begin
             if ((operation == `RV32IM_OP_REM) || (operation == `RV32IM_OP_REMU))
-                final_value = original_a;
+                final_value = (DIVZERO_REMAINDER_REUSE!=0)?corrected_result:original_a;
             else
                 final_value = 32'hffffffff;
         end else if (signed_overflow) begin
@@ -281,8 +282,16 @@ module rv32m_mdu_iterative #(
         .clk_i(clk_i),.write_i(shift_write),.data_i(shift_next),.data_o(shift_state));
     rv32_frequency_word_bank #(.WIDTH(32)) operand_owner (
         .clk_i(clk_i),.write_i(launch_views[1]),.data_i(initial_operand),.data_o(operand));
-    rv32_frequency_word_bank #(.WIDTH(32)) original_owner (
-        .clk_i(clk_i),.write_i(launch_views[2]),.data_i(req_src1_i),.data_o(original_a));
+    // Subtracting zero at every restoring-division step leaves abs(A) in
+    // the final remainder. Its existing sign correction reconstructs A,
+    // including INT_MIN, so REM/REMU zero-divisor needs no extra operand.
+    // DIV/DIVU zero-divisor retain the separate all-ones quotient override.
+    generate if(DIVZERO_REMAINDER_REUSE!=0) begin:g_reuse_remainder
+        assign original_a=32'b0;
+    end else begin:g_saved_dividend
+        rv32_frequency_word_bank #(.WIDTH(32)) original_owner (
+            .clk_i(clk_i),.write_i(launch_views[2]),.data_i(req_src1_i),.data_o(original_a));
+    end endgenerate
     localparam integer OPERATION_PAYLOAD_WIDTH=OP_WIDTH+TAG_WIDTH+PHYS_ADDR_WIDTH+6;
     wire [OPERATION_PAYLOAD_WIDTH-1:0] operation_payload;
     assign {mode_mul,operation,result_negative,remainder_negative,divide_zero,signed_overflow,

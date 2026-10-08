@@ -53,6 +53,8 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["MDU_DIVZERO_REMAINDER_REUSE"] not in (0, 1) or (p["MDU_DIVZERO_REMAINDER_REUSE"] and p["MUL_IMPL"]!=2):
+        raise ValueError("MDU remainder reuse is 0/1 and requires unified iterative MUL_IMPL=2")
     if p["FETCH_OWNER_PAYLOAD_SELECT"] not in (0, 1):
         raise ValueError("Fetch owner payload selection is 0/1")
     if p["LSQ_COMMITTED_STORE_BYPASS"] not in (0, 1):
