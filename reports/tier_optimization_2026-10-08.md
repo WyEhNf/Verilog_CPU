@@ -390,3 +390,23 @@ RENAME_REGISTERED_FREE_POOL 默认 1，top/core/backend 逐级传给 rv32_rename
 两个模式都按相同 decoded prefix、rd_we、ROB/RS/LSQ/物理信用分配，最年轻 RAW 映射、提交回收、恢复位图和完整 GEN 契约都保留。直接模式的池计数恒为零，不预留池位，空闲位图更新使用已有 rename_new_phys 消费路径；每个候选从寄存位图的第 k 个空闲非零位选择。没有绕过 ROB 有序退休、CDB 或 LSQ 身份过滤，也没有按 BE_WIDTH 选择另一套 CPU。顶层只增加默认值1的参数，原有所有默认值未改；这仍不是新 Tier3 实测成绩。
 
 准备 configs/tier1_shared_direct_free.json（沿用 FE2/BE1 候选）及 configs/tier2_shared_direct_free.json（沿用已测 ROB8/PHYS38 预读候选），仅切换池参数为0。都未冻结、未测试。正在运行的 FE2/BE1 冻结副本仍使用原固定池1；副本、工具和报告不被修改或覆盖。源码连线及 diff 静态检查完成，未运行新的正确性/性能/PPA 批次。下一步依据当前 FE2/BE1 的完整结果，选择一次直接分配批次。
+
+
+## FE2 / BE1 实测：取指供应不是当前主要缺口
+
+64c0447a 冻结的 FE2/BE1 完整 PPA 一次完成，538.414 秒：面积 8629.163695000005 μm²、Fmax 368.87608069164264 MHz，report SHA256 70e1364748ecca8556e8feb0703a1af046e12cbccfbc6c243b454e520c664c65，log SHA256 6b1147c5bc1f028f1f78c4127e7cc9a753aa327555df92d05ce65e1fa327373e。相对同执行资源的 FE1 PC-index，面积多 112.00356 μm²、频率低 24.516159 MHz，不能称为全部指标改善。
+
+门通过后构建一次，46.661 秒，exe SHA256 4b8a2f62505d4e393593243ab6db8182e47e5ac0c40d8a1f7f84ea394d9b248f。一次六项官方 perf，latency10、5.914 秒，答案全部通过，geomean 0.5092853916794254。比 FE1 PC-index 的 0.5070995903241434 仅提高约 0.431%，仍低于 0.6000；不验收、不切 canonical、不跑 smoke、不重复性能测试。perf log SHA256 93feff106cf35c1fe3beecb0912b92943bacab90ca283451be158afd5ce1d4c3；完整阶段和差异在 Tier1_shared_fetch2_2026-10-08.json。
+
+| perf | 官方指令数 | 实测周期 | IPC |
+|---|---:|---:|---:|
+| median | 6961 | 14260 | 0.488148668 |
+| multiply | 21722 | 25010 | 0.868532587 |
+| qsort | 139900 | 264180 | 0.529563177 |
+| rsort | 195719 | 546308 | 0.358257613 |
+| towers | 5278 | 11168 | 0.472600287 |
+| vvadd | 4524 | 9856 | 0.459009740 |
+
+不继续宽度扫描；这份共享单发射证据没有支持“仅加宽前端就有显著收益”，也不能外推 Tier2 必须加宽。未冻结的 configs/tier1_shared_direct_free.json 已回到 FE1 PC-index 配置，只改 RENAME_REGISTERED_FREE_POOL0，避免把 FE2 的面积/频率代价带入分配器批次。Tier2 对应配置保留已测 0.807638 候选的全部资源，只切相同 allocator 选项；先顺序评估这份双发射直接位图分配批次，再根据结果安排单发射。
+
+c6a0c9b1 的只读默认参数核对：A109 的 145 个数值参数全未改变。新增参数 DIRECT_DISPATCH_CURRENT_CREDITS0、DIRECT_LOAD_RS_CREDIT0、DISPATCH_PIPELINE1、STORE_ALLOC_EARLY_ADDRESS2、PRF_VALUE_SRAM0、RENAME_REGISTERED_FREE_POOL1、PREDICTOR_BHT_INDEX_BITS8、DCACHE_WAITERS8 均选择原有行为或之前隐式常量。此核对只说明参数/资源默认值，不是当前源码完整 Tier3 PPA/IPC 证明；历史冻结数字仍有自己的身份。
