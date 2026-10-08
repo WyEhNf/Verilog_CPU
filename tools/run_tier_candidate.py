@@ -59,6 +59,8 @@ def validate_parameters(text, profile):
         raise ValueError("PRF_VALUE_SRAM is 0/1; STORE_ALLOC_EARLY_ADDRESS is 0/1/2")
     if p["DISPATCH_PIPELINE"] not in (0, 1) or p["DISPATCH_ELASTIC"] not in (0, 1) or (p["DISPATCH_ELASTIC"] and not p["DISPATCH_PIPELINE"]):
         raise ValueError("Elastic dispatch requires its pipeline; both flags must be 0 or 1")
+    if p["DIRECT_DISPATCH_CURRENT_CREDITS"] not in (0, 1) or (p["DIRECT_DISPATCH_CURRENT_CREDITS"] and (p["DISPATCH_PIPELINE"] or p["DISPATCH_ELASTIC"])):
+        raise ValueError("Current credits require direct nonelastic dispatch")
     if p["FE_WIDTH"] not in (1, 2, 4) or p["BE_WIDTH"] not in (1, 2, 4):
         raise ValueError("Frontend/backend widths must be 1, 2 or 4")
     if not 1 <= p["INT_ISSUE_WIDTH"] <= p["BE_WIDTH"] or not 1 <= p["CDB_WIDTH"] <= p["BE_WIDTH"]:

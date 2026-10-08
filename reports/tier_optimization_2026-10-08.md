@@ -238,3 +238,18 @@ Store-control候选完整PPA一次完成：面积14488.819021999865μm²，频�
 
 
 从51c47bb9冻结F:/CPU2026TierRuns/tier1_shared_sram_d128_20261008；准备阶段完成参数几何和文件哈希校验。仅改变缓存容量，没有再重复全top lint；D256的top lint已通过，D128走同一已支持的power-of-two metadata/tag分支。顺序开始一次完整PPA，仍未构建或测IPC。
+
+
+## 共享 D128 候选结果与有限 PRF 样本
+
+冻结51c47bb9的D128候选完整PPA通过：8622.194454999893μm²、372.3636363636364MHz；组合5216.898959999893、时序2167.7544、SRAM1237.5410950000007μm²。manifest SHA256 438c64a449258681005c695d818bf0c815e873b3df00a7771ea4ce763f0766e6，report SHA256 7d95589ac8a17f8eed5e0ca824feaba6b7772abcbe4a132820206c74ab4c2c38。PPA只执行一次；3409.095秒包含主机长时间暂停，不是重复综合。构建一次35.401秒，exe SHA256 5eac3ef83a03ddaee26c3277236a0edb2115e02a213e37a42d22bfb78fb63e79。
+
+一次六项官方perf，latency10，5.027秒，所有答案通过，IPC几何平均0.4327925169129822，未达0.6000。周期分别15962/35126/314629/579826/13116/11213；perf log SHA256 9015fa4feae77fde59bb21b805d391187f91982e4d6d48ddc3bdc5652ffa7db5。与旧micro frontend相比几何均值仅略增，并有towers等单项回退，因此不验收，不切canonical，不追加CPU smoke。完整记录见Tier1_shared_sram_d128_2026-10-08.json。
+
+PRF SRAM仅做一次小型定向样本，BE2/PHYS36，与同一PRF的FF存储逐观察比较ready及ready数据；原生同步RAM、不使用WORD_SIM。首次98次观察的C++激励没有实际覆盖所声称的同row多lane及连续写；已纠正激励，保留原源码/日志，不重建RTL，只重编译并链接C++。修正后24组/114次观察通过，覆盖最高lane优先、连续同/异row写、当前/上一拍旁路、空闲同步读、alloc与WB碰撞、reset/P0/越界。F:/CPU2026TierRuns/prf_sram_smoke_20261008/smoke_cover.log SHA256 dd084d87457c5691391b6f84ac66f3748a45e87b68682beee4e3dc2e5a78aed1。这个有限样本不能替代CPU整体正确性证明；没有跑完整套件。
+
+## 共享直接分配信用优化（待测）
+
+新增DIRECT_DISPATCH_CURRENT_CREDITS=0/1，默认0保留原路径。1只允许DISPATCH_PIPELINE0/ELASTIC0：没有D包占用的预留槽，ROB/RS/LSQ的occupancy均来自寄存状态，因此可用min(BE_WIDTH,capacity-occupancy)直接界定本拍实际分配，不必等待另一拍credit寄存器。新路径不预借同拍释放，不读allocator fire/ready；trace_ready和rename使用同一三组饱和信用，所有RS需求仍按每条一槽保守计数。reset/flush信用为零，branch busy仍阻塞原rename入口，PRF可用池信用不变。不同BE宽度使用同一计算，不增加专用CPU或backend。默认Tier3的开关0及DISPATCH_PIPELINE1保持原信用和数据通路。
+
+configs/tier1_shared_current_credits.json只在D128共享候选上启用此项，保留全部缓存及ROB/PRF/RS/LSQ容量，避免把容量调整与信用收益混淆。准备进行一次静态检查及完整PPA；尚无性能达标结论。

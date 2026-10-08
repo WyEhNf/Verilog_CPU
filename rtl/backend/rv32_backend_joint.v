@@ -11,6 +11,10 @@ module rv32_backend_joint #(
     // directly. Default retains the standalone configuration relation.
     parameter integer LOCAL_EXEC_RECOVERY = (ISSUE_PIPELINE!=0),
     parameter integer DISPATCH_PIPELINE = 0,
+    // Direct dispatch has no reserved packet. Its registered queue counts
+    // already bound admission on this edge; an extra credit register only
+    // delays reuse after a release. The pipelined policy stays unchanged.
+    parameter integer DIRECT_DISPATCH_CURRENT_CREDITS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
@@ -811,6 +815,11 @@ module rv32_backend_joint #(
         assign shared_store_addr = 32'b0;
     end endgenerate
     initial begin
+        if ((DIRECT_DISPATCH_CURRENT_CREDITS!=0 && DIRECT_DISPATCH_CURRENT_CREDITS!=1) ||
+            (DIRECT_DISPATCH_CURRENT_CREDITS!=0 && (DISPATCH_PIPELINE!=0 || DISPATCH_ELASTIC!=0))) begin
+            $display("ERROR: current queue credits require direct nonelastic dispatch");
+            $finish(1);
+        end
         if ((DISPATCH_ELASTIC!=0 && DISPATCH_ELASTIC!=1) ||
             (DISPATCH_ELASTIC!=0 && DISPATCH_PIPELINE==0)) begin
             $display("ERROR: DISPATCH_ELASTIC must be 0 or 1; elastic mode requires DISPATCH_PIPELINE");
@@ -1181,6 +1190,19 @@ module rv32_backend_joint #(
             reserved_credit=bounded_credit(unreserved,newly_reserved);
         end
     endfunction
+    localparam integer CURRENT_DISPATCH_CREDITS_ACTIVE =
+        (DIRECT_DISPATCH_CURRENT_CREDITS!=0) && (DISPATCH_PIPELINE==0) &&
+        (DISPATCH_ELASTIC==0);
+    // Only count slots already free in registered state. This neither
+    // anticipates a same-edge release nor reads an allocator's fire/ready.
+    wire [CREDIT_WIDTH-1:0] admission_rob_credit = CURRENT_DISPATCH_CREDITS_ACTIVE ?
+        ((!reset_i && !flush_i) ? bounded_credit(rob_free_count,0) : CREDIT_WIDTH'(0)) : rob_credit;
+    wire [CREDIT_WIDTH-1:0] admission_rs_credit = CURRENT_DISPATCH_CREDITS_ACTIVE ?
+        ((!reset_i && !flush_i) ? bounded_credit(rs_free_count,0) : CREDIT_WIDTH'(0)) : rs_credit;
+    wire [CREDIT_WIDTH-1:0] admission_lsq_credit = CURRENT_DISPATCH_CREDITS_ACTIVE ?
+        ((!reset_i && !flush_i) ? bounded_credit(lsq_free_count,0) : CREDIT_WIDTH'(0)) : lsq_credit;
+    // The original registered policy advertises F - accepted and omits
+    // releases. Keep it for default/pipelined dispatch profiles.
     // At the next edge actual free slots F' = F - accepted + releases.
     // Advertise min(BE_WIDTH,F-accepted), omitting this edge's releases.
     // Thus registered credits never promise more than actual capacity.
@@ -1403,9 +1425,9 @@ module rv32_backend_joint #(
                 (trace_rd_i[ready_lane*5 +: 5] != 0))
                 ready_phys_used = ready_phys_used + 1;
             if (!halted_o && !flush_i && !branch_busy_domains[0] && dispatch_packet_ready &&
-                (ready_rob_used <= rob_credit) &&
-                ((DISPATCH_ELASTIC!=0) || (ready_rs_used <= rs_credit)) &&
-                ((DISPATCH_ELASTIC!=0) || (ready_lsq_used <= lsq_credit)) &&
+                (ready_rob_used <= admission_rob_credit) &&
+                ((DISPATCH_ELASTIC!=0) || (ready_rs_used <= admission_rs_credit)) &&
+                ((DISPATCH_ELASTIC!=0) || (ready_lsq_used <= admission_lsq_credit)) &&
                 (ready_phys_used <= phys_credit))
                 trace_ready_r[ready_lane] = 1'b1;
         end
@@ -2052,9 +2074,9 @@ module rv32_backend_joint #(
         .clk_i(clk_i), .reset_i(reset_i), .rename_ready_i(!halted_o && !flush_i && !branch_busy_domains[1] && dispatch_packet_ready),
         .decoded_valid_i(dec_valid), .decoded_rd_we_i(dec_rd_we), .decoded_rs1_used_i(dec_rs1_used), .decoded_rs2_used_i(dec_rs2_used),
         .decoded_rs_need_i(dec_rs_need), .decoded_lsq_need_i(dec_lsq_need), .decoded_rd_i(dec_rd), .decoded_rs1_i(dec_rs1), .decoded_rs2_i(dec_rs2),
-        .rob_free_count_i({{(16-CREDIT_WIDTH){1'b0}},rob_credit}),
-        .rs_free_count_i((DISPATCH_ELASTIC!=0)?16'hffff:{{(16-CREDIT_WIDTH){1'b0}},rs_credit}),
-        .lsq_free_count_i((DISPATCH_ELASTIC!=0)?16'hffff:{{(16-CREDIT_WIDTH){1'b0}},lsq_credit}),
+        .rob_free_count_i({{(16-CREDIT_WIDTH){1'b0}},admission_rob_credit}),
+        .rs_free_count_i((DISPATCH_ELASTIC!=0)?16'hffff:{{(16-CREDIT_WIDTH){1'b0}},admission_rs_credit}),
+        .lsq_free_count_i((DISPATCH_ELASTIC!=0)?16'hffff:{{(16-CREDIT_WIDTH){1'b0}},admission_lsq_credit}),
         .rename_valid_o(rename_valid), .rename_rd_we_o(rename_rd_we), .rename_rd_o(rename_rd), .rename_old_phys_o(rename_old_phys), .rename_new_phys_o(rename_new_phys),
         .rename_rs1_phys_o(rename_rs1_phys), .rename_rs2_phys_o(rename_rs2_phys), .rename_count_o(rename_count), .rat_state_o(rat_state), .rrat_state_o(rrat_state),
         .free_bitmap_state_o(free_bitmap_state), .free_count_o(free_count), .allocatable_count_o(phys_credit),
