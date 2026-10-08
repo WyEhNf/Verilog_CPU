@@ -196,3 +196,19 @@ Tier2 lookup isolated完整PPA结束，628.212秒，manifest SHA256 `5cc5b4042ae
 资源调整为D512/MSHRD2/WAITERS4、FQ4、word queue8、AXI response FIFO0、128项方向表，保留FE2/BE1/ROB8/I128/MSHRI4与提前load。D容量少于上次未达标候选，不能据此宣称IPC提升；它仍比已验收Tier1的D256更大。收益仅以新冻结副本实测确认，不能替换默认Tier3或验收记录。
 
 冻结 `F:/CPU2026TierRuns/tier2_inorder_store_control_20261008`，一次top静态lint退出0，无Error、LATCH或UNOPTFLAT。顺序开始一次完整PPA，尚无结果；此前失败候选没有构建或CPU测试。
+
+
+Store-control候选完整PPA一次完成：面积14488.819021999865μm²，频率304.49003865596194MHz，614.882秒，组合6804.340199999864、时序3282.5412、SRAM4401.937622000003μm²。manifest SHA256 d31b1296a716fa53ccfbf2d1eb60476189f2e02792d7fce06d53f63d538de42b；report SHA2564193a63345e5254f00641dfc5814608ff68501e3bde8b7ffc465a95264b50e35。PPA门通过，构建一次34.503秒，exe SHA2565da03a7ec58651f30c61a411aa8391ddbd41fc91de5d7d8084b08fead726ad42。
+
+只跑一次六项官方perf，latency10、3.209秒，答案全部通过，geomean0.657438969856524，低于0.845。因此不验收Tier2、不跑smoke，不把PPA通过当作完整达标。perf log SHA256d0a19664fcbe11fdd1e7d329a5205f6bddeaa809429d4a4dba1e215459fd0571。
+
+| perf | 官方指令数 | 实测周期 | IPC |
+|---|---:|---:|---:|
+| perf_median | 6961 | 10279 | 0.677205954 |
+| perf_multiply | 21722 | 24062 | 0.902751226 |
+| perf_qsort | 139900 | 206252 | 0.678296453 |
+| perf_rsort | 195719 | 384399 | 0.509155851 |
+| perf_towers | 5278 | 7911 | 0.667172292 |
+| perf_vvadd | 4524 | 7892 | 0.573238723 |
+
+该结果表明提前load与D512仍不足以在单发射方案满足IPC。下一项结构工作为独立双发射/双退休按序后端：同批RAW禁止第二lane，分支首lane禁止更年轻lane，单个load/MDU端口仲裁，完整代际完成与最年轻writer map保留；尚未实现或测量。Tier1已验收模块保持独立。
