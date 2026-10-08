@@ -365,10 +365,19 @@ PPA 门通过后仅构建一次，57.955 秒，exe SHA256 e94802bcac746ab38c7f0c
 这一批排除了“小表索引策略本身足以弥补单发射 IPC 缺口”的猜测；不继续微小 predictor 参数扫描。共享 Tier2 ROB16/PHYS40 候选在本批结束后冻结，CPU/backend 和其他资源仍相同，先进行静态检查及一次完整 PPA。其容量增加不是预先验收的优化，不能省略面积/时序检查或从历史独立 backend 借用 IPC。
 
 
-共享 Tier2 window16 从 c7e53071 冻结至 F:/CPU2026TierRuns/tier2_shared_window16_20261008；原 RTL 静态 lint 一次，13.181 秒，退出 0，无 Error/LATCH/UNOPTFLAT，仍有既存其他 warning；log SHA256 a8b3781a310e658cc8a80823b74d6b4a6c4299a6732da8f216bf652c768fe554。已开始一次完整 PPA，未构建、未测 IPC。
+共享 Tier2 window16 从 c7e530719d43d94ccb90703e394344ba7fc32690 冻结至 F:/CPU2026TierRuns/tier2_shared_window16_20261008，manifest SHA256 ab143b3139e646abb346d5ef9165b7e93dc15d991471ccce45b556bf8e5056a1；原 RTL 静态 lint 一次，13.181 秒，退出 0，无 Error/LATCH/UNOPTFLAT，仍有既存其他 warning；log SHA256 a8b3781a310e658cc8a80823b74d6b4a6c4299a6732da8f216bf652c768fe554。已开始一次完整 PPA，未构建、未测 IPC。
 
 ## 下一单发射候选扩大取指吞吐，保持执行宽度
 
 只读检查确认 frontend 的 FQ_DEPTH 计数/存储的是单条指令，不是每项 FE_WIDTH 条的 bundle；一次响应最多产生 FE_WIDTH 条，cpu_core 只让前 BE_WIDTH 个前端 lane 接收 ready，其余 lane 为 0，未接受的指令仍留队列。decode、rename、ROB、RS、CDB 都按 BE_WIDTH 构造。因此可以用现有同一 CPU 的 FE2/BE1，让一次 I-cache 响应填两条指令而持续单发射，不必复制/新增单发射 CPU，也不必把 FQ 存储容量翻倍。
 
 configs/tier1_shared_fetch2.json 保留 PC-index 共享候选的所有执行/缓存/队列资源，仅 FE1→2；BHT64 和 BTB4 总项数保持，通过既有分 bank 参数分成两 bank。历史长度 6→5 仅满足现有小表 bank 宽度合法性，模式1未使用 history 索引或 metadata。PC-index 已测 482.84 μm² 面积门余量不能证明 FE2 能放入，也不能仅由 wider fetch 断定速度提高。此候选针对取指供应吞吐，尚未冻结/测试，等待 Tier2 当前批次结束；默认 FE4/BE2 Tier3 不变。
+
+
+## 共享 ROB16 双发射候选面积失败
+
+c7e53071 冻结的 window16 完整 PPA 一次完成，658.653 秒：面积 18066.682212010215 μm²，Fmax 323.2323232323232 MHz；report SHA256 25dc2538500c0047c0fb9fcf1dd25f03ee02366e365d6175fc7b5626fd4ba676，log SHA256 5349752da8ba6d8512cd970f4d273de8cf4874b0ee1c1d10850cc8ab5db36309。面积超过门槛 66.682212 μm²，相对已测共享 ROB8/PHYS38 的 17088.199166 μm² / 363.120567 MHz，面积多 978.483046 μm²、频率低 39.888244 MHz，未验收且没有实测 IPC。跳过构建、perf、smoke，不重复 PPA，也不拿旧配置 IPC 作为扩容后成绩。完整记录在 Tier2_shared_window16_2026-10-08.json。
+
+## FE2 / BE1 共享取指候选已冻结
+
+从 64c0447a15f2d9320f069dbd89aa517b0eb571f7 冻结 F:/CPU2026TierRuns/tier1_shared_fetch2_20261008，manifest SHA256 a251a25f26d13a7ae7dedff101a250dbba0ba3b08140cbd82867357bbdb2ad1f。一次原 RTL 静态 lint 6.294 秒，退出 0，Error/LATCH/UNOPTFLAT 均 0；保留既存其他 warning，lint log SHA256 e010082d7c4cd7bf3f8bd54105048f125071078bcc4ca5014c3e80a0353a8c18。共享 Tier2 当前批次结束后顺序开始一次完整 PPA，尚无面积、频率或 IPC 结论。没有新建窄后端，默认 Tier3 仍保持原资源与策略。
