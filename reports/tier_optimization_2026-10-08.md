@@ -217,3 +217,16 @@ Store-control候选完整PPA一次完成：面积14488.819021999865μm²，频�
 ## 用户明确的架构约束（2026-10-08）
 
 用户要求实现参数化CPU，而不是给每一种发射建立独立实现。Tier1/2/3最终应由同一套CPU源码及宽度、容量、流水参数配置得到；允许参数化generate裁剪资源，不能以选择独立专用后端替代宽度参数化。现有新增inorder/lookup模块属于历史实验，仍需收敛到统一设计，不因此宣称最终架构要求已完成。Tier1冻结副本的PPA、六项perf和单个小正确性样本证据保持有效，但只证明那个历史候选的数值门槛，不能作为重构后的统一实现达标证据。默认Tier3的已知良好版本仍保留，统一后的变化需按显著改动批次验证。
+
+
+## 统一后端入口与共享 PRF 存储参数
+
+提交c65acfe8移除core的独立serial/inorder/lookup generate选择，以及课程编译清单中的三个独立backend模块。当前core只实例化rv32_backend_joint；保留SERIAL_BACKEND=0的兼容参数，非0在准备阶段和RTL初始检查中拒绝。历史独立实验文件、Git冻结标签与记录继续保存，但不属于活动CPU编译。canonical Tier1回到同一后端的micro frontend参数，历史IPC0.427551，尚不达标；未沿用独立inorder的数字作统一验收。默认Tier3仍配置原OoO资源与原FF PRF。
+
+共享PRF新增PRF_VALUE_SRAM=0/1，0保留FF row，1在同一row模块内使用真正的1RW同步sram_fakeram DEPTH1/WIDTH32。每个非零物理寄存器只拥有一个RAM word；闲置行每拍读，当前写行的输出在该拍无效。共享的上一拍写回流保存每lane物理ID、32bit value与valid，对刚写的row按原最高lane优先规则旁路；下一拍该row若不再写，就已恢复同步RAM读结果。连续写同row、不同row、同拍多lane同row均保留同一优先规则。current WB到读口的原组合旁路仍保留；ready仍是FF并保持write优先于alloc、reset清零、P0恒零。未以FF模拟替换课程RAM，也没有改变1RW同步时钟语义。
+
+这项存储参数支持BE1/2/4，不复制CPU或后端。已有WORD_SIM的PHYS56纯word存储只在VALUE_SRAM0走；启用SRAM时，仿真与综合均使用同一RAM接口/上一拍写回资格逻辑。另把已有STORE_ALLOC_EARLY_ADDRESS从core hardcode2暴露为参数，默认2；可选1使用单个PRF读后simm12地址单元，保持共享LSQ、完整generation与RAM/store资格。
+
+候选configs/tier1_shared_sram.json启用PRF SRAM、直接dispatch PIPELINE0/ELASTIC0、STORE_ALLOC_EARLY_ADDRESS1、D256与LSQ2，其他来自同一OoO micro frontend配置，FE1/BE1/ROB4/PRF36/RS2/I32。减少dispatch层级及PRF状态，为更大D-cache留空间；LSQ容量缩减的代价与频率不能仅凭状态数量判断。冻结F:/CPU2026TierRuns/tier1_shared_sram_20261008，top静态lint一次退出0，无Error/LATCH/UNOPTFLAT；接着顺序启动一次完整PPA，尚无达标证据。默认Tier3的PRF_VALUE_SRAM0、PIPELINE1、LSQ16等保持原值，未启用本候选参数。
+
+只读审查另排除两个无效假设：现有CHECKPOINT_IMPL1已移除整份RAT快照存储；LSQ store payload已经是相对访问的32bit，而非128bit。未为重复删除这些已不存在的开销新增测试。
