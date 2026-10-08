@@ -107,6 +107,31 @@ For binaries built with the configured F-drive MinGW toolchain, `python tools/ru
 
 These existing results meet the course Tier3 thresholds. They are measurements of the frozen A109 sources under the pinned course tools, not a new OJ result or post-layout frequency. See [the verified A109 report](reports/ER1_A109_Tier3_verified_2026-10-06.md) for the exact correctness runs, budgets, tool versions, and source identity.
 
+### Area tiers and optimization acceptance
+
+The [official course requirements](https://github.com/ACMClassCourse-2025/RISC-V-CPU-2026) use the following joint thresholds. Area includes every SRAM macro, IPC is the geometric mean of all six official `perf_*` programs at latency 10, and frequency comes from the complete course synthesis/STA flow.
+
+| Tier | Maximum area (μm²) | Minimum IPC (geomean) | Minimum frequency (MHz) | Cumulative score |
+|---|---:|---:|---:|---:|
+| Tier 1 | 9,000 | 0.6000 | 300 | 90 |
+| Tier 2 | 18,000 | 0.8450 | 300 | 95 |
+| Tier 3 | 36,000 | 1.0985 | 300 | 100 |
+
+[Tier1](configs/tier1.json) and [Tier2](configs/tier2.json) define initial independent area candidates: single issue and dual issue respectively. Both retain the out-of-order backend, register renaming, in-order retirement, RV32IM and the original AXI/SRAM interfaces. They are **unverified candidates**, not achieved tiers. [Tier3](configs/tier3.json) retains the source defaults. No reduced configuration replaces the default Tier3 CPU.
+
+`tools/run_tier_candidate.py` freezes the current tracked RTL and official scripts into a new directory, applies only the listed top-level parameter defaults there, and records source/tool/library hashes. Select each measurement phase explicitly; it never starts a sweep or a full correctness suite. The native Windows defaults can be replaced with `--host-config` during preparation.
+
+```powershell
+python tools/run_tier_candidate.py prepare --profile configs/tier1.json --out F:/CPU2026TierRuns/NEW_TIER1
+python tools/run_tier_candidate.py synth --out F:/CPU2026TierRuns/NEW_TIER1
+# After the complete area/frequency result supports continuing:
+python tools/run_tier_candidate.py build --out F:/CPU2026TierRuns/NEW_TIER1
+python tools/run_tier_candidate.py perf --out F:/CPU2026TierRuns/NEW_TIER1
+python tools/run_tier_candidate.py smoke --out F:/CPU2026TierRuns/NEW_TIER1
+```
+
+Before accepting a Tier3 optimization, all three measured metrics must meet its thresholds and must not regress from the accepted version. The project final version additionally requires at least 500 MHz. Only after preserving that version do the IPC 1.5, 1 GHz and unrestricted-area explorations begin. Candidate measurements and failures remain separate from accepted results; historical evidence is never overwritten.
+
 The AXI4-Lite exit convention is a word store to `0x80000000` with `WSTRB=4'hf`; the 32-bit write data is the exit result. External RAM is 256 MiB. `student_top` provides all required course ports and three additional diagnostic outputs accepted by the previously verified official simulator; the simulation view preserves those ports and the synthesis view retains the original hardware structure. Protocol and SRAM specifications are in [docs/axi4-lite.md](docs/axi4-lite.md) and [docs/sram.md](docs/sram.md).
 
 ## Repository layout

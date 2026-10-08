@@ -1,0 +1,8 @@
+{
+  "tier": 3,
+  "maximum_area_um2": 36000,
+  "minimum_geomean_ipc": 1.0985,
+  "minimum_frequency_mhz": 300,
+  "cumulative_score": 100,
+  "parameters": {}
+}
