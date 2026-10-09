@@ -1,7 +1,7 @@
 {
   "status": "PREFLIGHT_PASS_PPA_RUNNING",
   "accepted": false,
-  "source_commit": null,
+  "source_commit": "21175e7b3f31958a61bd4b696c5e0f16495cf843",
   "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_comparison_20261009",
   "manifest_sha256": "39b096b02c83702389dc9a03d5e7e65be94e97b2f606da035e5e624641f094ec",
   "profile_path": "configs/tier3_shared_500_comparison_candidate.json",
