@@ -914,6 +914,7 @@ module rv32_backend_joint #(
     localparam integer ROB_LIVE_WIDTH=ROB_GENERATION_WIDTH+1;
     wire [ROB_ENTRIES*ROB_LIVE_WIDTH-1:0] rob_live_rows;
     wire [ROB_ENTRIES*3-1:0] rob_completion_state_rows;
+    wire [ROB_ENTRIES-1:0] rob_completion_error_rows;
     wire [PRODUCERS*TAG_WIDTH-1:0] producer_query_tags={
         lsq_load_complete_tag,mdu_completion_tag,alu_exec_tag};
     wire unused_producer_query_tags_bits = &{1'b0, producer_query_tags};
@@ -925,7 +926,7 @@ module rv32_backend_joint #(
     wire [PRODUCERS*3-1:0] producer_completion_states;
     wire [BE_WIDTH*PRODUCERS-1:0] completion_source_masks;
     wire [2:0] lsq_report_completion_state;
-    initial if((COMPLETION_SOURCE_STATE_QUERY!=0 && COMPLETION_SOURCE_STATE_QUERY!=1) ||
+    initial if((COMPLETION_SOURCE_STATE_QUERY<0 || COMPLETION_SOURCE_STATE_QUERY>2) ||
                (COMPLETION_SOURCE_STATE_QUERY!=0 && COMPLETION_BYPASS!=2))
         $fatal(1,"Completion source state query requires direct completion");
     // Saved, head and optional held identities perform the full live/GEN
@@ -992,10 +993,19 @@ module rv32_backend_joint #(
             end
             wire [ROB_LIVE_WIDTH-1:0] live_state;
             if(COMPLETION_SOURCE_STATE_QUERY!=0) begin:g_completion_state
+                if(COMPLETION_SOURCE_STATE_QUERY==2) begin:g_error_only
+                    wire error;
+                    rv32_frequency_array_read_bank_masks #(.WIDTH(1),.ENTRIES(ROB_ENTRIES),
+                        .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
+                        .rows_i(rob_completion_error_rows),.query_i(query),.value_o(error));
+                    // The LOAD report source never supplies a STORE packet.
+                    assign candidate_state[identity_candidate*3 +: 3]={error,2'b0};
+                end else begin:g_complete_state
                 rv32_frequency_array_read_bank_masks #(.WIDTH(3),.ENTRIES(ROB_ENTRIES),
                     .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
                     .rows_i(rob_completion_state_rows),.query_i(query),
                     .value_o(candidate_state[identity_candidate*3 +: 3]));
+                end
             end else begin:g_original_completion_state
                 assign candidate_state[identity_candidate*3 +: 3]=0;
             end
@@ -1038,11 +1048,35 @@ module rv32_backend_joint #(
                 rob_entry_generation[status_row*ROB_GENERATION_WIDTH +: ROB_GENERATION_WIDTH]};
             assign rob_completion_state_rows[status_row*3 +: 3]={
                 load_error_mem[status_row],rob_mem_size_mem[status_row]};
+            assign rob_completion_error_rows[status_row]=load_error_mem[status_row];
         end
         for(status_source=0;status_source<PRODUCERS;status_source=status_source+1) begin:g_producer_live_read
             if(COMPLETION_SOURCE_STATE_QUERY!=0) begin:g_completion_state
                 if(status_source==LSQ_SOURCE && LSQ_HEAD_LOAD_IDENTITY_ACTIVE!=0) begin:g_preselected_load
                     assign producer_completion_states[status_source*3 +: 3]=lsq_report_completion_state;
+                end else if(COMPLETION_SOURCE_STATE_QUERY==2) begin:g_error_only
+                    wire error;
+                    if(status_source==LSQ_SOURCE && LSQ_ROB_QUERY_PREDECODE!=0) begin:g_predecoded_load
+                        rv32_frequency_array_read_bank_masks #(.WIDTH(1),.ENTRIES(ROB_ENTRIES),
+                            .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
+                            .rows_i(rob_completion_error_rows),.query_i(lsq_load_complete_rob_query),
+                            .value_o(error));
+                    end else begin:g_registered_tag
+                        rv32_frequency_array_read #(.WIDTH(1),.ENTRIES(ROB_ENTRIES),
+                            .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
+                            .rows_i(rob_completion_error_rows),
+                            .index_i(producer_query_tags[status_source*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]),
+                            .value_o(error));
+                    end
+                    if(status_source<BE_WIDTH) begin:g_alu_size
+                        // The ALU already owns size with this same full tag.
+                        // STORE consumes it; every source still reads the
+                        // exact current error bit, without an ownership shortcut.
+                        assign producer_completion_states[status_source*3 +: 3]=
+                            {error,alu_exec_mem_size[status_source*2 +: 2]};
+                    end else begin:g_nonstore_size
+                        assign producer_completion_states[status_source*3 +: 3]={error,2'b0};
+                    end
                 end else if(status_source==LSQ_SOURCE && LSQ_ROB_QUERY_PREDECODE!=0) begin:g_predecoded_load
                     rv32_frequency_array_read_bank_masks #(.WIDTH(3),.ENTRIES(ROB_ENTRIES),
                         .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
@@ -1088,8 +1122,11 @@ module rv32_backend_joint #(
                 always @(posedge clk_i) if(!reset_i && rob_wb_valid[status_lane]) begin
                     assert($onehot(completion_source_masks[status_lane*PRODUCERS +: PRODUCERS]))
                         else $fatal(1,"Completion source state has no unique source");
-                    assert(completion_state_reads[status_lane*3 +: 3]==original_state)
-                        else $fatal(1,"Completion source state differs from original selected-tag lookup");
+                    assert(completion_state_reads[status_lane*3+2]==original_state[2])
+                        else $fatal(1,"Completion source error differs from original selected-tag lookup");
+                    if(COMPLETION_SOURCE_STATE_QUERY==1 || cdb_is_store[status_lane])
+                        assert(completion_state_reads[status_lane*3 +: 2]==original_state[1:0])
+                            else $fatal(1,"Completion source size differs from original selected-tag lookup");
                 end
 `endif
             end else begin:g_original_state
@@ -1101,6 +1138,13 @@ module rv32_backend_joint #(
             end
         end
     endgenerate
+`ifdef VERILATOR
+    generate if(COMPLETION_SOURCE_STATE_QUERY==2) begin:g_source_state_class_contract
+        always @(posedge clk_i) if(!reset_i)
+            assert(!producer_store[MDU_SOURCE] && !producer_store[LSQ_SOURCE])
+                else $fatal(1,"Compact completion metadata source acquired STORE class");
+    end endgenerate
+`endif
 
     // The accepted live branch can redirect fetch on its capture edge.
     // Backend preview/capture/apply and its sole epoch increment stay staged.

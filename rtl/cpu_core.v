@@ -244,7 +244,7 @@ module cpu_core #(
         if((LSQ_PHASED_DIRECT_WRITE_EVENTS!=0 && LSQ_PHASED_DIRECT_WRITE_EVENTS!=1) ||
            (LSQ_PHASED_DIRECT_WRITE_EVENTS!=0 && LSQ_PHASED_DATA_OWNER==0))
             $fatal(1,"Direct phased events require the phased LSQ data owner");
-        if((COMPLETION_SOURCE_STATE_QUERY!=0 && COMPLETION_SOURCE_STATE_QUERY!=1) ||
+        if((COMPLETION_SOURCE_STATE_QUERY<0 || COMPLETION_SOURCE_STATE_QUERY>2) ||
            (COMPLETION_SOURCE_STATE_QUERY!=0 && COMPLETION_BYPASS!=2))
             $fatal(1,"Completion source state query requires direct completion");
         if(ROB_RECOVERY_PENDING_OWNER!=0 && ROB_RECOVERY_PENDING_OWNER!=1)

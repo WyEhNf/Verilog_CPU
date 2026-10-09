@@ -21,7 +21,7 @@ module rv32_completion_source_state_fixture #(parameter integer DIRECT=0)(output
                       (op[0 +: 6]==`RV32IM_OP_SW || op[0 +: 6]==`RV32IM_OP_SH || op[0 +: 6]==`RV32IM_OP_SB)};
     wire [15:0] req_mask[0:1];
     wire [127:0] req_data[0:1];
-    integer stores_seen=0,state_samples=0;
+    integer stores_seen=0,state_samples=0,mdu_samples=0;
     reg [15:0] held_load_tag=0;
     reg held_load_seen=0;
     integer read_count=0,received=0,expected=0,timeout_count,i,lane;
@@ -33,10 +33,10 @@ module rv32_completion_source_state_fixture #(parameter integer DIRECT=0)(output
     generate for(policy=0;policy<2;policy=policy+1) begin:g_backend
         rv32_backend_joint #(.BE_WIDTH(BW),.ROB_ENTRIES(8),.PHYS_REGS(40),
             .RS_ENTRIES(4),.LSQ_ENTRIES(4),.TAG_WIDTH(TW),.CDB_WIDTH(2),.INT_ISSUE_WIDTH(2),
-            .PRF_VALUE_SRAM(1),.PRF_READ_MUX_IMPL(1),.CHECKPOINT_IMPL(1),.RAT_RECOVERY_IMPL(1),
+            .MUL_IMPL(2),.RS_ISSUE_METADATA(1),.PRF_VALUE_SRAM(1),.PRF_READ_MUX_IMPL(1),.CHECKPOINT_IMPL(1),.RAT_RECOVERY_IMPL(1),
             .LOCAL_EXEC_RECOVERY(1),.RECOVERY_DIRECT_APPLY(DIRECT),.RECOVERY_ROB_CREDIT(1),
             .ROB_RECOVERY_PENDING_OWNER(0),.ROB_COMPLETION_COMMIT_BYPASS(1),
-            .COMPLETION_BYPASS(2),.COMPLETION_SOURCE_STATE_QUERY(policy),
+            .COMPLETION_BYPASS(2),.COMPLETION_SOURCE_STATE_QUERY(2*policy),
             .LSQ_ROB_QUERY_PREDECODE(1),.LOAD_COMPLETION_BYPASS(2),.LSQ_SAVED_REPORT_PRIORITY(1),
             .LSQ_HEAD_LOAD_IDENTITY_QUERY(1),.LSQ_HELD_LOAD_IDENTITY_QUERY(DIRECT),
             .LSQ_HEAD_STORE_ACK_BYPASS(1),.LSQ_STORE_ACK_SOURCE_QUERY(1),.LSQ_HEAD_LOAD_PACKET_PRESELECT(1)) dut (
@@ -104,6 +104,8 @@ module rv32_completion_source_state_fixture #(parameter integer DIRECT=0)(output
             end
         end
         if(|g_backend[1].dut.rob_wb_valid) state_samples=state_samples+1;
+        if(g_backend[1].dut.completion_source_masks[2] ||
+           g_backend[1].dut.completion_source_masks[6]) mdu_samples=mdu_samples+1;
         if(resp_valid && resp_error) begin
             assert(g_backend[0].dut.lsq_load_complete_error &&
                    g_backend[1].dut.lsq_load_complete_error);
@@ -183,8 +185,8 @@ module rv32_completion_source_state_fixture #(parameter integer DIRECT=0)(output
             $fatal(1,"Recovery lifecycle was not exercised");
         // Wrap and reuse all eight ROB rows with the original complete tags.
         for(i=0;i<8;i=i+1) begin
-            expect_packet(32'h1100+i*4,32'(10+i),1);
-            send(1,64'(32'h1100+i*4),{6'b0,`RV32IM_OP_ADDI},64'(10+i),10'd4,1,0,0);
+            expect_packet(32'h1100+i*4,(i==3)?32'b0:32'(10+i),1);
+            send(1,64'(32'h1100+i*4),{6'b0,(i==3)?`RV32IM_OP_MUL:`RV32IM_OP_ADDI},64'(10+i),10'd4,1,0,0);
         end
         wait_commits;
         if(g_backend[1].dut.rob_entry_generation[first_branch_tag[5:3]*10+:10]==first_branch_tag[6+:10])
@@ -221,7 +223,7 @@ module rv32_completion_source_state_fixture #(parameter integer DIRECT=0)(output
         if(read_count!=2) $fatal(1,"Error LOAD request absent");
         @(negedge clk);resp_valid=1;resp_error=1;tick;@(negedge clk);resp_valid=0;
         for(timeout_count=0;timeout_count<30 && !error[0];timeout_count=timeout_count+1) tick;
-        if(error!=2'b11 || state_samples<12 || received!=expected) $fatal(1,"Precise error/state selection not exercised");
+        if(error!=2'b11 || state_samples<12 || received!=expected || mdu_samples==0) $fatal(1,"Precise error/state selection not exercised");
         done=1;
         $display("PASS: completion-source-state shared backend direct=%0d captures=%0d previews=%0d applies=%0d",DIRECT,captures,previews,applies);
     end

@@ -72,7 +72,7 @@ def main():
     report = dict(status='PASS', elapsed_seconds=time.monotonic()-started, results=results,
                   input_sha256=hashes, proves_whole_lsq=False, proves_whole_cpu=False,
                   claims_cpu_ppa=False, simulator='native Verilator two-state, WORD_SIM scheduling',
-                  scope='One BE2/ROB8/PHYS40/RS4/LSQ4 paired shared-backend sample in direct and staged recovery, source-state 0/1; delayed older LOAD, older ALU completion, same-bundle redirect and younger instruction, recovery across new work, ordered commit, eight-row generation reuse, pending whole flush and reset, SB/SH/SW with real ACKs, head LOAD error, same-edge no-commit then registered terminal record; compare valid public packets, handshakes and allocator/ROB identity state plus original full identity and selected-state assertions; no whole CPU proof', proves_whole_backend=False)
+                  scope='One BE2/ROB8/PHYS40/RS4/LSQ4 paired shared-backend sample in direct and staged recovery, source-state 0/2 with RS inline metadata; delayed older LOAD, older ALU completion, same-bundle redirect and younger instruction, recovery across new work, ordered commit, eight-row generation reuse with one iterative MUL, pending whole flush and reset, SB/SH/SW with real ACKs, head LOAD error, same-edge no-commit then registered terminal record; compare valid public packets, handshakes and allocator/ROB identity state plus original full identity and selected-state assertions; no whole CPU proof', proves_whole_backend=False)
     (out/'report.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
 
 
