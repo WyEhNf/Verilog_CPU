@@ -1,6 +1,6 @@
 # MSHR unowned write-data clear review
 
-This is an unimplemented fallback area direction. The active combined PPA is frozen at a7e64b80 in F:/CPU2026TierRuns/tier1_shared_balanced_owner_20261009_r2; it must finish before deciding whether more area work is needed. No new RTL, simulation, synthesis, STA or perf is started for this review. All profiles retain the same parameterized CPU.
+The following is the historical preimplementation area review at a7e64b80. At that point no RTL or evaluation of this direction was started. A later implementation is documented below. All profiles retain the same parameterized CPU.
 
 The actual bank at rtl/cache/rv32_dcache_mshr_data_bank.v retains 128 bits per MSHR. Its current highest-priority reset/prefetch event clears all bytes, a demand allocation/store promotion writes the whole line, and store merge writes only selected bytes. Each byte uses a two-event selector plus its original word owner. The clear event qualifies WDATA and all byte write enables even when no valid store can observe those bits.
 
@@ -25,3 +25,13 @@ Reviewed source SHA256:
 - rtl/cache/rv32_dcache_nonblocking.v: 9d7c6cae3e7bec698a2ca0e2d32daa8c77de315869d146319f4129de009a9fde
 
 - rtl/cache/rv32_dcache_mshr_data_bank.v: f9a71ce8d8d147b9c115b277718da9b378029861f7ff598669bbe1ce13621b73
+
+## Later implementation: DCACHE_MSHR_DATA_NO_CLEAR
+
+The core/top policy defaults to zero and passes MSHR_DATA_NO_CLEAR to the same nonblocking cache and NO_UNOWNED_CLEAR to its existing data banks. It requires banked STATIC_UPDATES=2 and a nonblocking cache. Mode zero preserves the original clear selector. Mode one retains all 128 bits and byte owners but drives raw incoming byte data and writes only when update AND NOT (reset OR this-row-prefetch-clear). Reset and prefetch therefore still win over simultaneous allocation/merge; their existing lifecycle and mask writes are unchanged. No SRAM, queue capacity, tag/generation or clock edge changes.
+
+Cache lifecycle ordering was checked directly: reset clears valid/store; prefetch allocation is the last allocation writer and clears store; new demand/around allocation and store promotion establish store on the same edge as a complete data-bank word write. Merge retains the original owned word and writes only enabled bytes. Response failure clears lifecycle authority without publishing unowned bank bytes; victim data and writearound data remain in their separate original owner. No-clear changes neither response/error classification nor those byte consumers.
+
+A simulation-only initialized certificate clears on reset/prefetch reuse, sets on a complete word write, and asserts before a masked merge. The actual cache additionally asserts that every valid store row has that initialized certificate. This state is excluded from synthesis. Full masks and complete original data remain important even for word responses: masked refill, forwarding and a later full-line dirty writeback must agree exactly.
+
+The finite paired cache fixture uses PREFETCH=1, word responses, held RFO/ACK/response and no-clear 0/1. It deliberately seeds both banks with nonzero data, resets them, promotes a stale prefetch into a store, merges a second partial store, checks words and all 128 bytes of the actual dirty writeback, then reuses stale bytes as a nonstore prefetch and checks its memory result. It compares every valid public transfer and handshake cycle. Initial fixture failures were not equivalence failures: both implementations held a second miss to the same set while the first refill was stalled, then the fixture incorrectly expected full line-data from a WORD_RESPONSE interface. Those assumptions were corrected; frozen failed logs are retained. A finite sample is not a whole-cache or whole-CPU proof.

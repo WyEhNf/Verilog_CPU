@@ -28,6 +28,7 @@ module rv32_dcache_nonblocking #(
     parameter integer NARROW_REQUEST_WORD = 0,
     // 0: legacy dynamic writes; 1: flat static enables; 2: functional state banks.
     parameter integer STATIC_UPDATES = 0,
+    parameter integer MSHR_DATA_NO_CLEAR = 0,
     // Compute set indices on the existing synchronous tag-query capture edge.
     // This is a layout change, not an additional request pipeline cycle.
     parameter integer REGISTERED_INDEX = 0,
@@ -1483,6 +1484,7 @@ module rv32_dcache_nonblocking #(
 `endif
         for (update_mshr = 0; update_mshr < MSHR_ENTRIES; update_mshr = update_mshr + 1) begin : g_mshr_data
             rv32_dcache_mshr_data_bank #(.MSHR_ID(update_mshr),
+                .NO_UNOWNED_CLEAR(MSHR_DATA_NO_CLEAR),
                 .STORE_MISS_WRITE_AROUND(STORE_MISS_WRITE_AROUND)) state_bank (
                 .clk_i(clk_i), .reset_i(reset_i), .request_action_i(static_request_action),
                 .prefetch_allocate_i(static_prefetch_allocate), .second_free_i(second_free_index[2:0]),
@@ -1490,6 +1492,12 @@ module rv32_dcache_nonblocking #(
                 .write_mask_i(core_req_mask), .write_data_i(core_req_wdata),
                 .data_o(mshr_wdata[update_mshr])
             );
+`ifdef VERILATOR
+            always @(posedge clk_i) if(!reset_i && MSHR_DATA_NO_CLEAR!=0 &&
+                    mshr_valid[update_mshr] && mshr_store[update_mshr])
+                assert(state_bank.debug_word_initialized)
+                    else $fatal(1,"Valid MSHR store lacks a complete initialized word");
+`endif
         end
     end endgenerate
 
@@ -2114,6 +2122,8 @@ module rv32_dcache_nonblocking #(
             (STORE_MISS_WRITE_AROUND != 0 && STORE_MISS_WRITE_AROUND != 1) ||
             (TAG_SRAM != 0 && TAG_SRAM != 1) ||
             (STATIC_UPDATES < 0 || STATIC_UPDATES > 2) ||
+            (MSHR_DATA_NO_CLEAR != 0 && MSHR_DATA_NO_CLEAR != 1) ||
+            (MSHR_DATA_NO_CLEAR != 0 && STATIC_UPDATES != 2) ||
             (LOCAL_METADATA_QUERY != 0 && LOCAL_METADATA_QUERY != 1) ||
             (LOCAL_ACTION_DECODE != 0 && LOCAL_ACTION_DECODE != 1) ||
             (CACHE_LINES % CACHE_WAYS != 0) ||

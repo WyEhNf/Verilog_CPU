@@ -25,3 +25,7 @@ One finite paired BE2/LSQ4 sample with policy 0/1 passed fresh/held requests, pa
 ## Evaluation
 
 Freeze once, original structural lint once, full official PPA once. Only after both area <=9000 and frequency >=300, build once and run the six official perf cases. Require IPC >=0.6000 and no cycle regression versus c2a09eaa (12249/23982/231173/455096/7515/9007). Only after all gates pass run correctness_array_test1 once. Historical accepted Tier2/Tier3 remain their exact freezes; defaults are unchanged and no canonical profile is replaced by an unaccepted candidate.
+
+## Terminal result
+
+One full official PPA on e776571f measured 9069.333895 um2 / 290.49645390070924 MHz. Both gates fail; area +95.819760 um2 and frequency -4.434422 MHz versus 8af905db. No CPU build/perf/smoke was run, IPC is unmeasured, and no accepted profile was replaced. The new worst path returns to D-cache metadata, LSQ response/completion, ROB live query, LSQ selection/forward admission, qualified MMIO exit distribution and bus read lifecycle. Minimum period is 3.4423828125 ns and worst arrival is 3.3826 ns. This failed combined policy is not accepted as a new tier.

@@ -66,6 +66,9 @@ def validate_parameters(text, profile):
         raise ValueError("Saved LSQ request query requires registered parallel SRAM cache query")
     if p["LSQ_PHASED_DATA_OWNER"] not in (0,1):
         raise ValueError("LSQ phased data owner is 0/1")
+    if p["DCACHE_MSHR_DATA_NO_CLEAR"] not in (0,1) or (p["DCACHE_MSHR_DATA_NO_CLEAR"] and
+            (p["DCACHE_MSHRS"]<=1 or p["DCACHE_STATIC_UPDATES"]!=2)):
+        raise ValueError("MSHR data no-clear requires banked nonblocking cache")
     if p["DCACHE_NARROW_REQUEST_WORD"] not in (0,1) or (p["DCACHE_NARROW_REQUEST_WORD"] and
             (p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"] or p["DCACHE_REQUEST_PIPELINE"])):
         raise ValueError("Narrow cache request requires unpipelined synchronous nonblocking cache query")

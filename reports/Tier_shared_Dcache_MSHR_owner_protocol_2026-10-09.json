@@ -1,0 +1,90 @@
+{
+  "status": "PASS",
+  "elapsed_seconds": 26.6924025999906,
+  "results": [
+    {
+      "name": "limited",
+      "status": "PASS",
+      "compile_log_sha256": "781d3ecb4db0c23341c20140b87a8fdc501088f38d0d5d0d0a0e85583a74f81a",
+      "simulation_log_sha256": "63e0f7208b4cd070d75a0f8216796e0d73fee229d6b0ad99b91439be1d37aaaa",
+      "executable_sha256": "63d113a5ddd6e2fe2060343c52d3c6410669088cec726fcb2d6be440d38d2e65"
+    }
+  ],
+  "input_sha256": {
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32im_fifo.v": "b3aede7b42f38f487ba663e484af22a931752bcb7a039365600d24da746ab7f6",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32im_prefix_alloc.v": "8e7a5fcb64fe73a81ff6447a03bd52d6377165772d2c777cf9803e112f6e008f",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32im_priority_select.v": "235effc1247c438fdde9af0454d8eee1826267861f0322f54cc538a9547b1e07",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32im_skid_buffer.v": "badf825930c31b90391b2ab5f256d165c4fb30436c1db0876dbdb2c460840c91",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32im_tag_compare.v": "6c937d7c532803700fe70c2d1308100bfcdb8702deedeba3a48cec6e543c3c2b",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_asap7_fanout.v": "1cd8bf90cd721f100a01e410dfbc89eb0a428ad361c0f43b3b711380ae3a8b17",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_control_register_bank.v": "1b03645d6917db1a385e55c823c8d4afdd6f04086de1ace890b0d0106a0eb15f",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_execution_recovery_cancel.v": "2f1d2226bb8d4997207b5d4092bcfb0edfb633e794f864cbdeb625e9943f7f84",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_add32_select.v": "cf1c2d516d26eefd9b0416339af7489516e4dbbb6388fd3171083698223e0676",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_add64_select.v": "e78e9acef1b179651c17f296fb35fe1a5b27f5ad9f8c0b4f810001d6cb624fcc",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_add_simm12.v": "9e5acba80569c4c03f410e53d8fce3e236216727af7bde09ee34c3a891934327",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_array_read.v": "47a708bda1aa7075e773ddae480aa67e44c56c743b73932144ca2741d49a4a3e",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_array_read_bank_masks.v": "8659e7a0c1bb7b8cc12aa74864261f6cfe8ee2641dbb6b382b6d99ffa3d4ab81",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_barrel32.v": "62dd16d18975fdd119257532fd3ea6a0a78ec21e811f3590370f695acc520c31",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_conditional_negate32.v": "adc27a62673ecc89042c3e754b4770d0e2fc54eadf67eede290a9cc3f56ecf1e",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_control_tree.v": "75ff2391c14527a812bc37c3ab8833e379a748413a2ab126731815e601711334",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_event_select.v": "e8e3e3f2cd245028cad44252036fcc98ca5d7da4ed73996882c34824af3c585b",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_first_two.v": "4accc95ff11053e3b087c2bc73a9426fdc3e91fc9b10e4ce32747772890da0ab",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_inversion.v": "7342316b6cbbd1d8de73e332004f88640f6ded8d409fa16008dfafc0203f1ffe",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_line_extract32.v": "0d8f7f2e08457fa1a08a2b0d165ed579eef7750f2bbf7f2205de37043b36b591",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_line_insert32.v": "68e47fec1b95a0852e0577746399c96ce7dbced8a37287d652f200d1804f2eea",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_narrow_array_read.v": "f1ef9fc54ba24b1283492f8025695a2fdd612ef7ed7331d627156908b883b02a",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_negative_subtree.v": "c2f23713812b3b1f611edd0af2c7afdeb99bc914e93aa8dbca59ecbc29c12b49",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_polarity_tree.v": "84d224455e1470cd8a1476d1fe6f6ec07f6e33a6daa53f06136a4f5e633d513f",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\common\\rv32_frequency_word_bank.v": "33e7619519d7d6f16ac70701b6fdf03e1e2db92d962f8306ce82932c5d7c3940",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_cache_stats.v": "5d766279f38825a6c72c3b4b5f35cbbebb5cca2c8e582f56701697e98a1dfa17",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_dcache.v": "552ce891e5a23b7c321c5dbb6138ee8bbc2d6b34b14ed11b0699469dc33ce837",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_dcache_command_line.v": "e875860850f580aceedc70cb15f6767e3f7fa3b9b56c3c84750960056594df89",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_dcache_command_word.v": "360254d5685815d76382e9d1e1c4a859a72cb3908260f8a5855e7700fc93d261",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_dcache_control_banks.v": "1f6e2670b6f24f3811584ef0408515a367f8bb0d6e9d71f8bd04ab8a4ce5f4df",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_dcache_metadata_bank.v": "dd275c6d9e396dd17ebaae5d3c885f322b20b14742b755207bd0caa03bda5a8c",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_dcache_metadata_word.v": "e5089ebbf5291632b00664680f116b4e92f764271cb528cb29be044a3074d3f3",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_dcache_mshr_data_bank.v": "1316dfdb1d0ef7b096051f4751777edfabd286385a5002867ab26c837963da94",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_dcache_nonblocking.v": "e9c14290347fd87d6c62fc999024817a5925539b20929fa44239b5142f616c11",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_icache.v": "bf9e8b9f0f8483dbc8599d064422c90a3d496a78e5812ec3ad4bcadbef9aaac1",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_icache_mshr_state_bank.v": "c5142986c53865d6e1cdca84e79ca7352c5f4b553c67af10d891611b71e92ca2",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_icache_nonblocking.v": "9ebd4146d93198ccfb83907547579822178ac16ab004b44ed8cdb984bf482aad",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_icache_query_queue.v": "d3f8314cdd003f9cb3cbc3b83f595aaeccd2b8722b729c5160d17a0901f425cf",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\cache\\rv32_instruction_line_filter.v": "a1fb8da41fec201460e8c31a1795384f23138438535449a411b08460363b665d",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\rtl\\rv32im_defs.vh": "9a3b0637ba166001a67f1d57b0dc7b7c8534290a7cba52a2bec7597d53b63c70",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\scripts\\ram\\sram_fakeram.sv": "633f573eab26e6f8cfcdde57b844441579540e381d6622bf9684065be3a6d37e",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\tb\\unit\\rv32_dcache_mshr_owner_tb.v": "2d4e62b23a61ebf505157f0554c141e8bb0a95a21d534b317d2e5864b7c5a522",
+    "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3\\source\\tools\\test_dcache_mshr_owner_sample.py": "6f12a46fa3e17f3f669fb21df5e685dedd4a3ed5d790167d589804bc0379b619",
+    "F:\\CPU2026CourseTools\\win5040\\source_release\\verilator-5.040\\bin\\verilator_bin.exe": "798b1da737c08a316f63195b6c1a4c9646f118788182fb1165d100a7c1e46661"
+  },
+  "proves_whole_lsq": false,
+  "proves_whole_cpu": false,
+  "claims_cpu_ppa": false,
+  "simulator": "native Verilator two-state, WORD_SIM scheduling",
+  "scope": "One paired CACHE16/ways2/MSHR2/WAIT2/PREFETCH1/NARROW1 with no-clear 0/1; seed both retained banks with nonzero bytes, reset, prefetch reuse, held RFO/ACK/response, prefetch-to-store full initialization and partial merge, exact store refill/hit payload, second stale nonstore prefetch refill; compare valid public transfers and cycles plus production init assertions; no whole CPU proof",
+  "proves_whole_cache": false,
+  "run_directory": "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r3",
+  "accepted_cpu_candidate": false,
+  "sample_report_sha256": "8c4be827f43bcb3dee9bb1ec3f2749abbcc1debd2f4b796b7490d4e49d32d65b",
+  "notes": [
+    "One finite paired PREFETCH=1 cache stimulus, eleven accesses. Verilator WORD_RESPONSE returns zero line data; all 128 merged bytes were checked through an actual dirty eviction.",
+    "Earlier stimulus failures do not establish CPU equivalence or a production failure: both DUTs held same-set misses as designed, then the fixture expected a full line on a word-only response port. Corrected addresses, existing SRAM-edge timing and full-line observation via dirty writeback.",
+    "No CPU build/perf/smoke or PPA for this source yet. Full tag, mask, capacity and original clock edges retained."
+  ],
+  "retained_fixture_failures": [
+    {
+      "run_directory": "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009",
+      "reason": "Second seed miss conflicts with first stalled miss in the same set",
+      "simulation_log_sha256": "700749119d2ea12b8f206cd2bab71eb710b1ef1b138108c75abf56e018f417f0"
+    },
+    {
+      "run_directory": "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_diagnostic",
+      "reason": "Diagnostic identifies second seed tag 0019, query held and ready zero despite a free MSHR",
+      "simulation_log_sha256": "8f3986cbb62c26f20b6495ebbddc96c803ede9901770f2adb9544ac4d3bdda12"
+    },
+    {
+      "run_directory": "F:\\CPU2026TierRuns\\dcache_mshr_owner_sample_20261009_r2",
+      "reason": "Fixture incorrectly expected whole line data under WORD_RESPONSE=1",
+      "simulation_log_sha256": "fe8e34c599cab4bce5adbc5dacf7075e189fef700029171b57c430e9fb089fb6"
+    }
+  ]
+}
