@@ -13,6 +13,7 @@ module rv32_lsq #(
     parameter integer SINGLE_GENERATION_OWNER = 0,
     parameter integer ALLOC_LOAD_REQUEST_BYPASS = 0,
     parameter integer SAVED_REQUEST_QUERY = 0,
+    parameter integer SAVED_CANDIDATE_STATE_QUERY = 0,
     parameter integer PHASED_DATA_OWNER = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
@@ -687,9 +688,21 @@ module rv32_lsq #(
         assign {pick_generation,pick_rob_tag,pick_store_data,pick_store_mask,pick_load,pick_size,pick_unsigned}=
             pick_payload[1];
     end endgenerate
+    wire [SLOT_WIDTH-1:0] candidate_state_index=(SAVED_CANDIDATE_STATE_QUERY!=0) ?
+        existing_selection_packet[SELECTION_PAYLOAD_WIDTH-1 -: SLOT_WIDTH] : candidate[SLOT_WIDTH-1:0];
     rv32_frequency_array_read #(.WIDTH(4),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) candidate_state_read (
-        .rows_i(candidate_state_rows),.index_i(candidate[SLOT_WIDTH-1:0]),
+        .rows_i(candidate_state_rows),.index_i(candidate_state_index),
         .value_o({candidate_wait,candidate_load,candidate_sent,candidate_complete}));
+`ifdef VERILATOR
+    generate if(SAVED_CANDIDATE_STATE_QUERY!=0) begin:g_candidate_state_reference
+        wire [3:0] original_state;
+        rv32_frequency_array_read #(.WIDTH(4),.ENTRIES(LSQ_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) original_read (
+            .rows_i(candidate_state_rows),.index_i(candidate[SLOT_WIDTH-1:0]),.value_o(original_state));
+        always @(posedge clk_i) if(!reset_i && candidate_found)
+            assert({candidate_wait,candidate_load,candidate_sent,candidate_complete}==original_state)
+                else $fatal(1,"Saved candidate state changed an owned query");
+    end endgenerate
+`endif
     generate for(genvar query_row=0;query_row<LSQ_ENTRIES;query_row=query_row+1) begin:g_selected_query
         assign selection_state_rows[query_row*SELECT_STATE_WIDTH +: SELECT_STATE_WIDTH]={
             generation_mem[query_row],valid_mem[query_row],request_sent_mem[query_row],complete_mem[query_row],response_wait_mem[query_row],
@@ -1338,6 +1351,9 @@ module rv32_lsq #(
         $fatal(1,"PHASED_DATA_OWNER must be 0 or 1");
     initial if(SAVED_REQUEST_QUERY!=0 && SAVED_REQUEST_QUERY!=1)
         $fatal(1,"SAVED_REQUEST_QUERY must be 0 or 1");
+    initial if(SAVED_CANDIDATE_STATE_QUERY<0 || SAVED_CANDIDATE_STATE_QUERY>1 ||
+        (SAVED_CANDIDATE_STATE_QUERY!=0 && SAVED_REQUEST_QUERY==0))
+        $fatal(1,"Saved candidate state requires saved request query");
     assign dcache_req_addr_o=selected_addr;
     (* keep_hierarchy = 1 *)
     rv32_lsq_request_owner #(.FRESH_NO_FORWARD(SAVED_REQUEST_QUERY),.TAG_WIDTH(TAG_WIDTH),.ROB_TAG_WIDTH(ROB_TAG_WIDTH)) request_owner (

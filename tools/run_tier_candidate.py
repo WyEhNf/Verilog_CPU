@@ -57,6 +57,10 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["DECODE_STATIC_HALT_CLASS"] not in (0,1):
+        raise ValueError("Static HALT class must be 0 or 1")
+    if p["LSQ_SAVED_CANDIDATE_STATE_QUERY"] not in (0,1) or (p["LSQ_SAVED_CANDIDATE_STATE_QUERY"] and not p["LSQ_SAVED_REQUEST_QUERY"]):
+        raise ValueError("Saved candidate state requires saved request query")
     if p["LSQ_SAVED_REQUEST_QUERY"] not in (0,1) or (p["LSQ_SAVED_REQUEST_QUERY"] and
             (p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"] or not p["DCACHE_WAY_PARALLEL_QUERY"])):
         raise ValueError("Saved LSQ request query requires registered parallel SRAM cache query")
