@@ -119,6 +119,7 @@ module rv32_backend_joint #(
     parameter integer RAT_RECOVERY_IMPL = 0,
     parameter integer RAT_SUFFIX_BRANCH_MAPPING = 0,
     parameter integer STORE_BUFFERED_RETIRE = 1,
+    parameter integer COMPLETION_SOURCE_STATE_QUERY = 0,
     parameter integer COMPLETION_BYPASS = 0,
     parameter integer COMPLETION_DEPTH = (BE_WIDTH <= 1) ? 4 :
                                          ((BE_WIDTH == 2) ? 8 : 16),
@@ -919,12 +920,21 @@ module rv32_backend_joint #(
 
     wire [PRODUCERS*ROB_LIVE_WIDTH-1:0] producer_live_reads;
     wire [BE_WIDTH*3-1:0] completion_state_reads;
+    // Move the same current-table lookup before direct CDB selection.
+    // These are combinational views, never cached completion state.
+    wire [PRODUCERS*3-1:0] producer_completion_states;
+    wire [BE_WIDTH*PRODUCERS-1:0] completion_source_masks;
+    wire [2:0] lsq_report_completion_state;
+    initial if((COMPLETION_SOURCE_STATE_QUERY!=0 && COMPLETION_SOURCE_STATE_QUERY!=1) ||
+               (COMPLETION_SOURCE_STATE_QUERY!=0 && COMPLETION_BYPASS!=2))
+        $fatal(1,"Completion source state query requires direct completion");
     // Saved, head and optional held identities perform the full live/GEN
     // lookup independently; late report choice selects only a qualified bool.
     // Late head-return choice selects one bool, not a ROB address/tag packet.
     generate if(LSQ_HEAD_LOAD_IDENTITY_ACTIVE!=0) begin:g_load_report_identity_qualification
         wire [LSQ_REPORT_IDENTITY_CANDIDATES-1:0] candidate_live;
         wire [LSQ_REPORT_IDENTITY_CANDIDATES-1:0] candidate_recovery_kill;
+        wire [LSQ_REPORT_IDENTITY_CANDIDATES*3-1:0] candidate_state;
         // W-bit ages wrap modulo 2**W, including non-power-of-two ROBs.
         // Compute the unwrapped occupied range end once, independently of
         // each candidate. W+count-width bounds retain every binary count.
@@ -981,6 +991,14 @@ module rv32_backend_joint #(
                 assign candidate_recovery_kill[identity_candidate]=1'b0;
             end
             wire [ROB_LIVE_WIDTH-1:0] live_state;
+            if(COMPLETION_SOURCE_STATE_QUERY!=0) begin:g_completion_state
+                rv32_frequency_array_read_bank_masks #(.WIDTH(3),.ENTRIES(ROB_ENTRIES),
+                    .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
+                    .rows_i(rob_completion_state_rows),.query_i(query),
+                    .value_o(candidate_state[identity_candidate*3 +: 3]));
+            end else begin:g_original_completion_state
+                assign candidate_state[identity_candidate*3 +: 3]=0;
+            end
             rv32_frequency_array_read_bank_masks #(.WIDTH(ROB_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),
                 .INDEX_WIDTH(ROB_SLOT_WIDTH)) live_read (
                 .rows_i(rob_live_rows),
@@ -1000,12 +1018,16 @@ module rv32_backend_joint #(
         if(LSQ_HELD_LOAD_IDENTITY_ACTIVE!=0) begin:g_choose_held
             assign lsq_report_identity_live=lsq_report_identity_held ? candidate_live[2] :
                 (lsq_report_identity_head ? candidate_live[1] : candidate_live[0]);
+            assign lsq_report_completion_state=lsq_report_identity_held ? candidate_state[6 +: 3] :
+                (lsq_report_identity_head ? candidate_state[3 +: 3] : candidate_state[0 +: 3]);
         end else begin:g_original_choice
             assign lsq_report_identity_live=lsq_report_identity_head ? candidate_live[1] : candidate_live[0];
+            assign lsq_report_completion_state=lsq_report_identity_head ? candidate_state[3 +: 3] : candidate_state[0 +: 3];
         end
     end else begin:g_original_load_identity_qualification
         assign lsq_report_identity_live=1'b0;
         assign lsq_report_identity_recovery_kill=1'b0;
+        assign lsq_report_completion_state=0;
     end endgenerate
 
     genvar status_row,status_source,status_lane;
@@ -1018,6 +1040,24 @@ module rv32_backend_joint #(
                 load_error_mem[status_row],rob_mem_size_mem[status_row]};
         end
         for(status_source=0;status_source<PRODUCERS;status_source=status_source+1) begin:g_producer_live_read
+            if(COMPLETION_SOURCE_STATE_QUERY!=0) begin:g_completion_state
+                if(status_source==LSQ_SOURCE && LSQ_HEAD_LOAD_IDENTITY_ACTIVE!=0) begin:g_preselected_load
+                    assign producer_completion_states[status_source*3 +: 3]=lsq_report_completion_state;
+                end else if(status_source==LSQ_SOURCE && LSQ_ROB_QUERY_PREDECODE!=0) begin:g_predecoded_load
+                    rv32_frequency_array_read_bank_masks #(.WIDTH(3),.ENTRIES(ROB_ENTRIES),
+                        .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
+                        .rows_i(rob_completion_state_rows),.query_i(lsq_load_complete_rob_query),
+                        .value_o(producer_completion_states[status_source*3 +: 3]));
+                end else begin:g_registered_tag
+                    rv32_frequency_array_read #(.WIDTH(3),.ENTRIES(ROB_ENTRIES),
+                        .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
+                        .rows_i(rob_completion_state_rows),
+                        .index_i(producer_query_tags[status_source*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]),
+                        .value_o(producer_completion_states[status_source*3 +: 3]));
+                end
+            end else begin:g_original_completion_state
+                assign producer_completion_states[status_source*3 +: 3]=0;
+            end
             if(LSQ_ROB_QUERY_PREDECODE!=0 && status_source==LSQ_SOURCE) begin:g_predecoded_load
                 rv32_frequency_array_read_bank_masks #(.WIDTH(ROB_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),
                     .INDEX_WIDTH(ROB_SLOT_WIDTH)) live_read (
@@ -1032,11 +1072,33 @@ module rv32_backend_joint #(
             end
         end
         for(status_lane=0;status_lane<BE_WIDTH;status_lane=status_lane+1) begin:g_completion_state_read
-            rv32_frequency_array_read #(.WIDTH(3),.ENTRIES(ROB_ENTRIES),
-                .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
-                .rows_i(rob_completion_state_rows),
-                .index_i(rob_wb_tag[status_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]),
-                .value_o(completion_state_reads[status_lane*3 +: 3]));
+            if(COMPLETION_SOURCE_STATE_QUERY!=0) begin:g_source_state
+                wire unused_write;
+                rv32_frequency_event_select #(.WIDTH(3),.EVENTS(PRODUCERS),.PRIORITY(0)) selector (
+                    .events_i(completion_source_masks[status_lane*PRODUCERS +: PRODUCERS]),
+                    .values_i(producer_completion_states),.write_o(unused_write),
+                    .value_o(completion_state_reads[status_lane*3 +: 3]));
+`ifdef VERILATOR
+                wire [2:0] original_state;
+                rv32_frequency_array_read #(.WIDTH(3),.ENTRIES(ROB_ENTRIES),
+                    .INDEX_WIDTH(ROB_SLOT_WIDTH)) original_read (
+                    .rows_i(rob_completion_state_rows),
+                    .index_i(rob_wb_tag[status_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]),
+                    .value_o(original_state));
+                always @(posedge clk_i) if(!reset_i && rob_wb_valid[status_lane]) begin
+                    assert($onehot(completion_source_masks[status_lane*PRODUCERS +: PRODUCERS]))
+                        else $fatal(1,"Completion source state has no unique source");
+                    assert(completion_state_reads[status_lane*3 +: 3]==original_state)
+                        else $fatal(1,"Completion source state differs from original selected-tag lookup");
+                end
+`endif
+            end else begin:g_original_state
+                rv32_frequency_array_read #(.WIDTH(3),.ENTRIES(ROB_ENTRIES),
+                    .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
+                    .rows_i(rob_completion_state_rows),
+                    .index_i(rob_wb_tag[status_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]),
+                    .value_o(completion_state_reads[status_lane*3 +: 3]));
+            end
         end
     endgenerate
 
@@ -2614,7 +2676,7 @@ module rv32_backend_joint #(
     wire [(((COMPLETION_DEPTH) <= 1) ? 1 : $clog2((COMPLETION_DEPTH) + 1))-1:0] unused_completion_occupancy_o;
     rv32_completion_network #(.BE_WIDTH(BE_WIDTH), .CDB_WIDTH(CDB_WIDTH), .SOURCES(PRODUCERS), .FIFO_DEPTH(COMPLETION_DEPTH), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .BYPASS(COMPLETION_BYPASS), .DIRECT_BRANCH_PAYLOAD(0),
         .DIRECT_STORE_PAYLOAD((LIGHT_RETIRE_PAYLOAD==0) || (ROB_RETURN_VALUE_ENABLE!=0))) completion (
-        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .kill_valid_i(recovery_domains[6]), .kill_mask_i(completion_kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready_r), .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live_r), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}}), .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect_valid), .cdb_is_memory_o(cdb_is_memory), .cdb_is_load_o(cdb_is_load), .prf_write_valid_o(completion_prf_write_valid), .prf_write_tag_o(prf_wb_tag), .prf_write_phys_rd_o(completion_prf_write_phys), .prf_write_value_o(completion_prf_write_data), .rob_ready_valid_o(rob_wb_valid), .rob_ready_tag_o(rob_wb_tag), .rob_ready_value_o(rob_wb_value), .wakeup_valid_o(wake_wb_valid), .wakeup_tag_o(wake_wb_tag), .wakeup_value_o(wake_wb_value), .entry_valid_o(completion_entry_valid), .entry_tag_o(completion_entry_tag), .occupancy_o(unused_completion_occupancy_o)
+        .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .kill_valid_i(recovery_domains[6]), .kill_mask_i(completion_kill_mask), .producer_valid_i(producer_valid), .producer_ready_o(producer_ready_r), .producer_tag_i(producer_tag), .producer_phys_rd_i(producer_phys), .producer_value_i(producer_value), .producer_addr_i(producer_addr), .producer_branch_target_i(producer_branch_target), .producer_store_data_i(producer_store_data), .producer_rd_we_i(producer_rd_we), .producer_is_store_i(producer_store), .producer_is_branch_i(producer_branch), .producer_branch_taken_i(producer_taken), .producer_redirect_valid_i(producer_redirect), .producer_is_memory_i(producer_memory), .producer_is_load_i(producer_load), .producer_target_live_i(producer_target_live_r), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}}), .cdb_valid_o(cdb_valid), .cdb_ready_i(cdb_ready), .cdb_tag_o(cdb_tag), .cdb_phys_rd_o(cdb_phys), .cdb_value_o(cdb_value), .cdb_addr_o(cdb_addr), .cdb_branch_target_o(cdb_branch_target), .cdb_store_data_o(cdb_store_data), .cdb_rd_we_o(cdb_rd_we), .cdb_is_store_o(cdb_is_store), .cdb_is_branch_o(cdb_is_branch), .cdb_branch_taken_o(cdb_branch_taken), .cdb_redirect_valid_o(cdb_redirect_valid), .cdb_is_memory_o(cdb_is_memory), .cdb_is_load_o(cdb_is_load), .prf_write_valid_o(completion_prf_write_valid), .prf_write_tag_o(prf_wb_tag), .prf_write_phys_rd_o(completion_prf_write_phys), .prf_write_value_o(completion_prf_write_data), .rob_ready_valid_o(rob_wb_valid), .rob_ready_tag_o(rob_wb_tag), .rob_ready_value_o(rob_wb_value), .direct_source_mask_o(completion_source_masks), .wakeup_valid_o(wake_wb_valid), .wakeup_tag_o(wake_wb_tag), .wakeup_value_o(wake_wb_value), .entry_valid_o(completion_entry_valid), .entry_tag_o(completion_entry_tag), .occupancy_o(unused_completion_occupancy_o)
     );
     // A valid producer holds its result until the completion network accepts
     // it.  Its value can therefore wake a dependent RS entry even when the

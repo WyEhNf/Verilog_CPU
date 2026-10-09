@@ -68,6 +68,10 @@ module rv32_completion_network #(
     output wire [BE_WIDTH-1:0]          rob_ready_valid_o,
     output wire [(BE_WIDTH*TAG_WIDTH)-1:0] rob_ready_tag_o,
     output wire [(BE_WIDTH*32)-1:0]      rob_ready_value_o,
+    // The direct payload's exact one-hot source grant, including reset/flush
+    // qualification. A caller may select current source-side metadata on the
+    // same edge; this export does not change arbitration or add state.
+    output wire [BE_WIDTH*SOURCES-1:0]   direct_source_mask_o,
     output wire [BE_WIDTH-1:0]          wakeup_valid_o,
     output wire [(BE_WIDTH*TAG_WIDTH)-1:0] wakeup_tag_o,
     output wire [(BE_WIDTH*32)-1:0]      wakeup_value_o,
@@ -208,6 +212,14 @@ module rv32_completion_network #(
     end
 
     localparam integer DIRECT_META_WIDTH=TAG_WIDTH+PHYS_ADDR_WIDTH+7;
+    generate for(genvar mask_lane=0;mask_lane<BE_WIDTH;mask_lane=mask_lane+1) begin:g_source_mask
+        if(BYPASS==2 && mask_lane<CDB_WIDTH) begin:g_direct
+            assign direct_source_mask_o[mask_lane*SOURCES +: SOURCES]=
+                selected_mask[mask_lane] & {SOURCES{!reset_i && !flush_i}};
+        end else begin:g_unused
+            assign direct_source_mask_o[mask_lane*SOURCES +: SOURCES]=0;
+        end
+    end endgenerate
     wire [DIRECT_META_WIDTH-1:0] direct_meta [0:CDB_WIDTH-1];
     wire [31:0] direct_value [0:CDB_WIDTH-1],direct_target [0:CDB_WIDTH-1];
     wire [63:0] direct_memory [0:CDB_WIDTH-1];
