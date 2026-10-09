@@ -1,0 +1,1081 @@
+{
+  "status": "REJECTED_FREQUENCY_NONREGRESSION",
+  "accepted": false,
+  "source_commit": "4e707df9327b75aab645128f445a8be5e0f1b37b",
+  "run_directory": "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009",
+  "manifest_sha256": "4ad583a894316502cbb97e16bb726aff8b794ca39197943911e62c53a21a8cb7",
+  "parameters": {
+    "MDU_DIVZERO_REMAINDER_REUSE": 1,
+    "MDU_PREFIX_SIGN_CORRECTION": 1,
+    "DECODE_PIPELINE": 1,
+    "ISSUE_PIPELINE": 0,
+    "FETCH_OWNER_PAYLOAD_SELECT": 1,
+    "DECODE_QUEUE_DEPTH": 2,
+    "DECODE_EMPTY_BYPASS": 1,
+    "DECODE_FULL_REPLACE": 1,
+    "DECODE_STATIC_HALT_CLASS": 0,
+    "DIRECT_DISPATCH_CURRENT_CREDITS": 1,
+    "DIRECT_DISPATCH_RELEASE_CREDITS": 0,
+    "DIRECT_LOAD_RS_CREDIT": 1,
+    "LSQ_DIRECT_POP_CREDIT": 0,
+    "TAG_SINGLE_GENERATION_OWNER": 1,
+    "ROB_COMPLETION_COMMIT_BYPASS": 0,
+    "ROB_STORE_RETIRE_ADMISSION_BYPASS": 0,
+    "RS_ALLOC_EMPTY_BYPASS": 0,
+    "RS_FRESH_DEFAULT_LANE_DATA": 0,
+    "ICACHE_MSHR_STATIC_WRITES": 1,
+    "ICACHE_MSHR_STATE_BANKS": 1,
+    "FRONTEND_QUEUE_PAYLOAD_BANKS": 1,
+    "FRONTEND_RESPONSE_BYPASS": 1,
+    "FRONTEND_RESPONSE_LOCAL_PC": 1,
+    "FRONTEND_REDIRECT_REQUEST": 1,
+    "FRONTEND_PARALLEL_BUNDLE_CONTROL": 1,
+    "FRONTEND_RAS_PREDECODE": 2,
+    "FRONTEND_RAS_PARALLEL_CONTROL": 1,
+    "RAS_REPEAT_COMPRESSION": 1,
+    "RAS_REPEAT_MATCH_PREDECODE": 1,
+    "RAS_REPEAT_COUNTER_BITS": 6,
+    "FRONTEND_RESPONSE_WORD_OFFSET_READ": 1,
+    "FRONTEND_DIRECT_WORD_BOUNDS": 1,
+    "DCACHE_LOCAL_SRAM_COMMANDS": 1,
+    "DCACHE_WAY_PARALLEL_QUERY": 1,
+    "DCACHE_HIT_RESPONSE_COISSUE": 1,
+    "FE_WIDTH": 2,
+    "BE_WIDTH": 2,
+    "PHYS_REGS": 40,
+    "ROB_ENTRIES": 16,
+    "RS_ENTRIES": 3,
+    "LSQ_ENTRIES": 4,
+    "LSQ_STORE_ADMISSION_BYPASS": 0,
+    "EARLY_LOAD_ADDRESS": 3,
+    "LOAD_COMPLETION_BYPASS": 2,
+    "LSQ_SAVED_REPORT_PRIORITY": 1,
+    "LSQ_HEAD_LOAD_IDENTITY_QUERY": 1,
+    "LSQ_HELD_LOAD_IDENTITY_QUERY": 0,
+    "LSQ_REPORT_RECOVERY_PREQUALIFY": 1,
+    "LSQ_REPORT_RECOVERY_CIRCULAR_COMPARE": 1,
+    "LSQ_HEAD_LOAD_PACKET_PRESELECT": 1,
+    "LSQ_SAVED_IDENTITY_WORD_MASK": 1,
+    "LSQ_SAVED_IDENTITY_BALANCED_MERGE": 1,
+    "LOAD_WAKE_BYPASS": 1,
+    "ALLOC_LOAD_SELECTION_BYPASS": 1,
+    "LSQ_ALLOC_LOAD_REQUEST_BYPASS": 0,
+    "LSQ_SAVED_REQUEST_QUERY": 1,
+    "LSQ_SAVED_CANDIDATE_STATE_QUERY": 1,
+    "LSQ_PHASED_DATA_OWNER": 1,
+    "LSQ_PHASED_DIRECT_WRITE_EVENTS": 1,
+    "MMIO_WRITE_CAPACITY_READY": 1,
+    "MMIO_SAVED_ROUTE_CLASS": 1,
+    "MMIO_STORE_ADMISSION_ROUTE": 1,
+    "LSQ_ALLOC_SLOT_PRESELECT": 1,
+    "LSQ_ALLOC_PAYLOAD_PRESELECT": 1,
+    "LSQ_ALLOC_FIRE_DISTRIBUTE": 1,
+    "LSQ_RESPONSE_SOURCE_QUERY": 1,
+    "LSQ_RECLAIM_WIDTH": 2,
+    "LSQ_SECOND_REPORT_RECLAIM": 1,
+    "LSQ_EMPTY_SELECTION_BYPASS": 2,
+    "LSQ_COMMITTED_STORE_BYPASS": 0,
+    "LSQ_PICK_LOCAL_VALIDITY": 1,
+    "LSQ_FORWARD_ONEHOT": 1,
+    "LSQ_PICK_ONEHOT": 1,
+    "EARLY_FRONT_REDIRECT": 1,
+    "BRANCH_CAPTURE_REDIRECT_READY": 1,
+    "BRANCH_CAPTURE_PHASE_VALID": 1,
+    "RECOVERY_DIRECT_APPLY": 1,
+    "ROB_RECOVERY_PENDING_OWNER": 1,
+    "RECOVERY_ROB_CREDIT": 1,
+    "RECOVERY_PREVIEW_OLDER_ISSUE": 1,
+    "RECOVERY_APPLY_OLDER_ISSUE": 1,
+    "RS_ROW_RECOVERY_QUALIFICATION": 1,
+    "RS_ROW_LIVE_MEMBERSHIP": 1,
+    "RS_PREDECODE_ISSUE_CANCEL": 1,
+    "DISPATCH_ELASTIC": 0,
+    "DISPATCH_PIPELINE": 0,
+    "DISPATCH_FULL_REPLACE": 1,
+    "EARLY_STORE_ADDRESS": 2,
+    "STORE_ALLOC_EARLY_DATA": 1,
+    "STORE_ALLOC_EARLY_ADDRESS": 1,
+    "FAST_STORE_COMPLETE": 1,
+    "FAST_STORE_IDENTITY_PRESELECT": 1,
+    "ROB_STORE_PREFIX_ADMISSION": 1,
+    "ROB_RECOVERY_ROW_LIVE_QUALIFY": 0,
+    "ROB_OCCUPANCY_DISTRIBUTE": 1,
+    "LSQ_STORE_ACK_SOURCE_QUERY": 1,
+    "LSQ_HEAD_STORE_ACK_BYPASS": 1,
+    "FAST_STORE_ADDRESS_PREDECODE": 1,
+    "FAST_STORE_SAVED_OPERANDS": 1,
+    "FAST_STORE_WB_DATA": 1,
+    "FAST_STORE_CLASS_COMPARE": 1,
+    "FAST_STORE_BATCH": 0,
+    "RS_ELASTIC_SKIP_CAPACITY": 1,
+    "RS_ISSUE_METADATA": 1,
+    "RS_WAKE_MUX_IMPL": 1,
+    "RS_AGE_WIDTH": 8,
+    "RS_ALLOC_STATIC_WRITE": 1,
+    "PRF_READ_MUX_IMPL": 1,
+    "PRF_VALUE_SRAM": 1,
+    "PRF_SRAM_PORT_FORWARD": 1,
+    "PRF_SRAM_RAW_WRITE": 1,
+    "RAT_READ_BYPASS": 1,
+    "RENAME_REGISTERED_FREE_POOL": 1,
+    "RENAME_RETAIN_FREE_POOL": 1,
+    "PREDICTOR_DIRECT_BRANCH_TARGET": 2,
+    "PREDICTOR_HISTORY_BITS": 6,
+    "PREDICTOR_BHT_INDEX_BITS": 7,
+    "PREDICTOR_HYBRID_DIRECTION": 1,
+    "PREDICTOR_DIRECTION_INDEPENDENT_TARGET": 1,
+    "PREDICTOR_NARROW_DIRECTION_READ": 1,
+    "PREDICTOR_BANK_PC_CARRY_SELECT": 1,
+    "PREDICTOR_PREFIX_QUERY_HISTORY": 1,
+    "PREDICTOR_BANK_LOCAL_INSTRUCTION_READ": 1,
+    "PREDICTOR_BANK_LOCAL_PREFIX_HISTORY": 1,
+    "PREDICTOR_BANK_DIRECT_WORD_INDEX": 1,
+    "PREDICTOR_COMPACT_TARGET": 1,
+    "PREDICTOR_COMPACT_BTB": 1,
+    "PREDICTOR_COMPACT_BTB_ENTRIES": 4,
+    "PREDICTOR_MULTI_FEEDBACK": 1,
+    "ASAP7_FANOUT_BUFFERS": 0,
+    "ROB_CONTROL_REGISTER_BANKS": 0,
+    "ROB_COMMIT_BANKED_READ": 1,
+    "LIGHT_RETIRE_PAYLOAD": 1,
+    "ROB_MMIO_PREDECODE": 1,
+    "ROB_ALLOC_BANKED_WRITE": 1,
+    "ROB_UNIQUE_RECLAIM_COUNT": 1,
+    "INT_ISSUE_WIDTH": 2,
+    "CDB_WIDTH": 2,
+    "ICACHE_LOOP_LINES": 16,
+    "ICACHE_LOOP_SRAM": 1,
+    "ICACHE_LOCAL_RESPONSE_READY": 1,
+    "ICACHE_TAG_MATCH_PARALLEL": 1,
+    "ICACHE_TAG_REGION_BITS": 12,
+    "ICACHE_MSHRS": 4,
+    "ICACHE_LINES": 64,
+    "ICACHE_WAYS": 2,
+    "DCACHE_MSHRS": 2,
+    "DCACHE_LINES": 512,
+    "DCACHE_WAYS": 2,
+    "DCACHE_WAITERS": 4,
+    "DCACHE_WORD_RESPONSE": 1,
+    "DCACHE_INDEX_HASH": 1,
+    "DCACHE_REQUEST_PIPELINE": 0,
+    "DCACHE_STORE_MERGE_DELAY": 16,
+    "DCACHE_STORE_MERGE_POLICY": 0,
+    "DCACHE_STORE_MISS_WRITE_AROUND": 0,
+    "DCACHE_TAG_SRAM": 1,
+    "DCACHE_NARROW_REQUEST_WORD": 1,
+    "DCACHE_MSHR_DATA_NO_CLEAR": 1,
+    "DCACHE_STATIC_UPDATES": 2,
+    "DCACHE_REGISTERED_INDEX": 1,
+    "DCACHE_LOCAL_METADATA_QUERY": 1,
+    "DCACHE_LOCAL_ACTION_DECODE": 1,
+    "FRONTEND_NARROW_OCCUPANCY": 1,
+    "FETCH_QUEUE_DEPTH": 4,
+    "COMPLETION_DEPTH": 8,
+    "CHECKPOINT_IMPL": 1,
+    "MUL_IMPL": 2,
+    "SHIFT_IMPL": 0,
+    "SHIFT_SHARED_BARREL": 1,
+    "RAT_RECOVERY_IMPL": 1,
+    "RAT_SUFFIX_BRANCH_MAPPING": 1,
+    "PHYS_TAG_IMPL": 0,
+    "GENERATION_WIDTH": 8,
+    "COMPLETION_SOURCE_STATE_QUERY": 2,
+    "STORE_BUFFERED_RETIRE": 1,
+    "COMPLETION_BYPASS": 2,
+    "SERIAL_BACKEND": 0,
+    "ENABLE_CACHE_STATS": 1,
+    "READ_LINES": 4,
+    "WRITE_LINES": 2,
+    "WORD_QUEUE": 8,
+    "AXI_READ_PAYLOAD_SRAM": 1,
+    "AXI_RESPONSE_FIFO_DEPTH": 0,
+    "LSQ_DISTRIBUTED_LOAD_FORMAT": 1,
+    "LSQ_PHASED_ALLOC_EXCLUSIVE": 1
+  },
+  "balanced_control_tree": 1,
+  "acceptance_thresholds": {
+    "maximum_area_um2": 17997.018972010097,
+    "minimum_frequency_mhz": 355.67905522750954,
+    "minimum_geomean_ipc": 0.8561418961675636
+  },
+  "lint": {
+    "returncode": 0,
+    "elapsed_seconds": 12.718701500009047,
+    "errors": 0,
+    "latches": 0,
+    "unoptflat": 0,
+    "log_sha256": "057ce3361ce00ceef0c30fafe5f928d45ecba59cd7f277f4e7408d6f29a6f530",
+    "command": [
+      "F:/CPU2026CourseTools/win5040/source_release/verilator-5.040/bin/verilator_bin.exe",
+      "--lint-only",
+      "--assert",
+      "-Wall",
+      "-Wno-fatal",
+      "--top-module",
+      "student_top",
+      "--unroll-count",
+      "1024",
+      "--unroll-stmts",
+      "1000000",
+      "-I.",
+      "-Irtl",
+      "scripts/ram/sram_fakeram.sv",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32im_decoder.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\predictor\\rv32_branch_predictor.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\predictor\\rv32_predictor_bht_row.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\predictor\\rv32_predictor_btb_row.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\predictor\\rv32_predictor_indirect_btb_row.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\predictor\\rv32_predictor_choice_row.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\predictor\\rv32_banked_predictor.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_icache.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_icache_nonblocking.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_icache_mshr_state_bank.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_icache_query_queue.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_instruction_line_filter.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_dcache.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_dcache_control_banks.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_dcache_metadata_bank.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_dcache_mshr_data_bank.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_dcache_metadata_word.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_dcache_nonblocking.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_dcache_command_word.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_dcache_command_line.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cache\\rv32_cache_stats.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\memory\\rv32_memory_bridge.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\memory\\rv32_uncached_memory.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\frontend\\rv32_fetch_frontend.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\frontend\\rv32_frontend_queue_payload_bank.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\frontend\\rv32_frontend_parallel_bundle_control.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32i_alu.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32m_multiplier.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32m_multiplier_radix4.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32m_divider.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32m_mdu_iterative.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32_physical_register_file.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32_prf_value_row.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32_rename_unit.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32_rename_map_row.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_rob.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_rob_owned_field.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_rob_recovery_live_or.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_reservation_station.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_rs_payload_row.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32m_mdu_reservation_station.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_completion_network.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_lsq.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_lsq_owned_field.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_lsq_forward_window.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_lsq_request_owner.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_lsq_identity_pair_or.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_store_address_select.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_store_rs_links.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_rat_recovery.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_rat_recovery_word.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_backend_joint.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_issue_pipeline_slot.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_producer_tag_row.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_reserved_dispatch_packet.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\backend\\rv32_elastic_dispatch_packet.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32im_tag_compare.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32im_fifo.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32im_skid_buffer.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32im_prefix_alloc.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32im_priority_select.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_asap7_fanout.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_inversion.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_negative_subtree.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_control_tree.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_polarity_tree.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_word_bank.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_qualified_word_bank.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_event_select.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_first_two.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_array_read.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_barrel32.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_line_extract32.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_load_format.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_line_insert32.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_conditional_negate32.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_execution_recovery_cancel.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_add64_select.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_add32_select.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_add_simm12.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_array_read_bank_masks.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_frequency_narrow_array_read.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\common\\rv32_control_register_bank.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\cpu_core.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32_decode_bundle_register.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\rv32_decode_field_bank.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\course\\rv32_axi_lite_bridge.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\course\\rv32_axi_response_fifo.v",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\rtl\\course\\student_top.v"
+    ]
+  },
+  "synth": {
+    "status": "PASSED",
+    "command": [
+      "C:\\Users\\admin\\miniconda3\\python.exe",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\source\\scripts\\synth.py",
+      "--filelist",
+      "verilog/filelist.f",
+      "--out",
+      "F:\\CPU2026TierRuns\\tier2_shared_exclusive_capture_20261009\\synth",
+      "--mode",
+      "opt",
+      "--clock-period",
+      "2.0",
+      "--appimage",
+      "",
+      "--yosys",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys.exe",
+      "--abc",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys-abc.exe",
+      "--sta",
+      "F:/CPU2026CourseTools/win54fc150/opensta/bin/sta.exe",
+      "--asap7-lib",
+      "F:/CPU2026CourseTools/win54fc150/asap7/lib"
+    ],
+    "manifest_sha256": "4ad583a894316502cbb97e16bb726aff8b794ca39197943911e62c53a21a8cb7",
+    "phase": "synth",
+    "returncode": 0,
+    "seconds": 738.6295736999891,
+    "log_sha256": "fa9fab7149cc25611b37302874610c63c498dbf75b1d9efbb82ce307ff449732",
+    "area_um2": 17349.18583200877,
+    "fmax_mhz": 337.063857801185,
+    "report_sha256": "c9cb6c00f68154d94dfe7766a6a67611f61b3b26f614185b765b12821b0d51f3",
+    "ppa_thresholds_passed": false
+  },
+  "observed_synth_session": 56414,
+  "area_um2": 17349.18583200877,
+  "fmax_mhz": 337.063857801185,
+  "geomean_ipc": null,
+  "build_run": false,
+  "perf_run": false,
+  "cpu_smoke_run": false,
+  "notes": [
+    "One official PPA completed in 738.629574 seconds. Area 17349.18583200877 um2, Fmax 337.063857801185 MHz; historical frequency nonregression fails. No CPU build/perf/smoke; IPC remains unmeasured. No accepted profile is replaced.",
+    "Compared with accepted 5be74e01, area improves 647.833140 um2 but frequency regresses 18.615197 MHz. Compared with c85c56ea, area increases 13.107420 um2 and frequency decreases 6.791078 MHz. Functional sample/structural PASS does not imply timing improvement.",
+    "Worst path is 2.907 ns / period 2.966796875 ns: D-cache metadata row18 -> response/source validity -> head LOAD metadata/report -> direct CDB lane1/source2 -> dispatch/allocation -> row0 qualified word write tree/hold feedback -> mapped FF. Splitting selection does not remove the late allocation contribution to its shared write/hold control. Exact path points retained.",
+    "Mapped _115932_ drives d_rob_value_tree root, _119934_ combines allocation_fire_views[1] with a slot condition, and _179660_ drives row0 qualified-word write-tree root. Endpoint _198855_/D; output QN _009715_. A precise logical endpoint bit was not independently mapped.",
+    "Tier1 509377c4, Tier2 5be74e01 and Tier3 88e460d3 accepted evidence remains unchanged. Current-source Tier3 integration is unmeasured; registered dispatch makes its current path different from this direct-dispatch Tier2 path. One complete Tier3 freeze is still required before selecting any new arithmetic structure. All goal stages remain active."
+  ],
+  "synth_session_closed": true,
+  "minimum_period_ns": 2.966796875,
+  "area_components_um2": {
+    "combinational_area_um2": 9879.889140008767,
+    "sequential_area_um2": 3358.9404,
+    "sram_area_um2": 4110.356292000004
+  },
+  "critical_path": {
+    "startpoint": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_855_/QN",
+    "endpoint": "_198855_/D",
+    "slack_ns": -0.9664000000000001,
+    "arrival_ns": 2.907,
+    "required_ns": 1.94,
+    "points": [
+      {
+        "pin": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_855_/QN",
+        "cell": "DFFHQNx1_ASAP7_75t_R",
+        "arrival_ns": 0.08358
+      },
+      {
+        "pin": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_451_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 0.08358
+      },
+      {
+        "pin": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_451_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 0.1076
+      },
+      {
+        "pin": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_504_/B",
+        "cell": "NAND2xp33_ASAP7_75t_R",
+        "arrival_ns": 0.1076
+      },
+      {
+        "pin": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_504_/Y",
+        "cell": "NAND2xp33_ASAP7_75t_R",
+        "arrival_ns": 0.1748
+      },
+      {
+        "pin": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_755_/A2",
+        "cell": "OAI22xp33_ASAP7_75t_R",
+        "arrival_ns": 0.1748
+      },
+      {
+        "pin": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_755_/Y",
+        "cell": "OAI22xp33_ASAP7_75t_R",
+        "arrival_ns": 0.2047
+      },
+      {
+        "pin": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_756_/A2",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 0.2047
+      },
+      {
+        "pin": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_756_/Y",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 0.224
+      },
+      {
+        "pin": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_757_/B",
+        "cell": "NAND2xp33_ASAP7_75t_R",
+        "arrival_ns": 0.224
+      },
+      {
+        "pin": "core.g_cached_memory.g_nonblocking_dcache.dcache.genblk23.g_banked_updates.g_metadata[18].state_bank/_757_/Y",
+        "cell": "NAND2xp33_ASAP7_75t_R",
+        "arrival_ns": 0.23979999999999999
+      },
+      {
+        "pin": "_105984_/B",
+        "cell": "OR4x1_ASAP7_75t_R",
+        "arrival_ns": 0.23979999999999999
+      },
+      {
+        "pin": "_105984_/Y",
+        "cell": "OR4x1_ASAP7_75t_R",
+        "arrival_ns": 0.2757
+      },
+      {
+        "pin": "_105985_/E",
+        "cell": "NOR5xp2_ASAP7_75t_R",
+        "arrival_ns": 0.2757
+      },
+      {
+        "pin": "_105985_/Y",
+        "cell": "NOR5xp2_ASAP7_75t_R",
+        "arrival_ns": 0.3096
+      },
+      {
+        "pin": "_105988_/A",
+        "cell": "NAND3xp33_ASAP7_75t_R",
+        "arrival_ns": 0.3096
+      },
+      {
+        "pin": "_105988_/Y",
+        "cell": "NAND3xp33_ASAP7_75t_R",
+        "arrival_ns": 0.32739999999999997
+      },
+      {
+        "pin": "_105994_/A",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 0.32739999999999997
+      },
+      {
+        "pin": "_105994_/Y",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 0.3596
+      },
+      {
+        "pin": "_106521_/A",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 0.3596
+      },
+      {
+        "pin": "_106521_/Y",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 0.41300000000000003
+      },
+      {
+        "pin": "_106522_/B",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 0.41300000000000003
+      },
+      {
+        "pin": "_106522_/Y",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 0.629
+      },
+      {
+        "pin": "_106523_/A2",
+        "cell": "AO21x1_ASAP7_75t_R",
+        "arrival_ns": 0.629
+      },
+      {
+        "pin": "_106523_/Y",
+        "cell": "AO21x1_ASAP7_75t_R",
+        "arrival_ns": 0.6874
+      },
+      {
+        "pin": "_106524_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 0.6874
+      },
+      {
+        "pin": "_106524_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 0.6987
+      },
+      {
+        "pin": "_106526_/A2",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 0.6987
+      },
+      {
+        "pin": "_106526_/Y",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 0.731
+      },
+      {
+        "pin": "_106529_/A",
+        "cell": "NAND3xp33_ASAP7_75t_R",
+        "arrival_ns": 0.731
+      },
+      {
+        "pin": "_106529_/Y",
+        "cell": "NAND3xp33_ASAP7_75t_R",
+        "arrival_ns": 0.7525000000000001
+      },
+      {
+        "pin": "_119779_/C",
+        "cell": "O2A1O1Ixp33_ASAP7_75t_R",
+        "arrival_ns": 0.7525000000000001
+      },
+      {
+        "pin": "_119779_/Y",
+        "cell": "O2A1O1Ixp33_ASAP7_75t_R",
+        "arrival_ns": 0.8039
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 0.8039
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 0.821
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_internal.g_child[0].node.g_driver[1].invert/_0_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 0.821
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_internal.g_child[0].node.g_driver[1].invert/_0_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 0.8361999999999999
+      },
+      {
+        "pin": "_110335_/C",
+        "cell": "NAND3xp33_ASAP7_75t_R",
+        "arrival_ns": 0.8361999999999999
+      },
+      {
+        "pin": "_110335_/Y",
+        "cell": "NAND3xp33_ASAP7_75t_R",
+        "arrival_ns": 0.8616
+      },
+      {
+        "pin": "_110425_/C",
+        "cell": "NOR4xp25_ASAP7_75t_R",
+        "arrival_ns": 0.8616
+      },
+      {
+        "pin": "_110425_/Y",
+        "cell": "NOR4xp25_ASAP7_75t_R",
+        "arrival_ns": 0.8917999999999999
+      },
+      {
+        "pin": "_110426_/E",
+        "cell": "NAND5xp2_ASAP7_75t_R",
+        "arrival_ns": 0.8917999999999999
+      },
+      {
+        "pin": "_110426_/Y",
+        "cell": "NAND5xp2_ASAP7_75t_R",
+        "arrival_ns": 0.9206
+      },
+      {
+        "pin": "_110465_/A1",
+        "cell": "O2A1O1Ixp33_ASAP7_75t_R",
+        "arrival_ns": 0.9206
+      },
+      {
+        "pin": "_110465_/Y",
+        "cell": "O2A1O1Ixp33_ASAP7_75t_R",
+        "arrival_ns": 0.9805999999999999
+      },
+      {
+        "pin": "_110467_/C",
+        "cell": "NAND3xp33_ASAP7_75t_R",
+        "arrival_ns": 0.9805999999999999
+      },
+      {
+        "pin": "_110467_/Y",
+        "cell": "NAND3xp33_ASAP7_75t_R",
+        "arrival_ns": 1.014
+      },
+      {
+        "pin": "_110469_/B1",
+        "cell": "OA22x2_ASAP7_75t_R",
+        "arrival_ns": 1.014
+      },
+      {
+        "pin": "_110469_/Y",
+        "cell": "OA22x2_ASAP7_75t_R",
+        "arrival_ns": 1.049
+      },
+      {
+        "pin": "_110562_/A2",
+        "cell": "AOI21xp33_ASAP7_75t_R",
+        "arrival_ns": 1.049
+      },
+      {
+        "pin": "_110562_/Y",
+        "cell": "AOI21xp33_ASAP7_75t_R",
+        "arrival_ns": 1.0850000000000002
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.0850000000000002
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.113
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_internal.g_child[0].node.g_driver[0].invert/_0_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.113
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_internal.g_child[0].node.g_driver[0].invert/_0_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.15
+      },
+      {
+        "pin": "_100757_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.15
+      },
+      {
+        "pin": "_100757_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.199
+      },
+      {
+        "pin": "_110947_/A",
+        "cell": "NAND2xp33_ASAP7_75t_R",
+        "arrival_ns": 1.199
+      },
+      {
+        "pin": "_110947_/Y",
+        "cell": "NAND2xp33_ASAP7_75t_R",
+        "arrival_ns": 1.231
+      },
+      {
+        "pin": "_110948_/C",
+        "cell": "A2O1A1Ixp33_ASAP7_75t_R",
+        "arrival_ns": 1.231
+      },
+      {
+        "pin": "_110948_/Y",
+        "cell": "A2O1A1Ixp33_ASAP7_75t_R",
+        "arrival_ns": 1.281
+      },
+      {
+        "pin": "_110949_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.281
+      },
+      {
+        "pin": "_110949_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.304
+      },
+      {
+        "pin": "_110970_/A2",
+        "cell": "OAI22xp33_ASAP7_75t_R",
+        "arrival_ns": 1.304
+      },
+      {
+        "pin": "_110970_/Y",
+        "cell": "OAI22xp33_ASAP7_75t_R",
+        "arrival_ns": 1.3210000000000002
+      },
+      {
+        "pin": "_110971_/C",
+        "cell": "AOI221xp5_ASAP7_75t_R",
+        "arrival_ns": 1.3210000000000002
+      },
+      {
+        "pin": "_110971_/Y",
+        "cell": "AOI221xp5_ASAP7_75t_R",
+        "arrival_ns": 1.3459999999999999
+      },
+      {
+        "pin": "_110976_/C",
+        "cell": "NAND4xp25_ASAP7_75t_R",
+        "arrival_ns": 1.3459999999999999
+      },
+      {
+        "pin": "_110976_/Y",
+        "cell": "NAND4xp25_ASAP7_75t_R",
+        "arrival_ns": 1.375
+      },
+      {
+        "pin": "_110978_/E",
+        "cell": "OR5x1_ASAP7_75t_R",
+        "arrival_ns": 1.375
+      },
+      {
+        "pin": "_110978_/Y",
+        "cell": "OR5x1_ASAP7_75t_R",
+        "arrival_ns": 1.438
+      },
+      {
+        "pin": "_110980_/D",
+        "cell": "NAND4xp25_ASAP7_75t_R",
+        "arrival_ns": 1.438
+      },
+      {
+        "pin": "_110980_/Y",
+        "cell": "NAND4xp25_ASAP7_75t_R",
+        "arrival_ns": 1.48
+      },
+      {
+        "pin": "_111366_/A",
+        "cell": "MAJIxp5_ASAP7_75t_R",
+        "arrival_ns": 1.48
+      },
+      {
+        "pin": "_111366_/Y",
+        "cell": "MAJIxp5_ASAP7_75t_R",
+        "arrival_ns": 1.5110000000000001
+      },
+      {
+        "pin": "_115580_/D",
+        "cell": "NOR5xp2_ASAP7_75t_R",
+        "arrival_ns": 1.5110000000000001
+      },
+      {
+        "pin": "_115580_/Y",
+        "cell": "NOR5xp2_ASAP7_75t_R",
+        "arrival_ns": 1.5630000000000002
+      },
+      {
+        "pin": "_115581_/B",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 1.5630000000000002
+      },
+      {
+        "pin": "_115581_/Y",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 1.604
+      },
+      {
+        "pin": "_177761_/B",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 1.604
+      },
+      {
+        "pin": "_177761_/Y",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 1.645
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[2].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.645
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[2].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.6640000000000001
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[2].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_internal.g_child[0].node.g_driver[0].invert/_0_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.6640000000000001
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[2].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_internal.g_child[0].node.g_driver[0].invert/_0_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 1.694
+      },
+      {
+        "pin": "_115631_/B1",
+        "cell": "AOI221xp5_ASAP7_75t_R",
+        "arrival_ns": 1.694
+      },
+      {
+        "pin": "_115631_/Y",
+        "cell": "AOI221xp5_ASAP7_75t_R",
+        "arrival_ns": 1.715
+      },
+      {
+        "pin": "_115632_/B",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 1.715
+      },
+      {
+        "pin": "_115632_/Y",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 1.7309999999999999
+      },
+      {
+        "pin": "_115633_/B",
+        "cell": "AOI21xp33_ASAP7_75t_R",
+        "arrival_ns": 1.7309999999999999
+      },
+      {
+        "pin": "_115633_/Y",
+        "cell": "AOI21xp33_ASAP7_75t_R",
+        "arrival_ns": 1.743
+      },
+      {
+        "pin": "_115634_/B",
+        "cell": "AO21x1_ASAP7_75t_R",
+        "arrival_ns": 1.743
+      },
+      {
+        "pin": "_115634_/Y",
+        "cell": "AO21x1_ASAP7_75t_R",
+        "arrival_ns": 1.786
+      },
+      {
+        "pin": "_115665_/A2",
+        "cell": "AOI22xp33_ASAP7_75t_R",
+        "arrival_ns": 1.786
+      },
+      {
+        "pin": "_115665_/Y",
+        "cell": "AOI22xp33_ASAP7_75t_R",
+        "arrival_ns": 1.8090000000000002
+      },
+      {
+        "pin": "_115666_/C",
+        "cell": "OAI221xp5_ASAP7_75t_R",
+        "arrival_ns": 1.8090000000000002
+      },
+      {
+        "pin": "_115666_/Y",
+        "cell": "OAI221xp5_ASAP7_75t_R",
+        "arrival_ns": 1.827
+      },
+      {
+        "pin": "_115667_/C",
+        "cell": "AOI211xp5_ASAP7_75t_R",
+        "arrival_ns": 1.827
+      },
+      {
+        "pin": "_115667_/Y",
+        "cell": "AOI211xp5_ASAP7_75t_R",
+        "arrival_ns": 1.856
+      },
+      {
+        "pin": "_115725_/A3",
+        "cell": "AOI311xp33_ASAP7_75t_R",
+        "arrival_ns": 1.856
+      },
+      {
+        "pin": "_115725_/Y",
+        "cell": "AOI311xp33_ASAP7_75t_R",
+        "arrival_ns": 1.893
+      },
+      {
+        "pin": "_115734_/A2",
+        "cell": "OAI211xp5_ASAP7_75t_R",
+        "arrival_ns": 1.893
+      },
+      {
+        "pin": "_115734_/Y",
+        "cell": "OAI211xp5_ASAP7_75t_R",
+        "arrival_ns": 1.928
+      },
+      {
+        "pin": "_115929_/C",
+        "cell": "NAND4xp25_ASAP7_75t_R",
+        "arrival_ns": 1.928
+      },
+      {
+        "pin": "_115929_/Y",
+        "cell": "NAND4xp25_ASAP7_75t_R",
+        "arrival_ns": 2.032
+      },
+      {
+        "pin": "_115930_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 2.032
+      },
+      {
+        "pin": "_115930_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 2.1310000000000002
+      },
+      {
+        "pin": "_115931_/B",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 2.1310000000000002
+      },
+      {
+        "pin": "_115931_/Y",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 2.2600000000000002
+      },
+      {
+        "pin": "_115932_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 2.2600000000000002
+      },
+      {
+        "pin": "_115932_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 2.33
+      },
+      {
+        "pin": "_116580_/B",
+        "cell": "XNOR2xp5_ASAP7_75t_R",
+        "arrival_ns": 2.33
+      },
+      {
+        "pin": "_116580_/Y",
+        "cell": "XNOR2xp5_ASAP7_75t_R",
+        "arrival_ns": 2.3689999999999998
+      },
+      {
+        "pin": "_116581_/B",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 2.3689999999999998
+      },
+      {
+        "pin": "_116581_/Y",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 2.4410000000000003
+      },
+      {
+        "pin": "_116584_/A",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 2.4410000000000003
+      },
+      {
+        "pin": "_116584_/Y",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 2.537
+      },
+      {
+        "pin": "_119934_/B",
+        "cell": "AND2x2_ASAP7_75t_R",
+        "arrival_ns": 2.537
+      },
+      {
+        "pin": "_119934_/Y",
+        "cell": "AND2x2_ASAP7_75t_R",
+        "arrival_ns": 2.5869999999999997
+      },
+      {
+        "pin": "_119937_/B",
+        "cell": "AOI21xp33_ASAP7_75t_R",
+        "arrival_ns": 2.5869999999999997
+      },
+      {
+        "pin": "_119937_/Y",
+        "cell": "AOI21xp33_ASAP7_75t_R",
+        "arrival_ns": 2.663
+      },
+      {
+        "pin": "_119938_/B",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 2.663
+      },
+      {
+        "pin": "_119938_/Y",
+        "cell": "NOR2xp33_ASAP7_75t_R",
+        "arrival_ns": 2.732
+      },
+      {
+        "pin": "_179660_/A",
+        "cell": "OR3x1_ASAP7_75t_R",
+        "arrival_ns": 2.732
+      },
+      {
+        "pin": "_179660_/Y",
+        "cell": "OR3x1_ASAP7_75t_R",
+        "arrival_ns": 2.774
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_state_row[0].g_phased_payload.word_owner.g_qualified.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 2.774
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_state_row[0].g_phased_payload.word_owner.g_qualified.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 2.786
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_state_row[0].g_phased_payload.word_owner.g_qualified.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_internal.g_child[1].node.g_driver[0].invert/_0_/A",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 2.786
+      },
+      {
+        "pin": "core.g_ooo_backend.backend.lsq.g_state_row[0].g_phased_payload.word_owner.g_qualified.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_internal.g_child[1].node.g_driver[0].invert/_0_/Y",
+        "cell": "INVx1_ASAP7_75t_R",
+        "arrival_ns": 2.8200000000000003
+      },
+      {
+        "pin": "_119652_/B1",
+        "cell": "OAI221xp5_ASAP7_75t_R",
+        "arrival_ns": 2.8200000000000003
+      },
+      {
+        "pin": "_119652_/Y",
+        "cell": "OAI221xp5_ASAP7_75t_R",
+        "arrival_ns": 2.8480000000000003
+      },
+      {
+        "pin": "_119653_/B",
+        "cell": "AOI21xp33_ASAP7_75t_R",
+        "arrival_ns": 2.8480000000000003
+      },
+      {
+        "pin": "_119653_/Y",
+        "cell": "AOI21xp33_ASAP7_75t_R",
+        "arrival_ns": 2.8609999999999998
+      },
+      {
+        "pin": "_119654_/B",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 2.8609999999999998
+      },
+      {
+        "pin": "_119654_/Y",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 2.875
+      },
+      {
+        "pin": "_119655_/C",
+        "cell": "AOI221xp5_ASAP7_75t_R",
+        "arrival_ns": 2.875
+      },
+      {
+        "pin": "_119655_/Y",
+        "cell": "AOI221xp5_ASAP7_75t_R",
+        "arrival_ns": 2.889
+      },
+      {
+        "pin": "_119656_/B",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 2.889
+      },
+      {
+        "pin": "_119656_/Y",
+        "cell": "OAI21xp33_ASAP7_75t_R",
+        "arrival_ns": 2.907
+      },
+      {
+        "pin": "_198855_/D",
+        "cell": "DFFHQNx1_ASAP7_75t_R",
+        "arrival_ns": 2.907
+      }
+    ]
+  },
+  "area_threshold_passed": true,
+  "frequency_threshold_passed": false,
+  "course_area_frequency_thresholds_passed": true
+}
