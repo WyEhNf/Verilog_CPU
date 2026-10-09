@@ -1,0 +1,48 @@
+{
+  "status": "PARAMETER_PREPARATION_ONLY",
+  "accepted": false,
+  "profile": "configs/tier3_shared_500_exclusive_candidate.json",
+  "profile_sha256": "26337fe6d9f8ac777ba69f86c131cccbe7288bb8cc82eb0a36b5980a050e2c0a",
+  "top_sha256": "4004a06cec6c77f58592ff0b46d25d4bc12f8f864666ce110ebe5ce8aafb5192",
+  "pinned_numeric_parameters": 186,
+  "predecessor_profile": "configs/tier3_shared_500_candidate.json",
+  "parameter_changes": {
+    "LSQ_PHASED_ALLOC_EXCLUSIVE": {
+      "old": 0,
+      "new": 1
+    }
+  },
+  "parameter_check_passed": true,
+  "course_thresholds": {
+    "maximum_area_um2": 36000,
+    "minimum_frequency_mhz": 300,
+    "minimum_geomean_ipc": 1.0985
+  },
+  "acceptance_thresholds": {
+    "maximum_area_um2": 35891.672317998215,
+    "minimum_frequency_mhz": 500,
+    "minimum_geomean_ipc": 1.1152626918348099
+  },
+  "maximum_case_cycles": {
+    "perf_median": 7572,
+    "perf_multiply": 17490,
+    "perf_qsort": 143485,
+    "perf_rsort": 153155,
+    "perf_towers": 4739,
+    "perf_vvadd": 3725
+  },
+  "lint_run": false,
+  "synth_run": false,
+  "build_run": false,
+  "perf_run": false,
+  "cpu_smoke_run": false,
+  "area_um2": null,
+  "fmax_mhz": null,
+  "geomean_ipc": null,
+  "notes": [
+    "One shared parameterized cpu_core/rv32_backend_joint with original Tier3 resources and registered dispatch. No width-specific CPU.",
+    "Adds only the no-release phased capture policy to the previous 185-parameter profile; all other resource and policy values remain identical. Guards pass because release policies are both zero and phased/direct owners are enabled.",
+    "This preparation starts no EDA or simulation; BE2/LSQ4 sample evidence does not establish LSQ16 CPU correctness or PPA. Historical baseline 88e460d3 is preserved.",
+    "Freeze and evaluate this complete combination once after current Tier2 evaluation; use original source/tool/SRAM/area accounting and all nonregression gates. Final project remains unfinished until Tier3 >=500MHz without metric/case regression."
+  ]
+}
