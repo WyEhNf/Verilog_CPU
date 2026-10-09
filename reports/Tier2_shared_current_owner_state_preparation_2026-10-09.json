@@ -1,0 +1,53 @@
+{
+  "status": "PARAMETER_CHECK_ONLY_NOT_MEASURED",
+  "accepted": false,
+  "review_source_commit": "31573e52c5b6b4e03b4b676e977d1c398922d571",
+  "profile": "configs\\tier2_shared_current_owner_state_candidate.json",
+  "profile_sha256": "af856680b13a693d78ed593e9e6230c02f2e2ca23c2fa71c3f5dc20bbfb4cb28",
+  "course_top_sha256": "c9c7fb39f49793c6013f1012a6c1a33a8886289015424f0bfb7eadb27cf85c7c",
+  "parameter_count": 184,
+  "additional_parameters": {
+    "MDU_PREFIX_SIGN_CORRECTION": 1,
+    "TAG_SINGLE_GENERATION_OWNER": 1,
+    "PRF_SRAM_PORT_FORWARD": 1,
+    "PRF_SRAM_RAW_WRITE": 1,
+    "LSQ_SAVED_REQUEST_QUERY": 1,
+    "LSQ_SAVED_CANDIDATE_STATE_QUERY": 1,
+    "LSQ_PHASED_DATA_OWNER": 1,
+    "LSQ_PHASED_DIRECT_WRITE_EVENTS": 1,
+    "MMIO_WRITE_CAPACITY_READY": 1,
+    "MMIO_SAVED_ROUTE_CLASS": 1,
+    "MMIO_STORE_ADMISSION_ROUTE": 1,
+    "DCACHE_NARROW_REQUEST_WORD": 1,
+    "DCACHE_MSHR_DATA_NO_CLEAR": 1,
+    "COMPLETION_SOURCE_STATE_QUERY": 1,
+    "ROB_RECOVERY_PENDING_OWNER": 1
+  },
+  "baseline_source_commit": "5be74e01a455cb4b97561645efd86287d81c018f",
+  "baseline_record": "reports/Tier2_shared_verified_2026-10-09.json",
+  "baseline_area_um2": 17997.018972010097,
+  "baseline_fmax_mhz": 355.67905522750954,
+  "baseline_geomean_ipc": 0.8561418961675636,
+  "baseline_case_cycles": {
+    "median": 8534,
+    "multiply": 17439,
+    "qsort": 162821,
+    "rsort": 294021,
+    "towers": 6301,
+    "vvadd": 5592
+  },
+  "structural_lint_run": false,
+  "ppa_run": false,
+  "build_run": false,
+  "perf_run": false,
+  "cpu_smoke_run": false,
+  "area_um2": null,
+  "fmax_mhz": null,
+  "geomean_ipc": null,
+  "notes": [
+    "Prepared same shared RTL profile on the current source, preserving the historical accepted resource/pipeline geometry.",
+    "No new EDA/test while Tier1 candidate is live. No current-source acceptance or new metric is established by parameter validation.",
+    "Do not enable Tier1 empty RS/fresh data, fresh LOAD allocation request or same-edge ROB retirement changes; those may alter cycles/timing. This first current Tier2 combination contains reviewed current-table/payload/ownership changes intended to preserve cycles.",
+    "Require original baseline nonregression for area, frequency, geomean IPC and each case, as well as course Tier2 limits, before replacing canonical tier2.json. Any historical old-source hard-wired settings must be reviewed during the actual freeze; parameter pinning is not source equivalence."
+  ]
+}
