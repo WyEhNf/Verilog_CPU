@@ -19,3 +19,9 @@ The profile thresholds now encode area <= 17997.018972010097, IPC >= 0.856141896
 ## Current-source frozen preflight
 
 The c85c56ea freeze at F:/CPU2026TierRuns/tier2_shared_distributed_load_format_20261009 passed one original full-core structural lint in 12.893507 seconds with zero errors/latches/UNOPTFLAT, and its frozen hashes were verified. One official PPA is running. Reports/Tier2_shared_distributed_load_format_progress_2026-10-09.json records the exact freeze, session and dated live process. No new Tier2 metrics or accepted profile replacement exist yet. The RTL/filelists/runner are byte-identical to the verified Tier1 source 509377c4; parameter differences select the dual-issue configuration in the same modules.
+
+## Terminal current-source PPA rejection
+
+The c85c56ea freeze completed one official PPA in 733.584556 seconds: 17336.078412 um2 / 343.854936 MHz. Area improves 660.940560 um2 versus 5be74e01 but frequency falls 11.824119 MHz. Although course PPA passes, the encoded nonregression gate fails. No build/perf/smoke ran; IPC is unknown and canonical Tier2 remains historical. Reports/Tier2_shared_distributed_load_format_2026-10-09.json supersedes the dated running record.
+
+Worst arrival is 2.848 ns through memory-bridge error/D-cache response -> LOAD report/CDB -> PRF/dispatch credit -> d_valid -> LSQ allocation -> partial-forward payload grant -> phased word. This is an allocation-priority/control path, not the historical Tier3 ALU subtraction path. The prepared Tier3 freeze has not been measured.
