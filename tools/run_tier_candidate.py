@@ -109,6 +109,8 @@ def validate_parameters(text, profile):
     if ((p["LSQ_DIRECT_POP_CREDIT"] or p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"]) and
             (p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"])):
         raise ValueError("Direct LSQ allocation policies require the registered nonblocking cache query")
+    if p["BRANCH_CAPTURE_RESULT_OWNER"] not in (0,1) or (p["BRANCH_CAPTURE_RESULT_OWNER"] and not p["BRANCH_CAPTURE_REDIRECT_READY"]):
+        raise ValueError("Branch capture result ownership requires redirect consumption")
     if p["AXI_READ_COUNTERS_OWNED"] not in (0,1):
         raise ValueError("AXI read counter ownership must be 0 or 1")
     if p["RS_ARITHMETIC_PRECOMPUTE"] not in (0,1) or (p["RS_ARITHMETIC_PRECOMPUTE"] and not p["RS_ISSUE_METADATA"]):

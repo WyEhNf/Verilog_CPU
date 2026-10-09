@@ -72,6 +72,7 @@ module rv32_backend_joint #(
     // redirect-ready priority, independently of ordinary completion ready.
     parameter integer BRANCH_CAPTURE_REDIRECT_READY = 0,
     parameter integer BRANCH_CAPTURE_PHASE_VALID = 0,
+    parameter integer BRANCH_CAPTURE_RESULT_OWNER = 0,
     // The branch result remains captured. Apply its full qualified recovery
     // on the next edge, using the original direct ROB recovery implementation.
     parameter integer RECOVERY_DIRECT_APPLY = 0,
@@ -848,6 +849,9 @@ module rv32_backend_joint #(
         assign shared_store_addr_tag = {TAG_WIDTH{1'b0}};
         assign shared_store_addr = 32'b0;
     end endgenerate
+    initial if((BRANCH_CAPTURE_RESULT_OWNER!=0 && BRANCH_CAPTURE_RESULT_OWNER!=1) ||
+        (BRANCH_CAPTURE_RESULT_OWNER!=0 && (BRANCH_CAPTURE_REDIRECT_READY==0 || LOCAL_EXEC_RECOVERY==0)))
+        $fatal(1,"Branch capture ownership requires redirect consumption and local execution recovery");
     initial if((RS_ARITHMETIC_PRECOMPUTE!=0 && RS_ARITHMETIC_PRECOMPUTE!=1) ||
         (RS_ARITHMETIC_PRECOMPUTE!=0 && RS_ISSUE_METADATA==0))
         $fatal(1,"RS arithmetic precompute requires exact inline immediate metadata");
@@ -3055,10 +3059,39 @@ module rv32_backend_joint #(
             assign capture_redirect_ready[capture_lane]=alu_exec_is_load[capture_lane] ||
                 !(|capture_redirect_claim[capture_lane-1:0]);
         end
+        wire capture_live;
+        if(BRANCH_CAPTURE_RESULT_OWNER!=0) begin:g_result_owner
+            // This private redirect packet cannot complete ordinarily. Capture
+            // consumes its ALU owner before the pending branch can retire.
+            // Pending excludes any other capture while recovery can kill rows.
+            assign capture_live=!alu_flush_r[capture_lane] &&
+                alu_exec_tag[capture_lane*TAG_WIDTH] &&
+                32'(alu_exec_tag[capture_lane*TAG_WIDTH+3 +: ROB_SLOT_WIDTH])<ROB_ENTRIES;
+`ifdef VERILATOR
+            always @(posedge clk_i) if(!reset_i && !flush_i && !branch_pending &&
+                    branch_capture_valid[capture_lane] && alu_exec_redirect_valid[capture_lane]) begin
+                assert(branch_training_live[capture_lane] && alu_exec_is_branch[capture_lane])
+                    else $fatal(1,"Private redirect result lost its original full ROB identity");
+                assert(alu_exec_valid[capture_lane])
+                    else $fatal(1,"Capture result owner is canceled or no longer visible");
+            end
+`endif
+        end else begin:g_original_capture_live
+            assign capture_live=branch_training_live[capture_lane];
+        end
         assign branch_capture_match[capture_lane]=!reset_i && !flush_i && !branch_pending &&
             branch_capture_valid[capture_lane] &&
             ((BRANCH_CAPTURE_REDIRECT_READY!=0)?capture_redirect_ready[capture_lane]:alu_exec_ready[capture_lane]) &&
+            capture_live && alu_exec_redirect_valid[capture_lane];
+`ifdef VERILATOR
+        wire original_capture_match=!reset_i && !flush_i && !branch_pending &&
+            branch_capture_valid[capture_lane] &&
+            ((BRANCH_CAPTURE_REDIRECT_READY!=0)?capture_redirect_ready[capture_lane]:alu_exec_ready[capture_lane]) &&
             branch_training_live[capture_lane] && alu_exec_redirect_valid[capture_lane];
+        always @(posedge clk_i) if(!reset_i)
+            assert(branch_capture_match[capture_lane]==original_capture_match)
+                else $fatal(1,"Private redirect ownership changed original capture acceptance");
+`endif
         if(capture_lane==0) begin:g_first
             assign branch_capture_grant[capture_lane]=branch_capture_match[capture_lane];
         end else begin:g_priority
