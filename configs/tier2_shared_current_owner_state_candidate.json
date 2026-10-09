@@ -1,8 +1,8 @@
 {
   "tier": 2,
-  "maximum_area_um2": 18000,
-  "minimum_geomean_ipc": 0.845,
-  "minimum_frequency_mhz": 300,
+  "maximum_area_um2": 17997.018972010097,
+  "minimum_geomean_ipc": 0.8561418961675636,
+  "minimum_frequency_mhz": 355.67905522750954,
   "cumulative_score": 95,
   "parameters": {
     "MDU_DIVZERO_REMAINDER_REUSE": 1,
@@ -179,7 +179,7 @@
     "RAT_SUFFIX_BRANCH_MAPPING": 1,
     "PHYS_TAG_IMPL": 0,
     "GENERATION_WIDTH": 8,
-    "COMPLETION_SOURCE_STATE_QUERY": 1,
+    "COMPLETION_SOURCE_STATE_QUERY": 2,
     "STORE_BUFFERED_RETIRE": 1,
     "COMPLETION_BYPASS": 2,
     "SERIAL_BACKEND": 0,
@@ -188,7 +188,8 @@
     "WRITE_LINES": 2,
     "WORD_QUEUE": 8,
     "AXI_READ_PAYLOAD_SRAM": 1,
-    "AXI_RESPONSE_FIFO_DEPTH": 0
+    "AXI_RESPONSE_FIFO_DEPTH": 0,
+    "LSQ_DISTRIBUTED_LOAD_FORMAT": 1
   },
   "balanced_control_tree": 1,
   "name": "Tier2 shared current ownership and source state"

@@ -1,7 +1,7 @@
 {
   "tier": 3,
-  "maximum_area_um2": 36000,
-  "minimum_geomean_ipc": 1.0985,
+  "maximum_area_um2": 35891.672317998215,
+  "minimum_geomean_ipc": 1.1152626918348099,
   "minimum_frequency_mhz": 500,
   "cumulative_score": 100,
   "parameters": {
@@ -188,7 +188,8 @@
     "WORD_QUEUE": 16,
     "AXI_READ_PAYLOAD_SRAM": 1,
     "AXI_RESPONSE_FIFO_DEPTH": 2,
-    "COMPLETION_SOURCE_STATE_QUERY": 1
+    "COMPLETION_SOURCE_STATE_QUERY": 2,
+    "LSQ_DISTRIBUTED_LOAD_FORMAT": 1
   },
   "name": "Tier3 shared registered-dispatch 500 MHz candidate",
   "balanced_control_tree": 1

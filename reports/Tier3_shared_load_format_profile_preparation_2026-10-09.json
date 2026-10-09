@@ -1,0 +1,29 @@
+{
+  "status": "PREPARED_NOT_MEASURED",
+  "accepted": false,
+  "review_source_commit": "dd601adf48d0d29671736d368aa3a801b60902ac",
+  "profile": "configs/tier3_shared_500_candidate.json",
+  "profile_sha256": "06a8baa2586d41a3bd8a51ea409425b5415e17959cecbd4947c1dc1da6362a05",
+  "pinned_parameter_count": 185,
+  "parameter_changes": {
+    "COMPLETION_SOURCE_STATE_QUERY": 2,
+    "LSQ_DISTRIBUTED_LOAD_FORMAT": 1
+  },
+  "course_thresholds": {
+    "maximum_area_um2": 36000,
+    "minimum_geomean_ipc": 1.0985,
+    "minimum_frequency_mhz": 300
+  },
+  "acceptance_thresholds": {
+    "maximum_area_um2": 35891.672317998215,
+    "minimum_geomean_ipc": 1.1152626918348099,
+    "minimum_frequency_mhz": 500
+  },
+  "evidence": "reports/Tier1_shared_verified_2026-10-09.json",
+  "notes": [
+    "Current shared Tier1 source passed all PPA/perf/nonregression/smoke gates. This profile enables the same compact consumed-error/ALU-size and distributed LOAD-format policies on the same CPU/backend; no new RTL or width-specific implementation.",
+    "All 185 numeric top parameters pinned. No pipeline/resource/tag-width change relative to this prepared profile. Parameter checker only; not a whole CPU proof.",
+    "Runner PPA and IPC thresholds now encode historical nonregression, not only course lower thresholds. Manual per-case cycle audit remains required before one array1 smoke.",
+    "No current-source Tier2/Tier3 measurement or canonical replacement is established by this preparation."
+  ]
+}
