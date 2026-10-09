@@ -1,5 +1,5 @@
 `timescale 1ns/1ps
-module rv32_lsq_direct_phase_fixture #(parameter integer DIRECT_PHASE=0, DISTRIBUTED_FORMAT=0)(output reg done=0);
+module rv32_lsq_direct_phase_fixture #(parameter integer DIRECT_PHASE=0, DISTRIBUTED_FORMAT=0, EXCLUSIVE_ALLOC=0, RELEASE_POLICY=2, PLANNED_ALLOC=0)(output reg done=0);
     reg clk=0,reset=1,recovery=0;
     reg load_ready=0;reg [1:0] updates=0;reg [15:0] update_tag=0;reg [31:0] update_data=0;reg allocation_data_ready=1;reg [15:0] tickets[0:3];integer row;reg [15:0] reused_ticket;
     reg monitor_loads=1;wire saved_mmio_class,admitted_mmio;
@@ -31,7 +31,7 @@ module rv32_lsq_direct_phase_fixture #(parameter integer DIRECT_PHASE=0, DISTRIB
     reg [31:0] expected_addr;
     reg [127:0] expected_data;
     reg [15:0] expected_mask;
-    rv32_lsq #(.DISTRIBUTED_LOAD_FORMAT(DISTRIBUTED_FORMAT),.PHASED_DATA_OWNER(1),.PHASED_DIRECT_WRITE_EVENTS(DIRECT_PHASE),.RELEASE_CREDITS(2),.SAVED_REQUEST_QUERY(1),.SAVED_CANDIDATE_STATE_QUERY(1),.ALLOC_LOAD_REQUEST_BYPASS(1),.ALLOC_LOAD_SELECTION_BYPASS(1), .BE_WIDTH(2),.LSQ_ENTRIES(4),.ROB_ENTRIES(8),.TAG_WIDTH(16),.ROB_TAG_WIDTH(16),
+    rv32_lsq #(.PHASED_ALLOC_EXCLUSIVE(EXCLUSIVE_ALLOC),.ALLOC_SLOT_PRESELECT(PLANNED_ALLOC),.ALLOC_PAYLOAD_PRESELECT(PLANNED_ALLOC),.RECLAIM_WIDTH(2),.SECOND_REPORT_RECLAIM(1),.DISTRIBUTED_LOAD_FORMAT(DISTRIBUTED_FORMAT),.PHASED_DATA_OWNER(1),.PHASED_DIRECT_WRITE_EVENTS(DIRECT_PHASE),.RELEASE_CREDITS(RELEASE_POLICY),.SAVED_REQUEST_QUERY(1),.SAVED_CANDIDATE_STATE_QUERY(1),.ALLOC_LOAD_REQUEST_BYPASS(1),.ALLOC_LOAD_SELECTION_BYPASS(1), .BE_WIDTH(2),.LSQ_ENTRIES(4),.ROB_ENTRIES(8),.TAG_WIDTH(16),.ROB_TAG_WIDTH(16),
         .REQUEST_PIPELINE(1),.EMPTY_SELECTION_BYPASS(2),.PICK_LOCAL_VALIDITY(1),
         .STORE_ADMISSION_BYPASS(1),.COMMITTED_STORE_BYPASS(1)) dut (
         .clk_i(clk),
@@ -44,7 +44,7 @@ module rv32_lsq_direct_phase_fixture #(parameter integer DIRECT_PHASE=0, DISTRIB
         .retire_valid_i('0),
         .retire_rob_tag_i('0),
         .alloc_valid_i(alloc_valid),
-        .alloc_plan_valid_i(alloc_valid),
+        .alloc_plan_valid_i(alloc_valid & (loads | stores)),
         .alloc_is_load_i(loads),
         .alloc_is_store_i(stores),
         .alloc_rob_tag_i(alloc_rob),
@@ -184,7 +184,12 @@ module rv32_lsq_direct_phase_fixture #(parameter integer DIRECT_PHASE=0, DISTRIB
         request_ready=0;response_valid=1;response_tag=tickets[0];response_data=32'h11223344;
         tick;@(negedge clk);response_valid=0;#1;
         if(occupancy!=4 || !load_valid || load_value!=32'h11223344) $fatal(1,"full head result was not held");
-        load_ready=1;alloc_valid=1;stores=1;alloc_rob=32'h129;alloc_addr=32'h200;
+        load_ready=1;
+        if(RELEASE_POLICY==0) begin
+            #1;if(alloc_ready) $fatal(1,"No-release LSQ exposed same-edge full-row capacity");
+            tick;@(negedge clk);load_ready=0;
+        end
+        alloc_valid=1;stores=1;alloc_rob=32'h129;alloc_addr=32'h200;
         alloc_data=32'hcafebabe;alloc_size=2;#1;reused_ticket=alloc_tag[15:0];
         if(!alloc_ready || reused_ticket==tickets[0]) $fatal(1,"same-edge pop did not allocate new full generation");
         tick;@(negedge clk);load_ready=0;alloc_valid=0;stores=0;
@@ -194,6 +199,29 @@ module rv32_lsq_direct_phase_fixture #(parameter integer DIRECT_PHASE=0, DISTRIB
         if(occupancy!=4 || !request_valid || !request_store || request_tag!=reused_ticket ||
            request_addr!=32'h200 || request_data[31:0]!=32'hcafebabe || request_mask!=16'h000f)
             $fatal(1,"old load result/stale response overwrote reallocated store");
+        if(RELEASE_POLICY==0) begin
+            // Planned two-lane allocation, then a returning LOAD and STORE
+            // allocation own different rows on one edge.
+            clear;monitor_loads=0;alloc_valid=3;stores=1;loads=2;
+            alloc_addr={32'h200,32'h100};alloc_data={32'b0,32'h55667788};
+            alloc_size=4'b1010;alloc_rob={16'h111,16'h109};#1;
+            tickets[0]=alloc_tag[15:0];tickets[1]=alloc_tag[31:16];
+            if(!alloc_ready || tickets[0]==tickets[1]) $fatal(1,"Two-lane plan lost distinct allocation identity");
+            tick;@(negedge clk);alloc_valid=0;stores=0;loads=0;request_ready=1;
+            for(limit=0;limit<8 && !request_valid;limit=limit+1) begin tick;@(negedge clk);end
+            if(!request_valid || request_store || request_addr!=32'h200 || request_tag!=tickets[1])
+                $fatal(1,"Second planned memory lane lost LOAD request");
+            tick;@(negedge clk);request_ready=0;
+            response_valid=1;response_tag=tickets[1];response_data=32'h80000001;
+            alloc_valid=1;stores=1;alloc_addr=32'h300;alloc_data=32'haabbccdd;
+            alloc_size=2;alloc_rob=32'h119;#1;reused_ticket=alloc_tag[15:0];
+            if(!alloc_ready || reused_ticket==tickets[0] || reused_ticket==tickets[1])
+                $fatal(1,"Simultaneous result/allocation lost separate row identities");
+            tick;@(negedge clk);response_valid=0;alloc_valid=0;stores=0;#1;
+            if(!load_valid || load_value!=32'h80000001 || load_rob_tag!=16'h111 || occupancy!=3 ||
+               dut.phased_word[2]!=32'haabbccdd)
+                $fatal(1,"Different-row LOAD result and STORE allocation did not both capture");
+        end
         // Held exact MMIO classification remains true through backpressure.
         // After ACK/pop, its invalid payload may remain in the selection owner;
         // that stale payload must not classify the next fresh load as MMIO.

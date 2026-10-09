@@ -64,6 +64,7 @@ rtl/common/rv32_frequency_inversion.v
 rtl/common/rv32_frequency_negative_subtree.v
 rtl/common/rv32_frequency_control_tree.v
 rtl/common/rv32_frequency_word_bank.v
+rtl/common/rv32_frequency_qualified_word_bank.v
 rtl/common/rv32_frequency_event_select.v
 rtl/common/rv32_frequency_first_two.v
 rtl/common/rv32_frequency_array_read.v

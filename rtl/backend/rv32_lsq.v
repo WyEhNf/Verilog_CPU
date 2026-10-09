@@ -17,6 +17,7 @@ module rv32_lsq #(
     parameter integer PHASED_DATA_OWNER = 0,
     parameter integer PHASED_DIRECT_WRITE_EVENTS = 0,
     parameter integer DISTRIBUTED_LOAD_FORMAT = 0,
+    parameter integer PHASED_ALLOC_EXCLUSIVE = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -1350,6 +1351,9 @@ module rv32_lsq #(
                 else $fatal(1,"Fresh load forwarded without owned store");
     end
 `endif
+    initial if((PHASED_ALLOC_EXCLUSIVE!=0 && PHASED_ALLOC_EXCLUSIVE!=1) ||
+            (PHASED_ALLOC_EXCLUSIVE!=0 && (PHASED_DATA_OWNER==0 || PHASED_DIRECT_WRITE_EVENTS==0 || RELEASE_CREDITS!=0)))
+        $fatal(1,"Exclusive phased allocation requires direct events and no release credits");
     initial if(DISTRIBUTED_LOAD_FORMAT!=0 && DISTRIBUTED_LOAD_FORMAT!=1)
         $fatal(1,"DISTRIBUTED_LOAD_FORMAT must be 0 or 1");
     initial if(PHASED_DATA_OWNER!=0 && PHASED_DATA_OWNER!=1)
@@ -2280,9 +2284,38 @@ module rv32_lsq #(
                         assign values[(2*BE_WIDTH+3+alloc_event)*32 +: 32]=alloc_is_store_i[alloc_event] ?
                             alloc_store_data_i[alloc_event*32 +: 32] : 32'b0;
                     end
-                    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(EVENTS)) selector (
-                        .events_i(events),.values_i(values),
-                        .write_o(phased_write_enable[payload_row]),.value_o(phased_write_data[payload_row]));
+                    if(PHASED_ALLOC_EXCLUSIVE!=0) begin:g_exclusive_allocation
+                        // With no release credit, allocation uses a currently
+                        // free row. Keep last-event priority inside each group;
+                        // their words are mutually exclusive for this row.
+                        localparam integer LIVE_EVENTS=2*BE_WIDTH+3;
+                        wire live_write,allocation_write;
+                        wire [31:0] live_data,allocation_data;
+                        rv32_frequency_event_select #(.WIDTH(32),.EVENTS(LIVE_EVENTS)) live_selector (
+                            .events_i(events[LIVE_EVENTS-1:0]),.values_i(values[LIVE_EVENTS*32-1:0]),
+                            .write_o(live_write),.value_o(live_data));
+                        rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH)) allocation_selector (
+                            .events_i(events[EVENTS-1:LIVE_EVENTS]),.values_i(values[EVENTS*32-1:LIVE_EVENTS*32]),
+                            .write_o(allocation_write),.value_o(allocation_data));
+                        assign phased_write_enable[payload_row]=live_write || allocation_write;
+                        assign phased_write_data[payload_row]=live_data | allocation_data;
+`ifdef VERILATOR
+                        always @(posedge clk_i) if(!reset_i && !flush_i) begin
+                            assert(!(valid_mem[payload_row] && (|allocations)))
+                                else $fatal(1,"No-release LSQ allocated a currently valid row");
+                            assert(!(live_write && allocation_write))
+                                else $fatal(1,"Exclusive phased allocation overlaps a live-row event");
+                            for(integer lane=0;lane<BE_WIDTH;lane=lane+1)
+                                if(allocations[lane])
+                                    assert(payload_alloc_slot[lane]==alloc_lsq_tag_o[lane*TAG_WIDTH+3 +: SLOT_WIDTH])
+                                        else $fatal(1,"Planned LSQ payload slot differs from actual allocation");
+                        end
+`endif
+                    end else begin:g_original_priority
+                        rv32_frequency_event_select #(.WIDTH(32),.EVENTS(EVENTS)) selector (
+                            .events_i(events),.values_i(values),
+                            .write_o(phased_write_enable[payload_row]),.value_o(phased_write_data[payload_row]));
+                    end
 `ifdef VERILATOR
                     wire original_write;
                     wire [31:0] original_data;
@@ -2701,7 +2734,7 @@ module rv32_lsq #(
             .clk_i(clk_i),.write_i(addr_mem_write_enable[storage_row]),
             .data_i(addr_mem_write_data[storage_row]),.data_o(addr_mem[storage_row]));
         if(PHASED_DATA_OWNER!=0) begin:g_phased_payload
-            rv32_lsq_owned_field #(.WIDTH(32)) word_owner (
+            rv32_lsq_owned_field #(.WIDTH(32),.QUALIFIED_INPUT(PHASED_ALLOC_EXCLUSIVE)) word_owner (
                 .clk_i(clk_i),.write_i(phased_write_enable[storage_row]),
                 .data_i(phased_write_data[storage_row]),.data_o(phased_word[storage_row]));
             assign data_mem[storage_row]=phased_word[storage_row];

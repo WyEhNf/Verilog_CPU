@@ -68,6 +68,10 @@ def validate_parameters(text, profile):
     if p["LSQ_SAVED_REQUEST_QUERY"] not in (0,1) or (p["LSQ_SAVED_REQUEST_QUERY"] and
             (p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"] or not p["DCACHE_WAY_PARALLEL_QUERY"])):
         raise ValueError("Saved LSQ request query requires registered parallel SRAM cache query")
+    if p["LSQ_PHASED_ALLOC_EXCLUSIVE"] not in (0,1) or (p["LSQ_PHASED_ALLOC_EXCLUSIVE"] and
+            (not p["LSQ_PHASED_DATA_OWNER"] or not p["LSQ_PHASED_DIRECT_WRITE_EVENTS"] or
+             p["DIRECT_DISPATCH_RELEASE_CREDITS"] or p["LSQ_DIRECT_POP_CREDIT"])):
+        raise ValueError("Exclusive phased allocation requires direct events and no LSQ release credits")
     if p["LSQ_DISTRIBUTED_LOAD_FORMAT"] not in (0,1):
         raise ValueError("LSQ_DISTRIBUTED_LOAD_FORMAT must be 0 or 1")
     if p["LSQ_PHASED_DIRECT_WRITE_EVENTS"] not in (0,1) or (p["LSQ_PHASED_DIRECT_WRITE_EVENTS"] and not p["LSQ_PHASED_DATA_OWNER"]):
