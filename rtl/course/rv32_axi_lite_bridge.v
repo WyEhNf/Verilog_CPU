@@ -9,6 +9,7 @@ module rv32_axi_lite_bridge #(
     parameter integer WRITE_LINES = 8,
     parameter integer WORD_QUEUE = 64,
     parameter integer READ_PAYLOAD_SRAM = 0,
+    parameter integer READ_COUNTERS_OWNED = 0,
     parameter integer RESPONSE_FIFO_DEPTH = 0
 ) (
     input wire clock, reset,
@@ -32,6 +33,8 @@ module rv32_axi_lite_bridge #(
     output wire wvalid, input wire wready,
     input wire [1:0] bresp, input wire bvalid, output wire bready
 );
+    initial if(READ_COUNTERS_OWNED!=0 && READ_COUNTERS_OWNED!=1)
+        $fatal(1,"AXI read counter ownership must be 0 or 1");
     localparam integer RPW = $clog2(READ_LINES);
     localparam integer WPW = $clog2(WRITE_LINES);
     localparam integer QPW = $clog2(WORD_QUEUE);
@@ -419,6 +422,58 @@ module rv32_axi_lite_bridge #(
             wire [RPW-1:0] free_slot,issue_slot,return_slot,reply_slot;
             assign {local_reset,allocate,free_slot,push,issue_slot,pop,return_slot,fill,reply_slot,error}=
                 read_lifecycle_views[(lifecycle_row/4)*READ_LIFECYCLE_WIDTH +: READ_LIFECYCLE_WIDTH];
+            if(READ_COUNTERS_OWNED!=0) begin:g_owned_counters
+                // Allocation chooses only pre-edge invalid rows. Their counters
+                // are unowned and initialized independently of late admission.
+                // The original valid lifecycle still acquires/releases the row.
+                always @(posedge clock) begin
+                    if(local_reset) read_valid[lifecycle_row]<=1'b0;
+                    else begin
+                        if(allocate && free_slot==lifecycle_row) read_valid[lifecycle_row]<=1'b1;
+                        if(fill && reply_slot==lifecycle_row) read_valid[lifecycle_row]<=1'b0;
+                    end
+                    if(!local_reset) begin
+                        if(!read_valid[lifecycle_row]) begin
+                            read_sent[lifecycle_row]<=0;
+                            read_received[lifecycle_row]<=0;
+                            read_error[lifecycle_row]<=0;
+                        end else begin
+                            if(push && issue_slot==lifecycle_row)
+                                read_sent[lifecycle_row]<=read_sent[lifecycle_row]+1'b1;
+                            if(pop && return_slot==lifecycle_row) begin
+                                read_received[lifecycle_row]<=read_received[lifecycle_row]+1'b1;
+                                read_error[lifecycle_row]<=read_error[lifecycle_row] || error;
+                            end
+                        end
+                    end
+                end
+`ifdef VERILATOR
+                reg [2:0] original_sent,original_received;
+                reg original_error;
+                always @(posedge clock) if(!local_reset) begin
+                    if(allocate && free_slot==lifecycle_row) begin
+                        assert(!read_valid[lifecycle_row])
+                            else $fatal(1,"AXI read allocation reused a currently valid row");
+                        original_sent<=0;original_received<=0;original_error<=0;
+                    end
+                    if(push && issue_slot==lifecycle_row) begin
+                        assert(read_valid[lifecycle_row])
+                            else $fatal(1,"AXI read issue used an unowned row");
+                        original_sent<=original_sent+1'b1;
+                    end
+                    if(pop && return_slot==lifecycle_row) begin
+                        assert(read_valid[lifecycle_row])
+                            else $fatal(1,"AXI read response used an unowned row");
+                        original_received<=original_received+1'b1;
+                        original_error<=original_error || error;
+                    end
+                end
+                always @(negedge clock) if(!reset && read_valid[lifecycle_row])
+                    assert({read_sent[lifecycle_row],read_received[lifecycle_row],read_error[lifecycle_row]}==
+                        {original_sent,original_received,original_error})
+                        else $fatal(1,"AXI read owned counter differs from original valid lifecycle");
+`endif
+            end else begin:g_original_counters
             always @(posedge clock) begin
                 if(local_reset) read_valid[lifecycle_row]<=1'b0;
                 else begin
@@ -435,6 +490,7 @@ module rv32_axi_lite_bridge #(
                     end
                     if(fill && reply_slot==lifecycle_row) read_valid[lifecycle_row]<=1'b0;
                 end
+            end
             end
         end
         for(lifecycle_row=0;lifecycle_row<WRITE_LINES;lifecycle_row=lifecycle_row+1) begin:g_write_lifecycle

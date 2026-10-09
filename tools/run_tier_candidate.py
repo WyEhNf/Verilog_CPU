@@ -109,6 +109,8 @@ def validate_parameters(text, profile):
     if ((p["LSQ_DIRECT_POP_CREDIT"] or p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"]) and
             (p["DCACHE_MSHRS"]<=1 or not p["DCACHE_TAG_SRAM"])):
         raise ValueError("Direct LSQ allocation policies require the registered nonblocking cache query")
+    if p["AXI_READ_COUNTERS_OWNED"] not in (0,1):
+        raise ValueError("AXI read counter ownership must be 0 or 1")
     if p["RS_ARITHMETIC_PRECOMPUTE"] not in (0,1) or (p["RS_ARITHMETIC_PRECOMPUTE"] and not p["RS_ISSUE_METADATA"]):
         raise ValueError("RS arithmetic precompute requires exact inline immediate metadata")
     if p["RS_FRESH_DEFAULT_LANE_DATA"] not in (0,1) or (p["RS_FRESH_DEFAULT_LANE_DATA"] and not p["RS_ALLOC_EMPTY_BYPASS"]):

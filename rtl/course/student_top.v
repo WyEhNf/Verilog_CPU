@@ -171,6 +171,7 @@ module student_top #(
     parameter integer SERIAL_BACKEND = 0, ENABLE_CACHE_STATS = 1,
     parameter integer READ_LINES = 8, WRITE_LINES = 4, WORD_QUEUE = 16,
     parameter integer AXI_READ_PAYLOAD_SRAM = 1,
+    parameter integer AXI_READ_COUNTERS_OWNED = 0,
     parameter integer AXI_RESPONSE_FIFO_DEPTH = 2
 ) (
     input wire clock, reset,
@@ -226,7 +227,7 @@ cpu_core #(.DIRECT_LOAD_RS_CREDIT(DIRECT_LOAD_RS_CREDIT), .LSQ_DIRECT_POP_CREDIT
         .mem_d_resp_data(dsd), .mem_d_resp_id(dsid), .mem_d_resp_error(dse)
     , .halted(unused_core_halted), .return_value(unused_core_return_value));
     rv32_axi_lite_bridge #(.READ_LINES(READ_LINES), .WRITE_LINES(WRITE_LINES),
-        .WORD_QUEUE(WORD_QUEUE), .READ_PAYLOAD_SRAM(AXI_READ_PAYLOAD_SRAM), .RESPONSE_FIFO_DEPTH(AXI_RESPONSE_FIFO_DEPTH)) bus (
+        .WORD_QUEUE(WORD_QUEUE), .READ_PAYLOAD_SRAM(AXI_READ_PAYLOAD_SRAM), .READ_COUNTERS_OWNED(AXI_READ_COUNTERS_OWNED), .RESPONSE_FIFO_DEPTH(AXI_RESPONSE_FIFO_DEPTH)) bus (
         .clock(clock), .reset(reset), .i_req_valid(iv), .i_req_ready(ir), .i_req_addr(ia), .i_req_id(iid),
         .i_resp_valid(ov), .i_resp_ready(ore), .i_resp_addr(oa), .i_resp_data(od),
         .i_resp_id(oid), .i_resp_error(oe), .d_req_valid(dv), .d_req_ready(dr), .d_write_capacity_ready(dwcr),
