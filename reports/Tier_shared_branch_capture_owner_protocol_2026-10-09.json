@@ -131,8 +131,20 @@
   "notes": [
     "One finite paired BE2/ROB8/PHYS40/RS4/LSQ4 shared-backend sample. Capture owner0/1 with identical arithmetic1, compact completion2, pending owner1, capture redirect-ready1/phase-valid1/early redirect1. Direct recovery/direct issue; staged recovery/existing registered issue.",
     "Two legal, actual redirecting branches in one admitted bundle exercise original earlier-lane capture and younger cancellation. Both fixtures require an actual simultaneous two-redirect edge. Every potential capture checks original full ROB valid/GEN and visible branch result; every capture match equals the original predicate.",
-    "Three captures/three previews/one apply per recovery mode. Remaining captures canceled by whole flush/reset. Original delayed older LOAD, held CDB, full-tag row reuse, MUL0*0, real STORE ACK/size and precise LOAD error points remain. Original public cycles/complete packets/ROB and allocator identities match.",
+    "Observed original posedge monitors: direct captures3/previews2/source-accept-events2; staged captures3/previews3/source-accept-events1. The source-accept monitor is not flush-qualified and is not an independent count of actual architectural apply. The initial normal recovery/drain requires one acceptance and retained ordered commits; later reset/whole-flush points explicitly check pending/descriptor clearing. Original full-tag row reuse, delayed older LOAD, held CDB, MUL0*0, real STORE ACK/size and precise LOAD error remain. Original public cycles/complete packets/ROB and allocator identities match.",
     "The policy requires consumption-ready capture plus local execution recovery. It changes only capture liveness, retains complete tags/generation and all original ordinary completion/predictor training queries, lane/ready/capture/recovery/commit controls. No synthesized certificate state.",
     "Finite sample is not a whole CPU/all-width/configuration/PPA proof. Combine measured-path capture/query and AXI read-counter changes with arithmetic before one official full PPA; accepted freezes remain unchanged."
-  ]
+  ],
+  "observed_monitor_counts": {
+    "direct": {
+      "captures": 3,
+      "previews": 2,
+      "source_accept_events": 2
+    },
+    "staged": {
+      "captures": 3,
+      "previews": 3,
+      "source_accept_events": 1
+    }
+  }
 }
