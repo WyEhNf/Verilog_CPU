@@ -25,3 +25,9 @@ After that sample passes, commit and freeze one Tier1 candidate, run one origina
 ## Finite result
 
 The paired sequence passed once. Frozen source/build/executable/log hashes are recorded in reports/Tier_shared_LSQ_distributed_load_format_protocol_2026-10-09.json. All request/completion comparisons, original full-format comparisons and direct-phase write references passed. No CPU metrics or canonical replacement follow from this sample.
+
+## Terminal Tier1 acceptance
+
+The 509377c4 freeze passed one original structural lint (6.878091 seconds, zero errors/latches/UNOPTFLAT), one official PPA (599.524668 seconds), one build, six official performance cases and one array1 smoke. Area is 8968.688155 um2; Fmax is 305.854241 MHz; geomean IPC is 0.6012842155901663. All six cycles and instruction counts exactly match the c2a09eaa IPC-passing reference. The same CPU source is accepted for this Tier1 profile. Full identities and hashes are in reports/Tier1_shared_verified_2026-10-09.json.
+
+Area decreases 27.570780 um2 and frequency increases 13.031822 MHz versus the immediate rejected compact freeze. Sequential and SRAM area remain identical; total area reduction is combinational mapping. The new worst arrival is 3.208 ns / minimum period 3.26953125 ns and ends in LSQ selection-payload capture through forwarding coverage/request-fire; the previous sign-extension endpoint is no longer worst. The new formatter hierarchy reports 4.85514 um2. This local area is not the whole-design area delta. No current-source Tier2/Tier3 metric or 500 MHz claim follows.
