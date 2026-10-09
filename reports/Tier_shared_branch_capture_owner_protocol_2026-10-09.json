@@ -146,5 +146,6 @@
       "previews": 3,
       "source_accept_events": 1
     }
-  }
+  },
+  "scope_metadata_note": "The original frozen report scope describes intended uniform 3/3/1 counts. Preserve that raw report/hash; actual observed counters and flush qualification are corrected by observed_monitor_counts and notes in this record."
 }
