@@ -28,6 +28,7 @@ module rv32_lsq_request_owner #(
     output wire [ROB_TAG_WIDTH-1:0] rob_tag_o,
     output wire [TAG_WIDTH-1:0] lsq_tag_o,
     output wire [3:0] target_mask_o,forward_mask_o,
+    output wire forward_admitted_o,
     output wire [31:0] forward_data_o
 );
     wire unused_address_i_bits = &{1'b0, address_i};
@@ -39,6 +40,7 @@ module rv32_lsq_request_owner #(
     localparam integer VALID_LEAVES=DATA_START+8;
     wire admitted=!flush_i && !recovery_i && found_i && !wait_i;
     wire admitted_load=admitted && load_i;
+    assign forward_admitted_o=admitted_load;
     function automatic [3:0] decode_access_mask;
         input [1:0] size;
         begin

@@ -16,6 +16,7 @@ module rv32_lsq #(
     parameter integer SAVED_CANDIDATE_STATE_QUERY = 0,
     parameter integer PHASED_DATA_OWNER = 0,
     parameter integer PHASED_DIRECT_WRITE_EVENTS = 0,
+    parameter integer DISTRIBUTED_LOAD_FORMAT = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -1311,6 +1312,7 @@ module rv32_lsq #(
         assert((|alloc_fire_o) && selected_load && !(|allocation_present_stores))
             else $fatal(1,"Unowned allocation load request");
 `endif
+    wire forward_admitted;
     // Admission is resolved beside bounded output groups. No new state.
     wire [2:0] saved_forward_views;
     rv32_frequency_control_tree #(.LEAVES(3)) saved_forward_tree (
@@ -1348,6 +1350,8 @@ module rv32_lsq #(
                 else $fatal(1,"Fresh load forwarded without owned store");
     end
 `endif
+    initial if(DISTRIBUTED_LOAD_FORMAT!=0 && DISTRIBUTED_LOAD_FORMAT!=1)
+        $fatal(1,"DISTRIBUTED_LOAD_FORMAT must be 0 or 1");
     initial if(PHASED_DATA_OWNER!=0 && PHASED_DATA_OWNER!=1)
         $fatal(1,"PHASED_DATA_OWNER must be 0 or 1");
     initial if((PHASED_DIRECT_WRITE_EVENTS!=0 && PHASED_DIRECT_WRITE_EVENTS!=1) ||
@@ -1373,7 +1377,7 @@ module rv32_lsq #(
         .unsigned_o(dcache_req_unsigned_o),.fire_o(request_fire),.size_o(dcache_req_size_o),
         .mask_o(dcache_req_mask_o),.data_o(dcache_req_wdata_o),.raw_word_o(dcache_req_raw_word_o),
         .rob_tag_o(dcache_req_rob_tag_o),.lsq_tag_o(dcache_req_lsq_tag_o),
-        .target_mask_o(target_mask),.forward_mask_o(fwd_mask),.forward_data_o(fwd_data));
+        .target_mask_o(target_mask),.forward_mask_o(fwd_mask),.forward_admitted_o(forward_admitted),.forward_data_o(fwd_data));
 
     // Move the existing backend LSQ_ENTRIES x PHYS_ADDR_WIDTH map into its
     // transaction owner. These are the SAME unreset allocation payload bits.
@@ -2091,7 +2095,22 @@ module rv32_lsq #(
         (payload_response_word & ~expand_word_bytes(response_query_mask));
     wire [31:0] payload_response_value=format_relative_value(
         payload_response_merge,response_query_size,response_query_unsigned);
-    wire [31:0] payload_forward_value=format_relative_value(fwd_data,selected_size,selected_unsigned);
+    wire [31:0] payload_forward_value;
+    generate if(DISTRIBUTED_LOAD_FORMAT!=0) begin:g_distributed_forward_format
+        // Formatting commutes with the exact existing qualification: format(0)
+        // is zero for every size/unsigned code. Keep the request predicates,
+        // public qualified forwarding word and every capture event unchanged.
+        rv32_frequency_load_format formatter (
+            .raw_i(owner_forward_data),.size_i(selected_size),.unsigned_i(selected_unsigned),
+            .valid_i(forward_admitted),.value_o(payload_forward_value));
+`ifdef VERILATOR
+        always @(posedge clk_i) if(!reset_i)
+            assert(payload_forward_value==format_relative_value(fwd_data,selected_size,selected_unsigned))
+                else $fatal(1,"Distributed LOAD format differs from qualified original word");
+`endif
+    end else begin:g_original_forward_format
+        assign payload_forward_value=format_relative_value(fwd_data,selected_size,selected_unsigned);
+    end endgenerate
     function automatic [RECOVERY_ARITH_WIDTH-1:0] payload_recovery_age;
         input [ROB_TAG_WIDTH-1:0] tag;
         reg [RECOVERY_ARITH_WIDTH-1:0] difference;

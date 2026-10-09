@@ -70,6 +70,7 @@
 ../rtl/common/rv32_frequency_array_read.v
 ../rtl/common/rv32_frequency_barrel32.v
 ../rtl/common/rv32_frequency_line_extract32.v
+../rtl/common/rv32_frequency_load_format.v
 ../rtl/common/rv32_frequency_line_insert32.v
 ../rtl/common/rv32_frequency_conditional_negate32.v
 ../rtl/common/rv32_execution_recovery_cancel.v

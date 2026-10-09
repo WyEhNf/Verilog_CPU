@@ -1,5 +1,5 @@
 `timescale 1ns/1ps
-module rv32_lsq_direct_phase_fixture #(parameter integer DIRECT_PHASE=0)(output reg done=0);
+module rv32_lsq_direct_phase_fixture #(parameter integer DIRECT_PHASE=0, DISTRIBUTED_FORMAT=0)(output reg done=0);
     reg clk=0,reset=1,recovery=0;
     reg load_ready=0;reg [1:0] updates=0;reg [15:0] update_tag=0;reg [31:0] update_data=0;reg allocation_data_ready=1;reg [15:0] tickets[0:3];integer row;reg [15:0] reused_ticket;
     reg monitor_loads=1;wire saved_mmio_class,admitted_mmio;
@@ -31,7 +31,7 @@ module rv32_lsq_direct_phase_fixture #(parameter integer DIRECT_PHASE=0)(output 
     reg [31:0] expected_addr;
     reg [127:0] expected_data;
     reg [15:0] expected_mask;
-    rv32_lsq #(.PHASED_DATA_OWNER(1),.PHASED_DIRECT_WRITE_EVENTS(DIRECT_PHASE),.RELEASE_CREDITS(2),.SAVED_REQUEST_QUERY(1),.SAVED_CANDIDATE_STATE_QUERY(1),.ALLOC_LOAD_REQUEST_BYPASS(1),.ALLOC_LOAD_SELECTION_BYPASS(1), .BE_WIDTH(2),.LSQ_ENTRIES(4),.ROB_ENTRIES(8),.TAG_WIDTH(16),.ROB_TAG_WIDTH(16),
+    rv32_lsq #(.DISTRIBUTED_LOAD_FORMAT(DISTRIBUTED_FORMAT),.PHASED_DATA_OWNER(1),.PHASED_DIRECT_WRITE_EVENTS(DIRECT_PHASE),.RELEASE_CREDITS(2),.SAVED_REQUEST_QUERY(1),.SAVED_CANDIDATE_STATE_QUERY(1),.ALLOC_LOAD_REQUEST_BYPASS(1),.ALLOC_LOAD_SELECTION_BYPASS(1), .BE_WIDTH(2),.LSQ_ENTRIES(4),.ROB_ENTRIES(8),.TAG_WIDTH(16),.ROB_TAG_WIDTH(16),
         .REQUEST_PIPELINE(1),.EMPTY_SELECTION_BYPASS(2),.PICK_LOCAL_VALIDITY(1),
         .STORE_ADMISSION_BYPASS(1),.COMMITTED_STORE_BYPASS(1)) dut (
         .clk_i(clk),
@@ -163,7 +163,7 @@ module rv32_lsq_direct_phase_fixture #(parameter integer DIRECT_PHASE=0)(output 
         // forwarded younger load through the original exact-tag update.
         clear;alloc_valid=1;stores=1;allocation_data_ready=0;alloc_addr=32'h100;
         alloc_data=0;alloc_size=2;alloc_rob=32'h109;#1;update_tag=alloc_tag[15:0];
-        tick;@(negedge clk);stores=0;loads=1;allocation_data_ready=1;alloc_rob=32'h101;
+        tick;@(negedge clk);stores=0;loads=1;allocation_data_ready=1;alloc_rob=32'h101;alloc_size=1;unsigned_load=0;
         #1;ticket=alloc_tag[15:0];tick;@(negedge clk);alloc_valid=0;loads=0;#1;
         if(request_valid || load_valid) $fatal(1,"load crossed unresolved store operand");
         updates=1;update_data=32'haabbccdd;tick;@(negedge clk);updates=0;
@@ -171,7 +171,7 @@ module rv32_lsq_direct_phase_fixture #(parameter integer DIRECT_PHASE=0)(output 
             #1;if(request_valid) $fatal(1,"fully forwarded delayed store queried cache");
             tick;@(negedge clk);
         end
-        if(!load_valid || load_value!=32'haabbccdd) $fatal(1,"delayed store operand lost");
+        if(!load_valid || load_value!=32'hffffccdd) $fatal(1,"delayed store operand lost");
         // Fill four rows with accepted loads. On the full head's report/pop
         // edge, an actual allocation replaces that same row with a store.
         clear;monitor_loads=0;request_ready=1;
