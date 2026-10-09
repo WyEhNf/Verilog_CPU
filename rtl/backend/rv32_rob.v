@@ -54,6 +54,9 @@ module rv32_rob #(
     // Private caller guarantees every asserted recovery valid retains the
     // exact live ROB row until apply/reset. Generic callers keep mode zero.
     parameter integer RECOVERY_CALLER_OWNED = 0,
+    // Private live-row ownership also certifies membership in the ROB window.
+    // Only removes a repeated acceptance guard; real ages/kill data are kept.
+    parameter integer RECOVERY_WINDOW_OWNED = 0,
     parameter integer OCCUPANCY_DISTRIBUTE = 0,
     // 1 retires a store after admission into the committed LSQ/store buffer;
     // 0 preserves the precise legacy behavior of waiting for cache ack.
@@ -460,6 +463,9 @@ module rv32_rob #(
     // Do not conflate the two nonarchitectural temporaries in name-based proof.
 
     initial begin
+        if((RECOVERY_WINDOW_OWNED!=0 && RECOVERY_WINDOW_OWNED!=1) ||
+            (RECOVERY_WINDOW_OWNED!=0 && RECOVERY_CALLER_OWNED==0))
+            $fatal(1,"ROB window ownership requires private live-row ownership");
         if(RECOVERY_CALLER_OWNED!=0 && RECOVERY_CALLER_OWNED!=1)
             $fatal(1,"ROB recovery caller ownership must be 0 or 1");
         if ((COMMIT_BANKED_READ != 0 && COMMIT_BANKED_READ != 1) ||
@@ -1031,6 +1037,7 @@ end
     wire [ROB_ENTRIES*RECOVERY_LIVE_WIDTH-1:0] recovery_live_rows;
     wire [ROB_ENTRIES*RECOVERY_DEST_WIDTH-1:0] recovery_dest_rows;
     wire [BE_WIDTH-1:0] recovery_lane_live;
+    wire [BE_WIDTH-1:0] recovery_lane_in_window;
     wire [RECOVERY_DEST_WIDTH-1:0] recovery_selected_dest;
     wire recovery_selected_rd_we;
     wire [4:0] recovery_selected_rd;
@@ -1052,9 +1059,24 @@ end
         end
         for(genvar recovery_query_lane=0;recovery_query_lane<BE_WIDTH;recovery_query_lane=recovery_query_lane+1) begin:g_recovery_lane_query
             wire [TAG_WIDTH-1:0] tag=recovery_tag_i[recovery_query_lane*TAG_WIDTH +: TAG_WIDTH];
+            wire [SLOT_WIDTH-1:0] original_age=tag[SLOT_LSB +: SLOT_WIDTH]-head_recovery_index;
+            wire original_in_window=COUNT_WIDTH'(original_age)<
+                occupancy_views[OCCUPANCY_ROW_DOMAINS*COUNT_WIDTH +: COUNT_WIDTH];
+            if(RECOVERY_WINDOW_OWNED!=0) begin:g_owned_window
+                // Acquisition uses the original full ROB identity. A redirect
+                // cannot retire ordinarily before its pending owner clears.
+                assign recovery_lane_in_window[recovery_query_lane]=1'b1;
+`ifdef VERILATOR
+                always @(posedge clk_i) if(!reset_i && recovery_valid_i[recovery_query_lane])
+                    assert(original_in_window)
+                        else $fatal(1,"Private pending recovery left the original ROB window");
+`endif
+            end else begin:g_original_window
+                assign recovery_lane_in_window[recovery_query_lane]=original_in_window;
+            end
             if(RECOVERY_CALLER_OWNED!=0) begin:g_caller_owned
                 // Validity is a private caller's ownership certificate. Keep
-                // tag-valid, slot/range and the original age/occupancy test.
+                // tag-valid and slot/range. Window ownership is independent.
                 assign recovery_lane_live[recovery_query_lane]=tag[VALID_LSB] &&
                     32'(tag[SLOT_LSB +: SLOT_WIDTH])<ROB_ENTRIES;
 `ifdef VERILATOR
@@ -1246,7 +1268,7 @@ end
             age = SLOT_WIDTH'(recovery_slot - 32'(head_recovery_index));
             if (recovery_valid_i[recovery_lane] &&
                 recovery_lane_live[recovery_lane] &&
-                (COUNT_WIDTH'(age) < occupancy_views[OCCUPANCY_ROW_DOMAINS*COUNT_WIDTH +: COUNT_WIDTH]) && (!recovery_found || 32'(age) < chosen_age)) begin
+                recovery_lane_in_window[recovery_lane] && (!recovery_found || 32'(age) < chosen_age)) begin
                 recovery_found = 1'b1;
                 chosen_age = 32'(age);
                 chosen_slot = recovery_slot;

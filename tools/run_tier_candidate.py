@@ -59,6 +59,8 @@ def validate_parameters(text, profile):
     p = defaults | overrides
     if p["COMPLETION_SOURCE_STATE_QUERY"] not in (0,1,2) or (p["COMPLETION_SOURCE_STATE_QUERY"] and p["COMPLETION_BYPASS"]!=2):
         raise ValueError("Completion source state query requires direct completion")
+    if p["ROB_RECOVERY_WINDOW_OWNER"] not in (0,1) or (p["ROB_RECOVERY_WINDOW_OWNER"] and not p["ROB_RECOVERY_PENDING_OWNER"]):
+        raise ValueError("Recovery window ownership requires private pending identity ownership")
     if p["ROB_RECOVERY_PENDING_OWNER"] not in (0,1):
         raise ValueError("Pending recovery ownership must be 0 or 1")
     if p["DECODE_STATIC_HALT_CLASS"] not in (0,1):
