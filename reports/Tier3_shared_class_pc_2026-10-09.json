@@ -1,0 +1,352 @@
+{
+  "status": "PPA_TERMINAL_500MHZ_GATE_FAILED",
+  "accepted": false,
+  "source_commit": "680bc691b37836e545781865340d5435f1a728dc",
+  "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009",
+  "manifest_sha256": "d066a46abc0b2b10fdafd445a84d1176a4c93055798dd50f305a19f7a65853df",
+  "profile_path": "configs/tier3_shared_500_class_pc_candidate.json",
+  "parameter_count": 193,
+  "lint": {
+    "status": "PASSED",
+    "command": [
+      "F:/CPU2026CourseTools/win5040/source_release/verilator-5.040/bin/verilator_bin.exe",
+      "--lint-only",
+      "--assert",
+      "-Wall",
+      "-Wno-fatal",
+      "--top-module",
+      "student_top",
+      "--unroll-count",
+      "1024",
+      "--unroll-stmts",
+      "1000000",
+      "-I.",
+      "-Irtl",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\scripts\\ram\\sram_fakeram.sv",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32im_decoder.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\predictor\\rv32_branch_predictor.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\predictor\\rv32_predictor_bht_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\predictor\\rv32_predictor_btb_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\predictor\\rv32_predictor_indirect_btb_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\predictor\\rv32_predictor_choice_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\predictor\\rv32_banked_predictor.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_icache.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_icache_nonblocking.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_icache_mshr_state_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_icache_query_queue.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_instruction_line_filter.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_dcache.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_dcache_control_banks.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_dcache_metadata_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_dcache_mshr_data_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_dcache_metadata_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_dcache_nonblocking.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_dcache_command_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_dcache_command_line.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cache\\rv32_cache_stats.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\memory\\rv32_memory_bridge.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\memory\\rv32_uncached_memory.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\frontend\\rv32_fetch_frontend.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\frontend\\rv32_frontend_queue_payload_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\frontend\\rv32_frontend_parallel_bundle_control.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32i_alu.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32m_multiplier.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32m_multiplier_radix4.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32m_divider.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32m_mdu_iterative.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32_physical_register_file.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32_prf_value_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32_rename_unit.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32_rename_map_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_rob.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_rob_owned_field.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_rob_recovery_live_or.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_reservation_station.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_rs_payload_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32m_mdu_reservation_station.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_completion_network.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_lsq.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_lsq_owned_field.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_lsq_forward_window.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_lsq_request_owner.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_lsq_identity_pair_or.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_store_address_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_store_rs_links.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_rat_recovery.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_rat_recovery_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_backend_joint.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_issue_pipeline_slot.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_producer_tag_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_reserved_dispatch_packet.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\backend\\rv32_elastic_dispatch_packet.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32im_tag_compare.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32im_fifo.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32im_skid_buffer.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32im_prefix_alloc.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32im_priority_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_asap7_fanout.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_inversion.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_negative_subtree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_control_tree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_polarity_tree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_word_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_qualified_word_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_addsub32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_compare32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_event_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_first_two.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_array_read.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_barrel32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_line_extract32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_load_format.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_line_insert32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_conditional_negate32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_execution_recovery_cancel.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_add64_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_add32_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_add_simm12.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_array_read_bank_masks.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_frequency_narrow_array_read.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\common\\rv32_control_register_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\cpu_core.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32_decode_bundle_register.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\rv32_decode_field_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\course\\rv32_axi_lite_bridge.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\course\\rv32_axi_response_fifo.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\rtl\\course\\student_top.v"
+    ],
+    "returncode": 0,
+    "elapsed_seconds": 32.15945129998727,
+    "errors": 0,
+    "latches": 0,
+    "unoptflat": 0,
+    "log_sha256": "a8aee7ffe921734dbe138f552fc521be1b6fea8c0d28679e287f5c9641ccd836"
+  },
+  "synth": {
+    "status": "PASSED",
+    "command": [
+      "C:\\Users\\admin\\miniconda3\\python.exe",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\source\\scripts\\synth.py",
+      "--filelist",
+      "verilog/filelist.f",
+      "--out",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_class_pc_20261009\\synth",
+      "--mode",
+      "opt",
+      "--clock-period",
+      "2.0",
+      "--appimage",
+      "",
+      "--yosys",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys.exe",
+      "--abc",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys-abc.exe",
+      "--sta",
+      "F:/CPU2026CourseTools/win54fc150/opensta/bin/sta.exe",
+      "--asap7-lib",
+      "F:/CPU2026CourseTools/win54fc150/asap7/lib"
+    ],
+    "manifest_sha256": "d066a46abc0b2b10fdafd445a84d1176a4c93055798dd50f305a19f7a65853df",
+    "phase": "synth",
+    "returncode": 0,
+    "seconds": 1386.1192542999634,
+    "log_sha256": "ad469f86f7a1fbe91aa753e2273f6ea173be13fd073c4852e66792686531d6d6",
+    "area_um2": 35414.600137996305,
+    "fmax_mhz": 344.6650959272972,
+    "report_sha256": "8def263b28b7145a7c1bc1bd95e800fb630ab46b1e1e2f79c94a48438166e013",
+    "ppa_thresholds_passed": false
+  },
+  "observed_synth_session": 91825,
+  "area_um2": 35414.600137996305,
+  "fmax_mhz": 344.6650959272972,
+  "geomean_ipc": null,
+  "build_run": false,
+  "perf_run": false,
+  "cpu_smoke_run": false,
+  "required_area_maximum_um2": 35891.672317998215,
+  "required_fmax_minimum_mhz": 500,
+  "required_geomean_ipc_minimum": 1.1152626918348099,
+  "required_maximum_cycles": {
+    "perf_median": 7572,
+    "perf_multiply": 17490,
+    "perf_qsort": 143485,
+    "perf_rsort": 153155,
+    "perf_towers": 4739,
+    "perf_vvadd": 3725
+  },
+  "notes": [
+    "Terminal process success is not a tier pass: Fmax344.6650959272972<500. All frozen hashes verified. No CPU build/perf/smoke, IPC/cycles unknown.",
+    "Area35414.600137996305 meets original35891.672317998215 ceiling; sequential7139.826 and SRAM7943.911838 retained. Relative to prior unaccepted21175e7b area increases268.155359998811 and frequency falls12.8768035140436. Not promoted.",
+    "Main path now starts at memory_bridge.data_error_tree signal_i, crosses response-query/LOAD-head selection, RS wake/issue and MDU payload selection, ending in anonymous execution registers. Exact endpoint named bits are not mapped independently. Additional path ends in LSQ row2 address payload through completion/allocation/write control. No false path exception.",
+    "Private pending window optimization passes one finite repaired paired sample at599db06c but has no PPA. Do not measure it alone: actual new LOAD/MDU and address-write paths need a combined implementation review first.",
+    "Historical Tier1 509377c4, Tier2 5be74e01 and Tier3 88e460d3 remain authoritative; none proves latest-source unified500MHz. All original objectives remain active."
+  ],
+  "minimum_period_ns": 2.9013671875,
+  "area_breakdown": {
+    "sequential_area_um2": 7139.826,
+    "combinational_area_um2": 20330.8622999963,
+    "sram_area_um2": 7943.911838000004
+  },
+  "critical_paths": [
+    {
+      "startpoint": "_400163_/QN",
+      "endpoint": "_397978_/D",
+      "arrival_ns": 2.841,
+      "slack_ns": -0.9012,
+      "named_anchors": [
+        {
+          "pin": "core.g_cached_memory.memory_bridge.data_error_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07835
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 0.7114
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.208
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_parallel_wake.tag_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[21].invert/_0_/A",
+          "arrival_ns": 1.413
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_issue_payload[0].g_row[0].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.8050000000000002
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.mdu_payload_selector.g_event[1].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.221
+        }
+      ]
+    },
+    {
+      "startpoint": "_400163_/QN",
+      "endpoint": "_397977_/D",
+      "arrival_ns": 2.835,
+      "slack_ns": -0.8946,
+      "named_anchors": [
+        {
+          "pin": "core.g_cached_memory.memory_bridge.data_error_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07835
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 0.7114
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.208
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_parallel_wake.tag_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[21].invert/_0_/A",
+          "arrival_ns": 1.413
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_issue_payload[0].g_row[0].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.8050000000000002
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.mdu_payload_selector.g_event[1].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.221
+        }
+      ]
+    },
+    {
+      "startpoint": "_400163_/QN",
+      "endpoint": "_397979_/D",
+      "arrival_ns": 2.8280000000000003,
+      "slack_ns": -0.8892,
+      "named_anchors": [
+        {
+          "pin": "core.g_cached_memory.memory_bridge.data_error_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07835
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 0.7114
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.208
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_parallel_wake.tag_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[21].invert/_0_/A",
+          "arrival_ns": 1.413
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_issue_payload[0].g_row[0].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.8050000000000002
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.mdu_payload_selector.g_event[1].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.221
+        }
+      ]
+    },
+    {
+      "startpoint": "_400163_/QN",
+      "endpoint": "_393106_/D",
+      "arrival_ns": 2.822,
+      "slack_ns": -0.8825,
+      "named_anchors": [
+        {
+          "pin": "core.g_cached_memory.memory_bridge.data_error_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07835
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 0.7114
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.208
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[2].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.7080000000000002
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 2.2640000000000002
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[2].addr_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.645
+        }
+      ]
+    },
+    {
+      "startpoint": "_400163_/QN",
+      "endpoint": "_393104_/D",
+      "arrival_ns": 2.823,
+      "slack_ns": -0.8825,
+      "named_anchors": [
+        {
+          "pin": "core.g_cached_memory.memory_bridge.data_error_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07835
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 0.7114
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.208
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[2].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.7080000000000002
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 2.2640000000000002
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[2].addr_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.645
+        }
+      ]
+    }
+  ]
+}
