@@ -191,6 +191,9 @@ def validate_parameters(text, profile):
         if p[key] < minimum or p[key] & (p[key]-1):
             raise ValueError("AXI bridge capacity must be a power of two >= " + str(minimum) + ": " + key)
 
+    if p["RS_COMPARISON_PRECOMPUTE"] not in (0, 1) or (p["RS_COMPARISON_PRECOMPUTE"] and not p["RS_ISSUE_METADATA"]):
+        raise ValueError("RS comparison precompute requires inline immediate metadata")
+
 
 def prepare(out, profile, host):
     if out.exists():

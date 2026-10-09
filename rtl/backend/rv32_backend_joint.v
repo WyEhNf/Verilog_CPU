@@ -29,6 +29,7 @@ module rv32_backend_joint #(
     parameter integer RS_ALLOC_EMPTY_BYPASS = 0,
     parameter integer RS_FRESH_DEFAULT_LANE_DATA = 0,
     parameter integer RS_ARITHMETIC_PRECOMPUTE = 0,
+    parameter integer RS_COMPARISON_PRECOMPUTE = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
@@ -849,6 +850,9 @@ module rv32_backend_joint #(
         assign shared_store_addr_tag = {TAG_WIDTH{1'b0}};
         assign shared_store_addr = 32'b0;
     end endgenerate
+    initial if((RS_COMPARISON_PRECOMPUTE!=0 && RS_COMPARISON_PRECOMPUTE!=1) ||
+        (RS_COMPARISON_PRECOMPUTE!=0 && RS_ISSUE_METADATA==0))
+        $fatal(1,"RS comparison precompute requires inline immediate metadata");
     initial if((BRANCH_CAPTURE_RESULT_OWNER!=0 && BRANCH_CAPTURE_RESULT_OWNER!=1) ||
         (BRANCH_CAPTURE_RESULT_OWNER!=0 && (BRANCH_CAPTURE_REDIRECT_READY==0 || LOCAL_EXEC_RECOVERY==0)))
         $fatal(1,"Branch capture ownership requires redirect consumption and local execution recovery");
@@ -2440,8 +2444,11 @@ module rv32_backend_joint #(
 
     // Registered RS selection / execution boundary.
     localparam integer ISSUE_ORIGINAL_PAYLOAD_WIDTH = `RV32IM_OP_WIDTH + 32 + TAG_WIDTH + PAW + 32 + 32 + 32 + RS_METADATA_WIDTH + ((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES));
-    localparam integer ISSUE_PAYLOAD_WIDTH=ISSUE_ORIGINAL_PAYLOAD_WIDTH+
+    localparam integer ISSUE_ARITHMETIC_PAYLOAD_WIDTH=ISSUE_ORIGINAL_PAYLOAD_WIDTH+
         ((RS_ARITHMETIC_PRECOMPUTE!=0)?32:0);
+    localparam integer ISSUE_PAYLOAD_WIDTH=ISSUE_ARITHMETIC_PAYLOAD_WIDTH+
+        ((RS_COMPARISON_PRECOMPUTE!=0)?3:0);
+    wire [BE_WIDTH*3-1:0] raw_rs_issue_comparison,rs_issue_comparison;
     wire [BE_WIDTH*32-1:0] raw_rs_issue_arithmetic,rs_issue_arithmetic;
     wire [BE_WIDTH-1:0] raw_rs_issue_valid, raw_rs_issue_ready;
     wire [BE_WIDTH*`RV32IM_OP_WIDTH-1:0] raw_rs_issue_op;
@@ -2453,11 +2460,11 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] raw_rs_issue_store;
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] raw_rs_issue_metadata;
     wire [BE_WIDTH*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))-1:0] raw_rs_issue_slot;
-    rv32_reservation_station #(.ALLOC_EMPTY_BYPASS(RS_ALLOC_EMPTY_BYPASS), .FRESH_DEFAULT_LANE_DATA(RS_FRESH_DEFAULT_LANE_DATA), .ARITHMETIC_PRECOMPUTE(RS_ARITHMETIC_PRECOMPUTE), .RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_QUALIFICATION(RS_ROW_QUALIFICATION_ACTIVE), .ISSUE_RECOVERY_CANCEL(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) rs (
+    rv32_reservation_station #(.ALLOC_EMPTY_BYPASS(RS_ALLOC_EMPTY_BYPASS), .FRESH_DEFAULT_LANE_DATA(RS_FRESH_DEFAULT_LANE_DATA), .ARITHMETIC_PRECOMPUTE(RS_ARITHMETIC_PRECOMPUTE), .COMPARISON_PRECOMPUTE(RS_COMPARISON_PRECOMPUTE), .RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_QUALIFICATION(RS_ROW_QUALIFICATION_ACTIVE), .ISSUE_RECOVERY_CANCEL(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) rs (
         .entry_issue_cancel_i(rs_entry_issue_cancel), .issue_cancel_o(raw_rs_issue_cancel),
         .entry_recovery_qualified_i(rs_entry_recovery_qualified),
         .issue_recovery_qualified_o(raw_rs_issue_recovery_qualified),
-        .alloc_metadata_i(rs_alloc_metadata), .issue_metadata_o(raw_rs_issue_metadata), .issue_arithmetic_o(raw_rs_issue_arithmetic), .entry_metadata_o(rs_entry_metadata),
+        .alloc_metadata_i(rs_alloc_metadata), .issue_metadata_o(raw_rs_issue_metadata), .issue_arithmetic_o(raw_rs_issue_arithmetic), .issue_comparison_o(raw_rs_issue_comparison), .entry_metadata_o(rs_entry_metadata),
         .entry_base_ready_o(rs_entry_base_ready), .entry_base_value_o(rs_entry_base_value),
         .alloc_slot_o(rs_alloc_slot),.entry_release_o(rs_entry_release),
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rs_alloc_valid), .alloc_op_i(d_op), .alloc_pc_i(d_pc), .alloc_rob_tag_i(d_tag), .alloc_target_live_i(d_valid), .alloc_phys_rd_i(d_new_phys),
@@ -2470,15 +2477,23 @@ module rv32_backend_joint #(
         if (ISSUE_PIPELINE != 0) begin : g_registered
             wire [ISSUE_PAYLOAD_WIDTH-1:0] in_payload, out_payload;
             wire [ISSUE_ORIGINAL_PAYLOAD_WIDTH-1:0] original_in_payload = {raw_rs_issue_op[pipe_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH], raw_rs_issue_pc[pipe_lane*32 +: 32], raw_rs_issue_tag[pipe_lane*TAG_WIDTH +: TAG_WIDTH], raw_rs_issue_phys[pipe_lane*PAW +: PAW], raw_rs_issue_src1[pipe_lane*32 +: 32], raw_rs_issue_src2[pipe_lane*32 +: 32], raw_rs_issue_store[pipe_lane*32 +: 32], raw_rs_issue_metadata[pipe_lane*RS_METADATA_WIDTH +: RS_METADATA_WIDTH], raw_rs_issue_slot[pipe_lane*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES)) +: ((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))]};
+            wire [ISSUE_ARITHMETIC_PAYLOAD_WIDTH-1:0] arithmetic_in_payload;
             if(RS_ARITHMETIC_PRECOMPUTE!=0) begin:g_arithmetic_packet
-                assign in_payload={raw_rs_issue_arithmetic[pipe_lane*32 +: 32],original_in_payload};
+                assign arithmetic_in_payload={raw_rs_issue_arithmetic[pipe_lane*32 +: 32],original_in_payload};
                 assign rs_issue_arithmetic[pipe_lane*32 +: 32]=
                     out_payload[ISSUE_ORIGINAL_PAYLOAD_WIDTH +: 32];
             end else begin:g_original_packet
-                assign in_payload=original_in_payload;
+                assign arithmetic_in_payload=original_in_payload;
                 assign rs_issue_arithmetic[pipe_lane*32 +: 32]=0;
             end
             assign {rs_issue_op[pipe_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH], rs_issue_pc[pipe_lane*32 +: 32], rs_issue_tag[pipe_lane*TAG_WIDTH +: TAG_WIDTH], rs_issue_phys[pipe_lane*PAW +: PAW], rs_issue_src1[pipe_lane*32 +: 32], rs_issue_src2[pipe_lane*32 +: 32], rs_issue_store[pipe_lane*32 +: 32], rs_issue_metadata[pipe_lane*RS_METADATA_WIDTH +: RS_METADATA_WIDTH], rs_issue_slot[pipe_lane*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES)) +: ((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))]} = out_payload[0 +: ISSUE_ORIGINAL_PAYLOAD_WIDTH];
+            if(RS_COMPARISON_PRECOMPUTE!=0) begin:g_comparison_packet
+                assign in_payload={raw_rs_issue_comparison[pipe_lane*3 +: 3],arithmetic_in_payload};
+                assign rs_issue_comparison[pipe_lane*3 +: 3]=out_payload[ISSUE_ARITHMETIC_PAYLOAD_WIDTH +: 3];
+            end else begin:g_original_comparison_packet
+                assign in_payload=arithmetic_in_payload;
+                assign rs_issue_comparison[pipe_lane*3 +: 3]=0;
+            end
             wire [`RV32IM_OP_WIDTH-1:0] raw_op = raw_rs_issue_op[pipe_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH];
             wire raw_mdu = (raw_op == `RV32IM_OP_MUL) || (raw_op == `RV32IM_OP_MULH) || (raw_op == `RV32IM_OP_MULHSU) || (raw_op == `RV32IM_OP_MULHU) || (raw_op == `RV32IM_OP_DIV) || (raw_op == `RV32IM_OP_DIVU) || (raw_op == `RV32IM_OP_REM) || (raw_op == `RV32IM_OP_REMU);
             rv32_issue_pipeline_slot #(.PAYLOAD_WIDTH(ISSUE_PAYLOAD_WIDTH),
@@ -2493,6 +2508,7 @@ module rv32_backend_joint #(
                 .valid_o(rs_issue_valid[pipe_lane]), .ready_i(rs_issue_ready[pipe_lane]),
                 .data_o(out_payload));
         end else begin : g_direct
+            assign rs_issue_comparison[pipe_lane*3 +: 3]=raw_rs_issue_comparison[pipe_lane*3 +: 3];
             assign rs_issue_arithmetic[pipe_lane*32 +: 32]=raw_rs_issue_arithmetic[pipe_lane*32 +: 32];
             assign rs_issue_valid[pipe_lane] = raw_rs_issue_valid[pipe_lane];
             assign raw_rs_issue_ready[pipe_lane] = rs_issue_ready[pipe_lane];
@@ -2512,7 +2528,7 @@ module rv32_backend_joint #(
     generate
         for (alu_lane = 0; alu_lane < BE_WIDTH; alu_lane = alu_lane + 1) begin : g_alu
             wire [(`RV32IM_EPOCH_WIDTH)-1:0] unused_alu_exec_epoch_o;
-            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .COMPACT_PRED_TARGET(COMPACT_PRED_TARGET), .FORWARD_METADATA(RS_ISSUE_METADATA), .PRECOMPUTED_ARITHMETIC(RS_ARITHMETIC_PRECOMPUTE), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY), .RECOVERY_OLDER_ISSUE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_PREDECODE(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) alu (
+            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .COMPACT_PRED_TARGET(COMPACT_PRED_TARGET), .FORWARD_METADATA(RS_ISSUE_METADATA), .PRECOMPUTED_ARITHMETIC(RS_ARITHMETIC_PRECOMPUTE), .PRECOMPUTED_COMPARISON(RS_COMPARISON_PRECOMPUTE), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY), .RECOVERY_OLDER_ISSUE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_PREDECODE(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) alu (
                 .exec_source_pc_o(alu_exec_source_pc[alu_lane*32 +: 32]),
                 .exec_pred_taken_o(alu_exec_pred_taken[alu_lane]),
                 .exec_pred_target_o(alu_exec_pred_target[alu_lane*32 +: 32]),
@@ -2529,6 +2545,7 @@ module rv32_backend_joint #(
                 .issue_pc_i(rs_issue_pc[alu_lane*32 +: 32]),
                 .issue_imm_i(rs_issue_imm[alu_lane*32 +: 32]),
                 .issue_arithmetic_i(rs_issue_arithmetic[alu_lane*32 +: 32]),
+                .issue_comparison_i(rs_issue_comparison[alu_lane*3 +: 3]),
                 .issue_src1_value_i(rs_issue_src1[alu_lane*32 +: 32]),
                 .issue_src2_value_i(rs_issue_src2[alu_lane*32 +: 32]),
                 .issue_store_data_i(rs_issue_store[alu_lane*32 +: 32]),

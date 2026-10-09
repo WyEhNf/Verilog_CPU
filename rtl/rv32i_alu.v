@@ -13,6 +13,7 @@ module rv32i_alu #(
     parameter integer SHIFT_SHARED_BARREL = 0,
     parameter integer FORWARD_METADATA = 0,
     parameter integer PRECOMPUTED_ARITHMETIC = 0,
+    parameter integer PRECOMPUTED_COMPARISON = 0,
     parameter COMPACT_PRED_TARGET = 0,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
@@ -32,6 +33,7 @@ module rv32i_alu #(
     input  wire [31:0]                  issue_pc_i,
     input  wire [31:0]                  issue_imm_i,
     input  wire [31:0]                  issue_arithmetic_i,
+    input  wire [2:0]                   issue_comparison_i,
     input  wire [31:0]                  issue_src1_value_i,
     input  wire [31:0]                  issue_src2_value_i,
     input  wire [31:0]                  issue_store_data_i,
@@ -250,6 +252,7 @@ module rv32i_alu #(
     wire [3:0] cmp_eq1, cmp_lt1;
     wire [1:0] cmp_eq2, cmp_lt2;
     wire cmp_equal, cmp_unsigned_lt, cmp_signed_lt;
+    wire original_cmp_equal,original_cmp_unsigned_lt,original_cmp_signed_lt;
     genvar cmp_chunk;
     generate
         for (cmp_chunk = 0; cmp_chunk < 8; cmp_chunk = cmp_chunk + 1) begin : g_cmp_chunk
@@ -271,10 +274,25 @@ module rv32i_alu #(
                 (cmp_eq1[2*cmp_chunk+1] && cmp_lt1[2*cmp_chunk]);
         end
     endgenerate
-    assign cmp_equal = cmp_eq2[1] && cmp_eq2[0];
-    assign cmp_unsigned_lt = cmp_lt2[1] || (cmp_eq2[1] && cmp_lt2[0]);
-    assign cmp_signed_lt = (issue_src1_value_i[31] ^ issue_src2_value_i[31]) ?
-        issue_src1_value_i[31] : cmp_unsigned_lt;
+    assign original_cmp_equal = cmp_eq2[1] && cmp_eq2[0];
+    assign original_cmp_unsigned_lt = cmp_lt2[1] || (cmp_eq2[1] && cmp_lt2[0]);
+    assign original_cmp_signed_lt = (issue_src1_value_i[31] ^ issue_src2_value_i[31]) ?
+        issue_src1_value_i[31] : original_cmp_unsigned_lt;
+    initial if(PRECOMPUTED_COMPARISON!=0 && PRECOMPUTED_COMPARISON!=1)
+        $fatal(1,"ALU precomputed comparison must be 0 or 1");
+    generate if(PRECOMPUTED_COMPARISON!=0) begin:g_precomputed_comparison
+        assign {cmp_signed_lt,cmp_unsigned_lt,cmp_equal}=issue_comparison_i;
+`ifdef VERILATOR
+        wire [31:0] rhs=(issue_op_i==`RV32IM_OP_SLTI || issue_op_i==`RV32IM_OP_SLTIU) ?
+            issue_imm_i : issue_src2_value_i;
+        always @(posedge clk_i) if(!reset_i && issue_valid_i)
+            assert(issue_comparison_i=={($signed(issue_src1_value_i)<$signed(rhs)),(issue_src1_value_i<rhs),(issue_src1_value_i==rhs)})
+                else $fatal(1,"ALU comparison differs from complete issue packet");
+`endif
+    end else begin:g_original_comparison
+        assign {cmp_signed_lt,cmp_unsigned_lt,cmp_equal}=
+            {original_cmp_signed_lt,original_cmp_unsigned_lt,original_cmp_equal};
+    end endgenerate
 
     wire result_cancel;
     rv32_execution_recovery_cancel #(.TAG_WIDTH(TAG_WIDTH),.ROB_ENTRIES(ROB_ENTRIES),
@@ -368,8 +386,8 @@ module rv32i_alu #(
     wire [15:0] value_classes;
     wire [16*32-1:0] value_class_data;
     wire comparison_value=
-        (issue_op_i==`RV32IM_OP_SLTI && $signed(issue_src1_value_i)<$signed(issue_imm_i)) ||
-        (issue_op_i==`RV32IM_OP_SLTIU && issue_src1_value_i<issue_imm_i) ||
+        (issue_op_i==`RV32IM_OP_SLTI && ((PRECOMPUTED_COMPARISON!=0)?cmp_signed_lt:($signed(issue_src1_value_i)<$signed(issue_imm_i)))) ||
+        (issue_op_i==`RV32IM_OP_SLTIU && ((PRECOMPUTED_COMPARISON!=0)?cmp_unsigned_lt:(issue_src1_value_i<issue_imm_i))) ||
         (issue_op_i==`RV32IM_OP_SLT && cmp_signed_lt) ||
         (issue_op_i==`RV32IM_OP_SLTU && cmp_unsigned_lt);
     wire [31:0] pc_plus_four=issue_pc_i+32'd4;
