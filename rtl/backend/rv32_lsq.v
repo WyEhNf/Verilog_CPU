@@ -18,6 +18,8 @@ module rv32_lsq #(
     parameter integer PHASED_DIRECT_WRITE_EVENTS = 0,
     parameter integer DISTRIBUTED_LOAD_FORMAT = 0,
     parameter integer PHASED_ALLOC_EXCLUSIVE = 0,
+    // Address selector already supplies zero whenever its write is absent.
+    parameter integer QUALIFIED_ADDRESS_WRITE = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -1351,6 +1353,8 @@ module rv32_lsq #(
                 else $fatal(1,"Fresh load forwarded without owned store");
     end
 `endif
+    initial if(QUALIFIED_ADDRESS_WRITE!=0 && QUALIFIED_ADDRESS_WRITE!=1)
+        $fatal(1,"Qualified LSQ address write must be 0 or 1");
     initial if((PHASED_ALLOC_EXCLUSIVE!=0 && PHASED_ALLOC_EXCLUSIVE!=1) ||
             (PHASED_ALLOC_EXCLUSIVE!=0 && (PHASED_DATA_OWNER==0 || PHASED_DIRECT_WRITE_EVENTS==0 || RELEASE_CREDITS!=0)))
         $fatal(1,"Exclusive phased allocation requires direct events and no release credits");
@@ -2730,7 +2734,7 @@ module rv32_lsq #(
         rv32_lsq_owned_field #(.WIDTH(1)) data_ready_mem_owner (
             .clk_i(clk_i),.write_i(data_ready_mem_write_enable[storage_row]),
             .data_i(data_ready_mem_write_data[storage_row]),.data_o(data_ready_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(31+1)) addr_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(31+1),.QUALIFIED_INPUT(QUALIFIED_ADDRESS_WRITE)) addr_mem_owner (
             .clk_i(clk_i),.write_i(addr_mem_write_enable[storage_row]),
             .data_i(addr_mem_write_data[storage_row]),.data_o(addr_mem[storage_row]));
         if(PHASED_DATA_OWNER!=0) begin:g_phased_payload

@@ -126,6 +126,10 @@ def validate_parameters(text, profile):
     if p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] not in (0,1) or (p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] and
             (not p["ALLOC_LOAD_SELECTION_BYPASS"] or not p["STORE_ALLOC_EARLY_ADDRESS"])):
         raise ValueError("Allocation load request bypass requires allocation selection and address")
+    if p["MDU_OWNED_STEP"] not in (0,1) or (p["MDU_OWNED_STEP"] and p["MUL_IMPL"]!=2):
+        raise ValueError("Owned step counter requires unified iterative MDU")
+    if p["LSQ_QUALIFIED_ADDRESS_WRITE"] not in (0,1):
+        raise ValueError("Qualified LSQ address write must be 0 or 1")
     if p["MDU_PREFIX_SIGN_CORRECTION"] not in (0,1) or (p["MDU_PREFIX_SIGN_CORRECTION"] and p["MUL_IMPL"]!=2):
         raise ValueError("Prefix sign correction requires unified iterative MUL_IMPL=2")
     if p["MDU_DIVZERO_REMAINDER_REUSE"] not in (0, 1) or (p["MDU_DIVZERO_REMAINDER_REUSE"] and p["MUL_IMPL"]!=2):

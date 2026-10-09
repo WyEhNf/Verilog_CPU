@@ -7,6 +7,8 @@
 module rv32m_mdu_iterative #(
     parameter integer DIVZERO_REMAINDER_REUSE = 0,
     parameter integer PREFIX_SIGN_CORRECTION = 0,
+    // Step is visible only while busy. Idle zeroing removes late launch reset.
+    parameter integer OWNED_STEP = 0,
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer PHYS_ADDR_WIDTH = `RV32IM_PHYS_REG_ADDR_WIDTH_DEFAULT,
@@ -51,6 +53,8 @@ module rv32m_mdu_iterative #(
         (req_op_i == `RV32IM_OP_MULH);
     wire req_a_negative = req_a_signed && req_src1_i[31];
     wire req_b_negative = req_b_signed && req_src2_i[31];
+    initial if(OWNED_STEP!=0 && OWNED_STEP!=1)
+        $fatal(1,"Owned step counter must be 0 or 1");
     initial if(PREFIX_SIGN_CORRECTION!=0 && PREFIX_SIGN_CORRECTION!=1)
         $fatal(1,"Prefix sign correction must be 0 or 1");
     wire [31:0] req_abs_a,req_abs_b;
@@ -329,6 +333,33 @@ module rv32m_mdu_iterative #(
         .data_i({finishing_value,operation_tag,operation_phys,operation_live}),
         .data_o({out_value,out_tag,out_phys,out_live}));
 
+    generate if(OWNED_STEP!=0) begin:g_owned_step
+        // A launch requires !busy. Both the launch edge and every idle edge
+        // install step zero without consulting request/selected-tag control.
+        // Iteration and completion retain the original busy/31 boundaries.
+        always @(posedge clk_i) begin
+            if(reset_i || flush_i || !busy || operation_cancel) step<=6'b0;
+            else if(step!=6'd31) step<=step+1'b1;
+        end
+`ifdef VERILATOR
+        reg [5:0] original_step;
+        always @(posedge clk_i) if(!reset_i && !flush_i) begin
+            if(busy && !operation_cancel && original_step!=6'd31)
+                original_step<=original_step+1'b1;
+            if(req_valid_i && req_ready_o) original_step<=6'b0;
+            if(busy) assert(step==original_step)
+                else $fatal(1,"Owned MDU counter changed a visible iteration");
+            assert(!(busy && req_valid_i && req_ready_o))
+                else $fatal(1,"MDU launch overlapped an owned busy counter");
+        end
+`endif
+    end else begin:g_original_step
+        always @(posedge clk_i) if(!reset_i && !flush_i) begin
+            if(busy && !operation_cancel && step!=6'd31) step<=step+1'b1;
+            if(req_valid_i && req_ready_o) step<=6'b0;
+        end
+    end endgenerate
+
     always @(posedge clk_i) begin
         if (reset_i || flush_i) begin
             busy <= 1'b0;
@@ -343,8 +374,6 @@ module rv32m_mdu_iterative #(
                 if (step == 6'd31) begin
                     busy <= 1'b0;
                     finishing <= 1'b1;
-                end else begin
-                    step <= step + 1'b1;
                 end
             end
 
@@ -355,7 +384,7 @@ module rv32m_mdu_iterative #(
 
             if (req_valid_i && req_ready_o) begin
                 busy <= 1'b1;
-                step <= 6'b0;
+                // Step uses the same launch edge in its policy block.
             end
         end
     end

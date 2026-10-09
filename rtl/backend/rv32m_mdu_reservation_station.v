@@ -10,6 +10,7 @@ module rv32m_mdu_reservation_station #(
     parameter integer MUL_IMPL = 0,
     parameter integer DIVZERO_REMAINDER_REUSE = 0,
     parameter integer PREFIX_SIGN_CORRECTION = 0,
+    parameter integer OWNED_STEP = 0,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
     parameter RECOVERY_OLDER_ISSUE = 0,
@@ -39,6 +40,8 @@ module rv32m_mdu_reservation_station #(
     input  wire                         live_tag_valid_i,
     input  wire [TAG_WIDTH-1:0]         live_tag_i
 );
+    initial if((OWNED_STEP!=0 && OWNED_STEP!=1) || (OWNED_STEP!=0 && MUL_IMPL!=2))
+        $fatal(1,"Owned step counter requires unified iterative MDU");
     initial if((PREFIX_SIGN_CORRECTION!=0 && PREFIX_SIGN_CORRECTION!=1) ||
                (PREFIX_SIGN_CORRECTION!=0 && MUL_IMPL!=2))
         $fatal(1,"Prefix sign correction requires unified iterative MDU");
@@ -139,7 +142,7 @@ module rv32m_mdu_reservation_station #(
                 .resp_valid_o(mul_resp_valid), .resp_ready_i(mul_resp_ready), .resp_value_o(mul_resp_value), .resp_rob_tag_o(mul_resp_tag), .resp_phys_rd_o(mul_resp_phys), .resp_rd_we_o(mul_resp_rd_we), .live_tag_valid_i(live_tag_valid_i), .live_tag_i(live_tag_i)
             );
         end else begin : gen_unified_mdu
-            rv32m_mdu_iterative #(.PREFIX_SIGN_CORRECTION(PREFIX_SIGN_CORRECTION), .DIVZERO_REMAINDER_REUSE(DIVZERO_REMAINDER_REUSE), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PHYS_ADDR_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(SELECTIVE_RECOVERY)) unified (
+            rv32m_mdu_iterative #(.PREFIX_SIGN_CORRECTION(PREFIX_SIGN_CORRECTION), .OWNED_STEP(OWNED_STEP), .DIVZERO_REMAINDER_REUSE(DIVZERO_REMAINDER_REUSE), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PHYS_ADDR_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(SELECTIVE_RECOVERY)) unified (
                 .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(recovery_views[1*RECOVERY_WIDTH +: RECOVERY_WIDTH]), .occupied_o(mul_occupied),
                 .req_valid_i(pending_valid && !pending_cancel), .req_ready_o(mul_req_ready),
                 .req_op_i(pending_op), .req_src1_i(pending_src1), .req_src2_i(pending_src2),
