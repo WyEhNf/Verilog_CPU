@@ -12,6 +12,7 @@ module rv32i_alu #(
     parameter integer SHIFT_IMPL = 0,
     parameter integer SHIFT_SHARED_BARREL = 0,
     parameter integer FORWARD_METADATA = 0,
+    parameter integer PRECOMPUTED_ARITHMETIC = 0,
     parameter COMPACT_PRED_TARGET = 0,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
@@ -30,6 +31,7 @@ module rv32i_alu #(
     input  wire [OP_WIDTH-1:0]          issue_op_i,
     input  wire [31:0]                  issue_pc_i,
     input  wire [31:0]                  issue_imm_i,
+    input  wire [31:0]                  issue_arithmetic_i,
     input  wire [31:0]                  issue_src1_value_i,
     input  wire [31:0]                  issue_src2_value_i,
     input  wire [31:0]                  issue_store_data_i,
@@ -110,14 +112,33 @@ module rv32i_alu #(
     // Target and AGU adders have fixed operands, so opcode selection is
     // after arithmetic instead of being in front of all thirty-two bits.
     // They trade combinational area for a shorter operation-to-result path.
-    wire [2:0] integer_subtract_views;
-    wire [31:0] integer_adjusted_rhs;
-    rv32_frequency_control_tree #(.LEAVES(3)) integer_subtract_tree (
-        .signal_i(issue_op_i==`RV32IM_OP_SUB),.views_o(integer_subtract_views));
-    assign integer_adjusted_rhs[15:0]=issue_src2_value_i[15:0] ^ {16{integer_subtract_views[0]}};
-    assign integer_adjusted_rhs[31:16]=issue_src2_value_i[31:16] ^ {16{integer_subtract_views[1]}};
-    wire [31:0] integer_sum=fast_add_carry(issue_src1_value_i,integer_adjusted_rhs,integer_subtract_views[2]);
-    wire [31:0] address_sum=fast_add_carry(issue_src1_value_i,issue_imm_i,1'b0);
+    wire [31:0] integer_sum,address_sum;
+    initial if(PRECOMPUTED_ARITHMETIC!=0 && PRECOMPUTED_ARITHMETIC!=1)
+        $fatal(1,"ALU precomputed arithmetic must be 0 or 1");
+    generate if(PRECOMPUTED_ARITHMETIC!=0) begin:g_precomputed_arithmetic
+        // Each instruction consumes either register arithmetic or its immediate
+        // address sum. The selected word accompanies that exact RS packet.
+        assign integer_sum=issue_arithmetic_i;
+        assign address_sum=issue_arithmetic_i;
+`ifdef VERILATOR
+        wire register_rhs=issue_op_i==`RV32IM_OP_ADD || issue_op_i==`RV32IM_OP_SUB;
+        wire [31:0] original_rhs=register_rhs ? issue_src2_value_i : issue_imm_i;
+        wire [31:0] original_sum=(issue_op_i==`RV32IM_OP_SUB) ?
+            issue_src1_value_i-original_rhs : issue_src1_value_i+original_rhs;
+        always @(posedge clk_i) if(!reset_i && issue_valid_i)
+            assert(issue_arithmetic_i==original_sum)
+                else $fatal(1,"ALU precomputed word differs from its complete issue packet");
+`endif
+    end else begin:g_original_arithmetic
+        wire [2:0] integer_subtract_views;
+        wire [31:0] integer_adjusted_rhs;
+        rv32_frequency_control_tree #(.LEAVES(3)) integer_subtract_tree (
+            .signal_i(issue_op_i==`RV32IM_OP_SUB),.views_o(integer_subtract_views));
+        assign integer_adjusted_rhs[15:0]=issue_src2_value_i[15:0] ^ {16{integer_subtract_views[0]}};
+        assign integer_adjusted_rhs[31:16]=issue_src2_value_i[31:16] ^ {16{integer_subtract_views[1]}};
+        assign integer_sum=fast_add_carry(issue_src1_value_i,integer_adjusted_rhs,integer_subtract_views[2]);
+        assign address_sum=fast_add_carry(issue_src1_value_i,issue_imm_i,1'b0);
+    end endgenerate
     wire [31:0] pc_relative_sum=fast_add_carry(issue_pc_i,issue_imm_i,1'b0);
     reg shift_busy;
     reg [4:0] shift_remaining;

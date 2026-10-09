@@ -9,6 +9,8 @@ module rv32_reservation_station #(
     parameter integer ALLOC_EMPTY_BYPASS = 0,
     // A fresh invalid packet may show lane 0. Actual grants still own validity.
     parameter integer FRESH_DEFAULT_LANE_DATA = 0,
+    // metadata[31:0] is the exact immediate of this allocated instruction.
+    parameter integer ARITHMETIC_PRECOMPUTE = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ENTRIES = 8,
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
@@ -79,6 +81,7 @@ module rv32_reservation_station #(
     output wire  [(BE_WIDTH*32)-1:0]      issue_src2_value_o,
     output wire  [(BE_WIDTH*STORE_DATA_WIDTH)-1:0] issue_store_data_o,
     output wire  [(BE_WIDTH*METADATA_WIDTH)-1:0] issue_metadata_o,
+    output wire [BE_WIDTH*32-1:0] issue_arithmetic_o,
     output wire  [(BE_WIDTH*SLOT_WIDTH)-1:0] issue_slot_o,
 
     input  wire                         flush_valid_i,
@@ -678,8 +681,10 @@ end
 
     // Rank policy and ready remain unchanged. Each selection controls
     // <=16-bit words before balanced payload reduction.
-    localparam integer ISSUE_BASE_DATA_WIDTH=OP_WIDTH+32+TAG_WIDTH+PHYS_ADDR_WIDTH+
+    localparam integer ISSUE_ORIGINAL_DATA_WIDTH=OP_WIDTH+32+TAG_WIDTH+PHYS_ADDR_WIDTH+
         64+STORE_DATA_WIDTH+METADATA_WIDTH+SLOT_WIDTH;
+    localparam integer ISSUE_BASE_DATA_WIDTH=ISSUE_ORIGINAL_DATA_WIDTH+
+        ((ARITHMETIC_PRECOMPUTE!=0)?32:0);
     localparam integer ISSUE_QUALIFIED_DATA_WIDTH=ISSUE_BASE_DATA_WIDTH+
         ((ISSUE_RECOVERY_QUALIFICATION!=0)?1:0);
     localparam integer ISSUE_DATA_WIDTH=ISSUE_QUALIFIED_DATA_WIDTH+
@@ -712,6 +717,32 @@ end
     initial if(FRESH_DEFAULT_LANE_DATA<0 || FRESH_DEFAULT_LANE_DATA>1 ||
         (FRESH_DEFAULT_LANE_DATA!=0 && ALLOC_EMPTY_BYPASS==0))
         $fatal(1,"Fresh default-lane data requires allocation issue bypass");
+    initial if((ARITHMETIC_PRECOMPUTE!=0 && ARITHMETIC_PRECOMPUTE!=1) ||
+        (ARITHMETIC_PRECOMPUTE!=0 && (METADATA_WIDTH<32 || OP_WIDTH<`RV32IM_OP_WIDTH)))
+        $fatal(1,"RS arithmetic precompute requires full opcode and immediate metadata");
+    wire [31:0] row_arithmetic [0:ENTRIES-1];
+    wire [31:0] incoming_arithmetic [0:BE_WIDTH-1];
+    generate if(ARITHMETIC_PRECOMPUTE!=0) begin:g_arithmetic_precompute
+        for(genvar row=0;row<ENTRIES;row=row+1) begin:g_row
+            wire register_rhs=op_mem[row]==`RV32IM_OP_ADD || op_mem[row]==`RV32IM_OP_SUB;
+            rv32_frequency_addsub32 arithmetic (
+                .lhs_i(src1_value_effective[row]),
+                .rhs_i(register_rhs ? src2_value_effective[row] : metadata_mem[row][31:0]),
+                .subtract_i(op_mem[row]==`RV32IM_OP_SUB),.value_o(row_arithmetic[row]));
+        end
+        for(genvar lane=0;lane<BE_WIDTH;lane=lane+1) begin:g_incoming
+            wire [OP_WIDTH-1:0] op=alloc_op_i[lane*OP_WIDTH +: OP_WIDTH];
+            wire register_rhs=op==`RV32IM_OP_ADD || op==`RV32IM_OP_SUB;
+            rv32_frequency_addsub32 arithmetic (
+                .lhs_i(alloc_src1_value_i[lane*32 +: 32]),
+                .rhs_i(register_rhs ? alloc_src2_value_i[lane*32 +: 32] :
+                    alloc_metadata_i[lane*METADATA_WIDTH +: 32]),
+                .subtract_i(op==`RV32IM_OP_SUB),.value_o(incoming_arithmetic[lane]));
+        end
+    end else begin:g_original_arithmetic
+        for(genvar row=0;row<ENTRIES;row=row+1) assign row_arithmetic[row]=0;
+        for(genvar lane=0;lane<BE_WIDTH;lane=lane+1) assign incoming_arithmetic[lane]=0;
+    end endgenerate
     genvar issue_lane,issue_row,issue_word,issue_node;
     generate for(issue_lane=0;issue_lane<BE_WIDTH;issue_lane=issue_lane+1) begin:g_issue_payload
         wire [ENTRIES-1:0] selections;
@@ -719,10 +750,16 @@ end
         for(issue_row=0;issue_row<ISSUE_DATA_LEAVES;issue_row=issue_row+1) begin:g_row
             if(issue_row<ENTRIES) begin:g_present
                 wire [ISSUE_DATA_WORDS-1:0] selected_words;
-                wire [ISSUE_BASE_DATA_WIDTH-1:0] base_payload={
+                wire [ISSUE_ORIGINAL_DATA_WIDTH-1:0] original_base_payload={
                     op_mem[issue_row],pc_mem[issue_row],rob_tag_mem[issue_row],phys_rd_mem[issue_row],
                     src1_value_effective[issue_row],src2_value_effective[issue_row],
                     store_data_mem[issue_row],metadata_mem[issue_row],issue_row[SLOT_WIDTH-1:0]};
+                wire [ISSUE_BASE_DATA_WIDTH-1:0] base_payload;
+                if(ARITHMETIC_PRECOMPUTE!=0) begin:g_arithmetic_packet
+                    assign base_payload={row_arithmetic[issue_row],original_base_payload};
+                end else begin:g_original_packet
+                    assign base_payload=original_base_payload;
+                end
                 wire [ISSUE_QUALIFIED_DATA_WIDTH-1:0] qualified_payload;
                 if(ISSUE_RECOVERY_QUALIFICATION!=0) begin:g_qualification
                     assign qualified_payload={entry_recovery_qualified_i[issue_row],base_payload};
@@ -760,12 +797,18 @@ end
             for(genvar fresh_lane=0;fresh_lane<BE_WIDTH;fresh_lane=fresh_lane+1) begin:g_lane
                 assign grants[fresh_lane]=incoming_ready[fresh_lane] &&
                     32'(incoming_rank[fresh_lane])+32'(stored_ready_count)==issue_lane;
-                assign values[fresh_lane*ISSUE_BASE_DATA_WIDTH +: ISSUE_BASE_DATA_WIDTH]={
+                wire [ISSUE_ORIGINAL_DATA_WIDTH-1:0] original_fresh_payload={
                     alloc_op_i[fresh_lane*OP_WIDTH +: OP_WIDTH],alloc_pc_i[fresh_lane*32 +: 32],
                     alloc_rob_tag_i[fresh_lane*TAG_WIDTH +: TAG_WIDTH],alloc_phys_rd_i[fresh_lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
                     alloc_src1_value_i[fresh_lane*32 +: 32],alloc_src2_value_i[fresh_lane*32 +: 32],
                     alloc_store_data_i[fresh_lane*STORE_DATA_WIDTH +: STORE_DATA_WIDTH],
                     alloc_metadata_i[fresh_lane*METADATA_WIDTH +: METADATA_WIDTH],allocation_slots[fresh_lane]};
+                if(ARITHMETIC_PRECOMPUTE!=0) begin:g_arithmetic_packet
+                    assign values[fresh_lane*ISSUE_BASE_DATA_WIDTH +: ISSUE_BASE_DATA_WIDTH]=
+                        {incoming_arithmetic[fresh_lane],original_fresh_payload};
+                end else begin:g_original_packet
+                    assign values[fresh_lane*ISSUE_BASE_DATA_WIDTH +: ISSUE_BASE_DATA_WIDTH]=original_fresh_payload;
+                end
             end
             if(FRESH_DEFAULT_LANE_DATA!=0) begin:g_default_lane_data
                 // Grants are one-hot for this issue rank. Selecting lane 0
@@ -826,7 +869,24 @@ end
             issue_rob_tag_o[issue_lane*TAG_WIDTH +: TAG_WIDTH],issue_phys_rd_o[issue_lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH],
             issue_src1_value_o[issue_lane*32 +: 32],issue_src2_value_o[issue_lane*32 +: 32],
             issue_store_data_o[issue_lane*STORE_DATA_WIDTH +: STORE_DATA_WIDTH],
-            issue_metadata_o[issue_lane*METADATA_WIDTH +: METADATA_WIDTH],issue_slot_o[issue_lane*SLOT_WIDTH +: SLOT_WIDTH]}=selected_issue_payload[0 +: ISSUE_BASE_DATA_WIDTH];
+            issue_metadata_o[issue_lane*METADATA_WIDTH +: METADATA_WIDTH],issue_slot_o[issue_lane*SLOT_WIDTH +: SLOT_WIDTH]}=selected_issue_payload[0 +: ISSUE_ORIGINAL_DATA_WIDTH];
+        if(ARITHMETIC_PRECOMPUTE!=0) begin:g_selected_arithmetic
+            assign issue_arithmetic_o[issue_lane*32 +: 32]=
+                selected_issue_payload[ISSUE_ORIGINAL_DATA_WIDTH +: 32];
+`ifdef VERILATOR
+            wire [OP_WIDTH-1:0] selected_op=issue_op_o[issue_lane*OP_WIDTH +: OP_WIDTH];
+            wire [31:0] selected_lhs=issue_src1_value_o[issue_lane*32 +: 32];
+            wire [31:0] selected_rhs=(selected_op==`RV32IM_OP_ADD || selected_op==`RV32IM_OP_SUB) ?
+                issue_src2_value_o[issue_lane*32 +: 32] : issue_metadata_o[issue_lane*METADATA_WIDTH +: 32];
+            wire [31:0] original_sum=(selected_op==`RV32IM_OP_SUB) ?
+                selected_lhs-selected_rhs : selected_lhs+selected_rhs;
+            always @(posedge clk_i) if(!reset_i && issue_valid_o[issue_lane])
+                assert(issue_arithmetic_o[issue_lane*32 +: 32]==original_sum)
+                    else $fatal(1,"RS arithmetic word differs from its selected complete packet");
+`endif
+        end else begin:g_original_selected_arithmetic
+            assign issue_arithmetic_o[issue_lane*32 +: 32]=0;
+        end
     end endgenerate
 
     // Allocate a contiguous prefix and choose the oldest ready entries for
