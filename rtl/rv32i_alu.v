@@ -14,6 +14,7 @@ module rv32i_alu #(
     parameter integer FORWARD_METADATA = 0,
     parameter integer PRECOMPUTED_ARITHMETIC = 0,
     parameter integer PRECOMPUTED_COMPARISON = 0,
+    parameter integer PRED_TARGET_CLASS_COMPARE = 0,
     parameter COMPACT_PRED_TARGET = 0,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
@@ -460,9 +461,30 @@ module rv32i_alu #(
     // For JALR only, reconstruct the page-qualified metadata. The frontend
     // forces an out-of-page raw prediction to a direction mismatch, so an
     // alias of these low bits can never conceal a wrong fetch target.
-    wire predicted_target_mismatch=(COMPACT_PRED_TARGET!=0)?
+    wire original_predicted_target_mismatch=(COMPACT_PRED_TARGET!=0)?
         ((issue_op_i==`RV32IM_OP_JALR) && indirect_predicted_target!=calc_branch_target):
         (issue_pred_target_i!=calc_branch_target);
+    wire predicted_target_mismatch;
+    initial if(PRED_TARGET_CLASS_COMPARE!=0 && PRED_TARGET_CLASS_COMPARE!=1)
+        $fatal(1,"ALU target class compare must be 0 or 1");
+    generate if(PRED_TARGET_CLASS_COMPARE!=0) begin:g_class_target_compare
+        // Opcode classes are exclusive. JALR does not consume PC+immediate.
+        // Keep the actual branch-target output and its capture unchanged.
+        assign predicted_target_mismatch=(COMPACT_PRED_TARGET!=0) ?
+            (jalr && indirect_predicted_target!=(address_sum & 32'hfffffffe)) :
+            (((conditional_branch || jal) && issue_pred_target_i!=pc_relative_sum) ||
+             (jalr && issue_pred_target_i!=(address_sum & 32'hfffffffe)));
+`ifdef VERILATOR
+        wire original_redirect=calc_is_branch &&
+            ((issue_pred_taken_i!=calc_branch_taken) ||
+             (calc_branch_taken && original_predicted_target_mismatch));
+        always @(posedge clk_i) if(!reset_i)
+            assert(calc_redirect_valid==original_redirect)
+                else $fatal(1,"Operation-class target comparison changed original redirect");
+`endif
+    end else begin:g_original_target_compare
+        assign predicted_target_mismatch=original_predicted_target_mismatch;
+    end endgenerate
     assign calc_redirect_valid=calc_is_branch &&
         ((issue_pred_taken_i!=calc_branch_taken) ||
          (calc_branch_taken && predicted_target_mismatch));

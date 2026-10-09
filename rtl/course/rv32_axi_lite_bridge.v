@@ -10,6 +10,7 @@ module rv32_axi_lite_bridge #(
     parameter integer WORD_QUEUE = 64,
     parameter integer READ_PAYLOAD_SRAM = 0,
     parameter integer READ_COUNTERS_OWNED = 0,
+    parameter integer CLASS_LOCAL_ADMISSION = 0,
     parameter integer RESPONSE_FIFO_DEPTH = 0
 ) (
     input wire clock, reset,
@@ -175,8 +176,27 @@ module rv32_axi_lite_bridge #(
     assign d_req_ready = !reset && (d_req_write ? write_free_found :
                          (read_free_found && (!i_req_valid || prefer_d_request)));
     wire take_i = i_req_valid && i_req_ready;
-    wire take_d_read = d_read_request && d_req_ready;
-    wire take_d_write = d_req_valid && d_req_write && d_req_ready;
+    wire take_d_read,take_d_write;
+    initial if(CLASS_LOCAL_ADMISSION!=0 && CLASS_LOCAL_ADMISSION!=1)
+        $fatal(1,"AXI class local admission must be 0 or 1");
+    generate if(CLASS_LOCAL_ADMISSION!=0) begin:g_class_local_admission
+        // Condition on the actual request class before expanding public ready.
+        // Write acquisition cannot depend on instruction/read arbitration.
+        assign take_d_read=!reset && d_read_request && read_free_found &&
+            (!i_req_valid || prefer_d_request);
+        assign take_d_write=d_req_valid && d_req_write && d_write_capacity_ready;
+`ifdef VERILATOR
+        always @(posedge clock) begin
+            assert(take_d_read==(d_read_request && d_req_ready))
+                else $fatal(1,"AXI read class admission changed public handshake");
+            assert(take_d_write==(d_req_valid && d_req_write && d_req_ready))
+                else $fatal(1,"AXI write class admission changed public handshake");
+        end
+`endif
+    end else begin:g_original_class_admission
+        assign take_d_read=d_read_request && d_req_ready;
+        assign take_d_write=d_req_valid && d_req_write && d_req_ready;
+    end endgenerate
 
     assign arvalid = !reset && read_active && 32'(rq_count) < WORD_QUEUE;
     assign rready = !reset && rq_count != 0;

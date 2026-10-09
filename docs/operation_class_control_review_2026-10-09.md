@@ -1,0 +1,25 @@
+# Operation-class control in the same CPU
+
+## Measured reason for this combination
+
+The 21175e7b Tier3 freeze measures 35146.444778 um2 / 357.541899 MHz and fails 500MHz. Its worst path is 2.737ns: the pending ROB-slot bit reaches recovery qualification, LOAD head selection/wake and RS issue, then an execution-result register consumed by branch capture. A second 2.720ns path starts at branch_pending, crosses frontend redirect/request control and read arbitration, and reaches bus.write_lifecycle_tree bit15 (write allocation) and a write-lifecycle register. Exact final named register bits are not independently mapped. The two changes below remove operation-class reconvergence in RTL; they do not exempt any STA path or claim an unmeasured frequency.
+
+## ALU target-class comparison
+
+ALU_PRED_TARGET_CLASS_COMPARE defaults to zero on the shared top/core/backend and becomes PRED_TARGET_CLASS_COMPARE on the existing ALU. Opcode decoding makes conditional branch, JAL and JALR exclusive. The original calc_branch_target selects PC+immediate for conditional/JAL and (source1+immediate)&~1 for JALR. Hence under JALR it is exactly the latter expression, without any dependency on the former target cone.
+
+In compact mode the original prediction mismatch is consumed only for JALR, so enabled mode directly compares the page-reconstructed prediction to the JALR address. Full mode compares conditional/JAL predictions to PC+immediate and JALR predictions to the cleared address, qualified by their classes. Non-branch target mismatch is unused by the original redirect predicate and becomes zero. The actual registered branch-target output, taken result, redirect PC, metadata, arithmetic, packet capture, ready/backpressure, cancellation and complete identities retain original behavior. Default-zero mode keeps the original mismatch expression. Every raw calc_redirect_valid on a non-reset edge is asserted equal to the complete original redirect expression in enabled simulation mode, including invalid/unconsumed operations; no lookup or tag certificate is replaced.
+
+One finite ALU comparison0/1 pair in both compact0/1 modes checks nine points: equal/not-taken branches, full-target mismatch, JAL, in-page/odd-target/out-of-page JALR, non-branch AUIPC and wrapping PC arithmetic. It compares full valid result packets, ready/valid cycles, expected redirects and held-result backpressure/consumption. It uses the original prefix arithmetic without WORD_SIM. The deliberately wrong direct-branch prediction input in one point tests algebraic equality with the original ALU; it is not claimed to be a legal compact frontend prediction or an end-to-end CPU test. The frontend's existing compact-target contract and out-of-page direction handling are unchanged.
+
+## AXI class-local acceptance
+
+AXI_CLASS_LOCAL_ADMISSION defaults to zero on student_top and selects CLASS_LOCAL_ADMISSION on the same rv32_axi_lite_bridge. Original public d_req_ready is !reset && (write ? write_free_found : (read_free_found && (!i_req_valid || prefer_d_request))). Under an actual write, substituting write=1 gives exactly d_write_capacity_ready, independent of read arbitration. Under an actual read, substituting write=0 gives exactly the read-capacity/arbitration term.
+
+Enabled mode uses those two class-qualified expressions for take_d_write and take_d_read. All public ready/valid, instruction acceptance, capacity, row allocation, payload, queue/word handshakes, response FIFOs, counters/errors and request/reply preferences retain the original logic and edges. There is no speculative ownership, additional state or ignored stale packet. Every actual class acceptance is asserted equal to the original public-valid/ready formula each clock, including reset cycles. Default-zero mode retains the original formulas.
+
+A single original finite production-geometry READ8/WRITE4/WORD16/FIFO2/SRAM-payload1 pair compares class0/1 with owned read counters1 fixed. It retains 12 line reads, six writes, independent AW/W progress, response backpressure/errors, word/FIFO wrap and row reuse. It additionally requires actual writes accepted while instruction valid is present, and compares all public valid packets/cycles, read/write validity and valid-row counter/error state. This is not an all-configuration or whole-CPU proof.
+
+## Acceptance gates
+
+The 192-parameter Tier3 profile combines these flags with the previous row arithmetic/comparison, private branch capture and owned read-counter policies. It keeps the same FE4/BE2/INT2/CDB2, ROB32/PHYS56/RS8/LSQ16, original caches and AXI resources, registered dispatch and register PRF. Both policies add no pipeline/FF or narrowed tags, and both apply to the same parameterized CPU used by all issue widths. One committed freeze and original full-core structural lint precede one official PPA. Require area<=35891.672317998215 and Fmax>=500 before CPU build/perf; then original instruction counts, IPC>=1.1152626918348099 and cycles<=7572/17490/143485/153155/4739/3725 precede one array1 smoke. All accepted historical freezes remain intact. New CPU PPA/IPC and final acceptance remain unproven.

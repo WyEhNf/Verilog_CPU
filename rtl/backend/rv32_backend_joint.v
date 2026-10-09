@@ -30,6 +30,7 @@ module rv32_backend_joint #(
     parameter integer RS_FRESH_DEFAULT_LANE_DATA = 0,
     parameter integer RS_ARITHMETIC_PRECOMPUTE = 0,
     parameter integer RS_COMPARISON_PRECOMPUTE = 0,
+    parameter integer ALU_PRED_TARGET_CLASS_COMPARE = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
@@ -850,6 +851,8 @@ module rv32_backend_joint #(
         assign shared_store_addr_tag = {TAG_WIDTH{1'b0}};
         assign shared_store_addr = 32'b0;
     end endgenerate
+    initial if(ALU_PRED_TARGET_CLASS_COMPARE!=0 && ALU_PRED_TARGET_CLASS_COMPARE!=1)
+        $fatal(1,"ALU target class compare must be 0 or 1");
     initial if((RS_COMPARISON_PRECOMPUTE!=0 && RS_COMPARISON_PRECOMPUTE!=1) ||
         (RS_COMPARISON_PRECOMPUTE!=0 && RS_ISSUE_METADATA==0))
         $fatal(1,"RS comparison precompute requires inline immediate metadata");
@@ -2528,7 +2531,7 @@ module rv32_backend_joint #(
     generate
         for (alu_lane = 0; alu_lane < BE_WIDTH; alu_lane = alu_lane + 1) begin : g_alu
             wire [(`RV32IM_EPOCH_WIDTH)-1:0] unused_alu_exec_epoch_o;
-            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .COMPACT_PRED_TARGET(COMPACT_PRED_TARGET), .FORWARD_METADATA(RS_ISSUE_METADATA), .PRECOMPUTED_ARITHMETIC(RS_ARITHMETIC_PRECOMPUTE), .PRECOMPUTED_COMPARISON(RS_COMPARISON_PRECOMPUTE), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY), .RECOVERY_OLDER_ISSUE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_PREDECODE(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) alu (
+            rv32i_alu #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .SHIFT_IMPL(SHIFT_IMPL), .SHIFT_SHARED_BARREL(SHIFT_SHARED_BARREL), .COMPACT_PRED_TARGET(COMPACT_PRED_TARGET), .FORWARD_METADATA(RS_ISSUE_METADATA), .PRECOMPUTED_ARITHMETIC(RS_ARITHMETIC_PRECOMPUTE), .PRECOMPUTED_COMPARISON(RS_COMPARISON_PRECOMPUTE), .PRED_TARGET_CLASS_COMPARE(ALU_PRED_TARGET_CLASS_COMPARE), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY), .RECOVERY_OLDER_ISSUE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_PREDECODE(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) alu (
                 .exec_source_pc_o(alu_exec_source_pc[alu_lane*32 +: 32]),
                 .exec_pred_taken_o(alu_exec_pred_taken[alu_lane]),
                 .exec_pred_target_o(alu_exec_pred_target[alu_lane*32 +: 32]),
