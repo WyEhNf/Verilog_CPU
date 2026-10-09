@@ -15,6 +15,7 @@ module rv32_lsq #(
     parameter integer SAVED_REQUEST_QUERY = 0,
     parameter integer SAVED_CANDIDATE_STATE_QUERY = 0,
     parameter integer PHASED_DATA_OWNER = 0,
+    parameter integer PHASED_DIRECT_WRITE_EVENTS = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -1349,6 +1350,9 @@ module rv32_lsq #(
 `endif
     initial if(PHASED_DATA_OWNER!=0 && PHASED_DATA_OWNER!=1)
         $fatal(1,"PHASED_DATA_OWNER must be 0 or 1");
+    initial if((PHASED_DIRECT_WRITE_EVENTS!=0 && PHASED_DIRECT_WRITE_EVENTS!=1) ||
+            (PHASED_DIRECT_WRITE_EVENTS!=0 && PHASED_DATA_OWNER==0))
+        $fatal(1,"Direct phased write events require the phased data owner");
     initial if(SAVED_REQUEST_QUERY!=0 && SAVED_REQUEST_QUERY!=1)
         $fatal(1,"SAVED_REQUEST_QUERY must be 0 or 1");
     initial if(SAVED_CANDIDATE_STATE_QUERY<0 || SAVED_CANDIDATE_STATE_QUERY>1 ||
@@ -2235,9 +2239,49 @@ module rv32_lsq #(
                     valid_mem[payload_row] && store_mem[payload_row] && data_write};
                 assign phase_values={allocation_store ? data_value : 32'b0,
                                      result_value,forward_value,data_value};
-                rv32_frequency_event_select #(.WIDTH(32),.EVENTS(4)) phase_selector (
-                    .events_i(phases),.values_i(phase_values),
-                    .write_o(phased_write_enable[payload_row]),.value_o(phased_write_data[payload_row]));
+                if(PHASED_DIRECT_WRITE_EVENTS!=0) begin:g_direct_events
+                    // Compose the original last-event priorities once, before
+                    // the wide payload mux. Store updates < partial forward
+                    // capture < forwarded result < response result < allocation.
+                    localparam integer EVENTS=3*BE_WIDTH+3;
+                    wire [EVENTS-1:0] events;
+                    wire [EVENTS*32-1:0] values;
+                    for(genvar event_id=0;event_id<2*BE_WIDTH;event_id=event_id+1) begin:g_store_update
+                        assign events[event_id]=valid_mem[payload_row] && store_mem[payload_row] && data_events[event_id];
+                        assign values[event_id*32 +: 32]=data_values[event_id*32 +: 32];
+                    end
+                    assign events[2*BE_WIDTH]=valid_mem[payload_row] && load_mem[payload_row] && forward_events[0];
+                    assign values[2*BE_WIDTH*32 +: 32]=forward_values[0 +: 32];
+                    assign events[2*BE_WIDTH+1]=valid_mem[payload_row] && load_mem[payload_row] && result_events[0];
+                    assign values[(2*BE_WIDTH+1)*32 +: 32]=result_values[0 +: 32];
+                    assign events[2*BE_WIDTH+2]=valid_mem[payload_row] && load_mem[payload_row] && result_events[1];
+                    assign values[(2*BE_WIDTH+2)*32 +: 32]=result_values[32 +: 32];
+                    for(genvar alloc_event=0;alloc_event<BE_WIDTH;alloc_event=alloc_event+1) begin:g_allocate
+                        assign events[2*BE_WIDTH+3+alloc_event]=allocations[alloc_event];
+                        assign values[(2*BE_WIDTH+3+alloc_event)*32 +: 32]=alloc_is_store_i[alloc_event] ?
+                            alloc_store_data_i[alloc_event*32 +: 32] : 32'b0;
+                    end
+                    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(EVENTS)) selector (
+                        .events_i(events),.values_i(values),
+                        .write_o(phased_write_enable[payload_row]),.value_o(phased_write_data[payload_row]));
+`ifdef VERILATOR
+                    wire original_write;
+                    wire [31:0] original_data;
+                    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(4)) original_selector (
+                        .events_i(phases),.values_i(phase_values),.write_o(original_write),.value_o(original_data));
+                    always @(posedge clk_i) begin
+                        assert(phased_write_enable[payload_row]==original_write)
+                            else $fatal(1,"Direct phased events changed a payload write edge");
+                        if(original_write)
+                            assert(phased_write_data[payload_row]==original_data)
+                                else $fatal(1,"Direct phased events changed the selected complete word");
+                    end
+`endif
+                end else begin:g_original_events
+                    rv32_frequency_event_select #(.WIDTH(32),.EVENTS(4)) phase_selector (
+                        .events_i(phases),.values_i(phase_values),
+                        .write_o(phased_write_enable[payload_row]),.value_o(phased_write_data[payload_row]));
+                end
                 // Allocation zeroing belongs to phase_selector. Removing the
                 // two unused original allocation-selector cones is deliberate.
                 rv32_frequency_event_select #(.WIDTH(32),.EVENTS(2)) result_selector (
