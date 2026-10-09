@@ -1,0 +1,28 @@
+{
+  "status": "PARAMETER_CHECK_ONLY_NOT_MEASURED",
+  "accepted": false,
+  "review_source_commit": "a1459c3e17a3456203f0057a6e85cecf0ea5ad47",
+  "profile": "configs\\tier3_shared_500_candidate.json",
+  "profile_sha256": "6564cdf81fd36459c1f1f66ca32991949bd957e6cf508424d33596f875e6f357",
+  "course_top_sha256": "c9c7fb39f49793c6013f1012a6c1a33a8886289015424f0bfb7eadb27cf85c7c",
+  "parameter_count": 184,
+  "additional_parameter": {
+    "COMPLETION_SOURCE_STATE_QUERY": 1
+  },
+  "previous_preparation": "reports/Tier3_shared_500_profile_preparation_2026-10-09.json",
+  "sample_report": "reports/Tier_shared_completion_source_state_protocol_2026-10-09.json",
+  "structural_lint_run": false,
+  "ppa_run": false,
+  "build_run": false,
+  "perf_run": false,
+  "cpu_smoke_run": false,
+  "area_um2": null,
+  "fmax_mhz": null,
+  "geomean_ipc": null,
+  "notes": [
+    "Adds the same current-table source query policy to the prepared registered-dispatch Tier3 profile. Requires direct completion, already retained at value 2.",
+    "All 184 current numeric parameters are pinned. Original resources, register PRF, pipeline settings and course profile remain unchanged.",
+    "Parameter checker accepted. Individual bounded BE2/ROB8 sample and Tier1 structural lint do not establish ROB32 Tier3 equivalence or PPA/IPC.",
+    "No extra EDA/test while Tier1 source-state PPA is live. Evaluate after Tier1 acceptance with original A109 and 500MHz gates."
+  ]
+}

@@ -187,7 +187,8 @@
     "WRITE_LINES": 4,
     "WORD_QUEUE": 16,
     "AXI_READ_PAYLOAD_SRAM": 1,
-    "AXI_RESPONSE_FIFO_DEPTH": 2
+    "AXI_RESPONSE_FIFO_DEPTH": 2,
+    "COMPLETION_SOURCE_STATE_QUERY": 1
   },
   "name": "Tier3 shared registered-dispatch 500 MHz candidate",
   "balanced_control_tree": 1
