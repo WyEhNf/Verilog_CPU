@@ -51,6 +51,9 @@ module rv32_rob #(
     // actually retires on this edge; its own retirement still uses saved sent.
     parameter integer STORE_PREFIX_ADMISSION = 0,
     parameter integer RECOVERY_ROW_LIVE_QUALIFY = 0,
+    // Private caller guarantees every asserted recovery valid retains the
+    // exact live ROB row until apply/reset. Generic callers keep mode zero.
+    parameter integer RECOVERY_CALLER_OWNED = 0,
     parameter integer OCCUPANCY_DISTRIBUTE = 0,
     // 1 retires a store after admission into the committed LSQ/store buffer;
     // 0 preserves the precise legacy behavior of waiting for cache ack.
@@ -457,6 +460,8 @@ module rv32_rob #(
     // Do not conflate the two nonarchitectural temporaries in name-based proof.
 
     initial begin
+        if(RECOVERY_CALLER_OWNED!=0 && RECOVERY_CALLER_OWNED!=1)
+            $fatal(1,"ROB recovery caller ownership must be 0 or 1");
         if ((COMMIT_BANKED_READ != 0 && COMMIT_BANKED_READ != 1) ||
             (ALLOC_BANKED_WRITE != 0 && ALLOC_BANKED_WRITE != 1) ||
             (ROB_CONTROL_REGISTER_BANKS != 0 && ROB_CONTROL_REGISTER_BANKS != 1) ||
@@ -1047,7 +1052,22 @@ end
         end
         for(genvar recovery_query_lane=0;recovery_query_lane<BE_WIDTH;recovery_query_lane=recovery_query_lane+1) begin:g_recovery_lane_query
             wire [TAG_WIDTH-1:0] tag=recovery_tag_i[recovery_query_lane*TAG_WIDTH +: TAG_WIDTH];
-            if(RECOVERY_ROW_LIVE_QUALIFY!=0) begin:g_row_live
+            if(RECOVERY_CALLER_OWNED!=0) begin:g_caller_owned
+                // Validity is a private caller's ownership certificate. Keep
+                // tag-valid, slot/range and the original age/occupancy test.
+                assign recovery_lane_live[recovery_query_lane]=tag[VALID_LSB] &&
+                    32'(tag[SLOT_LSB +: SLOT_WIDTH])<ROB_ENTRIES;
+`ifdef VERILATOR
+                wire [RECOVERY_LIVE_WIDTH-1:0] original_state;
+                rv32_frequency_array_read #(.WIDTH(RECOVERY_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),.INDEX_WIDTH(SLOT_WIDTH)) original_reader (
+                    .rows_i(recovery_live_rows),.index_i(tag[SLOT_LSB +: SLOT_WIDTH]),.value_o(original_state));
+                wire original_live=tag[VALID_LSB] && original_state[GENERATION_WIDTH] &&
+                    tag[GEN_LSB +: GENERATION_WIDTH]==original_state[0 +: GENERATION_WIDTH];
+                always @(posedge clk_i) if(!reset_i && recovery_valid_i[recovery_query_lane])
+                    assert(original_live)
+                        else $fatal(1,"Caller-owned recovery lost its full ROB identity");
+`endif
+            end else if(RECOVERY_ROW_LIVE_QUALIFY!=0) begin:g_row_live
                 localparam integer QUERY_WIDTH=SLOT_WIDTH+GENERATION_WIDTH;
                 localparam integer DOMAINS=(ROB_ENTRIES+3)/4;
                 localparam integer LEAVES=1<<$clog2(ROB_ENTRIES);

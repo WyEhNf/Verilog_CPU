@@ -57,6 +57,8 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["ROB_RECOVERY_PENDING_OWNER"] not in (0,1):
+        raise ValueError("Pending recovery ownership must be 0 or 1")
     if p["DECODE_STATIC_HALT_CLASS"] not in (0,1):
         raise ValueError("Static HALT class must be 0 or 1")
     if p["LSQ_SAVED_CANDIDATE_STATE_QUERY"] not in (0,1) or (p["LSQ_SAVED_CANDIDATE_STATE_QUERY"] and not p["LSQ_SAVED_REQUEST_QUERY"]):

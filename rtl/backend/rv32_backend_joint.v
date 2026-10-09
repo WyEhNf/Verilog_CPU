@@ -71,6 +71,8 @@ module rv32_backend_joint #(
     // The branch result remains captured. Apply its full qualified recovery
     // on the next edge, using the original direct ROB recovery implementation.
     parameter integer RECOVERY_DIRECT_APPLY = 0,
+    // Only this backend's captured branch_pending may certify ROB recovery.
+    parameter integer ROB_RECOVERY_PENDING_OWNER = 0,
     // Only the fully qualified direct apply can advertise its post-edge ROB
     // capacity. Ordinary allocation credits keep their original conservative rule.
     parameter integer RECOVERY_ROB_CREDIT = 0,
@@ -842,6 +844,8 @@ module rv32_backend_joint #(
         assign shared_store_addr = 32'b0;
     end endgenerate
     initial begin
+        if(ROB_RECOVERY_PENDING_OWNER!=0 && ROB_RECOVERY_PENDING_OWNER!=1)
+            $fatal(1,"Pending recovery ownership must be 0 or 1");
         if(RENAME_REGISTERED_FREE_POOL!=0 && RENAME_REGISTERED_FREE_POOL!=1)
             $fatal(1,"RENAME_REGISTERED_FREE_POOL must be 0/1");
         if ((DIRECT_LOAD_RS_CREDIT!=0 && DIRECT_LOAD_RS_CREDIT!=1) ||
@@ -2223,7 +2227,7 @@ module rv32_backend_joint #(
         end
     end
 
-    rv32_rob #(.STORE_RETIRE_ADMISSION_BYPASS(ROB_STORE_RETIRE_ADMISSION_BYPASS), .COMPLETION_COMMIT_BYPASS(ROB_COMPLETION_COMMIT_BYPASS), .SINGLE_GENERATION_OWNER(TAG_SINGLE_GENERATION_OWNER), .RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STAGED_RECOVERY(RECOVERY_DIRECT_ACTIVE==0), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .RECLAIM_UNIQUE_DESTINATIONS(ROB_UNIQUE_RECLAIM_COUNT), .FAST_STORE_COMPLETE(FAST_STORE_COMPLETE_ACTIVE), .FAST_STORE_IDENTITY_PRESELECT(FAST_STORE_IDENTITY_PRESELECT), .FAST_STORE_BATCH(FAST_STORE_BATCH_ACTIVE), .STORE_PREFIX_ADMISSION(ROB_STORE_PREFIX_ADMISSION), .RECOVERY_ROW_LIVE_QUALIFY(ROB_RECOVERY_ROW_LIVE_QUALIFY), .OCCUPANCY_DISTRIBUTE(ROB_OCCUPANCY_DISTRIBUTE), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .LEGACY_HALT_PAYLOAD(ROB_LEGACY_HALT_PAYLOAD), .RETURN_VALUE_ENABLE(ROB_RETURN_VALUE_ENABLE), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
+    rv32_rob #(.STORE_RETIRE_ADMISSION_BYPASS(ROB_STORE_RETIRE_ADMISSION_BYPASS), .COMPLETION_COMMIT_BYPASS(ROB_COMPLETION_COMMIT_BYPASS), .SINGLE_GENERATION_OWNER(TAG_SINGLE_GENERATION_OWNER), .RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_REGS(PHYS_REGS), .PHYS_ADDR_WIDTH(PAW), .GENERATION_WIDTH(ROB_GENERATION_WIDTH), .TAG_WIDTH(TAG_WIDTH), .CHECKPOINT_WIDTH(CHECKPOINT_WIDTH), .CHECKPOINT_IMPL(CHECKPOINT_IMPL), .ASAP7_FANOUT_BUFFERS(ASAP7_FANOUT_BUFFERS), .ROB_CONTROL_REGISTER_BANKS(ROB_CONTROL_REGISTER_BANKS), .STAGED_RECOVERY(RECOVERY_DIRECT_ACTIVE==0), .COMMIT_BANKED_READ(ROB_COMMIT_BANKED_READ), .ALLOC_BANKED_WRITE(ROB_ALLOC_BANKED_WRITE), .RECLAIM_UNIQUE_DESTINATIONS(ROB_UNIQUE_RECLAIM_COUNT), .FAST_STORE_COMPLETE(FAST_STORE_COMPLETE_ACTIVE), .FAST_STORE_IDENTITY_PRESELECT(FAST_STORE_IDENTITY_PRESELECT), .FAST_STORE_BATCH(FAST_STORE_BATCH_ACTIVE), .STORE_PREFIX_ADMISSION(ROB_STORE_PREFIX_ADMISSION), .RECOVERY_ROW_LIVE_QUALIFY(ROB_RECOVERY_ROW_LIVE_QUALIFY), .RECOVERY_CALLER_OWNED(ROB_RECOVERY_PENDING_OWNER), .OCCUPANCY_DISTRIBUTE(ROB_OCCUPANCY_DISTRIBUTE), .MMIO_PREDECODE(ROB_MMIO_PREDECODE), .LIGHT_RETIRE_PAYLOAD(LIGHT_RETIRE_PAYLOAD), .LEGACY_HALT_PAYLOAD(ROB_LEGACY_HALT_PAYLOAD), .RETURN_VALUE_ENABLE(ROB_RETURN_VALUE_ENABLE), .STORE_BUFFERED_RETIRE(STORE_BUFFERED_RETIRE)) rob (
         .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rob_alloc_valid), .alloc_pc_i(rob_alloc_pc), .alloc_inst_i(rob_alloc_inst), .alloc_rd_i(rob_alloc_rd),
         .alloc_rd_we_i(rename_rd_we), .alloc_old_phys_i(rob_alloc_old_phys), .alloc_new_phys_i(rob_alloc_new_phys), .alloc_is_store_i(rob_alloc_is_store),
         .alloc_is_branch_i(rob_alloc_is_branch), .alloc_is_halt_i(rob_alloc_is_halt), .alloc_is_error_i(rob_alloc_is_error), .alloc_checkpoint_i(rob_alloc_checkpoint),
@@ -2856,8 +2860,9 @@ module rv32_backend_joint #(
         lsq_store_ack_rob_query_tag : lsq_store_ack_rob_tag;
 
     generate if(RECOVERY_DIRECT_ACTIVE!=0) begin:g_direct_recovery_descriptor
-        // All consumers share the current pre-edge ROB prefix. No allocation
-        // or commit occurs on this apply edge; full GEN authority stays in ROB.
+        // All consumers share the current pre-edge ROB prefix.
+        // Ordinary commit is held on this apply edge. Optional recovery
+        // allocation credits remain qualified against the retained prefix.
         assign recovery_descriptor_valid=branch_pending && rob_recovery_preview;
         assign recovery_descriptor_rat=recovery_rat_state;
         assign recovery_descriptor_reclaim=rob_recovery_reclaim_bitmap;
@@ -2981,5 +2986,19 @@ module rv32_backend_joint #(
                 rob_commit_tag[TAG_WIDTH-1:0]==recovery_tag_views[0 +: TAG_WIDTH])
             branch_pending<=1'b0;
     end
+
+`ifdef VERILATOR
+    generate if(ROB_RECOVERY_PENDING_OWNER!=0) begin:g_pending_owner_contract
+        integer owner_source;
+        always @(posedge clk_i) if(!reset_i && !flush_i && branch_pending) begin
+            // Redirecting ALU results bypass ordinary completion. Distinct
+            // MDU/LSQ instruction owners cannot publish this pending branch.
+            for(owner_source=0;owner_source<PRODUCERS;owner_source=owner_source+1)
+                if(producer_valid[owner_source])
+                    assert(producer_tag[owner_source*TAG_WIDTH +: TAG_WIDTH]!=branch_pending_tag)
+                        else $fatal(1,"Pending branch also entered ordinary completion");
+        end
+    end endgenerate
+`endif
 
 endmodule
