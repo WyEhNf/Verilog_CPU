@@ -14,6 +14,7 @@ module rv32i_alu #(
     parameter integer FORWARD_METADATA = 0,
     parameter integer PRECOMPUTED_ARITHMETIC = 0,
     parameter integer PRECOMPUTED_COMPARISON = 0,
+    parameter integer PRECOMPUTED_PC = 0,
     parameter integer PRED_TARGET_CLASS_COMPARE = 0,
     parameter COMPACT_PRED_TARGET = 0,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
@@ -35,6 +36,7 @@ module rv32i_alu #(
     input  wire [31:0]                  issue_imm_i,
     input  wire [31:0]                  issue_arithmetic_i,
     input  wire [2:0]                   issue_comparison_i,
+    input  wire [63:0]                  issue_pc_arithmetic_i,
     input  wire [31:0]                  issue_src1_value_i,
     input  wire [31:0]                  issue_src2_value_i,
     input  wire [31:0]                  issue_store_data_i,
@@ -142,7 +144,21 @@ module rv32i_alu #(
         assign integer_sum=fast_add_carry(issue_src1_value_i,integer_adjusted_rhs,integer_subtract_views[2]);
         assign address_sum=fast_add_carry(issue_src1_value_i,issue_imm_i,1'b0);
     end endgenerate
-    wire [31:0] pc_relative_sum=fast_add_carry(issue_pc_i,issue_imm_i,1'b0);
+    wire [31:0] pc_relative_sum,pc_plus_four;
+    initial if(PRECOMPUTED_PC!=0 && PRECOMPUTED_PC!=1)
+        $fatal(1,"ALU precomputed PC must be 0 or 1");
+    generate if(PRECOMPUTED_PC!=0) begin:g_precomputed_pc
+        assign {pc_plus_four,pc_relative_sum}=issue_pc_arithmetic_i;
+`ifdef VERILATOR
+        wire [31:0] relative_pc=issue_pc_i+issue_imm_i,link_pc=issue_pc_i+32'd4;
+        always @(posedge clk_i) if(!reset_i && issue_valid_i)
+            assert(issue_pc_arithmetic_i=={link_pc,relative_pc})
+                else $fatal(1,"ALU PC arithmetic differs from complete issue packet");
+`endif
+    end else begin:g_original_pc
+        assign pc_relative_sum=fast_add_carry(issue_pc_i,issue_imm_i,1'b0);
+        assign pc_plus_four=issue_pc_i+32'd4;
+    end endgenerate
     reg shift_busy;
     reg [4:0] shift_remaining;
     reg shift_right;
@@ -391,7 +407,6 @@ module rv32i_alu #(
         (issue_op_i==`RV32IM_OP_SLTIU && ((PRECOMPUTED_COMPARISON!=0)?cmp_unsigned_lt:(issue_src1_value_i<issue_imm_i))) ||
         (issue_op_i==`RV32IM_OP_SLT && cmp_signed_lt) ||
         (issue_op_i==`RV32IM_OP_SLTU && cmp_unsigned_lt);
-    wire [31:0] pc_plus_four=issue_pc_i+32'd4;
     assign value_classes[0]=(issue_op_i==`RV32IM_OP_LUI);
     assign value_class_data[0*32 +: 32]=issue_imm_i;
     assign value_classes[1]=(issue_op_i==`RV32IM_OP_AUIPC);
