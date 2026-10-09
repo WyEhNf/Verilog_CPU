@@ -126,6 +126,10 @@ def validate_parameters(text, profile):
     if p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] not in (0,1) or (p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] and
             (not p["ALLOC_LOAD_SELECTION_BYPASS"] or not p["STORE_ALLOC_EARLY_ADDRESS"])):
         raise ValueError("Allocation load request bypass requires allocation selection and address")
+    if p["ICACHE_CLASS_SEND_SELECT"] not in (0,1) or (p["ICACHE_CLASS_SEND_SELECT"] and p["ICACHE_MSHRS"]<=1):
+        raise ValueError("I-cache class send selection requires nonblocking cached memory")
+    if p["DCACHE_SPLIT_MEMORY_RESPONSE_QUERY"] not in (0,1) or (p["DCACHE_SPLIT_MEMORY_RESPONSE_QUERY"] and p["DCACHE_MSHRS"]<=1):
+        raise ValueError("Split response query requires nonblocking cached memory")
     if p["MDU_OWNED_STEP"] not in (0,1) or (p["MDU_OWNED_STEP"] and p["MUL_IMPL"]!=2):
         raise ValueError("Owned step counter requires unified iterative MDU")
     if p["LSQ_QUALIFIED_ADDRESS_WRITE"] not in (0,1):

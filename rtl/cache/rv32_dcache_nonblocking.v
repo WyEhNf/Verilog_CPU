@@ -9,6 +9,7 @@ module rv32_dcache_nonblocking #(
     parameter integer LOCAL_SRAM_COMMANDS = 0,
     parameter integer WAY_PARALLEL_QUERY = 0,
     parameter integer HIT_RESPONSE_COISSUE = 0,
+    parameter integer SPLIT_MEMORY_RESPONSE_QUERY = 0,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
     parameter integer MSHR_ENTRIES = 4,
     parameter integer WAITER_ENTRIES = 8,
@@ -87,6 +88,12 @@ module rv32_dcache_nonblocking #(
     input  wire [127:0]             mem_resp_data_i,
     input  wire [7:0]               mem_resp_id_i,
     input  wire                     mem_resp_error_i,
+    // Same original full metadata, before local-error/external source muxing.
+    // The one-hot source selection remains defined on invalid cycles.
+    input  wire [1:0]              mem_resp_query_select_i,
+    input  wire [15:0]             mem_resp_query_ids_i,
+    input  wire [63:0]             mem_resp_query_addresses_i,
+    input  wire [1:0]              mem_resp_query_errors_i,
     output reg                      event_request_o,
     output reg                      event_hit_o,
     output reg                      event_miss_o,
@@ -94,6 +101,8 @@ module rv32_dcache_nonblocking #(
     output reg                      event_writeback_o,
     output reg                      event_stall_o
 );
+    initial if(SPLIT_MEMORY_RESPONSE_QUERY!=0 && SPLIT_MEMORY_RESPONSE_QUERY!=1)
+        $fatal(1,"Split memory response query must be 0 or 1");
     initial if((NARROW_REQUEST_WORD!=0 && NARROW_REQUEST_WORD!=1) ||
                (NARROW_REQUEST_WORD!=0 && TAG_SRAM==0))
         $fatal(1,"Narrow request word requires synchronous SRAM query");
@@ -612,7 +621,8 @@ module rv32_dcache_nonblocking #(
     wire store_mshr_present;
     wire unused_store_mshr_present_bits = &{1'b0, store_mshr_present};
 
-    reg response_found;
+    wire response_found;
+    reg original_response_found;
     wire matching_found;
     wire matching_prefetch;
     wire prefetch_line_present;
@@ -754,7 +764,7 @@ module rv32_dcache_nonblocking #(
     assign prefetch_index_conflict=|prefetch_conflict_candidates;
     always @* begin
         response_index=32'(mem_resp_id_i);
-        response_found=(response_index>=0) && (response_index<MSHR_ENTRIES) &&
+        original_response_found=(response_index>=0) && (response_index<MSHR_ENTRIES) &&
             mshr_valid[response_index] && mshr_sent[response_index];
     end
 
@@ -773,23 +783,98 @@ module rv32_dcache_nonblocking #(
     rv32_frequency_array_read #(.WIDTH(1),.ENTRIES(MSHR_ENTRIES),.INDEX_WIDTH(8)) response_address_match_read (
         .rows_i(response_address_match_rows),.index_i(mem_resp_id_i),.value_o(selected_response_address_match));
     // The original valid/sent/range response authority remains mandatory.
-    wire response_matches=response_found && selected_response_address_match;
-    wire response_writeback_failed = response_found &&
-                                     query_response_mshr_writeback &&
-                                     (mem_resp_error_i || !response_matches);
+    wire original_response_matches=original_response_found && selected_response_address_match;
+    wire original_response_writeback_failed=original_response_found &&
+        query_response_mshr_writeback && (mem_resp_error_i || !original_response_matches);
+    wire split_response_found,split_response_matches,split_response_writeback_failed;
+    wire split_response_load_claim,split_response_store_claim;
+    wire split_response_load_slot,split_response_ack_slot;
+    generate if(SPLIT_MEMORY_RESPONSE_QUERY!=0) begin:g_split_response_query
+        wire [1:0] source_found,source_matches,source_writeback_failed;
+        wire [1:0] source_load_claim,source_store_claim,source_load_slot,source_ack_slot;
+        for(genvar response_source=0;response_source<2;response_source=response_source+1) begin:g_source
+            wire [7:0] source_id=mem_resp_query_ids_i[response_source*8 +: 8];
+            wire [31:0] source_address=mem_resp_query_addresses_i[response_source*32 +: 32];
+            wire source_error=mem_resp_query_errors_i[response_source];
+            wire [MSHR_ENTRIES-1:0] found_rows,match_rows,writeback_failed_rows;
+            wire [MSHR_ENTRIES-1:0] load_claim_rows,store_claim_rows,load_slot_rows,ack_slot_rows;
+            for(genvar response_row=0;response_row<MSHR_ENTRIES;response_row=response_row+1) begin:g_row
+                // Complete original ID, range implied by exact physical row,
+                // valid/sent and full address are checked before source select.
+                wire found=mshr_valid[response_row] && mshr_sent[response_row] &&
+                    32'(source_id)==response_row;
+                wire address_matches=(mshr_writeback[response_row] &&
+                    source_address==mshr_victim_addr[response_row]) ||
+                    (!mshr_writeback[response_row] && source_address=={mshr_addr[response_row][31:4],4'b0});
+                wire failed_writeback=mshr_writeback[response_row] && (source_error || !address_matches);
+                wire around=(STORE_MISS_WRITE_AROUND!=0) && mshr_writearound[response_row];
+                assign found_rows[response_row]=found;
+                assign match_rows[response_row]=found && address_matches;
+                assign writeback_failed_rows[response_row]=found && failed_writeback;
+                assign load_claim_rows[response_row]=found &&
+                    ((!mshr_writeback[response_row] && !mshr_store[response_row] && !mshr_prefetch[response_row]) ||
+                     (failed_writeback && !mshr_store[response_row]));
+                assign store_claim_rows[response_row]=found && around;
+                // Preserve even the original successful-WB slot reservation.
+                // This class depends on STORE/prefetch/around, not response valid.
+                assign load_slot_rows[response_row]=found && !around &&
+                    !mshr_store[response_row] && !mshr_prefetch[response_row];
+                assign ack_slot_rows[response_row]=found && around;
+            end
+            assign source_found[response_source]=|found_rows;
+            assign source_matches[response_source]=|match_rows;
+            assign source_writeback_failed[response_source]=|writeback_failed_rows;
+            assign source_load_claim[response_source]=|load_claim_rows;
+            assign source_store_claim[response_source]=|store_claim_rows;
+            assign source_load_slot[response_source]=|load_slot_rows;
+            assign source_ack_slot[response_source]=|ack_slot_rows;
+        end
+        assign split_response_found=|(source_found & mem_resp_query_select_i);
+        assign split_response_matches=|(source_matches & mem_resp_query_select_i);
+        assign split_response_writeback_failed=|(source_writeback_failed & mem_resp_query_select_i);
+        assign split_response_load_claim=|(source_load_claim & mem_resp_query_select_i);
+        assign split_response_store_claim=|(source_store_claim & mem_resp_query_select_i);
+        assign split_response_load_slot=|(source_load_slot & mem_resp_query_select_i);
+        assign split_response_ack_slot=|(source_ack_slot & mem_resp_query_select_i);
+`ifdef VERILATOR
+        wire [7:0] original_source_id=mem_resp_query_select_i[0]?
+            mem_resp_query_ids_i[0 +: 8]:mem_resp_query_ids_i[8 +: 8];
+        wire [31:0] original_source_address=mem_resp_query_select_i[0]?
+            mem_resp_query_addresses_i[0 +: 32]:mem_resp_query_addresses_i[32 +: 32];
+        wire original_source_error=mem_resp_query_select_i[0]?mem_resp_query_errors_i[0]:mem_resp_query_errors_i[1];
+        always @(posedge clk_i) if(!reset_i) begin
+            assert(mem_resp_query_select_i==2'b01 || mem_resp_query_select_i==2'b10)
+                else $fatal(1,"Response source query requires original one-hot selection");
+            assert({mem_resp_id_i,mem_resp_line_addr_i,mem_resp_error_i}==
+                   {original_source_id,original_source_address,original_source_error})
+                else $fatal(1,"Split query changed original selected full response metadata");
+            assert({response_found,response_matches,response_writeback_failed,response_emits_load,response_emits_store,response_needs_output}==
+                   {original_response_found,original_response_matches,original_response_writeback_failed,original_response_emits_load,original_response_emits_store,original_response_needs_output})
+                else $fatal(1,"Split query changed original response classification or invalid-cycle readiness");
+        end
+`endif
+    end else begin:g_original_response_query
+        assign {split_response_found,split_response_matches,split_response_writeback_failed,
+                split_response_load_claim,split_response_store_claim,split_response_load_slot,split_response_ack_slot}=7'b0;
+    end endgenerate
+    assign response_found=(SPLIT_MEMORY_RESPONSE_QUERY!=0)?split_response_found:original_response_found;
+    wire response_matches=(SPLIT_MEMORY_RESPONSE_QUERY!=0)?split_response_matches:original_response_matches;
+    wire response_writeback_failed=(SPLIT_MEMORY_RESPONSE_QUERY!=0)?
+        split_response_writeback_failed:original_response_writeback_failed;
     // The hit path, a completed waiter, and a returning MSHR all share one
     // registered output slot.  Admit a hit only when neither of the other
     // producers can claim that slot this cycle; otherwise the later
     // nonblocking assignment would silently overwrite the hit response.
-    wire response_emits_load = mem_resp_valid_i && response_found &&
-                               ((!query_response_mshr_writeback &&
-                                 !query_response_mshr_store &&
-                                 !query_response_mshr_prefetch) ||
-                                (response_writeback_failed &&
-                                 !query_response_mshr_store));
+    wire original_response_emits_load=mem_resp_valid_i && original_response_found &&
+        ((!query_response_mshr_writeback && !query_response_mshr_store && !query_response_mshr_prefetch) ||
+         (original_response_writeback_failed && !query_response_mshr_store));
+    wire response_emits_load=(SPLIT_MEMORY_RESPONSE_QUERY!=0)?
+        (mem_resp_valid_i && split_response_load_claim):original_response_emits_load;
     // Allocating stores acknowledge durable MSHR absorption once. Around
     // stores instead reserve the ACK output when their memory write returns.
-    wire response_emits_store = mem_resp_valid_i && response_found && query_response_writearound;
+    wire original_response_emits_store=mem_resp_valid_i && original_response_found && query_response_writearound;
+    wire response_emits_store=(SPLIT_MEMORY_RESPONSE_QUERY!=0)?
+        (mem_resp_valid_i && split_response_store_claim):original_response_emits_store;
     wire matching_store_covers_load = matching_found &&
         query_matching_mshr_store &&
         ((query_matching_mshr_mask & core_req_mask) ==
@@ -829,11 +914,12 @@ module rv32_dcache_nonblocking #(
                                  (response_index == 32'(matching_index)))) :
                               (free_found && !request_index_conflict)));
     assign request_fire = core_req_valid && core_req_ready;
-    wire response_needs_output = response_found &&
-                                  (query_response_writearound ? !ack_slot_free :
-                                   (query_response_mshr_store ? 1'b0 :
-                                    (query_response_mshr_prefetch ? 1'b0 :
-                                     !resp_slot_free)));
+    wire original_response_needs_output=original_response_found &&
+        (query_response_writearound ? !ack_slot_free :
+         (query_response_mshr_store ? 1'b0 : (query_response_mshr_prefetch ? 1'b0 : !resp_slot_free)));
+    wire response_needs_output=(SPLIT_MEMORY_RESPONSE_QUERY!=0)?
+        ((split_response_ack_slot && !ack_slot_free) || (split_response_load_slot && !resp_slot_free)):
+        original_response_needs_output;
     wire demand_response_fire = mem_resp_valid_i && mem_resp_ready_o &&
                                 response_found &&
                                 !query_response_mshr_writeback &&

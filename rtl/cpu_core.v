@@ -43,6 +43,7 @@ module cpu_core #(
     parameter integer FRONTEND_DIRECT_WORD_BOUNDS = 0,
     parameter integer DCACHE_LOCAL_SRAM_COMMANDS = 0,
     parameter integer DCACHE_WAY_PARALLEL_QUERY = 0,
+    parameter integer DCACHE_SPLIT_MEMORY_RESPONSE_QUERY = 0,
     parameter integer DCACHE_HIT_RESPONSE_COISSUE = 0,
     parameter integer FE_WIDTH = `RV32IM_FE_WIDTH_DEFAULT,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
@@ -146,6 +147,7 @@ module cpu_core #(
     parameter integer ICACHE_FAST_HIT = 1,
     parameter integer ICACHE_COMBINATIONAL_HIT = 0,
     parameter integer ICACHE_PREFETCH = 1,
+    parameter integer ICACHE_CLASS_SEND_SELECT = 0,
     parameter integer ICACHE_LOCAL_RESPONSE_READY = 0,
     parameter integer ICACHE_TAG_MATCH_PARALLEL = 0,
     parameter integer ICACHE_TAG_REGION_BITS = 0,
@@ -246,6 +248,12 @@ module cpu_core #(
         ((ROB_ENTRIES <= 1) ? 1 : $clog2(ROB_ENTRIES)) +
         GENERATION_WIDTH;
 
+    initial if((ICACHE_CLASS_SEND_SELECT!=0 && ICACHE_CLASS_SEND_SELECT!=1) ||
+        (ICACHE_CLASS_SEND_SELECT!=0 && (ENABLE_CACHES==0 || ICACHE_MSHRS<=1)))
+        $fatal(1,"I-cache class send selection requires nonblocking cached memory");
+    initial if((DCACHE_SPLIT_MEMORY_RESPONSE_QUERY!=0 && DCACHE_SPLIT_MEMORY_RESPONSE_QUERY!=1) ||
+        (DCACHE_SPLIT_MEMORY_RESPONSE_QUERY!=0 && (ENABLE_CACHES==0 || DCACHE_MSHRS<=1)))
+        $fatal(1,"Split memory response query requires nonblocking cached memory");
     initial if((MDU_OWNED_STEP!=0 && MDU_OWNED_STEP!=1) ||
         (MDU_OWNED_STEP!=0 && MUL_IMPL!=2))
         $fatal(1,"Owned step counter requires unified iterative MDU");
@@ -899,6 +907,9 @@ module cpu_core #(
     wire [127:0] dc_mem_req_wdata, dc_mem_resp_data;
     wire [15:0] dc_mem_req_wmask;
     wire [7:0] dc_mem_req_id, dc_mem_resp_id;
+    wire [1:0] dc_mem_resp_query_select,dc_mem_resp_query_errors;
+    wire [15:0] dc_mem_resp_query_ids;
+    wire [63:0] dc_mem_resp_query_addresses;
     wire normal_mem_d_req_valid, normal_mem_d_req_ready, normal_mem_d_req_write;
     wire [31:0] normal_mem_d_req_line_addr;
     wire [127:0] normal_mem_d_req_wdata;
@@ -958,7 +969,7 @@ module cpu_core #(
     if (ENABLE_CACHES != 0) begin : g_cached_memory
     if (ICACHE_MSHRS > 1) begin : g_nonblocking_icache
     rv32_icache_nonblocking #(.MSHR_STATIC_WRITES(ICACHE_MSHR_STATIC_WRITES), .MSHR_STATE_BANKS(ICACHE_MSHR_STATE_BANKS),
-        .MSHR_ENTRIES(ICACHE_MSHRS), .TAG_REGION_BITS(ICACHE_TAG_REGION_BITS), .TAG_MATCH_PARALLEL(ICACHE_TAG_MATCH_PARALLEL), .LOCAL_RESPONSE_READY(ICACHE_LOCAL_RESPONSE_READY), .REQUEST_PIPELINE(1),
+        .CLASS_SEND_SELECT(ICACHE_CLASS_SEND_SELECT), .MSHR_ENTRIES(ICACHE_MSHRS), .TAG_REGION_BITS(ICACHE_TAG_REGION_BITS), .TAG_MATCH_PARALLEL(ICACHE_TAG_MATCH_PARALLEL), .LOCAL_RESPONSE_READY(ICACHE_LOCAL_RESPONSE_READY), .REQUEST_PIPELINE(1),
         .OWNER_PAYLOAD_SELECT(FETCH_OWNER_PAYLOAD_SELECT),
         .LOOP_BUFFER_LINES(ICACHE_LOOP_LINES), .LOOP_BUFFER_SRAM(ICACHE_LOOP_SRAM),
         .CACHE_LINES(ICACHE_LINES), .CACHE_WAYS(ICACHE_WAYS),
@@ -1005,7 +1016,7 @@ module cpu_core #(
     end
 
     if (DCACHE_MSHRS > 1) begin : g_nonblocking_dcache
-    rv32_dcache_nonblocking #(.NARROW_REQUEST_WORD(DCACHE_NARROW_REQUEST_WORD), .MSHR_DATA_NO_CLEAR(DCACHE_MSHR_DATA_NO_CLEAR), .WORD_RESPONSE((DCACHE_WORD_RESPONSE!=0) && (SERIAL_BACKEND==0)), .HIT_BYPASS(1), .LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), .WAY_PARALLEL_QUERY(DCACHE_WAY_PARALLEL_QUERY), .HIT_RESPONSE_COISSUE(DCACHE_HIT_RESPONSE_COISSUE),
+    rv32_dcache_nonblocking #(.NARROW_REQUEST_WORD(DCACHE_NARROW_REQUEST_WORD), .MSHR_DATA_NO_CLEAR(DCACHE_MSHR_DATA_NO_CLEAR), .WORD_RESPONSE((DCACHE_WORD_RESPONSE!=0) && (SERIAL_BACKEND==0)), .HIT_BYPASS(1), .LOCAL_SRAM_COMMANDS(DCACHE_LOCAL_SRAM_COMMANDS), .WAY_PARALLEL_QUERY(DCACHE_WAY_PARALLEL_QUERY), .SPLIT_MEMORY_RESPONSE_QUERY(DCACHE_SPLIT_MEMORY_RESPONSE_QUERY), .HIT_RESPONSE_COISSUE(DCACHE_HIT_RESPONSE_COISSUE),
         .TAG_WIDTH(ROB_TAG_WIDTH), .MSHR_ENTRIES(DCACHE_MSHRS), .WAITER_ENTRIES(DCACHE_WAITERS),
         .CACHE_LINES(DCACHE_LINES), .CACHE_WAYS(DCACHE_WAYS),
         .INDEX_HASH(DCACHE_INDEX_HASH), .STORE_MERGE_DELAY(DCACHE_STORE_MERGE_DELAY),
@@ -1034,7 +1045,9 @@ module cpu_core #(
         .mem_req_id_o(dc_mem_req_id), .mem_resp_valid_i(dc_mem_resp_valid),
         .mem_resp_ready_o(dc_mem_resp_ready), .mem_resp_line_addr_i(dc_mem_resp_line_addr),
         .mem_resp_data_i(dc_mem_resp_data), .mem_resp_id_i(dc_mem_resp_id),
-        .mem_resp_error_i(dc_mem_resp_error), .event_request_o(dc_event_request),
+        .mem_resp_error_i(dc_mem_resp_error),
+        .mem_resp_query_select_i(dc_mem_resp_query_select),.mem_resp_query_ids_i(dc_mem_resp_query_ids),
+        .mem_resp_query_addresses_i(dc_mem_resp_query_addresses),.mem_resp_query_errors_i(dc_mem_resp_query_errors), .event_request_o(dc_event_request),
         .event_hit_o(dc_event_hit), .event_miss_o(dc_event_miss), .event_refill_o(dc_event_refill),
         .event_writeback_o(dc_event_writeback), .event_stall_o(dc_event_stall)
     );
@@ -1083,6 +1096,8 @@ module cpu_core #(
         .cache_d_resp_valid_o(dc_mem_resp_valid), .cache_d_resp_ready_i(dc_mem_resp_ready),
         .cache_d_resp_line_addr_o(dc_mem_resp_line_addr), .cache_d_resp_data_o(dc_mem_resp_data),
         .cache_d_resp_id_o(dc_mem_resp_id), .cache_d_resp_error_o(dc_mem_resp_error),
+        .cache_d_resp_query_select_o(dc_mem_resp_query_select),.cache_d_resp_query_ids_o(dc_mem_resp_query_ids),
+        .cache_d_resp_query_addresses_o(dc_mem_resp_query_addresses),.cache_d_resp_query_errors_o(dc_mem_resp_query_errors),
         .mem_i_req_valid_o(mem_i_req_valid), .mem_i_req_ready_i(mem_i_req_ready),
         .mem_i_req_line_addr_o(mem_i_req_line_addr), .mem_i_req_id_o(mem_i_req_id),
         .mem_i_resp_valid_i(mem_i_resp_valid), .mem_i_resp_ready_o(mem_i_resp_ready),

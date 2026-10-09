@@ -8,6 +8,7 @@ module rv32_icache_nonblocking #(
     parameter integer EPOCH_WIDTH = `RV32IM_EPOCH_WIDTH,
     parameter integer MSHR_ENTRIES = 4,
     parameter integer MSHR_STATE_BANKS = 0,
+    parameter integer CLASS_SEND_SELECT = 0,
     parameter integer MSHR_STATIC_WRITES = 0,
     parameter integer TAG_MATCH_PARALLEL = 0,
     parameter integer TAG_REGION_BITS = 0,
@@ -220,7 +221,7 @@ module rv32_icache_nonblocking #(
     integer k;
     integer request_match_index;
     integer free_index;
-    integer send_index;
+    integer original_send_index;
     integer response_index;
     integer prefetch_match_index;
     wire unused_prefetch_match_index_bits = &{1'b0, prefetch_match_index};
@@ -229,7 +230,7 @@ module rv32_icache_nonblocking #(
     integer control_way;
     reg request_match_found;
     reg free_found;
-    reg send_found;
+    reg original_send_found;
     reg response_target_found;
     reg prefetch_match_found;
     wire control_target_valid;
@@ -241,8 +242,8 @@ module rv32_icache_nonblocking #(
         request_match_index = 0;
         free_found = 1'b0;
         free_index = 0;
-        send_found = 1'b0;
-        send_index = 0;
+        original_send_found = 1'b0;
+        original_send_index = 0;
         prefetch_match_found = 1'b0;
         prefetch_match_index = 0;
         for (k = 0; k < MSHR_ENTRIES; k = k + 1) begin
@@ -268,16 +269,16 @@ module rv32_icache_nonblocking #(
                 ((mshr_txn_epoch[k] == current_epoch_i) ||
                  mshr_control_prefetch[k]) &&
                 !mshr_sent[k] &&
-                (!send_found ||
-                 (mshr_prefetch[send_index] && !mshr_prefetch[k]) ||
-                 (mshr_prefetch[send_index] && mshr_prefetch[k] &&
-                  !mshr_control_prefetch[send_index] &&
+                (!original_send_found ||
+                 (mshr_prefetch[original_send_index] && !mshr_prefetch[k]) ||
+                 (mshr_prefetch[original_send_index] && mshr_prefetch[k] &&
+                  !mshr_control_prefetch[original_send_index] &&
                   mshr_control_prefetch[k]))) begin
                 // Priority is demand, then a decoded direct-control target,
                 // then ordinary sequential traffic.  The target line used
                 // to sit behind a stale fall-through prefetch at startup.
-                send_found = 1'b1;
-                send_index = k;
+                original_send_found = 1'b1;
+                original_send_index = k;
             end
             if (!prefetch_match_found && mshr_valid[k] &&
                 (mshr_txn_epoch[k] == current_epoch_i) &&
@@ -556,10 +557,64 @@ module rv32_icache_nonblocking #(
     assign primary_if_resp_epoch = resp_epoch_reg;
     assign primary_if_resp_error = resp_error_reg;
 
+    // Preserve demand > decoded control target > sequential prefetch, with
+    // the lowest row winning inside a class. Full epoch eligibility is shared
+    // by all three classes; only the old serial winner feedback is replaced.
+    wire send_found;
+    wire signed [31:0] send_index;
+    wire [31:0] original_send_address=original_send_found ?
+        mshr_line[original_send_index] : 32'd0;
+    wire [7:0] original_send_id=8'(original_send_found ?
+        ((original_send_index << EPOCH_WIDTH) |
+         32'(mshr_txn_epoch[original_send_index])) : 32'd0);
+    generate if(CLASS_SEND_SELECT!=0) begin:g_class_send
+        localparam integer INDEX_WIDTH=$clog2(MSHR_ENTRIES);
+        localparam integer PACKET_WIDTH=40+INDEX_WIDTH;
+        wire [MSHR_ENTRIES-1:0] eligible,demand,control,sequential,preferred,grants;
+        wire has_demand=|demand;
+        wire has_control=|control;
+        wire [MSHR_ENTRIES*PACKET_WIDTH-1:0] packets;
+        wire [PACKET_WIDTH-1:0] selected;
+        wire packet_valid;
+        for(genvar row=0;row<MSHR_ENTRIES;row=row+1) begin:g_row
+            assign eligible[row]=mshr_valid[row] && !mshr_sent[row] &&
+                ((mshr_txn_epoch[row]==current_epoch_i) || mshr_control_prefetch[row]);
+            assign demand[row]=eligible[row] && !mshr_prefetch[row];
+            assign control[row]=eligible[row] && mshr_prefetch[row] && mshr_control_prefetch[row];
+            assign sequential[row]=eligible[row] && mshr_prefetch[row] && !mshr_control_prefetch[row];
+            assign preferred[row]=demand[row] || (control[row] && !has_demand) ||
+                (sequential[row] && !has_demand && !has_control);
+            if(row==0) begin:g_first
+                assign grants[row]=preferred[row];
+            end else begin:g_following
+                assign grants[row]=preferred[row] && !(|preferred[row-1:0]);
+            end
+            // Keep the original full line and eight-bit slot/epoch ID together.
+            assign packets[row*PACKET_WIDTH +: PACKET_WIDTH]={INDEX_WIDTH'(row),
+                mshr_line[row],8'((row << EPOCH_WIDTH) | 32'(mshr_txn_epoch[row]))};
+        end
+        rv32_frequency_event_select #(.WIDTH(PACKET_WIDTH),.EVENTS(MSHR_ENTRIES),.PRIORITY(0)) packet_selector (
+            .events_i(grants),.values_i(packets),.write_o(packet_valid),.value_o(selected));
+        // Valid does not wait for the late class and payload selection.
+        assign send_found=|eligible;
+        assign send_index=32'(selected[40 +: INDEX_WIDTH]);
+        assign mem_req_line_addr_o=selected[8 +: 32];
+        assign mem_req_id_o=selected[7:0];
+        // synthesis translate_off
+        always @(posedge clk_i) if(!reset_i) begin
+            if(send_found!==original_send_found || packet_valid!==original_send_found ||
+               send_index!==original_send_index ||
+               mem_req_line_addr_o!==original_send_address || mem_req_id_o!==original_send_id)
+                $fatal(1,"I-cache parallel class send differs from original full packet");
+        end
+        // synthesis translate_on
+    end else begin:g_original_send
+        assign send_found=original_send_found;
+        assign send_index=original_send_index;
+        assign mem_req_line_addr_o=original_send_address;
+        assign mem_req_id_o=original_send_id;
+    end endgenerate
     assign mem_req_valid_o = send_found;
-    assign mem_req_line_addr_o = send_found ? mshr_line[send_index] : 32'd0;
-    assign mem_req_id_o = 8'(send_found ?
-        ((send_index << EPOCH_WIDTH) | 32'(mshr_txn_epoch[send_index])) : 32'(8'd0));
     // Responses from a cancelled epoch have no live MSHR.  Consume and drop
     // them so a stale transaction cannot block the memory response channel.
     // request_fire implies response_slot_free through lookup_req_ready.
@@ -1098,6 +1153,8 @@ module rv32_icache_nonblocking #(
     end endgenerate
 
     initial begin
+        if(CLASS_SEND_SELECT!=0 && CLASS_SEND_SELECT!=1)
+            $fatal(1,"I-cache class send selection must be 0 or 1");
         if(TAG_REGION_BITS<0 || TAG_REGION_BITS>=CACHE_TAG_WIDTH)
             $fatal(1,"Instruction cache region bits must be0..CACHE_TAG_WIDTH-1");
         if ((MSHR_STATE_BANKS != 0) && (MSHR_STATIC_WRITES == 0))

@@ -33,6 +33,12 @@ module rv32_memory_bridge #(
     output wire [127:0] cache_d_resp_data_o,
     output wire [7:0]   cache_d_resp_id_o,
     output wire         cache_d_resp_error_o,
+    // Selection is one-hot even on invalid cycles; this is not response valid.
+    // Low source: saved local error; high source: original external response.
+    output wire [1:0]   cache_d_resp_query_select_o,
+    output wire [15:0]  cache_d_resp_query_ids_o,
+    output wire [63:0]  cache_d_resp_query_addresses_o,
+    output wire [1:0]   cache_d_resp_query_errors_o,
 
     output wire         mem_i_req_valid_o,
     input  wire         mem_i_req_ready_i,
@@ -134,6 +140,10 @@ module rv32_memory_bridge #(
     assign cache_i_resp_id_o=i_error_views[10]?i_id:mem_i_resp_id_i;
     assign cache_i_resp_error_o=i_error_views[11] || mem_i_resp_error_i;
     assign mem_i_resp_ready_o=!i_error_views[11] && cache_i_resp_ready_i;
+    assign cache_d_resp_query_select_o={!d_local_error,d_local_error};
+    assign cache_d_resp_query_ids_o={mem_d_resp_id_i,d_id};
+    assign cache_d_resp_query_addresses_o={mem_d_resp_line_addr_i,d_line_addr};
+    assign cache_d_resp_query_errors_o={mem_d_resp_error_i,1'b1};
     assign cache_d_resp_valid_o=d_error_views[11] || mem_d_resp_valid_i;
     assign cache_d_resp_id_o=d_error_views[10]?d_id:mem_d_resp_id_i;
     assign cache_d_resp_error_o=d_error_views[11] || mem_d_resp_error_i;
