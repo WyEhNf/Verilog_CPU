@@ -1,0 +1,41 @@
+{
+  "status": "PARAMETER_CHECK_ONLY_NOT_MEASURED",
+  "accepted": false,
+  "review_source_commit": "100664ac3c907a7ace1ef4557bb00d58af6a23d0",
+  "profile": "configs\\tier3_shared_500_candidate.json",
+  "profile_sha256": "f5c4e7140906bc273d1ae63f2bc4b5a2d0c6feb1f5e6fbbb21ac2aa536829b73",
+  "course_top_sha256": "e8f86f9755561c02e4de42c753aa42ed766b5a948e57c730c18bb8c30b9b58ba",
+  "parameter_count": 183,
+  "changed_parameters": {
+    "MDU_DIVZERO_REMAINDER_REUSE": 1,
+    "MDU_PREFIX_SIGN_CORRECTION": 1,
+    "FETCH_OWNER_PAYLOAD_SELECT": 1,
+    "TAG_SINGLE_GENERATION_OWNER": 1,
+    "LSQ_SAVED_REQUEST_QUERY": 1,
+    "LSQ_SAVED_CANDIDATE_STATE_QUERY": 1,
+    "LSQ_PHASED_DATA_OWNER": 1,
+    "LSQ_PHASED_DIRECT_WRITE_EVENTS": 1,
+    "MMIO_WRITE_CAPACITY_READY": 1,
+    "MMIO_SAVED_ROUTE_CLASS": 1,
+    "MMIO_STORE_ADMISSION_ROUTE": 1,
+    "ROB_RECOVERY_PENDING_OWNER": 1,
+    "DCACHE_NARROW_REQUEST_WORD": 1,
+    "DCACHE_MSHR_DATA_NO_CLEAR": 1
+  },
+  "balanced_control_tree": 1,
+  "structural_lint_run": false,
+  "ppa_run": false,
+  "build_run": false,
+  "perf_run": false,
+  "cpu_smoke_run": false,
+  "area_um2": null,
+  "fmax_mhz": null,
+  "geomean_ipc": null,
+  "notes": [
+    "Next-stage integration preparation only; original Tier3 canonical profile unchanged.",
+    "Preserves registered dispatch, register PRF and original resources; does not inherit Tier1 direct/empty-RS/PRF SRAM-only settings.",
+    "Parameter checker accepted the combination; individual protocol samples are not a whole Tier3 equivalence/metric proof.",
+    "No new EDA or CPU test while one frozen Tier1 PPA remains live; activate evaluation only after Tier1 acceptance work.",
+    "Require goal 2 500MHz, course envelope and original A109 per-case/aggregate nonregression before accepting. Remaining exploration goals stay active."
+  ]
+}
