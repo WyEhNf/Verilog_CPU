@@ -9,6 +9,8 @@ module rv32_icache_nonblocking #(
     parameter integer MSHR_ENTRIES = 4,
     parameter integer MSHR_STATE_BANKS = 0,
     parameter integer CLASS_SEND_SELECT = 0,
+    parameter integer CONTROL_TARGET_PREFIX = 0,
+    parameter integer QUERY_DOMAINS = 4,
     parameter integer MSHR_STATIC_WRITES = 0,
     parameter integer TAG_MATCH_PARALLEL = 0,
     parameter integer TAG_REGION_BITS = 0,
@@ -342,12 +344,31 @@ module rv32_icache_nonblocking #(
         // the word displacement off the shared full-width PC carry path.
         wire [21:0] displaced_immediate=
             {inst[31],inst[31],inst[19:12],inst[20],inst[30:21],1'b0}+22'(control_lane*4);
-        wire [31:0] candidate=base+{{10{displaced_immediate[21]}},displaced_immediate};
+        wire [31:0] displaced_word={{10{displaced_immediate[21]}},displaced_immediate};
+        wire [31:0] candidate;
+        wire candidate_forward;
+        if(CONTROL_TARGET_PREFIX!=0) begin:g_prefix_target
+            wire [2:0] comparison;
+            rv32_frequency_addsub32 target_add (
+                .lhs_i(base),.rhs_i(displaced_word),.subtract_i(1'b0),.value_o(candidate));
+            rv32_frequency_compare32 forward_compare (
+                .lhs_i(pc),.rhs_i(candidate),.value_o(comparison));
+            assign candidate_forward=comparison[1];
+            // synthesis translate_off
+            always @(posedge clk_i) if(!reset_i) begin
+                if(candidate!==(base+displaced_word) || candidate_forward!==(candidate>pc))
+                    $fatal(1,"I-cache prefix target differs from original full arithmetic/comparison");
+            end
+            // synthesis translate_on
+        end else begin:g_original_target
+            assign candidate=base+displaced_word;
+            assign candidate_forward=candidate>pc;
+        end
         wire [31:0] pc=base+32'(control_lane*4);
         assign control_candidates[control_lane*32 +: 32]=candidate;
         assign control_outside[control_lane]=(inst[6:0]==7'b1101111) && candidate[31:4]!=base[31:4];
         // Preserve the original UNSIGNED comparison, including address wrap.
-        assign control_forward[control_lane]=control_outside[control_lane] && candidate>pc;
+        assign control_forward[control_lane]=control_outside[control_lane] && candidate_forward;
         assign control_preferred[control_lane]=control_has_forward?
             control_forward[control_lane]:control_outside[control_lane];
         if(control_lane==0) begin:g_first
@@ -404,21 +425,21 @@ module rv32_icache_nonblocking #(
     // Each row owns a fixed stored tag. Query indices qualify a one-bit
     // match instead of steering every stored tag bit through a large mux.
     // This changes only combinational layout, with no additional state.
-    wire [4*32-1:0] demand_pc_views,prefetch_pc_views,control_pc_views;
-    rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(4)) demand_query_tree (
+    wire [QUERY_DOMAINS*32-1:0] demand_pc_views,prefetch_pc_views,control_pc_views;
+    rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(QUERY_DOMAINS)) demand_query_tree (
         .signal_i(lookup_req_pc),.views_o(demand_pc_views));
-    rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(4)) prefetch_query_tree (
+    rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(QUERY_DOMAINS)) prefetch_query_tree (
         .signal_i(prefetch_next_line),.views_o(prefetch_pc_views));
-    rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(4)) control_query_tree (
+    rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(QUERY_DOMAINS)) control_query_tree (
         .signal_i(control_target),.views_o(control_pc_views));
     generate if(TAG_REGION_BITS!=0 && TAG_MATCH_PARALLEL!=0) begin:g_region_queries
-        localparam integer DOMAIN_SETS=CACHE_SETS/4;
+        localparam integer DOMAIN_SETS=CACHE_SETS/QUERY_DOMAINS;
         for(genvar query_way=0;query_way<CACHE_WAYS;query_way=query_way+1) begin:g_way
-            wire [4*REGION_STORAGE_WIDTH-1:0] prefixes;
-            rv32_frequency_control_tree #(.WIDTH(REGION_STORAGE_WIDTH),.LEAVES(4)) prefix_tree (
+            wire [QUERY_DOMAINS*REGION_STORAGE_WIDTH-1:0] prefixes;
+            rv32_frequency_control_tree #(.WIDTH(REGION_STORAGE_WIDTH),.LEAVES(QUERY_DOMAINS)) prefix_tree (
                 .signal_i(tag_regions[query_way*REGION_STORAGE_WIDTH +: REGION_STORAGE_WIDTH]),
                 .views_o(prefixes));
-            for(genvar query_domain=0;query_domain<4;query_domain=query_domain+1) begin:g_domain
+            for(genvar query_domain=0;query_domain<QUERY_DOMAINS;query_domain=query_domain+1) begin:g_domain
                 wire [REGION_STORAGE_WIDTH-1:0] prefix=prefixes[query_domain*REGION_STORAGE_WIDTH +: REGION_STORAGE_WIDTH];
                 wire [31:0] demand=demand_pc_views[query_domain*32 +: 32];
                 wire unused_demand_bits = &{1'b0, demand};
@@ -468,7 +489,7 @@ module rv32_icache_nonblocking #(
 `endif
         for (match_row=0; match_row<CACHE_LINES; match_row=match_row+1) begin:g_match_row
         if (TAG_MATCH_PARALLEL != 0) begin:g_parallel
-            localparam integer DOMAIN=(match_row*4)/CACHE_LINES;
+            localparam integer DOMAIN=(match_row*QUERY_DOMAINS)/CACHE_LINES;
             wire [31:0] demand_pc=demand_pc_views[DOMAIN*32 +: 32];
             wire [31:0] prefetch_pc=prefetch_pc_views[DOMAIN*32 +: 32];
             wire [31:0] control_pc=control_pc_views[DOMAIN*32 +: 32];
@@ -1153,6 +1174,11 @@ module rv32_icache_nonblocking #(
     end endgenerate
 
     initial begin
+        if(CONTROL_TARGET_PREFIX!=0 && CONTROL_TARGET_PREFIX!=1)
+            $fatal(1,"I-cache prefix target policy must be 0 or 1");
+        if(QUERY_DOMAINS<1 || QUERY_DOMAINS>CACHE_SETS ||
+           (QUERY_DOMAINS & (QUERY_DOMAINS-1))!=0 || CACHE_SETS%QUERY_DOMAINS!=0)
+            $fatal(1,"I-cache query domains must divide the power-of-two cache sets");
         if(CLASS_SEND_SELECT!=0 && CLASS_SEND_SELECT!=1)
             $fatal(1,"I-cache class send selection must be 0 or 1");
         if(TAG_REGION_BITS<0 || TAG_REGION_BITS>=CACHE_TAG_WIDTH)

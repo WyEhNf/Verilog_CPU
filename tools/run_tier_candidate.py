@@ -126,6 +126,18 @@ def validate_parameters(text, profile):
     if p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] not in (0,1) or (p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] and
             (not p["ALLOC_LOAD_SELECTION_BYPASS"] or not p["STORE_ALLOC_EARLY_ADDRESS"])):
         raise ValueError("Allocation load request bypass requires allocation selection and address")
+    if p["RS_OCCUPANCY_DELTA_SELECT"] not in (0,1):
+        raise ValueError("RS count delta policy must be 0 or 1")
+    if p["MDU_QUALIFIED_ISSUE_CLASS"] not in (0,1) or (p["MDU_QUALIFIED_ISSUE_CLASS"] and p["MUL_IMPL"]!=2):
+        raise ValueError("Qualified MDU class requires unified private packets")
+    if p["ICACHE_CONTROL_TARGET_PREFIX"] not in (0,1):
+        raise ValueError("I-cache target prefix policy must be 0 or 1")
+    domains=p["ICACHE_QUERY_DOMAINS"]
+    if p["ICACHE_WAYS"] not in (1,2):
+        raise ValueError("I-cache ways must be 1 or 2")
+    sets=p["ICACHE_LINES"]//p["ICACHE_WAYS"]
+    if domains<1 or (domains & (domains-1)) or (p["ICACHE_MSHRS"]>1 and (domains>sets or sets%domains)):
+        raise ValueError("I-cache query domains must divide cache sets")
     if p["ICACHE_CLASS_SEND_SELECT"] not in (0,1) or (p["ICACHE_CLASS_SEND_SELECT"] and p["ICACHE_MSHRS"]<=1):
         raise ValueError("I-cache class send selection requires nonblocking cached memory")
     if p["DCACHE_SPLIT_MEMORY_RESPONSE_QUERY"] not in (0,1) or (p["DCACHE_SPLIT_MEMORY_RESPONSE_QUERY"] and p["DCACHE_MSHRS"]<=1):

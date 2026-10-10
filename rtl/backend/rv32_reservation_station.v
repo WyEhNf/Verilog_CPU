@@ -13,6 +13,7 @@ module rv32_reservation_station #(
     parameter integer ARITHMETIC_PRECOMPUTE = 0,
     parameter integer COMPARISON_PRECOMPUTE = 0,
     parameter integer PC_PRECOMPUTE = 0,
+    parameter integer OCCUPANCY_DELTA_SELECT = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ENTRIES = 8,
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
@@ -1079,6 +1080,53 @@ end
                 issue_fire_count = issue_fire_count + 1;
     end
 
+    wire [COUNT_WIDTH-1:0] normal_occupancy_next;
+    initial if(OCCUPANCY_DELTA_SELECT!=0 && OCCUPANCY_DELTA_SELECT!=1)
+        $fatal(1,"RS occupancy delta selection must be 0 or 1");
+    generate if(OCCUPANCY_DELTA_SELECT!=0) begin:g_occupancy_delta
+        localparam integer LEAVES=1<<$clog2(BE_WIDTH);
+        wire [BE_WIDTH:0] count_matches [1:2*LEAVES-1];
+        wire [BE_WIDTH-1:0] fires=issue_valid_o & issue_ready_i;
+        for(genvar lane_id=0;lane_id<LEAVES;lane_id=lane_id+1) begin:g_leaf
+            for(genvar count_id=0;count_id<=BE_WIDTH;count_id=count_id+1) begin:g_count
+                if(count_id==0) begin:g_zero
+                    if(lane_id<BE_WIDTH) assign count_matches[LEAVES+lane_id][count_id]=!fires[lane_id];
+                    else assign count_matches[LEAVES+lane_id][count_id]=1'b1;
+                end else if(count_id==1 && lane_id<BE_WIDTH) begin:g_one
+                    assign count_matches[LEAVES+lane_id][count_id]=fires[lane_id];
+                end else begin:g_other
+                    assign count_matches[LEAVES+lane_id][count_id]=1'b0;
+                end
+            end
+        end
+        for(genvar node=1;node<LEAVES;node=node+1) begin:g_sum
+            for(genvar count_id=0;count_id<=BE_WIDTH;count_id=count_id+1) begin:g_count
+                wire [count_id:0] terms;
+                for(genvar lhs=0;lhs<=count_id;lhs=lhs+1) begin:g_term
+                    assign terms[lhs]=count_matches[2*node][lhs] && count_matches[2*node+1][count_id-lhs];
+                end
+                assign count_matches[node][count_id]=|terms;
+            end
+        end
+        wire [(BE_WIDTH+1)*COUNT_WIDTH-1:0] candidates;
+        for(genvar count_id=0;count_id<=BE_WIDTH;count_id=count_id+1) begin:g_delta
+            assign candidates[count_id*COUNT_WIDTH +: COUNT_WIDTH]=
+                COUNT_WIDTH'(32'(occupancy_reg)+allocation_count-count_id);
+        end
+        wire selection_valid;
+        rv32_frequency_event_select #(.WIDTH(COUNT_WIDTH),.EVENTS(BE_WIDTH+1),.PRIORITY(0)) count_selector (
+            .events_i(count_matches[1]),.values_i(candidates),.write_o(selection_valid),.value_o(normal_occupancy_next));
+        // synthesis translate_off
+        always @(posedge clk_i) if(!reset_i && !flush_valid_i) begin
+            if(!selection_valid || normal_occupancy_next!==
+               COUNT_WIDTH'(32'(occupancy_reg)+allocation_count-issue_fire_count))
+                $fatal(1,"RS selected count delta differs from original full arithmetic");
+        end
+        // synthesis translate_on
+    end else begin:g_original_occupancy_delta
+        assign normal_occupancy_next=COUNT_WIDTH'(32'(occupancy_reg)+allocation_count-issue_fire_count);
+    end endgenerate
+
     always @(posedge clk_i) begin
         if (reset_i)
         begin
@@ -1243,7 +1291,7 @@ end
                     end
                 end
                 age_counter <= AGE_WIDTH'(32'(age_counter) + allocation_count);
-                occupancy_reg <= COUNT_WIDTH'(32'(occupancy_reg) + allocation_count - issue_fire_count);
+                occupancy_reg <= normal_occupancy_next;
             end
     end
 

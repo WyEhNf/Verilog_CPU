@@ -1,0 +1,369 @@
+{
+  "status": "PPA_TERMINAL_500MHZ_GATE_FAILED",
+  "accepted": false,
+  "source_commit": "1852d5fab8feabd29a93f3ed77a9de2b49eee3d6",
+  "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010",
+  "manifest_sha256": "262d320ee4393174b9d7b110aa31a3939150bb7b493b28ba6500a4bcebfe96b2",
+  "profile_path": "configs/tier3_shared_500_cache_class_candidate.json",
+  "parameter_count": 198,
+  "lint": {
+    "status": "PASSED",
+    "command": [
+      "F:/CPU2026CourseTools/win5040/source_release/verilator-5.040/bin/verilator_bin.exe",
+      "--lint-only",
+      "--assert",
+      "-Wall",
+      "-Wno-fatal",
+      "--top-module",
+      "student_top",
+      "--unroll-count",
+      "1024",
+      "--unroll-stmts",
+      "1000000",
+      "-I.",
+      "-Irtl",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\scripts\\ram\\sram_fakeram.sv",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32im_decoder.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\predictor\\rv32_branch_predictor.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\predictor\\rv32_predictor_bht_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\predictor\\rv32_predictor_btb_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\predictor\\rv32_predictor_indirect_btb_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\predictor\\rv32_predictor_choice_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\predictor\\rv32_banked_predictor.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_icache.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_icache_nonblocking.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_icache_mshr_state_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_icache_query_queue.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_instruction_line_filter.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_dcache.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_dcache_control_banks.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_dcache_metadata_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_dcache_mshr_data_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_dcache_metadata_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_dcache_nonblocking.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_dcache_command_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_dcache_command_line.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cache\\rv32_cache_stats.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\memory\\rv32_memory_bridge.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\memory\\rv32_uncached_memory.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\frontend\\rv32_fetch_frontend.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\frontend\\rv32_frontend_queue_payload_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\frontend\\rv32_frontend_parallel_bundle_control.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32i_alu.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32m_multiplier.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32m_multiplier_radix4.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32m_divider.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32m_mdu_iterative.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32_physical_register_file.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32_prf_value_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32_rename_unit.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32_rename_map_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_rob.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_rob_owned_field.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_rob_recovery_live_or.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_reservation_station.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_rs_payload_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32m_mdu_reservation_station.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_completion_network.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_lsq.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_lsq_owned_field.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_lsq_forward_window.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_lsq_request_owner.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_lsq_identity_pair_or.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_store_address_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_store_rs_links.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_rat_recovery.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_rat_recovery_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_backend_joint.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_issue_pipeline_slot.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_producer_tag_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_reserved_dispatch_packet.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\backend\\rv32_elastic_dispatch_packet.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32im_tag_compare.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32im_fifo.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32im_skid_buffer.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32im_prefix_alloc.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32im_priority_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_asap7_fanout.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_inversion.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_negative_subtree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_control_tree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_polarity_tree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_word_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_qualified_word_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_addsub32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_compare32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_event_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_first_two.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_array_read.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_barrel32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_line_extract32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_load_format.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_line_insert32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_conditional_negate32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_execution_recovery_cancel.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_add64_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_add32_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_add_simm12.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_array_read_bank_masks.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_frequency_narrow_array_read.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\common\\rv32_control_register_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\cpu_core.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32_decode_bundle_register.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\rv32_decode_field_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\course\\rv32_axi_lite_bridge.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\course\\rv32_axi_response_fifo.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\rtl\\course\\student_top.v"
+    ],
+    "returncode": 0,
+    "seconds": 30.469607899955008,
+    "log_sha256": "8b735ef7c831206c53ddc132f03a6574b5877050a940136fe08ecea03cf04151",
+    "counts": {
+      "%Error": 0,
+      "%Warning-LATCH": 0,
+      "%Warning-UNOPTFLAT": 0
+    },
+    "original_structural_rtl": true,
+    "word_sim": false
+  },
+  "synth": {
+    "status": "PASSED",
+    "command": [
+      "C:\\Users\\admin\\miniconda3\\python.exe",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\source\\scripts\\synth.py",
+      "--filelist",
+      "verilog/filelist.f",
+      "--out",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_cache_class_20261010\\synth",
+      "--mode",
+      "opt",
+      "--clock-period",
+      "2.0",
+      "--appimage",
+      "",
+      "--yosys",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys.exe",
+      "--abc",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys-abc.exe",
+      "--sta",
+      "F:/CPU2026CourseTools/win54fc150/opensta/bin/sta.exe",
+      "--asap7-lib",
+      "F:/CPU2026CourseTools/win54fc150/asap7/lib"
+    ],
+    "manifest_sha256": "262d320ee4393174b9d7b110aa31a3939150bb7b493b28ba6500a4bcebfe96b2",
+    "phase": "synth",
+    "returncode": 0,
+    "seconds": 1345.5049188999692,
+    "log_sha256": "179e862df1e8da075c57f41c5ac8cfe2dfa90e7f28fe52abbb45dc2310ea50b8",
+    "area_um2": 35489.08935799678,
+    "fmax_mhz": 361.70964323560577,
+    "report_sha256": "fa22a7a7a9175f834788aa892ba9193a1af254d4fb264fc4aaefa89c8f6408e2",
+    "ppa_thresholds_passed": false
+  },
+  "observed_synth_session": 16663,
+  "area_um2": 35489.08935799678,
+  "fmax_mhz": 361.70964323560577,
+  "minimum_period_ns": 2.7646484375,
+  "area_breakdown": {
+    "sequential_area_um2": 7139.826,
+    "combinational_area_um2": 20405.351519996773,
+    "sram_area_um2": 7943.911838000004
+  },
+  "critical_paths": [
+    {
+      "startpoint": "_406649_/QN",
+      "endpoint": "_398789_/D",
+      "arrival_ns": 2.724,
+      "slack_ns": -0.7641,
+      "named_anchors": [
+        {
+          "pin": "bus.g_response_fifos.data.output_reader.query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07078
+        },
+        {
+          "pin": "bus.g_response_fifos.data.output_reader.g_row[0].g_present.select_tree.genblk1.g_balanced_polarity.tree.g_group[2].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.1102
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 0.6678000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.0399999999999998
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_parallel_wake.valid_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "arrival_ns": 1.281
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_issue_payload[1].g_row[3].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.704
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.mdu_payload_selector.g_event[1].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.085
+        }
+      ]
+    },
+    {
+      "startpoint": "_406649_/QN",
+      "endpoint": "_398788_/D",
+      "arrival_ns": 2.702,
+      "slack_ns": -0.7621,
+      "named_anchors": [
+        {
+          "pin": "bus.g_response_fifos.data.output_reader.query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07078
+        },
+        {
+          "pin": "bus.g_response_fifos.data.output_reader.g_row[0].g_present.select_tree.genblk1.g_balanced_polarity.tree.g_group[2].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.1102
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 0.6678000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.0399999999999998
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_parallel_wake.valid_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "arrival_ns": 1.281
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_issue_payload[1].g_row[3].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.704
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.mdu_payload_selector.g_event[1].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.085
+        }
+      ]
+    },
+    {
+      "startpoint": "_406649_/QN",
+      "endpoint": "_398787_/D",
+      "arrival_ns": 2.695,
+      "slack_ns": -0.7538999999999999,
+      "named_anchors": [
+        {
+          "pin": "bus.g_response_fifos.data.output_reader.query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07078
+        },
+        {
+          "pin": "bus.g_response_fifos.data.output_reader.g_row[0].g_present.select_tree.genblk1.g_balanced_polarity.tree.g_group[2].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.1102
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 0.6678000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.0399999999999998
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_parallel_wake.valid_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "arrival_ns": 1.281
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_issue_payload[1].g_row[3].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.704
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.mdu_payload_selector.g_event[1].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.085
+        }
+      ]
+    },
+    {
+      "startpoint": "_406649_/QN",
+      "endpoint": "_398786_/D",
+      "arrival_ns": 2.686,
+      "slack_ns": -0.7432,
+      "named_anchors": [
+        {
+          "pin": "bus.g_response_fifos.data.output_reader.query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07078
+        },
+        {
+          "pin": "bus.g_response_fifos.data.output_reader.g_row[0].g_present.select_tree.genblk1.g_balanced_polarity.tree.g_group[2].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.1102
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_response_source_query.validity_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 0.6678000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_head_load_packet_metadata.head_choice_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.0399999999999998
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_parallel_wake.valid_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "arrival_ns": 1.281
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rs.g_issue_payload[1].g_row[3].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.704
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.mdu_payload_selector.g_event[1].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.085
+        }
+      ]
+    },
+    {
+      "startpoint": "_406991_/QN",
+      "endpoint": "_403379_/D",
+      "arrival_ns": 2.694,
+      "slack_ns": -0.7378,
+      "named_anchors": [
+        {
+          "pin": "bus.g_response_fifos.instruction.output_reader.query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07416
+        },
+        {
+          "pin": "bus.g_response_fifos.instruction.output_reader.g_row[0].g_present.select_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.1124
+        },
+        {
+          "pin": "core.g_cached_memory.g_nonblocking_icache.icache.control_target_selector.g_event[3].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.324
+        },
+        {
+          "pin": "core.g_cached_memory.g_nonblocking_icache.icache.control_query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[13].invert/_0_/A",
+          "arrival_ns": 1.632
+        },
+        {
+          "pin": "core.g_cached_memory.g_nonblocking_icache.icache.stream_line_selector.g_event[1].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.556
+        }
+      ]
+    }
+  ],
+  "geomean_ipc": null,
+  "build_run": false,
+  "perf_run": false,
+  "cpu_smoke_run": false,
+  "required_area_maximum_um2": 35891.672317998215,
+  "required_fmax_minimum_mhz": 500,
+  "required_geomean_ipc_minimum": 1.1152626918348099,
+  "required_maximum_cycles": {
+    "perf_median": 7572,
+    "perf_multiply": 17490,
+    "perf_qsort": 143485,
+    "perf_rsort": 153155,
+    "perf_towers": 4739,
+    "perf_vvadd": 3725
+  },
+  "supersedes": "reports/Tier3_shared_cache_class_progress_2026-10-10.json",
+  "notes": [
+    "One official PPA process passed but Fmax361.70964323560577<500 fails final-project gate. Frozen hashes verified. CPU build/perf/smoke skipped; IPC/cycles unknown.",
+    "Relative to prior unaccepted79387fdc, area increases169.113419999754 and frequency improves25.4206448776419. Sequential7139.826 and SRAM7943.911838 retained. Area35489.08935799678 is under original35891.672317998215 ceiling but not accepted without500MHz and performance.",
+    "New top four paths start at named data FIFO output query, cross LOAD source query/head choice, RS wake/issue and MDU payload selection, then anonymous registers; worst arrival2.724ns. Another starts at instruction FIFO query, crosses I-cache control-target selector/query and stream-line selector, ends at anonymous register2.694ns. Exact endpoint named bits are not mapped.",
+    "Keep current measurement terminal and original accepted freezes intact. Inspect late issue-to-count arithmetic and control-target arithmetic/fanout as new structural candidates; no new false paths, narrowed tags, extra transactions or pipeline edges. These are source-level inferences requiring finite/official evidence, not exact endpoint attribution.",
+    "No latest-source500MHz version exists yet. Final shared-source tier verification and later IPC1.5/1GHz/unrestricted-area exploration remain outstanding."
+  ]
+}

@@ -11,6 +11,7 @@ module rv32m_mdu_reservation_station #(
     parameter integer DIVZERO_REMAINDER_REUSE = 0,
     parameter integer PREFIX_SIGN_CORRECTION = 0,
     parameter integer OWNED_STEP = 0,
+    parameter integer QUALIFIED_ISSUE_CLASS = 0,
     parameter integer ROB_ENTRIES = `RV32IM_ROB_ENTRIES_DEFAULT,
     parameter integer SELECTIVE_RECOVERY = 0,
     parameter RECOVERY_OLDER_ISSUE = 0,
@@ -101,12 +102,25 @@ module rv32m_mdu_reservation_station #(
         .packet_i(recovery_views[0 +: RECOVERY_WIDTH]),
         .active_i(issue_valid_i),.tag_i(issue_rob_tag_i),.cancel_o(issue_cancel));
     end endgenerate
+    // The shared caller selects only actual M-class packets and supplies an
+    // all-zero packet when no issue event owns it. This certifies the original
+    // class predicate on every cycle, including invalid/blocked cycles.
+    initial if((QUALIFIED_ISSUE_CLASS!=0 && QUALIFIED_ISSUE_CLASS!=1) ||
+               (QUALIFIED_ISSUE_CLASS!=0 && MUL_IMPL!=2))
+        $fatal(1,"Qualified issue class requires unified private MDU packets");
+    wire accepted_issue_class=(QUALIFIED_ISSUE_CLASS!=0)?issue_valid_i:(issue_is_mul || issue_is_div);
+    // synthesis translate_off
+    always @(posedge clk_i) if(!reset_i && QUALIFIED_ISSUE_CLASS!=0) begin
+        if((issue_is_mul || issue_is_div)!==issue_valid_i)
+            $fatal(1,"Private MDU issue class differs from original including idle packet");
+    end
+    // synthesis translate_on
     assign issue_ready_o = !flush_i &&
                            (!(SELECTIVE_RECOVERY != 0) || !recovery_packet_i[RECOVERY_WIDTH-1] ||
                             ((RECOVERY_OLDER_ISSUE!=0) && !issue_cancel)) &&
                            (!pending_valid || unit_req_fire ||
                             ((RECOVERY_OLDER_ISSUE!=0) && pending_cancel)) &&
-                           (issue_is_mul || issue_is_div);
+                           accepted_issue_class;
     assign completion_valid_o = mul_resp_valid || div_resp_valid;
     localparam integer COMPLETION_PAYLOAD_WIDTH=33+TAG_WIDTH+PHYS_ADDR_WIDTH;
     localparam integer COMPLETION_WORDS=(COMPLETION_PAYLOAD_WIDTH+15)/16;

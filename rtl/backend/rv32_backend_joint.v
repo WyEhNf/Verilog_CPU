@@ -9,6 +9,7 @@ module rv32_backend_joint #(
     parameter integer MDU_DIVZERO_REMAINDER_REUSE = 0,
     parameter integer MDU_PREFIX_SIGN_CORRECTION = 0,
     parameter integer MDU_OWNED_STEP = 0,
+    parameter integer MDU_QUALIFIED_ISSUE_CLASS = 0,
     parameter integer ISSUE_PIPELINE = 0,
     // Execution registers need selective cancellation even when RS issues
     // directly. Default retains the standalone configuration relation.
@@ -32,6 +33,7 @@ module rv32_backend_joint #(
     parameter integer RS_ARITHMETIC_PRECOMPUTE = 0,
     parameter integer RS_COMPARISON_PRECOMPUTE = 0,
     parameter integer RS_PC_PRECOMPUTE = 0,
+    parameter integer RS_OCCUPANCY_DELTA_SELECT = 0,
     parameter integer ALU_PRED_TARGET_CLASS_COMPARE = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
@@ -856,6 +858,11 @@ module rv32_backend_joint #(
         assign shared_store_addr_tag = {TAG_WIDTH{1'b0}};
         assign shared_store_addr = 32'b0;
     end endgenerate
+    initial if((MDU_QUALIFIED_ISSUE_CLASS!=0 && MDU_QUALIFIED_ISSUE_CLASS!=1) ||
+        (MDU_QUALIFIED_ISSUE_CLASS!=0 && MUL_IMPL!=2))
+        $fatal(1,"Qualified MDU issue class requires unified private packets");
+    initial if(RS_OCCUPANCY_DELTA_SELECT!=0 && RS_OCCUPANCY_DELTA_SELECT!=1)
+        $fatal(1,"RS count delta selection must be 0 or 1");
     initial if((MDU_OWNED_STEP!=0 && MDU_OWNED_STEP!=1) ||
         (MDU_OWNED_STEP!=0 && MUL_IMPL!=2))
         $fatal(1,"Owned step counter requires unified iterative MDU");
@@ -2482,7 +2489,7 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] raw_rs_issue_store;
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] raw_rs_issue_metadata;
     wire [BE_WIDTH*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))-1:0] raw_rs_issue_slot;
-    rv32_reservation_station #(.ALLOC_EMPTY_BYPASS(RS_ALLOC_EMPTY_BYPASS), .FRESH_DEFAULT_LANE_DATA(RS_FRESH_DEFAULT_LANE_DATA), .ARITHMETIC_PRECOMPUTE(RS_ARITHMETIC_PRECOMPUTE), .COMPARISON_PRECOMPUTE(RS_COMPARISON_PRECOMPUTE), .PC_PRECOMPUTE(RS_PC_PRECOMPUTE), .RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_QUALIFICATION(RS_ROW_QUALIFICATION_ACTIVE), .ISSUE_RECOVERY_CANCEL(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) rs (
+    rv32_reservation_station #(.ALLOC_EMPTY_BYPASS(RS_ALLOC_EMPTY_BYPASS), .FRESH_DEFAULT_LANE_DATA(RS_FRESH_DEFAULT_LANE_DATA), .ARITHMETIC_PRECOMPUTE(RS_ARITHMETIC_PRECOMPUTE), .COMPARISON_PRECOMPUTE(RS_COMPARISON_PRECOMPUTE), .PC_PRECOMPUTE(RS_PC_PRECOMPUTE), .OCCUPANCY_DELTA_SELECT(RS_OCCUPANCY_DELTA_SELECT), .RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_QUALIFICATION(RS_ROW_QUALIFICATION_ACTIVE), .ISSUE_RECOVERY_CANCEL(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) rs (
         .entry_issue_cancel_i(rs_entry_issue_cancel), .issue_cancel_o(raw_rs_issue_cancel),
         .entry_recovery_qualified_i(rs_entry_recovery_qualified),
         .issue_recovery_qualified_o(raw_rs_issue_recovery_qualified),
@@ -2612,7 +2619,7 @@ module rv32_backend_joint #(
         end
     endgenerate
 
-    rv32m_mdu_reservation_station #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .MUL_IMPL(MUL_IMPL), .DIVZERO_REMAINDER_REUSE(MDU_DIVZERO_REMAINDER_REUSE), .PREFIX_SIGN_CORRECTION(MDU_PREFIX_SIGN_CORRECTION), .OWNED_STEP(MDU_OWNED_STEP), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY), .RECOVERY_OLDER_ISSUE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_PREDECODE(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) mdu (
+    rv32m_mdu_reservation_station #(.TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .MUL_IMPL(MUL_IMPL), .DIVZERO_REMAINDER_REUSE(MDU_DIVZERO_REMAINDER_REUSE), .PREFIX_SIGN_CORRECTION(MDU_PREFIX_SIGN_CORRECTION), .OWNED_STEP(MDU_OWNED_STEP), .QUALIFIED_ISSUE_CLASS(MDU_QUALIFIED_ISSUE_CLASS), .ROB_ENTRIES(ROB_ENTRIES), .SELECTIVE_RECOVERY(LOCAL_EXEC_RECOVERY), .RECOVERY_OLDER_ISSUE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_PREDECODE(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) mdu (
         .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_packet_i(execution_recovery_views[BE_WIDTH*EXEC_RECOVERY_WIDTH +: EXEC_RECOVERY_WIDTH]), .issue_valid_i(mdu_issue_valid), .issue_cancel_i(mdu_issue_cancel), .issue_op_i(mdu_issue_op), .issue_src1_i(mdu_issue_src1), .issue_src2_i(mdu_issue_src2), .issue_rob_tag_i(mdu_issue_tag), .issue_phys_rd_i(mdu_issue_phys), .issue_target_live_i(1'b1), .issue_ready_o(mdu_issue_ready), .completion_valid_o(mdu_completion_valid), .completion_ready_i(mdu_completion_ready), .completion_value_o(mdu_completion_value), .completion_rob_tag_o(mdu_completion_tag), .completion_phys_rd_o(mdu_completion_phys), .completion_rd_we_o(mdu_completion_rd_we), .busy_o(mdu_busy), .live_tag_valid_i(1'b0), .live_tag_i({TAG_WIDTH{1'b0}})
     );
 
