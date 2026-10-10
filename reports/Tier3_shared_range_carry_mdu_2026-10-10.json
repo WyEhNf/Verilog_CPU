@@ -1,0 +1,316 @@
+{
+  "status": "OFFICIAL_PPA_TERMINAL_AREA_PASSED_FREQUENCY_FAILED",
+  "accepted": false,
+  "source_commit": "3a586c66e2502e676ef055a5ff4f940c8e4f4c87",
+  "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_range_carry_mdu_20261010",
+  "parameter_count": 212,
+  "manifest_sha256": "2fef3726a238d09d0e801e87ca56dcd65e3e6df0ae840f5f8f67117dba8a4b78",
+  "profile_path": "configs/tier3_shared_500_range_carry_mdu_candidate.json",
+  "lint": {
+    "status": "PASSED",
+    "returncode": 0,
+    "seconds": 25.847641200001817,
+    "word_sim": false,
+    "counts": {
+      "errors": 0,
+      "latches": 0,
+      "unoptflat": 0
+    },
+    "log_sha256": "cb69c82cb46c00f8d1a7325cd1cf2e22da6556091428f4e83900aa4ed2c1de9b"
+  },
+  "metrics": {
+    "area": {
+      "logic_area_um2": 27917.944379995046,
+      "sequential_area_um2": 7149.7404,
+      "combinational_area_um2": 20768.203979995047,
+      "sram_area_um2": 7943.911838000004,
+      "area_um2": 35861.85621799505
+    },
+    "timing": {
+      "clock_port": "clock",
+      "clock_period_ns": 2.0,
+      "input_delay_ns": 0.2,
+      "output_delay_ns": 0.2,
+      "input_transition_ns": 0.05,
+      "clock_transition_ns": 0.05,
+      "clock_uncertainty_ns": 0.05,
+      "output_load_ff": 5.0,
+      "reset_value": 0,
+      "clock_model": "ideal",
+      "interconnect": "no_parasitics",
+      "frequency_resolution_ns": 0.001,
+      "minimum_period_ns": 2.5380859375,
+      "estimated_fmax_mhz": 393.99769141977686,
+      "worst_setup_slack_ns": -0.537595,
+      "timing_analyzed": true
+    }
+  },
+  "synth": {
+    "status": "PASSED",
+    "command": [
+      "C:\\Users\\admin\\miniconda3\\python.exe",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_range_carry_mdu_20261010\\source\\scripts\\synth.py",
+      "--filelist",
+      "verilog/filelist.f",
+      "--out",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_range_carry_mdu_20261010\\synth",
+      "--mode",
+      "opt",
+      "--clock-period",
+      "2.0",
+      "--appimage",
+      "",
+      "--yosys",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys.exe",
+      "--abc",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys-abc.exe",
+      "--sta",
+      "F:/CPU2026CourseTools/win54fc150/opensta/bin/sta.exe",
+      "--asap7-lib",
+      "F:/CPU2026CourseTools/win54fc150/asap7/lib"
+    ],
+    "manifest_sha256": "2fef3726a238d09d0e801e87ca56dcd65e3e6df0ae840f5f8f67117dba8a4b78",
+    "phase": "synth",
+    "returncode": 0,
+    "seconds": 1802.7518421999994,
+    "log_sha256": "2a30998612d64a1c5f84ce521a832cd576d9912e702d78f4a1b2ec16068e14d7",
+    "area_um2": 35861.85621799505,
+    "fmax_mhz": 393.99769141977686,
+    "report_sha256": "52896df18c5bc2adee6a49b4ac044c7ae9f470caefb6fe7347d860799e7b5333",
+    "ppa_thresholds_passed": false
+  },
+  "previous_candidate": {
+    "source_commit": "748804a09e776cef66ffdf2c5b23bd2ec6c541ea",
+    "area_um2": 35802.909277995546,
+    "fmax_mhz": 389.2056252375523,
+    "accepted_500mhz": false
+  },
+  "delta_vs_previous_candidate": {
+    "area_um2": 58.94693999950687,
+    "fmax_mhz": 4.792066182224573
+  },
+  "required_area_maximum_um2": 35891.672317998215,
+  "required_fmax_minimum_mhz": 500,
+  "required_geomean_ipc_minimum": 1.1152626918348099,
+  "area_gate_passed": true,
+  "frequency_gate_passed": false,
+  "bounded_critical_paths": [
+    {
+      "startpoint": "_396666_/QN",
+      "endpoint": "_397040_/D",
+      "slack_ns": -0.5376,
+      "arrival_ns": 2.4939999999999998,
+      "required_ns": 1.956,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_carry_report_range.range_mask/_143_/B",
+          "arrival_ns": 0.1782
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.7987000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[6].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.9371
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_07_/A",
+          "arrival_ns": 1.02
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_original_live_query.live_read/query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "arrival_ns": 1.099
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[0].g_source[1].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.548
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 2.053
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[4].response_wait_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.426
+        }
+      ]
+    },
+    {
+      "startpoint": "_396666_/QN",
+      "endpoint": "_397055_/D",
+      "slack_ns": -0.525,
+      "arrival_ns": 2.465,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_carry_report_range.range_mask/_143_/B",
+          "arrival_ns": 0.1782
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.7987000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[6].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.9371
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_07_/A",
+          "arrival_ns": 1.02
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_original_live_query.live_read/query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "arrival_ns": 1.099
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[0].g_source[1].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.548
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 2.048
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[4].generation_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.371
+        }
+      ]
+    },
+    {
+      "startpoint": "_396666_/QN",
+      "endpoint": "_397052_/D",
+      "slack_ns": -0.5249,
+      "arrival_ns": 2.465,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_carry_report_range.range_mask/_143_/B",
+          "arrival_ns": 0.1782
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.7987000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[6].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.9371
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_07_/A",
+          "arrival_ns": 1.02
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_original_live_query.live_read/query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "arrival_ns": 1.099
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[0].g_source[1].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.548
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 2.048
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[4].generation_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.371
+        }
+      ]
+    },
+    {
+      "startpoint": "_396666_/QN",
+      "endpoint": "_397051_/D",
+      "slack_ns": -0.5249,
+      "arrival_ns": 2.465,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_carry_report_range.range_mask/_143_/B",
+          "arrival_ns": 0.1782
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.7987000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[6].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.9371
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_07_/A",
+          "arrival_ns": 1.02
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_original_live_query.live_read/query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "arrival_ns": 1.099
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[0].g_source[1].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.548
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 2.048
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[4].generation_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.371
+        }
+      ]
+    },
+    {
+      "startpoint": "_396666_/QN",
+      "endpoint": "_397054_/D",
+      "slack_ns": -0.5249,
+      "arrival_ns": 2.465,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_carry_report_range.range_mask/_143_/B",
+          "arrival_ns": 0.1782
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.7987000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[6].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.9371
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_07_/A",
+          "arrival_ns": 1.02
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_original_live_query.live_read/query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "arrival_ns": 1.099
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[0].g_source[1].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.548
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 2.048
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[4].generation_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.371
+        }
+      ]
+    }
+  ],
+  "timing_scope": "Complete official SRAM-inclusive synthesis/STA. Named paths cross carry range, wrap eligibility, saved identity row6/merge11, original full ROB live query, completion source1, LSQ allocation and response-wait/generation owners. Exact anonymous FF bits not mapped.",
+  "frozen_source_tool_library_hashes_verified": true,
+  "finite_sample": "reports/Tier_shared_range_carry_mdu_protocol_2026-10-10.json",
+  "supersedes_dated_progress": "reports/Tier3_shared_range_carry_mdu_progress_2026-10-10.json",
+  "controls_remain_default_zero": true,
+  "canonical_profiles_promoted": false,
+  "cpu_build_started": false,
+  "perf_started": false,
+  "smoke_started": false,
+  "ipc": null,
+  "cycles": null,
+  "next_action": "Keep this as an unaccepted higher-frequency candidate inside the historical area ceiling, with its area increase over205 explicitly recorded. Inspect moving full-count range qualification after oldest saved identity selection/full ROB lookup using exact circular prefix order. Preserve original public/raw packets, full generations, readiness and state edges. No CPU phases after failed500MHz gate."
+}
