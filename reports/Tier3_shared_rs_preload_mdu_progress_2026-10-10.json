@@ -1,0 +1,68 @@
+{
+  "status": "REPAIRED_STRUCTURAL_LINT_PASSED_ONE_OFFICIAL_PPA_RUNNING",
+  "accepted": false,
+  "source_commit": "9a5e47b51f73614220b62092f16da26e71c1fb63",
+  "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_rs_preload_mdu_class_20261010_r1",
+  "manifest_sha256": "e2f7cb4d59ad22515de9e34983ca34a8fb396fefd41ef5d88a369ae9c673e68d",
+  "parameter_count": 210,
+  "profile_path": "configs/tier3_shared_500_rs_preload_mdu_class_candidate.json",
+  "required_area_maximum_um2": 35891.672317998215,
+  "required_fmax_minimum_mhz": 500,
+  "required_geomean_ipc_minimum": 1.1152626918348099,
+  "required_maximum_cycles": {
+    "perf_median": 7572,
+    "perf_multiply": 17490,
+    "perf_qsort": 143485,
+    "perf_rsort": 153155,
+    "perf_towers": 4739,
+    "perf_vvadd": 3725
+  },
+  "lint": {
+    "status": "PASSED",
+    "returncode": 0,
+    "seconds": 25.421546800003853,
+    "word_sim": false,
+    "counts": {
+      "errors": 0,
+      "latches": 0,
+      "unoptflat": 0
+    },
+    "log_sha256": "526409a95ee82e7c83738e00bb56ae1287da143e8cf5b5ec203a0e8a6fb90cf5"
+  },
+  "initial_failed_freeze": "reports/Tier3_shared_rs_preload_mdu_lint_failure_2026-10-10.json",
+  "finite_correctness_repeated": false,
+  "reason": "Only class-tree node net layout changed; leaf/rank/OR/root equations and assertions are identical.",
+  "frozen_source_tool_library_hashes_verified": true,
+  "session_id": 39471,
+  "observed_live_processes": [
+    {
+      "Id": 44704,
+      "ProcessName": "python",
+      "CPU": 0.1875,
+      "StartTime": "/Date(1791614379952)/"
+    },
+    {
+      "Id": 85988,
+      "ProcessName": "python",
+      "CPU": 0.40625,
+      "StartTime": "/Date(1791614379243)/"
+    },
+    {
+      "Id": 81740,
+      "ProcessName": "yosys",
+      "CPU": 149.515625,
+      "StartTime": "/Date(1791614380553)/"
+    }
+  ],
+  "observation_is_not_terminal_evidence": true,
+  "ppa_metrics": null,
+  "ipc": null,
+  "cycles": null,
+  "canonical_profiles_promoted": false,
+  "cpu_build_started": false,
+  "perf_started": false,
+  "smoke_started": false,
+  "previous_goal_turn_classification": "progress: user-authorized remote master push verified at5673679396c6561f6e0222f6fdabb9da362d198b",
+  "current_goal_turn_progress": "Repair original full-core lint failure; record frozen failed attempt; freeze repaired source; full structural lint passes; start one official PPA and verify live runner/synthesis/Yosys processes.",
+  "next_action": "Wait on this exact official PPA; verify frozen hashes and actual area/Fmax before CPU build/perf. Retain strict gates and parameterized shared CPU."
+}
