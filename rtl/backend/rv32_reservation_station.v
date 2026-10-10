@@ -869,16 +869,21 @@ end
     endfunction
     generate if(MDU_CLASS_PRESELECT!=0) begin:g_mdu_class_preselection
         for(genvar lane=0;lane<BE_WIDTH;lane=lane+1) begin:g_lane
-            wire class_tree [1:2*ISSUE_DATA_LEAVES-1];
-            for(genvar row=0;row<ISSUE_DATA_LEAVES;row=row+1) begin:g_row
-                if(row<ENTRIES)
-                    assign class_tree[ISSUE_DATA_LEAVES+row]=ready_candidates[row] &&
-                        ready_rank_match[row][lane] && mdu_opcode(op_mem[row]);
-                else assign class_tree[ISSUE_DATA_LEAVES+row]=0;
+            // Separate node nets preserve the balanced DAG without an array-wide
+            // scheduling dependency between its parent and child elements.
+            for(genvar node=1;node<2*ISSUE_DATA_LEAVES;node=node+1) begin:g_node
+                wire value;
+                if(node>=ISSUE_DATA_LEAVES) begin:g_leaf
+                    localparam integer ROW=node-ISSUE_DATA_LEAVES;
+                    if(ROW<ENTRIES)
+                        assign value=ready_candidates[ROW] &&
+                            ready_rank_match[ROW][lane] && mdu_opcode(op_mem[ROW]);
+                    else assign value=0;
+                end else begin:g_branch
+                    assign value=g_node[2*node].value || g_node[2*node+1].value;
+                end
             end
-            for(genvar node=1;node<ISSUE_DATA_LEAVES;node=node+1)
-                assign class_tree[node]=class_tree[2*node] || class_tree[2*node+1];
-            assign issue_mdu_class_o[lane]=class_tree[1];
+            assign issue_mdu_class_o[lane]=g_node[1].value;
 `ifdef VERILATOR
             always @(posedge clk_i) if(!reset_i)
                 assert(issue_mdu_class_o[lane]==mdu_opcode(issue_op_o[lane*OP_WIDTH +: OP_WIDTH]))
