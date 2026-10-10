@@ -1,0 +1,74 @@
+{
+  "status": "FINITE_COMPLETE_PACKET_SAMPLE_AND_FULL_STRUCTURAL_LINT_PASSED_ONE_OFFICIAL_PPA_RUNNING",
+  "accepted": false,
+  "source_commit": "ceaec537566225589c0b0924de8ea8a1ffe580f1",
+  "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_report_packet_prefix_20261010",
+  "parameter_count": 216,
+  "manifest_sha256": "5d56403acfe452dde8c1b07f4326c0c8c5899bdfe7ee02e47bc86fe0ae2c8d37",
+  "profile_path": "configs/tier3_shared_500_report_packet_prefix_candidate.json",
+  "all_existing212_parameter_values_unchanged": true,
+  "added_parameters": {
+    "LSQ_REPORT_PREFIX_IDENTITY_QUERY": 0,
+    "LSQ_RESPONSE_WORD_PRESELECT": 0,
+    "ICACHE_CONTROL_REGION_PREQUERY": 0,
+    "LSQ_REPORT_PACKET_PREFIX_SELECT": 1
+  },
+  "required_area_maximum_um2": 35891.672317998215,
+  "required_fmax_minimum_mhz": 500,
+  "required_geomean_ipc_minimum": 1.1152626918348099,
+  "required_maximum_cycles": {
+    "perf_median": 7572,
+    "perf_multiply": 17490,
+    "perf_qsort": 143485,
+    "perf_rsort": 153155,
+    "perf_towers": 4739,
+    "perf_vvadd": 3725
+  },
+  "lint": {
+    "status": "PASSED",
+    "returncode": 0,
+    "seconds": 24.122354899998754,
+    "word_sim": false,
+    "counts": {
+      "errors": 0,
+      "latches": 0,
+      "unoptflat": 0
+    },
+    "log_sha256": "e041b6ada30ef5ec5b1af8f5452f259b969046c529baf9fe11a6f20d82e7bb3c"
+  },
+  "finite_protocol": "reports/Tier_shared_report_packet_prefix_protocol_2026-10-10.json",
+  "previous_candidate_terminal": "reports/Tier3_shared_control_region_response_2026-10-10.json",
+  "frozen_source_tool_library_hashes_verified": true,
+  "helper_in_both_active_filelists": true,
+  "session_id": 79638,
+  "observed_live_processes": [
+    {
+      "Id": 82996,
+      "ProcessName": "python",
+      "CPU": 0.203125,
+      "StartTime": "/Date(1791626050350)/"
+    },
+    {
+      "Id": 101416,
+      "ProcessName": "python",
+      "CPU": 0.390625,
+      "StartTime": "/Date(1791626049673)/"
+    },
+    {
+      "Id": 93732,
+      "ProcessName": "yosys",
+      "CPU": 111.46875,
+      "StartTime": "/Date(1791626050890)/"
+    }
+  ],
+  "observation_is_not_terminal_evidence": true,
+  "ppa_metrics": null,
+  "ipc": null,
+  "cycles": null,
+  "canonical_profiles_promoted": false,
+  "cpu_build_started": false,
+  "perf_started": false,
+  "smoke_started": false,
+  "current_goal_turn_progress": "Confirm215 official terminal area/frequency failure, verify frozen/results and commit rejection. Implement default-off complete LSQ normal and held packets before range, late original coverage/held choice, early minimum slot and valid prefix. Preserve complete invalid-cycle packet/slot defaults and full GEN/ROB queries/all state edges. One bounded paired finite binary passes first attempt; commit/freeze216 numeric pins; full original NO_WORD_SIM structural lint passes; start one official PPA and verify actual live runner/synth/Yosys tree.",
+  "next_action": "Observe this exact live PPA, no restart from timeout/sparse output. Verify terminal frozen/result hashes and bounded current critical paths. Strict area/F500 gates precede any build/perf; original instruction counts/all6 cycle/IPC nonregression precedes one array1 smoke. Keep full goals1..5 and same parameterized CPU active."
+}
