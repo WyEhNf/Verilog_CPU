@@ -25,6 +25,7 @@ module rv32_lsq #(
     parameter integer INVALID_PAYLOAD_PRELOAD = 0,
     parameter integer REPORT_RANGE_PREDECODE = 0,
     parameter integer REPORT_RANGE_CARRY_SELECT = 0,
+    parameter integer REPORT_PREFIX_IDENTITY_QUERY = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -217,6 +218,9 @@ module rv32_lsq #(
     // enabled; candidate1 is saved queue-head. Held has its own optional port.
     // The choice is meaningful only with an actual public completion event.
     output wire [2*ROB_TAG_WIDTH-1:0] load_report_identity_tags_o,
+    output wire [ROB_TAG_WIDTH-1:0] load_report_prefix_identity_tag_o,
+    output wire [(1<<REPORT_ROB_LOW_BITS)+(1<<REPORT_ROB_HIGH_BITS)-1:0] load_report_prefix_identity_query_o,
+    output wire load_report_prefix_identity_covered_o,
     output wire [2*((1<<REPORT_ROB_LOW_BITS)+(1<<REPORT_ROB_HIGH_BITS))-1:0] load_report_identity_queries_o,
     output wire load_report_identity_head_o,
     output wire [ROB_TAG_WIDTH-1:0] load_report_held_identity_tag_o,
@@ -1598,6 +1602,10 @@ module rv32_lsq #(
         (REPORT_ROB_PREDECODE!=0) && HEAD_STORE_ACK_ACTIVE;
     localparam HEAD_LOAD_PACKET_ACTIVE=(HEAD_LOAD_PACKET_PRESELECT!=0) && HEAD_LOAD_IDENTITY_ACTIVE;
     localparam HELD_LOAD_IDENTITY_ACTIVE=(HELD_LOAD_IDENTITY_QUERY!=0) && HEAD_LOAD_IDENTITY_ACTIVE;
+    initial if((REPORT_PREFIX_IDENTITY_QUERY!=0 && REPORT_PREFIX_IDENTITY_QUERY!=1) ||
+        (REPORT_PREFIX_IDENTITY_QUERY!=0 && (HELD_LOAD_IDENTITY_ACTIVE==0 ||
+         LSQ_ENTRIES<2 || LSQ_ENTRIES>32 || LSQ_ENTRIES!=(1<<SLOT_WIDTH))))
+        $fatal(1,"Report prefix query requires original saved/head/held identity and exact power-of-two slots");
     localparam integer NORMAL_IDENTITY_WIDTH=ROB_TAG_WIDTH+REPORT_ROB_QUERY_WIDTH;
     localparam integer NORMAL_IDENTITY_WORDS=(NORMAL_IDENTITY_WIDTH+15)/16;
     wire [NORMAL_IDENTITY_WIDTH-1:0] normal_identity_tree [1:2*REPORT_ROWS-1];
@@ -1695,6 +1703,16 @@ module rv32_lsq #(
     // wide report routing no longer waits for its encode/decode chain.
     localparam integer REPORT_GRANT_DOMAINS=(LSQ_ENTRIES+3)/4;
     wire [LSQ_ENTRIES-1:0] report_eligible,report_upper,report_first;
+    wire [LSQ_ENTRIES-1:0] prefix_eligible,prefix_wrapped,prefix_range,prefix_grants;
+    wire prefix_covered;
+    generate if(REPORT_PREFIX_IDENTITY_QUERY!=0) begin:g_prefix_identity_selection
+        rv32_lsq_report_prefix_select #(.ENTRIES(LSQ_ENTRIES)) selector (
+            .eligible_i(prefix_eligible),.wrapped_i(prefix_wrapped),.range_i(prefix_range),
+            .grants_o(prefix_grants),.covered_o(prefix_covered));
+    end else begin:g_original_prefix_unused
+        assign prefix_grants=0;
+        assign prefix_covered=0;
+    end endgenerate
     wire [LSQ_ENTRIES-1:0] fast_head_reports;
     wire fast_head_present=|fast_head_reports;
     wire [REPORT_GRANT_DOMAINS-1:0] fast_head_priority_views;
@@ -1895,6 +1913,15 @@ module rv32_lsq #(
                         (report_wrap_enable_views[report_row/4] && report_eligible[report_row] &&
                          !(|report_eligible[report_row-1:0]));
                 end
+                assign prefix_eligible[report_row]=valid_mem[report_row] && load_mem[report_row] &&
+                    complete_mem[report_row] && !load_reported_mem[report_row];
+                assign prefix_wrapped[report_row]=report_wrap_tree[REPORT_ROWS+report_row];
+                assign prefix_range[report_row]=row_in_report_range;
+`ifndef SYNTHESIS
+                always @(posedge clk_i) if(!reset_i && REPORT_PREFIX_IDENTITY_QUERY!=0)
+                    assert((prefix_grants[report_row] && prefix_covered)===report_priority)
+                        else $fatal(1,"Report prefix changed original range-qualified priority");
+`endif
                 if(HELD_LOAD_IDENTITY_ACTIVE!=0) begin:g_normal_identity_candidate
                     // Read ordinary priority independently of held-live. The
                     // full public packet still uses the original saved grant.
@@ -1902,7 +1929,7 @@ module rv32_lsq #(
                         report_payload[REPORT_BASE_WIDTH +: REPORT_ROB_QUERY_WIDTH],rob_tag_mem[report_row]};
                     wire [NORMAL_IDENTITY_WORDS-1:0] grant_views;
                     rv32_frequency_control_tree #(.LEAVES(NORMAL_IDENTITY_WORDS)) mask_tree (
-                        .signal_i(report_priority),.views_o(grant_views));
+                        .signal_i((REPORT_PREFIX_IDENTITY_QUERY!=0) ? prefix_grants[report_row] : report_priority),.views_o(grant_views));
                     for(genvar normal_word=0;normal_word<NORMAL_IDENTITY_WORDS;normal_word=normal_word+1) begin:g_word
                         localparam integer LOW=normal_word*16;
                         localparam integer BITS=(NORMAL_IDENTITY_WIDTH-LOW>=16)?16:NORMAL_IDENTITY_WIDTH-LOW;
@@ -2066,9 +2093,12 @@ module rv32_lsq #(
                 .value_o(held_identity));
             assign load_report_held_identity_tag_o=held_identity[0 +: ROB_TAG_WIDTH];
             assign load_report_held_identity_query_o=held_identity[ROB_TAG_WIDTH +: REPORT_ROB_QUERY_WIDTH];
-            assign load_report_identity_tags_o={head_tag,normal_identity_tree[1][0 +: ROB_TAG_WIDTH]};
+            wire normal_covered=(REPORT_PREFIX_IDENTITY_QUERY==0) || prefix_covered;
+            // Preserve even original invalid-cycle zero tag/query packets.
+            assign load_report_identity_tags_o={head_tag,
+                ({ROB_TAG_WIDTH{normal_covered}} & normal_identity_tree[1][0 +: ROB_TAG_WIDTH])};
             assign load_report_identity_queries_o={head_query,
-                normal_identity_tree[1][ROB_TAG_WIDTH +: REPORT_ROB_QUERY_WIDTH]};
+                ({REPORT_ROB_QUERY_WIDTH{normal_covered}} & normal_identity_tree[1][ROB_TAG_WIDTH +: REPORT_ROB_QUERY_WIDTH])};
             assign load_report_identity_held_o=report_hold_live;
         end else begin:g_original_saved_held_identity
             assign load_report_identity_tags_o={head_tag,saved_identity_tree[1][0 +: ROB_TAG_WIDTH]};
@@ -2086,6 +2116,16 @@ module rv32_lsq #(
         assign load_report_held_identity_tag_o=0;
         assign load_report_held_identity_query_o=0;
         assign load_report_identity_held_o=1'b0;
+    end endgenerate
+
+    generate if(REPORT_PREFIX_IDENTITY_QUERY!=0) begin:g_early_prefix_query
+        assign load_report_prefix_identity_tag_o=normal_identity_tree[1][0 +: ROB_TAG_WIDTH];
+        assign load_report_prefix_identity_query_o=normal_identity_tree[1][ROB_TAG_WIDTH +: REPORT_ROB_QUERY_WIDTH];
+        assign load_report_prefix_identity_covered_o=prefix_covered;
+    end else begin:g_no_early_prefix_query
+        assign load_report_prefix_identity_tag_o=0;
+        assign load_report_prefix_identity_query_o=0;
+        assign load_report_prefix_identity_covered_o=0;
     end endgenerate
 
     generate if(REPORT_ROB_PREDECODE!=0) begin:g_report_rob_query

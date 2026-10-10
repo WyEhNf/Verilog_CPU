@@ -57,6 +57,14 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["LSQ_REPORT_PREFIX_IDENTITY_QUERY"] not in (0,1) or (p["LSQ_REPORT_PREFIX_IDENTITY_QUERY"] and
+            (not p["LSQ_HEAD_LOAD_IDENTITY_QUERY"] or not p["LSQ_HELD_LOAD_IDENTITY_QUERY"] or
+             not p["LSQ_SAVED_REPORT_PRIORITY"] or p["LOAD_COMPLETION_BYPASS"]!=2 or
+             not p["LSQ_HEAD_STORE_ACK_BYPASS"] or not p["LSQ_STORE_ACK_SOURCE_QUERY"] or
+             p["COMPLETION_SOURCE_STATE_QUERY"]!=2 or not p["LSQ_REPORT_RECOVERY_PREQUALIFY"] or
+             not p["LSQ_REPORT_RECOVERY_CIRCULAR_COMPARE"] or p["LSQ_REPORT_LIVE_MATCH_PREQUERY"] or
+             p["LSQ_ENTRIES"]<2 or p["LSQ_ENTRIES"]>32 or p["LSQ_ENTRIES"]&(p["LSQ_ENTRIES"]-1))):
+        raise ValueError("Report prefix query requires original saved/head/held full identities and lookup policies")
     if p["LSQ_REPORT_RANGE_CARRY_SELECT"] not in (0,1) or (p["LSQ_REPORT_RANGE_CARRY_SELECT"] and
             (p["LSQ_REPORT_RANGE_PREDECODE"] or p["LSQ_ENTRIES"]<2 or p["LSQ_ENTRIES"]>32 or
              p["LSQ_ENTRIES"]&(p["LSQ_ENTRIES"]-1))):

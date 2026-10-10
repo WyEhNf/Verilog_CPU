@@ -70,6 +70,7 @@ module rv32_backend_joint #(
     parameter integer LSQ_INVALID_PAYLOAD_PRELOAD = 0,
     parameter integer LSQ_REPORT_RANGE_PREDECODE = 0,
     parameter integer LSQ_REPORT_RANGE_CARRY_SELECT = 0,
+    parameter integer LSQ_REPORT_PREFIX_IDENTITY_QUERY = 0,
     parameter integer LSQ_REPORT_LIVE_MATCH_PREQUERY = 0,
     parameter integer LSQ_ALLOC_SLOT_PRESELECT = 0,
     parameter integer LSQ_ALLOC_PAYLOAD_PRESELECT = 0,
@@ -627,6 +628,9 @@ module rv32_backend_joint #(
     localparam integer LSQ_ROB_QUERY_WIDTH=(1<<LSQ_ROB_LOW_BITS)+(1<<LSQ_ROB_HIGH_BITS);
     wire [LSQ_ROB_QUERY_WIDTH-1:0] lsq_load_complete_rob_query;
     wire [2*TAG_WIDTH-1:0] lsq_report_identity_tags;
+    wire [TAG_WIDTH-1:0] lsq_prefix_identity_tag;
+    wire [LSQ_ROB_QUERY_WIDTH-1:0] lsq_prefix_identity_query;
+    wire lsq_prefix_identity_covered;
     wire [2*LSQ_ROB_QUERY_WIDTH-1:0] lsq_report_identity_queries;
     wire lsq_report_identity_head,lsq_report_identity_live;
     wire [TAG_WIDTH-1:0] lsq_report_held_identity_tag;
@@ -1020,12 +1024,18 @@ module rv32_backend_joint #(
         wire end_second_turn = range_end[ROB_SLOT_WIDTH +: RECOVERY_RANGE_WIDTH-ROB_SLOT_WIDTH]==1;
         for(genvar identity_candidate=0;identity_candidate<LSQ_REPORT_IDENTITY_CANDIDATES;identity_candidate=identity_candidate+1) begin:g_candidate
             wire [TAG_WIDTH-1:0] tag;
+            wire raw_live,raw_recovery_kill;
+            wire [2:0] raw_state;
+            wire covered=(LSQ_REPORT_PREFIX_IDENTITY_QUERY==0 || identity_candidate!=0) || lsq_prefix_identity_covered;
             wire unused_tag_bits = &{1'b0, tag};
 
             wire [LSQ_ROB_QUERY_WIDTH-1:0] query;
             if(identity_candidate==2) begin:g_held
                 assign tag=lsq_report_held_identity_tag;
                 assign query=lsq_report_held_identity_query;
+            end else if(LSQ_REPORT_PREFIX_IDENTITY_QUERY!=0 && identity_candidate==0) begin:g_prefix
+                assign tag=lsq_prefix_identity_tag;
+                assign query=lsq_prefix_identity_query;
             end else begin:g_saved_or_head
                 assign tag=lsq_report_identity_tags[identity_candidate*TAG_WIDTH +: TAG_WIDTH];
                 assign query=lsq_report_identity_queries[identity_candidate*LSQ_ROB_QUERY_WIDTH +: LSQ_ROB_QUERY_WIDTH];
@@ -1044,7 +1054,7 @@ module rv32_backend_joint #(
                     // An end in turn 2 or above contains every W-bit age.
                     wire outside=(end_first_turn && (slot_wrap || slot_at_or_past_end)) ||
                         (end_second_turn && slot_wrap && slot_at_or_past_end);
-                    assign candidate_recovery_kill[identity_candidate]=!tag[0] || younger || outside;
+                    assign raw_recovery_kill=!tag[0] || younger || outside;
                 end else begin:g_original_age
                     // Preserve A103's exact unsigned W-bit truncation.
                     wire [ROB_SLOT_WIDTH-1:0] age=slot-
@@ -1052,11 +1062,11 @@ module rv32_backend_joint #(
                     wire [ROB_SLOT_WIDTH-1:0] branch_age=
                         recovery_tag_views[6*TAG_WIDTH+3 +: ROB_SLOT_WIDTH]-
                         recovery_head_views[4*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH];
-                    assign candidate_recovery_kill[identity_candidate]=!tag[0] ||
+                    assign raw_recovery_kill=!tag[0] ||
                         (age>branch_age) || (age>=recovery_descriptor_occupancy);
                 end
             end else begin:g_no_recovery_class
-                assign candidate_recovery_kill[identity_candidate]=1'b0;
+                assign raw_recovery_kill=1'b0;
             end
             wire [ROB_LIVE_WIDTH-1:0] live_state;
             if(COMPLETION_SOURCE_STATE_QUERY!=0) begin:g_completion_state
@@ -1066,15 +1076,15 @@ module rv32_backend_joint #(
                         .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
                         .rows_i(rob_completion_error_rows),.query_i(query),.value_o(error));
                     // The LOAD report source never supplies a STORE packet.
-                    assign candidate_state[identity_candidate*3 +: 3]={error,2'b0};
+                    assign raw_state={error,2'b0};
                 end else begin:g_complete_state
                 rv32_frequency_array_read_bank_masks #(.WIDTH(3),.ENTRIES(ROB_ENTRIES),
                     .INDEX_WIDTH(ROB_SLOT_WIDTH)) state_read (
                     .rows_i(rob_completion_state_rows),.query_i(query),
-                    .value_o(candidate_state[identity_candidate*3 +: 3]));
+                    .value_o(raw_state));
                 end
             end else begin:g_original_completion_state
-                assign candidate_state[identity_candidate*3 +: 3]=0;
+                assign raw_state=0;
             end
             if(LSQ_REPORT_LIVE_MATCH_PREQUERY!=0) begin:g_full_generation_prequery
                 wire match;
@@ -1082,7 +1092,7 @@ module rv32_backend_joint #(
                     .GENERATION_WIDTH(ROB_GENERATION_WIDTH),.INDEX_WIDTH(ROB_SLOT_WIDTH)) live_match (
                     .rows_i(rob_live_rows),.generation_i(tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]),
                     .query_i(query),.match_o(match));
-                assign candidate_live[identity_candidate]=tag[0] &&
+                assign raw_live=tag[0] &&
                     32'(tag[3 +: ROB_SLOT_WIDTH])<ROB_ENTRIES && match;
                 assign live_state=0;
 `ifndef SYNTHESIS
@@ -1094,7 +1104,7 @@ module rv32_backend_joint #(
                     original_live_state[ROB_GENERATION_WIDTH] &&
                     tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]==original_live_state[0 +: ROB_GENERATION_WIDTH];
                 always @(posedge clk_i) if(!reset_i) begin
-                    assert(candidate_live[identity_candidate]===original_live)
+                    assert(raw_live===original_live)
                         else $fatal(1,"Full generation prequery differs from original live lookup");
                     if(tag[0]) begin
                         assert($onehot0(query[0 +: 1<<LSQ_ROB_LOW_BITS]) &&
@@ -1107,10 +1117,48 @@ module rv32_backend_joint #(
                 rv32_frequency_array_read_bank_masks #(.WIDTH(ROB_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),
                     .INDEX_WIDTH(ROB_SLOT_WIDTH)) live_read (
                     .rows_i(rob_live_rows),.query_i(query),.value_o(live_state));
-                assign candidate_live[identity_candidate]=tag[0] &&
+                assign raw_live=tag[0] &&
                     32'(tag[3 +: ROB_SLOT_WIDTH])<ROB_ENTRIES && live_state[ROB_GENERATION_WIDTH] &&
                     tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]==live_state[0 +: ROB_GENERATION_WIDTH];
             end
+            // Full lookup is prepared before the late occupied-prefix bit.
+            // Absent coverage, the original selected tag/query is exactly0:
+            // live=0, error-state=0 and recovery-kill=1 in the guarded policy.
+            assign candidate_live[identity_candidate]=covered && raw_live;
+            assign candidate_state[identity_candidate*3 +: 3]={3{covered}} & raw_state;
+            assign candidate_recovery_kill[identity_candidate]=(LSQ_REPORT_RECOVERY_PREQUALIFY_ACTIVE!=0) ?
+                (!covered || raw_recovery_kill) : raw_recovery_kill;
+`ifndef SYNTHESIS
+            if(LSQ_REPORT_PREFIX_IDENTITY_QUERY!=0 && identity_candidate==0) begin:g_original_prefix_contract
+                wire [TAG_WIDTH-1:0] original_tag=lsq_report_identity_tags[0 +: TAG_WIDTH];
+                wire [LSQ_ROB_QUERY_WIDTH-1:0] original_query=lsq_report_identity_queries[0 +: LSQ_ROB_QUERY_WIDTH];
+                wire [ROB_LIVE_WIDTH-1:0] original_live_state;
+                wire original_error;
+                rv32_frequency_array_read_bank_masks #(.WIDTH(ROB_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),
+                    .INDEX_WIDTH(ROB_SLOT_WIDTH)) live_reader (
+                    .rows_i(rob_live_rows),.query_i(original_query),.value_o(original_live_state));
+                rv32_frequency_array_read_bank_masks #(.WIDTH(1),.ENTRIES(ROB_ENTRIES),
+                    .INDEX_WIDTH(ROB_SLOT_WIDTH)) error_reader (
+                    .rows_i(rob_completion_error_rows),.query_i(original_query),.value_o(original_error));
+                wire original_live=original_tag[0] && 32'(original_tag[3 +: ROB_SLOT_WIDTH])<ROB_ENTRIES &&
+                    original_live_state[ROB_GENERATION_WIDTH] &&
+                    original_tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]==original_live_state[0 +: ROB_GENERATION_WIDTH];
+                wire [ROB_SLOT_WIDTH-1:0] original_slot=original_tag[3 +: ROB_SLOT_WIDTH];
+                wire original_wrap=original_slot<range_head;
+                wire original_younger=(original_wrap && !branch_wrap) ||
+                    ((original_wrap==branch_wrap) && original_slot>range_branch);
+                wire original_after_end=original_slot>=range_end[0 +: ROB_SLOT_WIDTH];
+                wire original_outside=(end_first_turn && (original_wrap || original_after_end)) ||
+                    (end_second_turn && original_wrap && original_after_end);
+                wire original_kill=!original_tag[0] || original_younger || original_outside;
+                always @(posedge clk_i) if(!reset_i) begin
+                    assert(candidate_live[identity_candidate]===original_live &&
+                        candidate_state[identity_candidate*3 +: 3]==={original_error,2'b0} &&
+                        candidate_recovery_kill[identity_candidate]===original_kill)
+                        else $fatal(1,"Late prefix qualification changed full original ROB lookup results");
+                end
+            end
+`endif
         end
         if(LSQ_HELD_LOAD_IDENTITY_ACTIVE!=0) begin:g_choose_recovery_held
             assign lsq_report_identity_recovery_kill=lsq_report_identity_held ? candidate_recovery_kill[2] :
@@ -2688,7 +2736,7 @@ module rv32_backend_joint #(
     );
 
     wire [(((LSQ_ENTRIES) <= 1) ? 1 : $clog2((LSQ_ENTRIES)))-1:0] unused_lsq_tail_o;
-    rv32_lsq #(.SINGLE_GENERATION_OWNER(TAG_SINGLE_GENERATION_OWNER), .RELEASE_CREDITS((LSQ_DIRECT_POP_CREDIT!=0)?2:DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .ACK_SOURCE_QUERY(LSQ_STORE_ACK_SOURCE_QUERY), .HEAD_STORE_ACK_BYPASS(LSQ_HEAD_STORE_ACK_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .SAVED_REPORT_PRIORITY(LSQ_SAVED_REPORT_PRIORITY), .HEAD_LOAD_IDENTITY_QUERY(LSQ_HEAD_LOAD_IDENTITY_QUERY), .HELD_LOAD_IDENTITY_QUERY(LSQ_HELD_LOAD_IDENTITY_QUERY), .HEAD_LOAD_PACKET_PRESELECT(LSQ_HEAD_LOAD_PACKET_PRESELECT), .SAVED_IDENTITY_WORD_MASK(LSQ_SAVED_IDENTITY_WORD_MASK), .SAVED_IDENTITY_BALANCED_MERGE(LSQ_SAVED_IDENTITY_BALANCED_MERGE), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .ALLOC_LOAD_REQUEST_BYPASS(LSQ_ALLOC_LOAD_REQUEST_BYPASS), .SAVED_REQUEST_QUERY(LSQ_SAVED_REQUEST_QUERY), .SAVED_CANDIDATE_STATE_QUERY(LSQ_SAVED_CANDIDATE_STATE_QUERY), .PHASED_DATA_OWNER(LSQ_PHASED_DATA_OWNER), .PHASED_DIRECT_WRITE_EVENTS(LSQ_PHASED_DIRECT_WRITE_EVENTS), .DISTRIBUTED_LOAD_FORMAT(LSQ_DISTRIBUTED_LOAD_FORMAT), .PHASED_ALLOC_EXCLUSIVE(LSQ_PHASED_ALLOC_EXCLUSIVE), .QUALIFIED_ADDRESS_WRITE(LSQ_QUALIFIED_ADDRESS_WRITE), .QUALIFIED_METADATA_WRITE(LSQ_QUALIFIED_METADATA_WRITE), .INVALID_PAYLOAD_PRELOAD(LSQ_INVALID_PAYLOAD_PRELOAD), .REPORT_RANGE_PREDECODE(LSQ_REPORT_RANGE_PREDECODE), .REPORT_RANGE_CARRY_SELECT(LSQ_REPORT_RANGE_CARRY_SELECT), .ALLOC_SLOT_PRESELECT(LSQ_ALLOC_SLOT_PRESELECT_ACTIVE), .ALLOC_PAYLOAD_PRESELECT(LSQ_ALLOC_PAYLOAD_PRESELECT_ACTIVE), .ALLOC_FIRE_DISTRIBUTE(LSQ_ALLOC_FIRE_DISTRIBUTE), .RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .SECOND_REPORT_RECLAIM(LSQ_SECOND_REPORT_RECLAIM), .EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .COMMITTED_STORE_BYPASS(LSQ_COMMITTED_STORE_BYPASS), .PICK_LOCAL_VALIDITY(LSQ_PICK_LOCAL_VALIDITY), .FORWARD_ONEHOT(LSQ_FORWARD_ONEHOT), .FORWARD_PARALLEL_CLASS(LSQ_FORWARD_PARALLEL_CLASS), .FORWARD_OFFSET_PREDECODE(LSQ_FORWARD_OFFSET_PREDECODE), .PICK_ONEHOT(LSQ_PICK_ONEHOT), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .RESPONSE_SOURCE_QUERY(LSQ_RESPONSE_SOURCE_QUERY), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
+    rv32_lsq #(.SINGLE_GENERATION_OWNER(TAG_SINGLE_GENERATION_OWNER), .RELEASE_CREDITS((LSQ_DIRECT_POP_CREDIT!=0)?2:DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .ACK_SOURCE_QUERY(LSQ_STORE_ACK_SOURCE_QUERY), .HEAD_STORE_ACK_BYPASS(LSQ_HEAD_STORE_ACK_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .SAVED_REPORT_PRIORITY(LSQ_SAVED_REPORT_PRIORITY), .HEAD_LOAD_IDENTITY_QUERY(LSQ_HEAD_LOAD_IDENTITY_QUERY), .HELD_LOAD_IDENTITY_QUERY(LSQ_HELD_LOAD_IDENTITY_QUERY), .HEAD_LOAD_PACKET_PRESELECT(LSQ_HEAD_LOAD_PACKET_PRESELECT), .SAVED_IDENTITY_WORD_MASK(LSQ_SAVED_IDENTITY_WORD_MASK), .SAVED_IDENTITY_BALANCED_MERGE(LSQ_SAVED_IDENTITY_BALANCED_MERGE), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .ALLOC_LOAD_REQUEST_BYPASS(LSQ_ALLOC_LOAD_REQUEST_BYPASS), .SAVED_REQUEST_QUERY(LSQ_SAVED_REQUEST_QUERY), .SAVED_CANDIDATE_STATE_QUERY(LSQ_SAVED_CANDIDATE_STATE_QUERY), .PHASED_DATA_OWNER(LSQ_PHASED_DATA_OWNER), .PHASED_DIRECT_WRITE_EVENTS(LSQ_PHASED_DIRECT_WRITE_EVENTS), .DISTRIBUTED_LOAD_FORMAT(LSQ_DISTRIBUTED_LOAD_FORMAT), .PHASED_ALLOC_EXCLUSIVE(LSQ_PHASED_ALLOC_EXCLUSIVE), .QUALIFIED_ADDRESS_WRITE(LSQ_QUALIFIED_ADDRESS_WRITE), .QUALIFIED_METADATA_WRITE(LSQ_QUALIFIED_METADATA_WRITE), .INVALID_PAYLOAD_PRELOAD(LSQ_INVALID_PAYLOAD_PRELOAD), .REPORT_RANGE_PREDECODE(LSQ_REPORT_RANGE_PREDECODE), .REPORT_RANGE_CARRY_SELECT(LSQ_REPORT_RANGE_CARRY_SELECT), .REPORT_PREFIX_IDENTITY_QUERY(LSQ_REPORT_PREFIX_IDENTITY_QUERY), .ALLOC_SLOT_PRESELECT(LSQ_ALLOC_SLOT_PRESELECT_ACTIVE), .ALLOC_PAYLOAD_PRESELECT(LSQ_ALLOC_PAYLOAD_PRESELECT_ACTIVE), .ALLOC_FIRE_DISTRIBUTE(LSQ_ALLOC_FIRE_DISTRIBUTE), .RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .SECOND_REPORT_RECLAIM(LSQ_SECOND_REPORT_RECLAIM), .EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .COMMITTED_STORE_BYPASS(LSQ_COMMITTED_STORE_BYPASS), .PICK_LOCAL_VALIDITY(LSQ_PICK_LOCAL_VALIDITY), .FORWARD_ONEHOT(LSQ_FORWARD_ONEHOT), .FORWARD_PARALLEL_CLASS(LSQ_FORWARD_PARALLEL_CLASS), .FORWARD_OFFSET_PREDECODE(LSQ_FORWARD_OFFSET_PREDECODE), .PICK_ONEHOT(LSQ_PICK_ONEHOT), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .RESPONSE_SOURCE_QUERY(LSQ_RESPONSE_SOURCE_QUERY), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
         .early_addr_valid_i(shared_store_addr_valid), .early_addr_tag_i(shared_store_addr_tag),
         .early_addr_i(shared_store_addr), .store_addr_pending_o(lsq_store_addr_pending),
         .store_addr_rob_tag_o(lsq_store_addr_rob_tag), .store_addr_lsq_tag_o(lsq_store_addr_lsq_tag),
@@ -2698,6 +2746,9 @@ module rv32_backend_joint #(
 .clk_i(clk_i), .reset_i(reset_i), .flush_i(flush_i), .recovery_valid_i(recovery_domains[5]), .recovery_tag_i(recovery_tag_views[5*TAG_WIDTH +: TAG_WIDTH]), .recovery_head_i(recovery_head_views[3*ROB_SLOT_WIDTH +: ROB_SLOT_WIDTH]), .recovery_occupancy_i({{(16-ROB_COUNT_WIDTH){1'b0}}, recovery_descriptor_occupancy}), .alloc_valid_i(lsq_alloc_valid), .alloc_plan_valid_i(d_lsq_need), .alloc_ready_o(lsq_alloc_ready), .alloc_fire_o(lsq_alloc_fire), .alloc_count_o(lsq_alloc_count), .alloc_lsq_tag_o(lsq_alloc_tag), .alloc_payload_tag_o(lsq_alloc_payload_tag), .alloc_is_load_i(d_is_load), .alloc_is_store_i(d_is_store), .alloc_rob_tag_i(d_tag), .alloc_phys_rd_i(d_new_phys), .alloc_size_i(d_mem_size), .alloc_unsigned_i(d_mem_unsigned), .alloc_addr_valid_i(lsq_alloc_addr_valid), .alloc_addr_i(lsq_alloc_addr), .alloc_data_valid_i(lsq_alloc_data_valid), .alloc_store_data_i(lsq_alloc_store_data), .alloc_store_mask_i({BE_WIDTH*4{1'b0}}), .addr_update_valid_i(lsq_addr_update_valid), .addr_update_tag_i(lsq_addr_update_tag), .addr_update_i(lsq_addr_update), .data_update_valid_i(lsq_data_update_valid), .data_update_tag_i(lsq_data_update_tag), .data_update_i(alu_exec_store_data), .data_mask_update_i({BE_WIDTH*4{1'b0}}), .wakeup_valid_i({BE_WIDTH{1'b0}}), .wakeup_tag_i({BE_WIDTH*TAG_WIDTH{1'b0}}), .wakeup_value_i({BE_WIDTH*32{1'b0}}), .store_commit_valid_i(rob_store_commit_valid), .store_commit_ready_o(rob_store_commit_ready), .store_commit_rob_tag_i(rob_store_commit_tag), .dcache_req_valid_o(dcache_req_valid_o), .dcache_req_ready_i(dcache_req_ready_i), .dcache_req_is_load_o(dcache_req_is_load_o), .dcache_req_mmio_class_o(dcache_req_mmio_class_o), .dcache_req_mmio_valid_o(dcache_req_mmio_valid_o), .dcache_req_is_store_o(dcache_req_is_store_o), .dcache_req_addr_o(dcache_req_addr_o), .dcache_req_size_o(dcache_req_size_o), .dcache_req_unsigned_o(dcache_req_unsigned_o), .dcache_req_mask_o(dcache_req_mask_o), .dcache_req_wdata_o(dcache_req_wdata_o), .dcache_req_raw_word_o(dcache_req_raw_word_o), .dcache_req_rob_tag_o(dcache_req_rob_tag_o), .dcache_req_lsq_tag_o(dcache_req_lsq_tag_o), .dcache_resp_valid_i(dcache_resp_valid_i), .dcache_resp_ready_o(dcache_resp_ready_o), .dcache_resp_lsq_tag_i(dcache_resp_lsq_tag_i), .dcache_resp_query_valid_i(dcache_resp_query_valid_i), .dcache_resp_query_tags_i(dcache_resp_query_tags_i), .dcache_resp_addr_i(dcache_resp_addr_i), .dcache_resp_line_data_i(dcache_resp_line_data_i), .dcache_resp_word_data_i(dcache_resp_word_data_i), .dcache_resp_line_valid_i(dcache_resp_line_valid_i), .dcache_resp_error_i(dcache_resp_error_i), .load_return_wake_valid_o(lsq_return_wake_valid), .load_return_wake_rob_tag_o(lsq_return_wake_tag),
         .load_return_wake_phys_o(lsq_return_wake_phys), .load_return_wake_value_o(lsq_return_wake_value),
         .load_complete_valid_o(lsq_load_complete_valid), .load_complete_ready_i(lsq_load_complete_ready), .load_complete_rob_tag_o(lsq_load_complete_tag), .load_complete_rob_query_o(lsq_load_complete_rob_query),
+         .load_report_prefix_identity_tag_o(lsq_prefix_identity_tag),
+        .load_report_prefix_identity_query_o(lsq_prefix_identity_query),
+        .load_report_prefix_identity_covered_o(lsq_prefix_identity_covered),
         .load_report_identity_tags_o(lsq_report_identity_tags), .load_report_identity_queries_o(lsq_report_identity_queries),
         .load_report_held_identity_tag_o(lsq_report_held_identity_tag),
         .load_report_held_identity_query_o(lsq_report_held_identity_query),
@@ -3308,4 +3359,13 @@ module rv32_backend_joint #(
         (LSQ_REPORT_RANGE_CARRY_SELECT!=0 && (LSQ_REPORT_RANGE_PREDECODE!=0 ||
          LSQ_ENTRIES<2 || LSQ_ENTRIES>32 || (LSQ_ENTRIES&(LSQ_ENTRIES-1))!=0)))
         $fatal(1,"LSQ carry range requires power-of-two entries2..32 and original range policy");
+    initial if((LSQ_REPORT_PREFIX_IDENTITY_QUERY!=0 && LSQ_REPORT_PREFIX_IDENTITY_QUERY!=1) ||
+        (LSQ_REPORT_PREFIX_IDENTITY_QUERY!=0 && (LSQ_HEAD_LOAD_IDENTITY_QUERY==0 ||
+         LSQ_HELD_LOAD_IDENTITY_QUERY==0 || LSQ_SAVED_REPORT_PRIORITY==0 ||
+         LOAD_COMPLETION_BYPASS!=2 || LSQ_HEAD_STORE_ACK_BYPASS==0 ||
+         LSQ_STORE_ACK_SOURCE_QUERY==0 || COMPLETION_SOURCE_STATE_QUERY!=2 ||
+         LSQ_REPORT_RECOVERY_PREQUALIFY==0 || LSQ_REPORT_RECOVERY_CIRCULAR_COMPARE==0 ||
+         LSQ_REPORT_LIVE_MATCH_PREQUERY!=0 || LSQ_ENTRIES<2 || LSQ_ENTRIES>32 ||
+         (LSQ_ENTRIES&(LSQ_ENTRIES-1))!=0)))
+        $fatal(1,"Report prefix query requires exact saved/head/held full identity and original lookup policies");
 endmodule

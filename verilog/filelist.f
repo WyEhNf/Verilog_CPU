@@ -93,3 +93,4 @@
 ../rtl/backend/rv32_lsq_report_range_mask.v
 ../rtl/common/rv32_frequency_live_match_bank_masks.v
 ../rtl/backend/rv32_lsq_report_range_carry.v
+../rtl/backend/rv32_lsq_report_prefix_select.v

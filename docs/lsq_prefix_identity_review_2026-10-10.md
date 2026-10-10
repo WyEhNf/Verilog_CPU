@@ -1,0 +1,31 @@
+# Full occupied-prefix qualification after identity lookup
+
+The212-pin `3a586c66` freeze completes SRAM-inclusive official PPA at35861.85621799505um2 /393.99769141977686MHz. It passes the historical area ceiling but fails500MHz; IPC/cycles are unmeasured. Relative to205, area increases58.946940um2 and frequency improves4.792066MHz, so this is an unaccepted higher-frequency candidate, not an accepted Pareto improvement. The worst named path crosses carry range0.1782ns, wrap eligibility0.7987ns, saved identity row6/merge11 at0.9371/1.020ns, original full ROB live query1.099ns, completion source1 selection1.548ns, LSQ allocation2.053ns and response-wait ownership2.426ns before the anonymous endpoint2.494ns. Exact anonymous FF bits are not inferred. [Terminal evidence](../reports/Tier3_shared_range_carry_mdu_2026-10-10.json).
+
+## Exact prefix-order transformation
+
+For N power-of-two slots, head h and physical row r, the original age is `(r-h)&(N-1)`. Sorting by `(r<h,r)` is exactly sorting by that age. The complete original count C defines a prefix of this order: age<C. This holds for C=0, C=N, every encoding C>N, arbitrary eligible bits and all head values; it does not require a valid/occupancy/head/tail invariant.
+
+Let r* be the minimum-age eligible saved LOAD row, independently of C. If its age<C, it is also the minimum-age eligible row inside the occupied prefix. If its age>=C, every later eligible row is also outside the prefix. If no row is eligible, both choices are empty. Therefore the original one-hot priority equals `raw_oldest_grants & {N{covered}}`, where covered is the OR of raw grants AND the exact original range mask. Each native nonreset row compares this equality directly against the original range-qualified priority.
+
+The new helper uses the existing wrap classification, original saved eligibility (valid/load/complete/not-reported) and the entire original range predicate. It adds no state, new latency, count narrowing or tag certificate. Only the normal private full identity tree selects by raw oldest grants. The existing public normal tag/query is then masked by covered and remains exactly the original packet, including all-zero packets on invalid cycles. Full saved/held/head packet trees, range/hold/fast-response priority, completion validity, recovery, request/response, allocation, reclaim and all original state edges remain unchanged.
+
+## Full ROB lookup before the late prefix bit
+
+The backend receives a separate private raw normal tag/query and covered bit. It performs the original full ROB generation/live lookup and original error-state/recovery evaluation before covered arrives. If covered=1, results are unchanged. If covered=0, the original selected normal tag and query are both0: live is0 because tag[0]=0; the bank-mask error read is0 because both query banks are0; recovery-kill is1 because tag[0]=0. The new results are thus `covered && raw_live`, `covered ? raw_state : 0`, and `!covered || raw_recovery_kill`. This retains every full generation bit and exactly the original invalid-cycle results.
+
+Native nonreset checks independently read the original masked tag/query against the current complete ROB live/generation/error arrays and original circular recovery range, comparing all three results. These checks also run during flush/invalid cycles. The helper itself uses its real production logic under WORD_SIM; no correctness-specific bypass or forced queue state is added.
+
+The experiment pairs this new layout with the existing separate held identity query. The earlier212 profile used held query0; this213-pin profile uses held query1 so held, head and normal full lookups are independent before late priority chooses their scalar results. This is one material range/identity/lookup redesign, not an individual held-policy PPA or parameter sweep. Public guards require original saved/head/held decoded identities, direct completion/error-state query2, original circular recovery qualification and power-of-two LSQ2..32. Rejected full-generation prequery stays0. All controls remain default0, and canonical accepted profiles are unchanged.
+
+## Bounded validation and gates
+
+One finite native binary compares actual BE2/ROB8/PHYS40/RS8/LSQ4 backends with direct/staged recovery and direct/registered issue. Held query, prior carry range and existing direct MDU class are fixed in both references; only the new prefix policy0/1 differs. Existing LOAD/BNE wake, MUL0, STORE acknowledgement/error, arithmetic/PC wrap, reset/flush/recovery expectations remain. Public packets/cycles, raw original normal tag/query/live/error/recovery results and all20 raw LSQ metadata families/full generations are compared. No unrelated productionLSQ16 plan/reuse point is repeated.
+
+The same binary includes one512-point productionLSQ16 combinational probe with all head/full-count encodings and one empty/dense/sparse/single eligibility pattern per encoding. Independent modular-age minimum supplies its expectation; both covered and excluded eligible candidates must occur. This is bounded algebra/protocol coverage, not exhaustive eligibility masks, all geometries, full CPU correctness, MDU arithmetic, IPC or PPA proof.
+
+After finite PASS, commit/freeze all numeric pins and run original full-core structural lint without WORD_SIM, then one official PPA. Strict area<=35891.672317998215 and F>=500 permit CPU build/six original performance cases; original dynamic instructions, IPC>=1.1152626918348099 and every accepted cycle ceiling permit one array1 smoke. Final500MHz/latest-source three-tier verification and subsequent IPC1.5/1GHz/unrestricted-area exploration remain outstanding.
+
+## Finite result
+
+The first finite binary passes in103.987970s; simulation completes2us in0.043s. Direct/staged actual backends observe140/157 nonreset edges and counts0/1/2. Full original normal tag/query/live/error/recovery results and all20 raw metadata families/full GEN agree; production prefix priority and original full ROB lookup shadows pass. The raw512-point probe observes348 covered cases and36 excluded nonempty cases. Frozen and current RTL/fixture/tool hashes plus Verilator hash verify after completion. [Exact finite evidence](../reports/Tier_shared_prefix_identity_protocol_2026-10-10.json). No full CPU, exhaustive eligibility masks, all geometries, IPC or PPA claim follows.
