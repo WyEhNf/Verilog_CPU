@@ -1,0 +1,324 @@
+{
+  "status": "OFFICIAL_PPA_TERMINAL_REJECTED_FREQUENCY_REGRESSION_AND_500MHZ_FAILURE",
+  "accepted": false,
+  "source_commit": "9a5e47b51f73614220b62092f16da26e71c1fb63",
+  "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_rs_preload_mdu_class_20261010_r1",
+  "parameter_count": 210,
+  "manifest_sha256": "e2f7cb4d59ad22515de9e34983ca34a8fb396fefd41ef5d88a369ae9c673e68d",
+  "profile_path": "configs/tier3_shared_500_rs_preload_mdu_class_candidate.json",
+  "lint": {
+    "status": "PASSED",
+    "returncode": 0,
+    "seconds": 25.421546800003853,
+    "word_sim": false,
+    "counts": {
+      "errors": 0,
+      "latches": 0,
+      "unoptflat": 0
+    },
+    "log_sha256": "526409a95ee82e7c83738e00bb56ae1287da143e8cf5b5ec203a0e8a6fb90cf5"
+  },
+  "metrics": {
+    "area": {
+      "logic_area_um2": 27938.34179999499,
+      "sequential_area_um2": 7149.7404,
+      "combinational_area_um2": 20788.60139999499,
+      "sram_area_um2": 7943.911838000004,
+      "area_um2": 35882.253637994996
+    },
+    "timing": {
+      "clock_port": "clock",
+      "clock_period_ns": 2.0,
+      "input_delay_ns": 0.2,
+      "output_delay_ns": 0.2,
+      "input_transition_ns": 0.05,
+      "clock_transition_ns": 0.05,
+      "clock_uncertainty_ns": 0.05,
+      "output_load_ff": 5.0,
+      "reset_value": 0,
+      "clock_model": "ideal",
+      "interconnect": "no_parasitics",
+      "frequency_resolution_ns": 0.001,
+      "minimum_period_ns": 2.609375,
+      "estimated_fmax_mhz": 383.23353293413174,
+      "worst_setup_slack_ns": -0.609071,
+      "timing_analyzed": true
+    }
+  },
+  "synth": {
+    "status": "PASSED",
+    "command": [
+      "C:\\Users\\admin\\miniconda3\\python.exe",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_rs_preload_mdu_class_20261010_r1\\source\\scripts\\synth.py",
+      "--filelist",
+      "verilog/filelist.f",
+      "--out",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_rs_preload_mdu_class_20261010_r1\\synth",
+      "--mode",
+      "opt",
+      "--clock-period",
+      "2.0",
+      "--appimage",
+      "",
+      "--yosys",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys.exe",
+      "--abc",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys-abc.exe",
+      "--sta",
+      "F:/CPU2026CourseTools/win54fc150/opensta/bin/sta.exe",
+      "--asap7-lib",
+      "F:/CPU2026CourseTools/win54fc150/asap7/lib"
+    ],
+    "manifest_sha256": "e2f7cb4d59ad22515de9e34983ca34a8fb396fefd41ef5d88a369ae9c673e68d",
+    "phase": "synth",
+    "returncode": 0,
+    "seconds": 1059.4796063000103,
+    "log_sha256": "257422c3e1174f9b223c3bb51af58fae821c638c67c32440fa71a983960abe32",
+    "area_um2": 35882.253637994996,
+    "fmax_mhz": 383.23353293413174,
+    "report_sha256": "9ab515b45eb4eb202b2b970189d592df1e2a7513bd475ba5a4461e4b8cda3213",
+    "ppa_thresholds_passed": false
+  },
+  "previous_best_candidate": {
+    "source_commit": "748804a09e776cef66ffdf2c5b23bd2ec6c541ea",
+    "area_um2": 35802.909277995546,
+    "fmax_mhz": 389.2056252375523,
+    "accepted_500mhz": false
+  },
+  "delta_vs_previous_best": {
+    "area_um2": 79.34435999944981,
+    "fmax_mhz": -5.972092303420538
+  },
+  "required_area_maximum_um2": 35891.672317998215,
+  "required_fmax_minimum_mhz": 500,
+  "required_geomean_ipc_minimum": 1.1152626918348099,
+  "area_gate_passed": true,
+  "frequency_gate_passed": false,
+  "bounded_critical_paths": [
+    {
+      "startpoint": "_397445_/QN",
+      "endpoint": "_398262_/D",
+      "slack_ns": -0.6091,
+      "arrival_ns": 2.5490000000000004,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_bound_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[4].invert/_0_/A",
+          "arrival_ns": 0.31220000000000003
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.755
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[7].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.9156
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_08_/B",
+          "arrival_ns": 1.004
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_original_live_query.live_read/query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[2].invert/_0_/A",
+          "arrival_ns": 1.099
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[2].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.596
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.16
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[10].response_wait_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.455
+        }
+      ]
+    },
+    {
+      "startpoint": "_397445_/QN",
+      "endpoint": "_397821_/D",
+      "slack_ns": -0.5997,
+      "arrival_ns": 2.54,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_bound_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[4].invert/_0_/A",
+          "arrival_ns": 0.31220000000000003
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.755
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[7].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.9156
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_08_/B",
+          "arrival_ns": 1.004
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_original_live_query.live_read/query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[2].invert/_0_/A",
+          "arrival_ns": 1.099
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[2].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.596
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 2.16
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[4].response_wait_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.447
+        }
+      ]
+    },
+    {
+      "startpoint": "_397445_/QN",
+      "endpoint": "_397983_/D",
+      "slack_ns": -0.5893,
+      "arrival_ns": 2.529,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_bound_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[4].invert/_0_/A",
+          "arrival_ns": 0.31220000000000003
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.755
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[7].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.9156
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_08_/B",
+          "arrival_ns": 1.004
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_original_live_query.live_read/query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[2].invert/_0_/A",
+          "arrival_ns": 1.099
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[2].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.596
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 2.16
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[1].generation_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.436
+        }
+      ]
+    },
+    {
+      "startpoint": "_397445_/QN",
+      "endpoint": "_397976_/D",
+      "slack_ns": -0.5891,
+      "arrival_ns": 2.529,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_bound_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[4].invert/_0_/A",
+          "arrival_ns": 0.31220000000000003
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.755
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[7].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.9156
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_08_/B",
+          "arrival_ns": 1.004
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_original_live_query.live_read/query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[2].invert/_0_/A",
+          "arrival_ns": 1.099
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[2].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.596
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 2.16
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[1].generation_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.436
+        }
+      ]
+    },
+    {
+      "startpoint": "_397445_/QN",
+      "endpoint": "_397975_/D",
+      "slack_ns": -0.5891,
+      "arrival_ns": 2.529,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_bound_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[4].invert/_0_/A",
+          "arrival_ns": 0.31220000000000003
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.755
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[7].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.9156
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_08_/B",
+          "arrival_ns": 1.004
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_original_live_query.live_read/query_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[2].invert/_0_/A",
+          "arrival_ns": 1.099
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[2].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 1.596
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "arrival_ns": 2.16
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[1].generation_mem_owner.g_original.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.436
+        }
+      ]
+    }
+  ],
+  "timing_scope": "Complete official synthesis/STA including actual SRAM; exact anonymous register bits not mapped. Named anchors identify LSQ report range/saved identity, original ROB live/GEN query, direct completion, allocation-fire distribution and lifecycle/generation write owners.",
+  "frozen_source_tool_library_hashes_verified": true,
+  "initial_failure": "reports/Tier3_shared_rs_preload_mdu_lint_failure_2026-10-10.json",
+  "finite_sample": "reports/Tier_shared_rs_preload_mdu_protocol_2026-10-10.json",
+  "finite_correctness_repeated": false,
+  "supersedes_dated_progress": "reports/Tier3_shared_rs_preload_mdu_progress_2026-10-10.json",
+  "rejected_final_combination": [
+    "RS_INVALID_PAYLOAD_PRELOAD=1",
+    "RS_MDU_CLASS_PRESELECT=1"
+  ],
+  "controls_remain_default_zero": true,
+  "individual_policy_contributions_isolated": false,
+  "individual_ppa_sweep_started": false,
+  "canonical_profiles_promoted": false,
+  "cpu_build_started": false,
+  "perf_started": false,
+  "smoke_started": false,
+  "ipc": null,
+  "cycles": null,
+  "next_action": "Continue source investigation from prior205-pin configuration; disable both rejected210 controls. Inspect duplicated qualification of zero-idle LSQ state write data under original write enables. Keep full identities/range/recovery/allocation ownership; no CPU measurement after failed Fmax gate."
+}
