@@ -10,6 +10,7 @@ module rv32_icache_nonblocking #(
     parameter integer MSHR_STATE_BANKS = 0,
     parameter integer CLASS_SEND_SELECT = 0,
     parameter integer CONTROL_TARGET_PREFIX = 0,
+    parameter integer CONTROL_REGION_PREQUERY = 0,
     parameter integer QUERY_DOMAINS = 4,
     parameter integer MSHR_STATIC_WRITES = 0,
     parameter integer TAG_MATCH_PARALLEL = 0,
@@ -430,8 +431,38 @@ module rv32_icache_nonblocking #(
         .signal_i(lookup_req_pc),.views_o(demand_pc_views));
     rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(QUERY_DOMAINS)) prefetch_query_tree (
         .signal_i(prefetch_next_line),.views_o(prefetch_pc_views));
-    rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(QUERY_DOMAINS)) control_query_tree (
-        .signal_i(control_target),.views_o(control_pc_views));
+    localparam integer CONTROL_QUERY_WIDTH=(CONTROL_REGION_PREQUERY!=0) ? 32-TAG_REGION_BITS : 32;
+    wire [QUERY_DOMAINS*CONTROL_QUERY_WIDTH-1:0] control_low_views;
+    wire [CACHE_WAYS*QUERY_DOMAINS-1:0] control_region_views;
+    rv32_frequency_control_tree #(.WIDTH(CONTROL_QUERY_WIDTH),.LEAVES(QUERY_DOMAINS)) control_query_tree (
+        .signal_i(control_target[CONTROL_QUERY_WIDTH-1:0]),.views_o(control_low_views));
+    for(genvar control_domain=0;control_domain<QUERY_DOMAINS;control_domain=control_domain+1) begin:g_control_low_query
+        // The upper region is checked independently. Every set/low-tag bit
+        // remains complete; default0 retains the original full query word.
+        assign control_pc_views[control_domain*32 +: 32]=
+            {{(32-CONTROL_QUERY_WIDTH){1'b0}},control_low_views[control_domain*CONTROL_QUERY_WIDTH +: CONTROL_QUERY_WIDTH]};
+    end
+    generate if(CONTROL_REGION_PREQUERY!=0) begin:g_control_region_prequery
+        rv32_icache_control_region_query #(.REGION_BITS(REGION_STORAGE_WIDTH),.WAYS(CACHE_WAYS),
+            .DOMAINS(QUERY_DOMAINS)) query (
+            .candidates_i(control_candidates),.grants_i(control_grants),.prefixes_i(tag_regions),
+            .matches_o(control_region_views));
+`ifndef SYNTHESIS
+        always @(posedge clk_i) if(!reset_i) begin
+            assert($onehot0(control_grants)) else $fatal(1,"Original control priority grants are not onehot0");
+        end
+        for(genvar way=0;way<CACHE_WAYS;way=way+1) begin:g_original_region_shadow
+            wire original_match=tag_regions[way*REGION_STORAGE_WIDTH +: REGION_STORAGE_WIDTH]==
+                control_target[31 -: REGION_STORAGE_WIDTH];
+            always @(posedge clk_i) if(!reset_i)
+                assert(control_region_views[way*QUERY_DOMAINS +: QUERY_DOMAINS]==={QUERY_DOMAINS{original_match}})
+                    else $fatal(1,"Early control region query changed original raw region equality");
+        end
+`endif
+    end else begin:g_original_control_region_unused
+        assign control_region_views=0;
+    end endgenerate
+
     generate if(TAG_REGION_BITS!=0 && TAG_MATCH_PARALLEL!=0) begin:g_region_queries
         localparam integer DOMAIN_SETS=CACHE_SETS/QUERY_DOMAINS;
         for(genvar query_way=0;query_way<CACHE_WAYS;query_way=query_way+1) begin:g_way
@@ -452,7 +483,7 @@ module rv32_icache_nonblocking #(
 
                 wire [DOMAIN_SETS*3-1:0] region_query_matches;
                 rv32_frequency_control_tree #(.WIDTH(3),.LEAVES(DOMAIN_SETS)) match_tree (
-                    .signal_i({prefix==control[31 -: REGION_STORAGE_WIDTH],
+                    .signal_i({(CONTROL_REGION_PREQUERY!=0) ? control_region_views[query_way*QUERY_DOMAINS+query_domain] : (prefix==control[31 -: REGION_STORAGE_WIDTH]),
                         prefix==prefetch[31 -: REGION_STORAGE_WIDTH],
                         prefix==demand[31 -: REGION_STORAGE_WIDTH]}),.views_o(region_query_matches));
                 for(genvar query_row=0;query_row<DOMAIN_SETS;query_row=query_row+1) begin:g_row
@@ -468,7 +499,7 @@ module rv32_icache_nonblocking #(
     generate
 `ifdef CPU2026_WORD_SIM
     if(CACHE_LINES==128 && CACHE_WAYS==2 && CACHE_SET_WIDTH==6 &&
-       CACHE_ENTRY_WIDTH==7 && CACHE_TAG_WIDTH==22 && TAG_MATCH_PARALLEL!=0) begin:g_word_tag_query
+       CACHE_ENTRY_WIDTH==7 && CACHE_TAG_WIDTH==22 && TAG_MATCH_PARALLEL!=0 && CONTROL_REGION_PREQUERY==0) begin:g_word_tag_query
         reg [127:0] demand0,demand1,prefetch_matches,control_matches;
         wire [6:0] control0={control_target[9:4],1'b0};
         wire [6:0] control1={control_target[9:4],1'b1};
@@ -1174,6 +1205,10 @@ module rv32_icache_nonblocking #(
     end endgenerate
 
     initial begin
+        if((CONTROL_REGION_PREQUERY!=0 && CONTROL_REGION_PREQUERY!=1) ||
+            (CONTROL_REGION_PREQUERY!=0 && (TAG_MATCH_PARALLEL==0 || TAG_REGION_BITS<1 ||
+             TAG_REGION_BITS>=CACHE_TAG_WIDTH)))
+            $fatal(1,"Control region prequery requires complete original region/low tags");
         if(CONTROL_TARGET_PREFIX!=0 && CONTROL_TARGET_PREFIX!=1)
             $fatal(1,"I-cache prefix target policy must be 0 or 1");
         if(QUERY_DOMAINS<1 || QUERY_DOMAINS>CACHE_SETS ||

@@ -89,3 +89,5 @@ rtl/backend/rv32_lsq_report_range_mask.v
 rtl/common/rv32_frequency_live_match_bank_masks.v
 rtl/backend/rv32_lsq_report_range_carry.v
 rtl/backend/rv32_lsq_report_prefix_select.v
+rtl/cache/rv32_icache_control_region_query.v
+rtl/backend/rv32_lsq_response_word_format.v

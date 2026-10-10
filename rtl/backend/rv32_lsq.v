@@ -78,6 +78,7 @@ module rv32_lsq #(
     // route query payload from the original complete response match events.
     parameter integer RESPONSE_QUERY_PREDECODE = 0,
     parameter integer RESPONSE_SOURCE_QUERY = 0,
+    parameter integer RESPONSE_WORD_PRESELECT = 0,
     parameter integer SLOT_WIDTH = (LSQ_ENTRIES <= 1) ? 1 : $clog2(LSQ_ENTRIES),
     parameter integer GENERATION_WIDTH = (TAG_WIDTH > (SLOT_WIDTH + 3)) ?
                                           (TAG_WIDTH - SLOT_WIDTH - 3) : 1,
@@ -2174,6 +2175,15 @@ module rv32_lsq #(
     wire unused_response_query_rob_tag_bits = &{1'b0, response_query_rob_tag};
 
     wire [RESPONSE_QUERY_WIDTH-1:0] response_query_packet;
+    wire [LSQ_ENTRIES-1:0] response_word_events;
+    for(genvar query_row=0;query_row<LSQ_ENTRIES;query_row=query_row+1) begin:g_word_response_priority
+        // Exactly the original highest-match/default-row0 selection.
+        assign response_word_events[query_row]=response_match_rows[query_row] ||
+            ((query_row==0) && !(|response_match_rows));
+    end
+    initial if((RESPONSE_WORD_PRESELECT!=0 && RESPONSE_WORD_PRESELECT!=1) ||
+        (RESPONSE_WORD_PRESELECT!=0 && RESPONSE_QUERY_PREDECODE==0))
+        $fatal(1,"Word response preselection requires original decoded response query");
 
     assign {response_query_rob_tag,response_query_offset,response_query_forward,
             response_query_mask,response_query_size,response_query_unsigned}=response_query_packet;
@@ -2245,8 +2255,38 @@ module rv32_lsq #(
     wire [31:0] payload_response_merge=
         (response_query_forward & expand_word_bytes(response_query_mask)) |
         (payload_response_word & ~expand_word_bytes(response_query_mask));
-    wire [31:0] payload_response_value=format_relative_value(
+    wire [31:0] original_payload_response_value=format_relative_value(
         payload_response_merge,response_query_size,response_query_unsigned);
+    wire [31:0] payload_response_value;
+    generate if(RESPONSE_WORD_PRESELECT!=0) begin:g_response_word_preselection
+        localparam integer DOMAINS=(LSQ_ENTRIES+3)/4;
+        wire [DOMAINS*32-1:0] word_views;
+        wire [LSQ_ENTRIES*32-1:0] formatted_rows;
+        wire [31:0] word_value;
+        wire unused_word_selector_write;
+        rv32_frequency_control_tree #(.WIDTH(32),.LEAVES(DOMAINS)) word_tree (
+            .signal_i(dcache_resp_word_data_i),.views_o(word_views));
+        for(genvar row=0;row<LSQ_ENTRIES;row=row+1) begin:g_row
+            rv32_lsq_response_word_format formatter (
+                .word_i(word_views[(row/4)*32 +: 32]),.forward_i(forward_data_mem[row]),
+                .mask_i(forward_mask_mem[row]),.size_i(size_mem[row]),.unsigned_i(unsigned_mem[row]),
+                .value_o(formatted_rows[row*32 +: 32]));
+        end
+        rv32_frequency_event_select #(.WIDTH(32),.EVENTS(LSQ_ENTRIES),.PRIORITY(1)) selector (
+            .events_i(response_word_events),.values_i(formatted_rows),
+            .write_o(unused_word_selector_write),.value_o(word_value));
+        // Arbitrary full-line responses retain the original extraction path.
+        // The CPU's word-response port permits unused line cones to prune.
+        assign payload_response_value=dcache_resp_line_valid_i ? original_payload_response_value : word_value;
+`ifndef SYNTHESIS
+        always @(posedge clk_i) if(!reset_i)
+            assert(payload_response_value===original_payload_response_value)
+                else $fatal(1,"Prepared response format changed original raw value/default-row priority");
+`endif
+    end else begin:g_original_response_format
+        assign payload_response_value=original_payload_response_value;
+    end endgenerate
+
     wire [31:0] payload_forward_value;
     generate if(DISTRIBUTED_LOAD_FORMAT!=0) begin:g_distributed_forward_format
         // Formatting commutes with the exact existing qualification: format(0)

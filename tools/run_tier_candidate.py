@@ -57,6 +57,11 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["LSQ_RESPONSE_WORD_PRESELECT"] not in (0,1):
+        raise ValueError("LSQ word response preselection must be0 or1")
+    if p["ICACHE_CONTROL_REGION_PREQUERY"] not in (0,1) or (p["ICACHE_CONTROL_REGION_PREQUERY"] and
+            (not p["ICACHE_TAG_MATCH_PARALLEL"] or p["ICACHE_TAG_REGION_BITS"]<1 or p["ICACHE_MSHRS"]<2)):
+        raise ValueError("Icache control region prequery requires original nonblocking region tags")
     if p["LSQ_REPORT_PREFIX_IDENTITY_QUERY"] not in (0,1) or (p["LSQ_REPORT_PREFIX_IDENTITY_QUERY"] and
             (not p["LSQ_HEAD_LOAD_IDENTITY_QUERY"] or not p["LSQ_HELD_LOAD_IDENTITY_QUERY"] or
              not p["LSQ_SAVED_REPORT_PRIORITY"] or p["LOAD_COMPLETION_BYPASS"]!=2 or
