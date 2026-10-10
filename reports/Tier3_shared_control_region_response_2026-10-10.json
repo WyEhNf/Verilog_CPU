@@ -1,0 +1,345 @@
+{
+  "status": "OFFICIAL_PPA_TERMINAL_REJECTED_AREA_AND_FREQUENCY_FAILURE",
+  "accepted": false,
+  "source_commit": "f8b9fba007ecc2cbb3b27d5fe898f5a5caeed10c",
+  "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010",
+  "parameter_count": 215,
+  "manifest_sha256": "e157f14a9039ceafe6ccdb66ba6a924fd96a9353bf11d29072a68ccb0754bdb2",
+  "synth": {
+    "status": "PASSED",
+    "command": [
+      "C:\\Users\\admin\\miniconda3\\python.exe",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\scripts\\synth.py",
+      "--filelist",
+      "verilog/filelist.f",
+      "--out",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\synth",
+      "--mode",
+      "opt",
+      "--clock-period",
+      "2.0",
+      "--appimage",
+      "",
+      "--yosys",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys.exe",
+      "--abc",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys-abc.exe",
+      "--sta",
+      "F:/CPU2026CourseTools/win54fc150/opensta/bin/sta.exe",
+      "--asap7-lib",
+      "F:/CPU2026CourseTools/win54fc150/asap7/lib"
+    ],
+    "manifest_sha256": "e157f14a9039ceafe6ccdb66ba6a924fd96a9353bf11d29072a68ccb0754bdb2",
+    "phase": "synth",
+    "returncode": 0,
+    "seconds": 1072.3424458000227,
+    "log_sha256": "3b134835e44fe9ac54d36794a2b7f12b664e0fa3f173a36ce1fe3955fb3ec5d4",
+    "area_um2": 36041.6276179952,
+    "fmax_mhz": 373.45003646973015,
+    "report_sha256": "adc4e12719eb20aa26bafd447466511841efdc3be85d185aa9fcf13ba18d4f77",
+    "ppa_thresholds_passed": false
+  },
+  "lint": {
+    "status": "PASSED",
+    "returncode": 0,
+    "seconds": 27.182692900008988,
+    "command": [
+      "F:/CPU2026CourseTools/win5040/source_release/verilator-5.040/bin/verilator_bin.exe",
+      "--lint-only",
+      "--assert",
+      "-Wall",
+      "-Wno-fatal",
+      "--top-module",
+      "student_top",
+      "--unroll-count",
+      "1024",
+      "--unroll-stmts",
+      "1000000",
+      "-I.",
+      "-Irtl",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\scripts\\ram\\sram_fakeram.sv",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32im_decoder.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\predictor\\rv32_branch_predictor.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\predictor\\rv32_predictor_bht_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\predictor\\rv32_predictor_btb_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\predictor\\rv32_predictor_indirect_btb_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\predictor\\rv32_predictor_choice_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\predictor\\rv32_banked_predictor.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_icache.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_icache_nonblocking.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_icache_mshr_state_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_icache_query_queue.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_instruction_line_filter.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_dcache.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_dcache_control_banks.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_dcache_metadata_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_dcache_mshr_data_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_dcache_metadata_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_dcache_nonblocking.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_dcache_command_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_dcache_command_line.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_cache_stats.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\memory\\rv32_memory_bridge.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\memory\\rv32_uncached_memory.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\frontend\\rv32_fetch_frontend.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\frontend\\rv32_frontend_queue_payload_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\frontend\\rv32_frontend_parallel_bundle_control.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32i_alu.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32m_multiplier.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32m_multiplier_radix4.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32m_divider.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32m_mdu_iterative.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32_physical_register_file.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32_prf_value_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32_rename_unit.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32_rename_map_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_rob.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_rob_owned_field.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_rob_recovery_live_or.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_reservation_station.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_rs_payload_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32m_mdu_reservation_station.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_completion_network.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_lsq.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_lsq_owned_field.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_lsq_forward_window.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_lsq_request_owner.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_lsq_identity_pair_or.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_store_address_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_store_rs_links.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_rat_recovery.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_rat_recovery_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_backend_joint.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_issue_pipeline_slot.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_producer_tag_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_reserved_dispatch_packet.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_elastic_dispatch_packet.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32im_tag_compare.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32im_fifo.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32im_skid_buffer.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32im_prefix_alloc.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32im_priority_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_asap7_fanout.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_inversion.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_negative_subtree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_control_tree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_polarity_tree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_word_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_qualified_word_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_addsub32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_compare32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_event_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_first_two.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_array_read.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_barrel32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_line_extract32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_load_format.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_line_insert32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_conditional_negate32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_execution_recovery_cancel.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_add64_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_add32_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_add_simm12.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_array_read_bank_masks.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_narrow_array_read.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_control_register_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cpu_core.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32_decode_bundle_register.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\rv32_decode_field_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\course\\rv32_axi_lite_bridge.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\course\\rv32_axi_response_fifo.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\course\\student_top.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_lsq_report_range_mask.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\common\\rv32_frequency_live_match_bank_masks.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_lsq_report_range_carry.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_lsq_report_prefix_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\cache\\rv32_icache_control_region_query.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_control_region_response_20261010\\source\\rtl\\backend\\rv32_lsq_response_word_format.v"
+    ],
+    "word_sim": false,
+    "counts": {
+      "errors": 0,
+      "latches": 0,
+      "unoptflat": 0
+    },
+    "log_sha256": "b813263c54f3a080248f5637ebeefbea68b5965a0180e30397f90ee5139fdbaf",
+    "manifest_sha256": "e157f14a9039ceafe6ccdb66ba6a924fd96a9353bf11d29072a68ccb0754bdb2"
+  },
+  "metrics": {
+    "area": {
+      "logic_area_um2": 28097.71577999519,
+      "sequential_area_um2": 7149.7404,
+      "combinational_area_um2": 20947.97537999519,
+      "sram_area_um2": 7943.911838000004,
+      "area_um2": 36041.6276179952
+    },
+    "timing": {
+      "clock_port": "clock",
+      "clock_period_ns": 2.0,
+      "input_delay_ns": 0.2,
+      "output_delay_ns": 0.2,
+      "input_transition_ns": 0.05,
+      "clock_transition_ns": 0.05,
+      "clock_uncertainty_ns": 0.05,
+      "output_load_ff": 5.0,
+      "reset_value": 0,
+      "clock_model": "ideal",
+      "interconnect": "no_parasitics",
+      "frequency_resolution_ns": 0.001,
+      "minimum_period_ns": 2.677734375,
+      "estimated_fmax_mhz": 373.45003646973015,
+      "worst_setup_slack_ns": -0.677447,
+      "timing_analyzed": true
+    }
+  },
+  "required_area_maximum_um2": 35891.672317998215,
+  "required_fmax_minimum_mhz": 500,
+  "area_gate_passed": false,
+  "course36000_area_gate_passed": false,
+  "frequency_gate_passed": false,
+  "required_geomean_ipc_minimum": 1.1152626918348099,
+  "delta_vs212": {
+    "area_um2": 179.77140000014333,
+    "fmax_mhz": -20.547654950046706
+  },
+  "bounded_critical_paths": [
+    {
+      "startpoint": "_401163_/QN",
+      "endpoint": "_402172_/D",
+      "slack_ns": -0.6774,
+      "arrival_ns": 2.618,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.rob.genblk22.g_head_wires.tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07452
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_banked_commit.g_bank[0].packet_selector.g_event[7].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.3997
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_local_row_commands.store_send_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.3560000000000003
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_state_row[15].store_sent_mem_owner.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.551
+        }
+      ]
+    },
+    {
+      "startpoint": "_401163_/QN",
+      "endpoint": "_401367_/D",
+      "slack_ns": -0.6725,
+      "arrival_ns": 2.613,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.rob.genblk22.g_head_wires.tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07452
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_banked_commit.g_bank[0].packet_selector.g_event[7].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.3997
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_local_row_commands.store_send_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.3560000000000003
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_state_row[7].store_sent_mem_owner.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.5460000000000003
+        }
+      ]
+    },
+    {
+      "startpoint": "_401163_/QN",
+      "endpoint": "_402277_/D",
+      "slack_ns": -0.6723,
+      "arrival_ns": 2.613,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.rob.genblk22.g_head_wires.tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07452
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_banked_commit.g_bank[0].packet_selector.g_event[7].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.3997
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_local_row_commands.store_send_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.3560000000000003
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_state_row[12].store_sent_mem_owner.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.552
+        }
+      ]
+    },
+    {
+      "startpoint": "_401163_/QN",
+      "endpoint": "_402207_/D",
+      "slack_ns": -0.6721,
+      "arrival_ns": 2.612,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.rob.genblk22.g_head_wires.tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07452
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_banked_commit.g_bank[0].packet_selector.g_event[7].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.3997
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_local_row_commands.store_send_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.3560000000000003
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_state_row[14].store_sent_mem_owner.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.552
+        }
+      ]
+    },
+    {
+      "startpoint": "_401163_/QN",
+      "endpoint": "_402242_/D",
+      "slack_ns": -0.6709999999999999,
+      "arrival_ns": 2.611,
+      "required_ns": 1.94,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.rob.genblk22.g_head_wires.tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.07452
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_banked_commit.g_bank[0].packet_selector.g_event[7].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 0.3997
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_local_row_commands.store_send_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.3560000000000003
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.rob.g_state_row[13].store_sent_mem_owner.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "arrival_ns": 2.552
+        }
+      ]
+    }
+  ],
+  "frozen_source_tool_library_hashes_verified": true,
+  "finite_sample": "reports/Tier_shared_control_region_response_protocol_2026-10-10.json",
+  "supersedes_dated_progress": "reports/Tier3_shared_control_region_response_progress_2026-10-10.json",
+  "rejected_combination": "ICACHE_CONTROL_REGION_PREQUERY=1 plus LSQ_RESPONSE_WORD_PRESELECT=1; individual contributions not isolated",
+  "controls_remain_default_zero": true,
+  "canonical_profiles_promoted": false,
+  "cpu_build_started": false,
+  "perf_started": false,
+  "smoke_started": false,
+  "ipc": null,
+  "cycles": null,
+  "timing_scope": "Five worst paths cross ROB head views, bank0 commit packet selection and store-send/state-row ownership. Exact anonymous FF bits are not inferred.",
+  "next_action": "Return to212 parameter values. Inspect a material complete LSQ saved/held packet and slot prefix selection to remove the212 count-to-wide-packet arbitration chain without the rejected213 independent held ROB query. Preserve exact complete public packets, invalid-cycle defaults and all state edges; no individual-policy sweep."
+}
