@@ -345,6 +345,7 @@ module rv32_icache_nonblocking #(
         wire [21:0] displaced_immediate=
             {inst[31],inst[31],inst[19:12],inst[20],inst[30:21],1'b0}+22'(control_lane*4);
         wire [31:0] displaced_word={{10{displaced_immediate[21]}},displaced_immediate};
+        wire [31:0] pc=base+32'(control_lane*4);
         wire [31:0] candidate;
         wire candidate_forward;
         if(CONTROL_TARGET_PREFIX!=0) begin:g_prefix_target
@@ -364,7 +365,6 @@ module rv32_icache_nonblocking #(
             assign candidate=base+displaced_word;
             assign candidate_forward=candidate>pc;
         end
-        wire [31:0] pc=base+32'(control_lane*4);
         assign control_candidates[control_lane*32 +: 32]=candidate;
         assign control_outside[control_lane]=(inst[6:0]==7'b1101111) && candidate[31:4]!=base[31:4];
         // Preserve the original UNSIGNED comparison, including address wrap.
