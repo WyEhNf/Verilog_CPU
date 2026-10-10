@@ -1,0 +1,448 @@
+{
+  "required_area_maximum_um2": 35891.672317998215,
+  "required_fmax_minimum_mhz": 500,
+  "required_geomean_ipc_minimum": 1.1152626918348099,
+  "required_maximum_cycles": {
+    "perf_median": 7572,
+    "perf_multiply": 17490,
+    "perf_qsort": 143485,
+    "perf_rsort": 153155,
+    "perf_towers": 4739,
+    "perf_vvadd": 3725
+  },
+  "status": "PPA_TERMINAL_REJECTED_FREQUENCY_REGRESSION",
+  "accepted": false,
+  "source_commit": "cb799ace3ea1c743632ddc1ea562a9d5b19ee06f",
+  "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010",
+  "manifest_sha256": "713faf782880e90ed883c8ff8382b76c008a9db65731e117ef24e5701fc7c4f1",
+  "profile_path": "configs/tier3_shared_500_report_prequery_candidate.json",
+  "parameter_count": 204,
+  "lint": {
+    "status": "PASSED",
+    "returncode": 0,
+    "seconds": 26.669849500001874,
+    "command": [
+      "F:/CPU2026CourseTools/win5040/source_release/verilator-5.040/bin/verilator_bin.exe",
+      "--lint-only",
+      "--assert",
+      "-Wall",
+      "-Wno-fatal",
+      "--top-module",
+      "student_top",
+      "--unroll-count",
+      "1024",
+      "--unroll-stmts",
+      "1000000",
+      "-I.",
+      "-Irtl",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\scripts\\ram\\sram_fakeram.sv",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32im_decoder.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\predictor\\rv32_branch_predictor.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\predictor\\rv32_predictor_bht_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\predictor\\rv32_predictor_btb_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\predictor\\rv32_predictor_indirect_btb_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\predictor\\rv32_predictor_choice_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\predictor\\rv32_banked_predictor.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_icache.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_icache_nonblocking.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_icache_mshr_state_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_icache_query_queue.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_instruction_line_filter.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_dcache.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_dcache_control_banks.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_dcache_metadata_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_dcache_mshr_data_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_dcache_metadata_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_dcache_nonblocking.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_dcache_command_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_dcache_command_line.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cache\\rv32_cache_stats.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\memory\\rv32_memory_bridge.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\memory\\rv32_uncached_memory.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\frontend\\rv32_fetch_frontend.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\frontend\\rv32_frontend_queue_payload_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\frontend\\rv32_frontend_parallel_bundle_control.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32i_alu.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32m_multiplier.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32m_multiplier_radix4.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32m_divider.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32m_mdu_iterative.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32_physical_register_file.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32_prf_value_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32_rename_unit.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32_rename_map_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_rob.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_rob_owned_field.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_rob_recovery_live_or.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_reservation_station.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_rs_payload_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32m_mdu_reservation_station.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_completion_network.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_lsq.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_lsq_owned_field.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_lsq_forward_window.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_lsq_request_owner.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_lsq_identity_pair_or.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_store_address_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_store_rs_links.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_rat_recovery.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_rat_recovery_word.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_backend_joint.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_issue_pipeline_slot.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_producer_tag_row.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_reserved_dispatch_packet.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_elastic_dispatch_packet.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32im_tag_compare.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32im_fifo.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32im_skid_buffer.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32im_prefix_alloc.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32im_priority_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_asap7_fanout.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_inversion.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_negative_subtree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_control_tree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_polarity_tree.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_word_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_qualified_word_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_addsub32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_compare32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_event_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_first_two.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_array_read.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_barrel32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_line_extract32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_load_format.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_line_insert32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_conditional_negate32.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_execution_recovery_cancel.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_add64_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_add32_select.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_add_simm12.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_array_read_bank_masks.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_narrow_array_read.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_control_register_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\cpu_core.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32_decode_bundle_register.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\rv32_decode_field_bank.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\course\\rv32_axi_lite_bridge.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\course\\rv32_axi_response_fifo.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\course\\student_top.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\backend\\rv32_lsq_report_range_mask.v",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\rtl\\common\\rv32_frequency_live_match_bank_masks.v"
+    ],
+    "log_sha256": "be49f084d1d3aec9fbe7bd3d55685c9d6d4d1261dd8894e58571b10eb31b2969",
+    "errors": 0,
+    "latches": 0,
+    "unoptflat": 0
+  },
+  "observed_synth_session": 35075,
+  "area_um2": 35831.150737995995,
+  "fmax_mhz": 354.8163548163548,
+  "geomean_ipc": null,
+  "build_run": false,
+  "perf_run": false,
+  "cpu_smoke_run": false,
+  "notes": [
+    "One original official PPA completed in1160.4631664000335s on the committed204-pin cb799ace source. Frozen source/tool/library hashes verified after terminal completion. Original full-core structural lint had zero errors/latches/UNOPTFLAT; one finite paired sample remains scoped to its own frozen inputs.",
+    "Frequency354.8163548163548MHz regresses23.4621823096149MHz versus the prior202-pin378.2785371259697MHz candidate and fails500MHz. Area35831.150737995995um2 increases148.04531999987393um2 and remains below the strict historical ceiling. The combined policies are rejected; no accepted tier or best prior candidate is replaced. Synth PASSED is not acceptance.",
+    "Both new policies remain default0. Canonical Tier1/Tier2/Tier3 and the prior202-pin candidate do not enable either. The failed204-pin profile is preserved only as reproducible experimental evidence; no individual-flag PPA or parameter sweep is licensed by this failure.",
+    "The five worst paths still cross saved LSQ report range/wrap eligibility, full identity selection, full generation qualification, completion and LSQ allocation/payload writes. Named anchors now include the new range helper and full-generation helper. This does not isolate each policy contribution; exact anonymous source/endpoint bits remain unmapped.",
+    "No CPU build/perf/array1 smoke ran after the failed PPA gates; IPC/cycles unknown. Historical accepted freezes remain authoritative. Next meaningful combined change should use the prior202-pin math/layout policies and investigate completion-driven dispatch admission and original LSQ allocation-write cones rather than promoting this regression or blindly sweeping these two flags.",
+    "Strict area/Fmax then original six-case instruction/IPC/cycle gates and one array1 smoke remain required; latest-source all-three-tier finalization and later IPC1.5/1GHz/unrestricted-area exploration remain incomplete."
+  ],
+  "synth": {
+    "status": "PASSED",
+    "command": [
+      "C:\\Users\\admin\\miniconda3\\python.exe",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\source\\scripts\\synth.py",
+      "--filelist",
+      "verilog/filelist.f",
+      "--out",
+      "F:\\CPU2026TierRuns\\tier3_shared_500_report_prequery_20261010\\synth",
+      "--mode",
+      "opt",
+      "--clock-period",
+      "2.0",
+      "--appimage",
+      "",
+      "--yosys",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys.exe",
+      "--abc",
+      "F:/CPU2026CourseTools/win54fc150/yosys/bin/yosys-abc.exe",
+      "--sta",
+      "F:/CPU2026CourseTools/win54fc150/opensta/bin/sta.exe",
+      "--asap7-lib",
+      "F:/CPU2026CourseTools/win54fc150/asap7/lib"
+    ],
+    "manifest_sha256": "713faf782880e90ed883c8ff8382b76c008a9db65731e117ef24e5701fc7c4f1",
+    "phase": "synth",
+    "returncode": 0,
+    "seconds": 1160.4631664000335,
+    "log_sha256": "ddb2d0f599de32339b295c09e8f9266137dd82c9ae3cc7a6c522f29b18a11bae",
+    "area_um2": 35831.150737995995,
+    "fmax_mhz": 354.8163548163548,
+    "report_sha256": "53638104fc0aa7f12fbda5bc27a5001bed5027e5915ea088c00e26bbd05788c9",
+    "ppa_thresholds_passed": false
+  },
+  "minimum_period_ns": 2.818359375,
+  "area_breakdown": {
+    "logic_area_um2": 27887.238899995988,
+    "sequential_area_um2": 7139.826,
+    "combinational_area_um2": 20747.41289999599,
+    "sram_area_um2": 7943.911838000004,
+    "area_um2": 35831.150737995995
+  },
+  "critical_paths": [
+    {
+      "startpoint": "_396301_/QN",
+      "endpoint": "_414708_/D",
+      "slack_ns": -0.8174,
+      "arrival_ns": 2.762,
+      "required_ns": 1.9449999999999998,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_predecoded_report_range.range_mask/_056_/A",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "arrival_ns": 0.2024
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 0.8447
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[6].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 0.9960000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_72_/A",
+          "cell": "OR2x2_ASAP7_75t_R",
+          "arrival_ns": 1.074
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_full_generation_prequery.live_match/generation_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 1.149
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[1].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 1.709
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 2.245
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_payload_row[6].address_selector.g_event[0].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 2.637
+        }
+      ]
+    },
+    {
+      "startpoint": "_396301_/QN",
+      "endpoint": "_414710_/D",
+      "slack_ns": -0.8172999999999999,
+      "arrival_ns": 2.762,
+      "required_ns": 1.9449999999999998,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_predecoded_report_range.range_mask/_056_/A",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "arrival_ns": 0.2024
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 0.8447
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[6].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 0.9960000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_72_/A",
+          "cell": "OR2x2_ASAP7_75t_R",
+          "arrival_ns": 1.074
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_full_generation_prequery.live_match/generation_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 1.149
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[1].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 1.709
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 2.245
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_payload_row[6].address_selector.g_event[0].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 2.637
+        }
+      ]
+    },
+    {
+      "startpoint": "_396301_/QN",
+      "endpoint": "_414705_/D",
+      "slack_ns": -0.8172999999999999,
+      "arrival_ns": 2.762,
+      "required_ns": 1.9449999999999998,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_predecoded_report_range.range_mask/_056_/A",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "arrival_ns": 0.2024
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 0.8447
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[6].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 0.9960000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_72_/A",
+          "cell": "OR2x2_ASAP7_75t_R",
+          "arrival_ns": 1.074
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_full_generation_prequery.live_match/generation_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 1.149
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[1].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 1.709
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 2.245
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_payload_row[6].address_selector.g_event[0].g_present.selection_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 2.637
+        }
+      ]
+    },
+    {
+      "startpoint": "_396301_/QN",
+      "endpoint": "_414731_/D",
+      "slack_ns": -0.8168,
+      "arrival_ns": 2.76,
+      "required_ns": 1.943,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_predecoded_report_range.range_mask/_056_/A",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "arrival_ns": 0.2024
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 0.8447
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[6].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 0.9960000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_72_/A",
+          "cell": "OR2x2_ASAP7_75t_R",
+          "arrival_ns": 1.074
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_full_generation_prequery.live_match/generation_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 1.149
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[1].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 1.709
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 2.245
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[6].addr_mem_owner.g_qualified.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 2.6270000000000002
+        }
+      ]
+    },
+    {
+      "startpoint": "_396301_/QN",
+      "endpoint": "_414719_/D",
+      "slack_ns": -0.8167,
+      "arrival_ns": 2.76,
+      "required_ns": 1.943,
+      "named_anchors": [
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_predecoded_report_range.range_mask/_056_/A",
+          "cell": "NOR2xp33_ASAP7_75t_R",
+          "arrival_ns": 0.2024
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.report_wrap_enable_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 0.8447
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_row[6].g_present.g_saved_identity_candidate.g_saved_identity_words.mask_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 0.9960000000000001
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_report_merge[11].g_saved_identity_pair.pair/_72_/A",
+          "cell": "OR2x2_ASAP7_75t_R",
+          "arrival_ns": 1.074
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.g_load_report_identity_qualification.g_candidate[0].g_full_generation_prequery.live_match/generation_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[3].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 1.149
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.completion.g_direct_payload[1].g_source[1].g_live.select_tree.genblk1.g_balanced_polarity.tree.g_group[1].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 1.709
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_allocation_fire_distribution.fire_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[1].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 2.245
+        },
+        {
+          "pin": "core.g_ooo_backend.backend.lsq.g_state_row[6].addr_mem_owner.g_qualified.payload_owner.write_tree.genblk1.g_balanced_polarity.tree.g_group[0].node.g_driver[0].invert/_0_/A",
+          "cell": "INVx1_ASAP7_75t_R",
+          "arrival_ns": 2.6270000000000002
+        }
+      ]
+    }
+  ],
+  "supersedes": "reports/Tier3_shared_report_prequery_progress_2026-10-10.json",
+  "prior_candidate_delta": {
+    "source_commit": "cc2fe85909193dcb60b9bc7a0443867e80c194dd",
+    "area_um2": 148.04531999987375,
+    "fmax_mhz": -23.46218230961489
+  }
+}
