@@ -27,6 +27,7 @@ module rv32_lsq #(
     parameter integer REPORT_RANGE_CARRY_SELECT = 0,
     parameter integer REPORT_PREFIX_IDENTITY_QUERY = 0,
     parameter integer REPORT_PACKET_PREFIX_SELECT = 0,
+    parameter integer DIRECT_PACKET_FOLD = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -224,6 +225,8 @@ module rv32_lsq #(
     output wire [(1<<REPORT_ROB_LOW_BITS)+(1<<REPORT_ROB_HIGH_BITS)-1:0] load_report_prefix_identity_query_o,
     output wire load_report_prefix_identity_covered_o,
     output wire [2*((1<<REPORT_ROB_LOW_BITS)+(1<<REPORT_ROB_HIGH_BITS))-1:0] load_report_identity_queries_o,
+    output wire [ROB_TAG_WIDTH+PHYS_ADDR_WIDTH+32-1:0] load_report_head_payload_o,
+    output wire [ROB_TAG_WIDTH+PHYS_ADDR_WIDTH+32-1:0] load_report_saved_payload_o,
     output wire load_report_identity_head_o,
     output wire [ROB_TAG_WIDTH-1:0] load_report_held_identity_tag_o,
     output wire [(1<<REPORT_ROB_LOW_BITS)+(1<<REPORT_ROB_HIGH_BITS)-1:0] load_report_held_identity_query_o,
@@ -1613,6 +1616,9 @@ module rv32_lsq #(
          HELD_LOAD_IDENTITY_QUERY!=0 || REPORT_PREFIX_IDENTITY_QUERY!=0 ||
          LSQ_ENTRIES<2 || LSQ_ENTRIES>32 || LSQ_ENTRIES!=(1<<SLOT_WIDTH))))
         $fatal(1,"Packet prefix requires complete original saved/head packets and shared held query");
+    initial if((DIRECT_PACKET_FOLD!=0 && DIRECT_PACKET_FOLD!=1) ||
+        (DIRECT_PACKET_FOLD!=0 && HEAD_LOAD_PACKET_ACTIVE==0))
+        $fatal(1,"Direct packet fold requires complete original head/saved packet candidates");
     localparam integer NORMAL_IDENTITY_WIDTH=ROB_TAG_WIDTH+REPORT_ROB_QUERY_WIDTH;
     localparam integer NORMAL_IDENTITY_WORDS=(NORMAL_IDENTITY_WIDTH+15)/16;
     wire [NORMAL_IDENTITY_WIDTH-1:0] normal_identity_tree [1:2*REPORT_ROWS-1];
@@ -1650,6 +1656,23 @@ module rv32_lsq #(
             head_packet_metadata[TAG_WIDTH +: PHYS_ADDR_WIDTH],
             dcache_resp_error_i,payload_response_value,
             head_packet_metadata[0 +: TAG_WIDTH],store_ack_rob_query_tag_o};
+        if(DIRECT_PACKET_FOLD!=0) begin:g_direct_candidates
+            assign load_report_head_payload_o={store_ack_rob_query_tag_o,
+                head_packet_metadata[TAG_WIDTH +: PHYS_ADDR_WIDTH],payload_response_value};
+            assign load_report_saved_payload_o={qualified_saved_identity[0 +: ROB_TAG_WIDTH],
+                qualified_saved_identity[ROB_TAG_WIDTH+TAG_WIDTH+33 +: PHYS_ADDR_WIDTH],
+                qualified_saved_identity[ROB_TAG_WIDTH+TAG_WIDTH +: 32]};
+`ifndef SYNTHESIS
+            wire [ROB_TAG_WIDTH+PHYS_ADDR_WIDTH+32-1:0] selected_candidate=load_report_identity_head_o ?
+                load_report_head_payload_o :load_report_saved_payload_o;
+            always @(posedge clk_i) if(!reset_i)
+                assert(selected_candidate==={load_complete_rob_tag_o,load_complete_phys_rd_o,load_complete_value_o})
+                    else $fatal(1,"Raw complete LOAD candidates differ from original public payload");
+`endif
+        end else begin:g_no_direct_candidates
+            assign load_report_head_payload_o=0;
+            assign load_report_saved_payload_o=0;
+        end
         // Head choice implies original report-valid; absent any valid saved
         // or held row the normal tree is0. No second wide validity mask needed.
         // A late head/saved choice must not drive the entire report word.
@@ -1666,6 +1689,8 @@ module rv32_lsq #(
                 head_packet[LOW +: BITS] : qualified_saved_identity[LOW +: BITS];
         end
     end else begin:g_original_load_packet
+        assign load_report_head_payload_o=0;
+        assign load_report_saved_payload_o=0;
         assign head_packet_metadata=0;
         assign prepared_report_payload=report_payload_tree[1][0 +: REPORT_BASE_WIDTH];
     end endgenerate

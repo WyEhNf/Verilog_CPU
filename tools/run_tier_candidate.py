@@ -64,6 +64,12 @@ def validate_parameters(text, profile):
              not p["LSQ_HEAD_STORE_ACK_BYPASS"] or not p["LSQ_STORE_ACK_SOURCE_QUERY"] or
              p["LSQ_ENTRIES"]<2 or p["LSQ_ENTRIES"]>32 or p["LSQ_ENTRIES"]&(p["LSQ_ENTRIES"]-1))):
         raise ValueError("Complete packet prefix requires original shared saved/held lookup and power-of-two slots")
+    if p["COMPLETION_LOAD_PACKET_FOLD"] not in (0,1) or (p["COMPLETION_LOAD_PACKET_FOLD"] and
+            (p["COMPLETION_BYPASS"]!=2 or not p["LSQ_HEAD_LOAD_PACKET_PRESELECT"] or
+             not p["LSQ_HEAD_LOAD_IDENTITY_QUERY"] or not p["LSQ_SAVED_REPORT_PRIORITY"] or
+             p["LOAD_COMPLETION_BYPASS"]!=2 or not p["LSQ_HEAD_STORE_ACK_BYPASS"] or
+             not p["LSQ_STORE_ACK_SOURCE_QUERY"])):
+        raise ValueError("Load candidate fold requires original head/saved packets and direct CDB2")
     if p["LSQ_RESPONSE_WORD_PRESELECT"] not in (0,1):
         raise ValueError("LSQ word response preselection must be0 or1")
     if p["ICACHE_CONTROL_REGION_PREQUERY"] not in (0,1) or (p["ICACHE_CONTROL_REGION_PREQUERY"] and

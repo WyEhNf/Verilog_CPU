@@ -16,6 +16,8 @@ module rv32_completion_network #(
     // These optional direct-mode fields may be omitted only by a caller
     // which does not consume the corresponding CDB outputs. Legacy FIFO
     // paths and the standalone defaults retain their complete payload.
+    parameter integer SPLIT_DIRECT_SOURCE = 0,
+    parameter integer SPLIT_SOURCE_INDEX = 0,
     parameter integer DIRECT_BRANCH_PAYLOAD = 1,
     parameter DIRECT_STORE_PAYLOAD = 1,
     parameter integer SLOT_WIDTH = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH),
@@ -26,6 +28,8 @@ module rv32_completion_network #(
     input  wire                         flush_i,
     input  wire                         kill_valid_i,
     input  wire [FIFO_DEPTH-1:0]        kill_mask_i,
+    input  wire [TAG_WIDTH+PHYS_ADDR_WIDTH+32-1:0] producer_split_head_i,producer_split_saved_i,
+    input  wire producer_split_choice_i,
     input  wire [SOURCES-1:0]           producer_valid_i,
     output reg  [SOURCES-1:0]           producer_ready_o,
     input  wire [(SOURCES*TAG_WIDTH)-1:0] producer_tag_i,
@@ -134,6 +138,37 @@ module rv32_completion_network #(
         end
     endgenerate
 
+    initial if((SPLIT_DIRECT_SOURCE!=0 && SPLIT_DIRECT_SOURCE!=1) ||
+        (SPLIT_DIRECT_SOURCE!=0 && (BYPASS!=2 || SPLIT_SOURCE_INDEX<0 || SPLIT_SOURCE_INDEX>=SOURCES)))
+        $fatal(1,"Candidate fold requires direct mode2 and a complete original source");
+    wire split_tag_eligible;
+    wire [CDB_WIDTH-1:0] split_held_equal;
+    wire [CDB_WIDTH*TAG_WIDTH-1:0] split_held_tags;
+    for(genvar held_view=0;held_view<CDB_WIDTH;held_view=held_view+1) begin:g_split_held_tag_view
+        assign split_held_tags[held_view*TAG_WIDTH +: TAG_WIDTH]=direct_hold_tag[held_view];
+    end
+    generate if(SPLIT_DIRECT_SOURCE!=0) begin:g_split_tag_class
+        rv32_completion_candidate_class #(.TAG_WIDTH(TAG_WIDTH),.LANES(CDB_WIDTH)) classes (
+            .head_tag_i(producer_split_head_i[32+PHYS_ADDR_WIDTH +: TAG_WIDTH]),
+            .saved_tag_i(producer_split_saved_i[32+PHYS_ADDR_WIDTH +: TAG_WIDTH]),
+            .live_tag_i(live_tag_i),.live_valid_i(live_tag_valid_i),
+            .head_choice_i(producer_split_choice_i),.held_tags_i(split_held_tags),
+            .tag_eligible_o(split_tag_eligible),.held_equal_o(split_held_equal));
+`ifndef SYNTHESIS
+        always @(posedge clk_i) if(!reset_i) begin
+            assert(split_tag_eligible===(producer_tag_i[SPLIT_SOURCE_INDEX*TAG_WIDTH] &&
+                (!live_tag_valid_i || producer_tag_i[SPLIT_SOURCE_INDEX*TAG_WIDTH +: TAG_WIDTH]==live_tag_i)))
+                else $fatal(1,"Fold changed original valid/full live tag qualification");
+            for(integer check_lane=0;check_lane<CDB_WIDTH;check_lane=check_lane+1)
+                assert(split_held_equal[check_lane]===
+                    (producer_tag_i[SPLIT_SOURCE_INDEX*TAG_WIDTH +: TAG_WIDTH]==direct_hold_tag[check_lane]))
+                    else $fatal(1,"Fold changed full held tag comparison");
+        end
+`endif
+    end else begin:g_no_split_tag_class
+        assign split_tag_eligible=0;
+        assign split_held_equal=0;
+    end endgenerate
     // Reserve held sources using static tag comparisons. Each remaining
     // source computes its rank in the round-robin order in parallel. Free
     // lane numbers select ranks, rather than re-scanning a variable-indexed
@@ -152,9 +187,15 @@ module rv32_completion_network #(
             // Above-cursor sources precede wrapped sources; within
             // either part of the circle static source number determines order.
             assign source_above_cursor[rank_source]=(rank_source>=direct_rr_reg);
+            wire tag_eligible;
+            if(SPLIT_DIRECT_SOURCE!=0 && rank_source==SPLIT_SOURCE_INDEX) begin:g_split
+                assign tag_eligible=split_tag_eligible;
+            end else begin:g_original
+                assign tag_eligible=producer_tag_i[rank_source*TAG_WIDTH] &&
+                    (!live_tag_valid_i || producer_tag_i[rank_source*TAG_WIDTH +: TAG_WIDTH]==live_tag_i);
+            end
             assign direct_eligible[rank_source]=producer_valid_i[rank_source] &&
-                producer_target_live_i[rank_source] && producer_tag_i[rank_source*TAG_WIDTH] &&
-                (!live_tag_valid_i || producer_tag_i[rank_source*TAG_WIDTH +: TAG_WIDTH]==live_tag_i);
+                producer_target_live_i[rank_source] && tag_eligible;
             wire [CDB_WIDTH-1:0] held_here;
             for(rank_prior_lane=0;rank_prior_lane<CDB_WIDTH;rank_prior_lane=rank_prior_lane+1) begin:g_held
                 assign held_here[rank_prior_lane]=held_source_mask[rank_prior_lane][rank_source];
@@ -178,9 +219,14 @@ module rv32_completion_network #(
         end
         for(rank_lane=0;rank_lane<CDB_WIDTH;rank_lane=rank_lane+1) begin:g_lane_rank
             for(rank_source=0;rank_source<SOURCES;rank_source=rank_source+1) begin:g_held_match
+                wire tag_equal;
+                if(SPLIT_DIRECT_SOURCE!=0 && rank_source==SPLIT_SOURCE_INDEX) begin:g_split
+                    assign tag_equal=split_held_equal[rank_lane];
+                end else begin:g_original
+                    assign tag_equal=producer_tag_i[rank_source*TAG_WIDTH +: TAG_WIDTH]==direct_hold_tag[rank_lane];
+                end
                 assign held_source_mask[rank_lane][rank_source]=direct_hold_valid[rank_lane] &&
-                    direct_hold_source[rank_lane]==rank_source && direct_eligible[rank_source] &&
-                    producer_tag_i[rank_source*TAG_WIDTH +: TAG_WIDTH]==direct_hold_tag[rank_lane];
+                    direct_hold_source[rank_lane]==rank_source && direct_eligible[rank_source] && tag_equal;
                 assign selected_mask[rank_lane][rank_source]=held_source_mask[rank_lane][rank_source] ||
                     (!held_lane_live[rank_lane] && direct_eligible[rank_source] && !direct_used[rank_source] &&
                      source_rank[rank_source]==lane_free_rank[rank_lane]);
@@ -290,13 +336,38 @@ module rv32_completion_network #(
                     end
                 end
                 wire [DATA_WIDTH-1:0] selected_data;
-                rv32_frequency_control_tree #(.LEAVES(WORDS)) select_tree (
-                    .signal_i(selected_mask[payload_lane][payload_source] && !reset_i && !flush_i),
-                    .views_o(selected_views));
-                for(payload_word=0;payload_word<WORDS;payload_word=payload_word+1) begin:g_word
-                    localparam integer LOW=payload_word*16;
-                    localparam integer BITS=DATA_WIDTH-LOW>=16?16:DATA_WIDTH-LOW;
-                    assign selected_data[LOW +: BITS]={BITS{selected_views[payload_word]}} & data[LOW +: BITS];
+                if(SPLIT_DIRECT_SOURCE!=0 && payload_source==SPLIT_SOURCE_INDEX) begin:g_split_packet
+                    localparam integer VALUE_LOW=32+((DIRECT_BRANCH_PAYLOAD!=0)?32:0)+
+                        ((DIRECT_STORE_PAYLOAD!=0)?32:0);
+                    localparam integer FLAGS=(DIRECT_BRANCH_PAYLOAD!=0)?7:4;
+                    wire [DATA_WIDTH-1:0] head_packet={
+                        producer_split_head_i[32+PHYS_ADDR_WIDTH +: TAG_WIDTH],
+                        producer_split_head_i[32 +: PHYS_ADDR_WIDTH],
+                        data[VALUE_LOW+32 +: FLAGS],producer_split_head_i[0 +: 32],data[0 +: VALUE_LOW]};
+                    wire [DATA_WIDTH-1:0] saved_packet={
+                        producer_split_saved_i[32+PHYS_ADDR_WIDTH +: TAG_WIDTH],
+                        producer_split_saved_i[32 +: PHYS_ADDR_WIDTH],
+                        data[VALUE_LOW+32 +: FLAGS],producer_split_saved_i[0 +: 32],data[0 +: VALUE_LOW]};
+                    assign selected_views=0;
+                    rv32_completion_packet_fold #(.WIDTH(DATA_WIDTH)) fold (
+                        .head_i(head_packet),.saved_i(saved_packet),.head_choice_i(producer_split_choice_i),
+                        .grant_i(selected_mask[payload_lane][payload_source] && !reset_i && !flush_i),
+                        .packet_o(selected_data));
+`ifndef SYNTHESIS
+                    always @(posedge clk_i) if(!reset_i)
+                        assert(selected_data===({DATA_WIDTH{selected_mask[payload_lane][payload_source] &&
+                            !reset_i && !flush_i}} & data))
+                            else $fatal(1,"Fold changed complete original direct CDB payload/default zero");
+`endif
+                end else begin:g_original_packet
+                    rv32_frequency_control_tree #(.LEAVES(WORDS)) select_tree (
+                        .signal_i(selected_mask[payload_lane][payload_source] && !reset_i && !flush_i),
+                        .views_o(selected_views));
+                    for(payload_word=0;payload_word<WORDS;payload_word=payload_word+1) begin:g_word
+                        localparam integer LOW=payload_word*16;
+                        localparam integer BITS=DATA_WIDTH-LOW>=16?16:DATA_WIDTH-LOW;
+                        assign selected_data[LOW +: BITS]={BITS{selected_views[payload_word]}} & data[LOW +: BITS];
+                    end
                 end
                 if(DIRECT_BRANCH_PAYLOAD!=0) begin:g_selected_branch_1
                     if(DIRECT_STORE_PAYLOAD!=0) begin:g_selected_store_1
