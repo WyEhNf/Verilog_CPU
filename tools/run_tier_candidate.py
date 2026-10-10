@@ -57,6 +57,13 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["LSQ_INVALID_PAYLOAD_PRELOAD"] not in (0,1) or (p["LSQ_INVALID_PAYLOAD_PRELOAD"] and
+            (not p["DISPATCH_PIPELINE"] or not p["DISPATCH_ELASTIC"] or not p["LSQ_ALLOC_SLOT_PRESELECT"] or
+             not p["LSQ_ALLOC_PAYLOAD_PRESELECT"] or not p["LSQ_PHASED_DATA_OWNER"] or
+             not p["LSQ_PHASED_DIRECT_WRITE_EVENTS"] or not p["LSQ_PHASED_ALLOC_EXCLUSIVE"] or
+             not p["LSQ_QUALIFIED_ADDRESS_WRITE"] or p["DIRECT_DISPATCH_RELEASE_CREDITS"] or
+             p["LSQ_DIRECT_POP_CREDIT"] or p["BE_WIDTH"]>p["LSQ_ENTRIES"])):
+        raise ValueError("Invalid preload requires atomic planned no-release phased LSQ")
     if p["LSQ_REPORT_RANGE_PREDECODE"] not in (0,1) or (p["LSQ_REPORT_RANGE_PREDECODE"] and
             (p["LSQ_ENTRIES"]<2 or p["LSQ_ENTRIES"]>32 or p["LSQ_ENTRIES"]&(p["LSQ_ENTRIES"]-1))):
         raise ValueError("Report range predecode requires power-of-two LSQ entries 2..32")

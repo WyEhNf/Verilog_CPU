@@ -20,6 +20,7 @@ module rv32_lsq #(
     parameter integer PHASED_ALLOC_EXCLUSIVE = 0,
     // Address selector already supplies zero whenever its write is absent.
     parameter integer QUALIFIED_ADDRESS_WRITE = 0,
+    parameter integer INVALID_PAYLOAD_PRELOAD = 0,
     parameter integer REPORT_RANGE_PREDECODE = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
@@ -1395,11 +1396,15 @@ module rv32_lsq #(
     localparam integer PHYS_MAP_DOMAINS=(LSQ_ENTRIES+3)/4;
     wire [LSQ_ENTRIES*PHYS_ADDR_WIDTH-1:0] physical_destinations;
     wire [PHYS_MAP_DOMAINS*BE_WIDTH-1:0] physical_alloc_views;
+    wire [PHYS_MAP_DOMAINS*BE_WIDTH-1:0] payload_plan_views;
+    rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(PHYS_MAP_DOMAINS)) payload_plan_tree (
+        .signal_i(alloc_plan_valid_i),.views_o(payload_plan_views));
     wire [PHYS_MAP_DOMAINS*BE_WIDTH*SLOT_WIDTH-1:0] physical_slot_views;
     wire [PHYS_MAP_DOMAINS*BE_WIDTH*PHYS_ADDR_WIDTH-1:0] physical_value_views;
     wire [BE_WIDTH*SLOT_WIDTH-1:0] physical_alloc_slots;
     rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(PHYS_MAP_DOMAINS)) physical_alloc_tree (
-        .signal_i(alloc_fire_o & {BE_WIDTH{!reset_i}}),.views_o(physical_alloc_views));
+        .signal_i(((INVALID_PAYLOAD_PRELOAD!=0)?alloc_plan_valid_i:alloc_fire_o) &
+            {BE_WIDTH{!reset_i}}),.views_o(physical_alloc_views));
     rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*SLOT_WIDTH),.LEAVES(PHYS_MAP_DOMAINS)) physical_slot_tree (
         .signal_i(physical_alloc_slots),.views_o(physical_slot_views));
     rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*PHYS_ADDR_WIDTH),.LEAVES(PHYS_MAP_DOMAINS)) physical_value_tree (
@@ -1416,7 +1421,9 @@ module rv32_lsq #(
             wire row_write;
             wire [PHYS_ADDR_WIDTH-1:0] next_phys;
             for(genvar physical_lane=0;physical_lane<BE_WIDTH;physical_lane=physical_lane+1) begin:g_match
-                assign row_match_mask[physical_lane]=physical_alloc_views[DOMAIN*BE_WIDTH+physical_lane] &&
+                assign row_match_mask[physical_lane]=
+                    ((INVALID_PAYLOAD_PRELOAD==0) || !valid_mem[physical_row]) &&
+                    physical_alloc_views[DOMAIN*BE_WIDTH+physical_lane] &&
                     physical_slot_views[(DOMAIN*BE_WIDTH+physical_lane)*SLOT_WIDTH +: SLOT_WIDTH]==physical_row;
             end
             rv32_frequency_event_select #(.WIDTH(PHYS_ADDR_WIDTH),.EVENTS(BE_WIDTH)) selector (
@@ -1426,6 +1433,19 @@ module rv32_lsq #(
             rv32_frequency_word_bank #(.WIDTH(PHYS_ADDR_WIDTH)) owner (
                 .clk_i(clk_i),.write_i(row_write),.data_i(next_phys),
                 .data_o(physical_destinations[physical_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]));
+`ifndef SYNTHESIS
+            if(INVALID_PAYLOAD_PRELOAD!=0) begin:g_original_physical_shadow
+                reg [PHYS_ADDR_WIDTH-1:0] original_phys;
+                always @(posedge clk_i) begin
+                    if(!reset_i && valid_mem[physical_row])
+                        assert(physical_destinations[physical_row*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH]===original_phys)
+                            else $fatal(1,"Preloaded live physical destination differs");
+                    for(integer lane=0;lane<BE_WIDTH;lane=lane+1)
+                        if(!reset_i && alloc_fire_o[lane] && physical_alloc_slots[lane*SLOT_WIDTH +: SLOT_WIDTH]==physical_row)
+                            original_phys<=alloc_phys_rd_i[lane*PHYS_ADDR_WIDTH +: PHYS_ADDR_WIDTH];
+                end
+            end
+`endif
         end
     endgenerate
 
@@ -2192,6 +2212,22 @@ module rv32_lsq #(
     end endgenerate
     rv32_frequency_control_tree #(.WIDTH(3),.LEAVES(LSQ_ENTRIES)) payload_mode_tree (
         .signal_i({recovery_valid_i,flush_i,reset_i}),.views_o(payload_modes));
+    localparam integer PRELOAD_WIDTH=ROB_TAG_WIDTH+64;
+    wire [BE_WIDTH*PRELOAD_WIDTH-1:0] preload_inputs;
+    wire [PHYS_MAP_DOMAINS*BE_WIDTH*PRELOAD_WIDTH-1:0] preload_views;
+    generate for(genvar lane=0;lane<BE_WIDTH;lane=lane+1) begin:g_preload_input
+        assign preload_inputs[lane*PRELOAD_WIDTH +: PRELOAD_WIDTH]={
+            alloc_rob_tag_i[lane*ROB_TAG_WIDTH +: ROB_TAG_WIDTH],
+            alloc_is_store_i[lane]?alloc_store_data_i[lane*32 +: 32]:32'b0,
+            alloc_addr_i[lane*32 +: 32]};
+    end endgenerate
+    rv32_frequency_control_tree #(.WIDTH(BE_WIDTH*PRELOAD_WIDTH),.LEAVES(PHYS_MAP_DOMAINS)) preload_payload_tree (
+        .signal_i(preload_inputs),.views_o(preload_views));
+    initial if((INVALID_PAYLOAD_PRELOAD!=0 && INVALID_PAYLOAD_PRELOAD!=1) ||
+        (INVALID_PAYLOAD_PRELOAD!=0 && (PHASED_DATA_OWNER==0 || PHASED_DIRECT_WRITE_EVENTS==0 ||
+          PHASED_ALLOC_EXCLUSIVE==0 || QUALIFIED_ADDRESS_WRITE==0 || ALLOC_SLOT_PRESELECT==0 ||
+          ALLOC_PAYLOAD_PRESELECT==0 || REQUEST_PIPELINE==0 || RELEASE_CREDITS!=0 || BE_WIDTH>LSQ_ENTRIES)))
+        $fatal(1,"Invalid payload preload requires exact planned no-release phased LSQ");
     genvar payload_row,payload_lane;
     generate
         for(payload_lane=0;payload_lane<BE_WIDTH;payload_lane=payload_lane+1) begin:g_payload_allocation
@@ -2212,6 +2248,18 @@ module rv32_lsq #(
             wire recovery=payload_modes[payload_row*3+2];
             wire normal=enabled && !recovery;
             wire [BE_WIDTH-1:0] allocations;
+            wire [BE_WIDTH-1:0] preload_grants;
+            wire [PRELOAD_WIDTH-1:0] preload_payload;
+            wire unused_preload_present;
+            for(genvar lane=0;lane<BE_WIDTH;lane=lane+1) begin:g_preload_grant
+                assign preload_grants[lane]=(INVALID_PAYLOAD_PRELOAD!=0) && !valid_mem[payload_row] &&
+                    payload_plan_views[(payload_row/4)*BE_WIDTH+lane] &&
+                    physical_slot_views[((payload_row/4)*BE_WIDTH+lane)*SLOT_WIDTH +: SLOT_WIDTH]==payload_row;
+            end
+            rv32_frequency_event_select #(.WIDTH(PRELOAD_WIDTH),.EVENTS(BE_WIDTH)) preload_selector (
+                .events_i(preload_grants),
+                .values_i(preload_views[(payload_row/4)*BE_WIDTH*PRELOAD_WIDTH +: BE_WIDTH*PRELOAD_WIDTH]),
+                .write_o(unused_preload_present),.value_o(preload_payload));
             wire [ADDRESS_EVENTS-1:0] address_events;
             wire [ADDRESS_EVENTS*32-1:0] address_values;
             wire [DATA_EVENTS-1:0] data_events;
@@ -2250,7 +2298,7 @@ module rv32_lsq #(
                 assign address_events[1+payload_lane]=enabled && addr_update_valid_i[payload_lane] &&
                     tag_matches_slot(addr_update_tag_i[payload_lane*TAG_WIDTH +: TAG_WIDTH],payload_row);
                 assign address_values[(1+payload_lane)*32 +: 32]=addr_update_i[payload_lane*32 +: 32];
-                assign address_events[1+BE_WIDTH+payload_lane]=allocations[payload_lane];
+                assign address_events[1+BE_WIDTH+payload_lane]=(INVALID_PAYLOAD_PRELOAD!=0)?1'b0:allocations[payload_lane];
                 assign address_values[(1+BE_WIDTH+payload_lane)*32 +: 32]=alloc_addr_i[payload_lane*32 +: 32];
                 assign data_events[2*payload_lane]=enabled && data_update_valid_i[payload_lane] &&
                     tag_matches_slot(data_update_tag_i[payload_lane*TAG_WIDTH +: TAG_WIDTH],payload_row);
@@ -2321,8 +2369,13 @@ module rv32_lsq #(
                         rv32_frequency_event_select #(.WIDTH(32),.EVENTS(BE_WIDTH)) allocation_selector (
                             .events_i(events[EVENTS-1:LIVE_EVENTS]),.values_i(values[EVENTS*32-1:LIVE_EVENTS*32]),
                             .write_o(allocation_write),.value_o(allocation_data));
-                        assign phased_write_enable[payload_row]=live_write || allocation_write;
-                        assign phased_write_data[payload_row]=live_data | allocation_data;
+                        if(INVALID_PAYLOAD_PRELOAD!=0) begin:g_preload_invalid_word
+                            assign phased_write_enable[payload_row]=live_write || !valid_mem[payload_row];
+                            assign phased_write_data[payload_row]=live_data | preload_payload[32 +: 32];
+                        end else begin:g_original_allocated_word
+                            assign phased_write_enable[payload_row]=live_write || allocation_write;
+                            assign phased_write_data[payload_row]=live_data | allocation_data;
+                        end
 `ifdef VERILATOR
                         always @(posedge clk_i) if(!reset_i && !flush_i) begin
                             assert(!(valid_mem[payload_row] && (|allocations)))
@@ -2346,11 +2399,21 @@ module rv32_lsq #(
                     rv32_frequency_event_select #(.WIDTH(32),.EVENTS(4)) original_selector (
                         .events_i(phases),.values_i(phase_values),.write_o(original_write),.value_o(original_data));
                     always @(posedge clk_i) begin
-                        assert(phased_write_enable[payload_row]==original_write)
-                            else $fatal(1,"Direct phased events changed a payload write edge");
+                        if(INVALID_PAYLOAD_PRELOAD==0 || valid_mem[payload_row] || original_write)
+                            assert(phased_write_enable[payload_row]==original_write)
+                                else $fatal(1,"Direct phased events changed a live/allocated payload write edge");
                         if(original_write)
                             assert(phased_write_data[payload_row]==original_data)
                                 else $fatal(1,"Direct phased events changed the selected complete word");
+                    end
+                    if(INVALID_PAYLOAD_PRELOAD!=0) begin:g_original_word_shadow
+                        reg [31:0] original_word;
+                        always @(posedge clk_i) begin
+                            if(!reset_i && valid_mem[payload_row])
+                                assert(phased_word[payload_row]===original_word)
+                                    else $fatal(1,"Preloaded live complete word differs");
+                            if(original_write) original_word<=original_data;
+                        end
                     end
 `endif
                 end else begin:g_original_events
@@ -2387,17 +2450,49 @@ module rv32_lsq #(
             rv32_frequency_event_select #(.WIDTH(ROB_TAG_WIDTH),.EVENTS(BE_WIDTH)) tag_selector (
                 .events_i(allocations),.values_i(rob_tag_values),.write_o(rob_tag_write),.value_o(rob_tag_value));
             always @* begin
-                addr_mem_write_data[payload_row]=address_value;
-                addr_mem_write_enable[payload_row]=address_write;
+                addr_mem_write_data[payload_row]=(INVALID_PAYLOAD_PRELOAD!=0 && !valid_mem[payload_row])?
+                    preload_payload[0 +: 32]:address_value;
+                addr_mem_write_enable[payload_row]=address_write ||
+                    (INVALID_PAYLOAD_PRELOAD!=0 && !valid_mem[payload_row]);
                 data_mem_write_data[payload_row]=data_value;
                 data_mem_write_enable[payload_row]=data_write;
                 complete_value_mem_write_data[payload_row]=result_value;
                 complete_value_mem_write_enable[payload_row]=result_write;
                 forward_data_mem_write_data[payload_row]=forward_value;
                 forward_data_mem_write_enable[payload_row]=forward_write;
-                rob_tag_mem_write_data[payload_row]=rob_tag_value;
-                rob_tag_mem_write_enable[payload_row]=rob_tag_write;
+                rob_tag_mem_write_data[payload_row]=(INVALID_PAYLOAD_PRELOAD!=0)?
+                    preload_payload[64 +: ROB_TAG_WIDTH]:rob_tag_value;
+                rob_tag_mem_write_enable[payload_row]=(INVALID_PAYLOAD_PRELOAD!=0)?
+                    !valid_mem[payload_row]:rob_tag_write;
             end
+`ifndef SYNTHESIS
+            if(INVALID_PAYLOAD_PRELOAD!=0) begin:g_original_payload_shadow
+                reg [31:0] original_address;
+                reg [ROB_TAG_WIDTH-1:0] original_rob_tag;
+                wire [ADDRESS_EVENTS-1:0] original_address_events={allocations,address_events[0 +: BE_WIDTH+1]};
+                wire original_address_write;
+                wire [31:0] original_address_value;
+                rv32_frequency_event_select #(.WIDTH(32),.EVENTS(ADDRESS_EVENTS)) original_address_selector (
+                    .events_i(original_address_events),.values_i(address_values),
+                    .write_o(original_address_write),.value_o(original_address_value));
+                always @(posedge clk_i) begin
+                    if(!reset_i && valid_mem[payload_row]) begin
+                        assert(addr_mem[payload_row]===original_address && rob_tag_mem[payload_row]===original_rob_tag)
+                            else $fatal(1,"Preloaded live address/full ROB tag differs");
+                    end
+                    if(original_address_write) begin
+                        original_address<=original_address_value;
+                        assert(addr_mem_write_enable[payload_row] && addr_mem_write_data[payload_row]===original_address_value)
+                            else $fatal(1,"Preload changes actual original address write");
+                    end
+                    if(rob_tag_write) begin
+                        original_rob_tag<=rob_tag_value;
+                        assert(rob_tag_mem_write_enable[payload_row] && rob_tag_mem_write_data[payload_row]===rob_tag_value)
+                            else $fatal(1,"Preload changes actual original full ROB tag allocation");
+                    end
+                end
+            end
+`endif
         end
     endgenerate
 
