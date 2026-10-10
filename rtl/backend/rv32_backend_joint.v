@@ -35,6 +35,8 @@ module rv32_backend_joint #(
     parameter integer RS_PC_PRECOMPUTE = 0,
     parameter integer RS_OCCUPANCY_DELTA_SELECT = 0,
     parameter integer RS_QUALIFIED_OPERAND_WRITE = 0,
+    parameter integer RS_INVALID_PAYLOAD_PRELOAD = 0,
+    parameter integer RS_MDU_CLASS_PRESELECT = 0,
     parameter integer ALU_PRED_TARGET_CLASS_COMPARE = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer PHYS_REGS = `RV32IM_PHYS_REGS_DEFAULT,
@@ -521,6 +523,7 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*PAW-1:0] alu_exec_phys;
     wire [BE_WIDTH*TAG_WIDTH-1:0] alu_exec_tag;
     wire [BE_WIDTH-1:0] rs_issue_is_mdu;
+    wire [BE_WIDTH-1:0] raw_rs_issue_mdu_class;
     wire [BE_WIDTH-1:0] mdu_select;
     wire [`RV32IM_OP_WIDTH-1:0] mdu_issue_op;
     wire [31:0] mdu_issue_src1, mdu_issue_src2;
@@ -867,6 +870,14 @@ module rv32_backend_joint #(
     initial if((MDU_QUALIFIED_ISSUE_CLASS!=0 && MDU_QUALIFIED_ISSUE_CLASS!=1) ||
         (MDU_QUALIFIED_ISSUE_CLASS!=0 && MUL_IMPL!=2))
         $fatal(1,"Qualified MDU issue class requires unified private packets");
+    initial if((RS_INVALID_PAYLOAD_PRELOAD!=0 && RS_INVALID_PAYLOAD_PRELOAD!=1) ||
+        (RS_INVALID_PAYLOAD_PRELOAD!=0 && (DISPATCH_PIPELINE==0 || DISPATCH_ELASTIC==0 ||
+         RS_ALLOC_STATIC_WRITE==0 || DIRECT_DISPATCH_RELEASE_CREDITS!=0 ||
+         RS_QUALIFIED_OPERAND_WRITE!=0 || RS_ALLOC_EMPTY_BYPASS!=0 || BE_WIDTH>RS_ENTRIES)))
+        $fatal(1,"RS preload requires atomic elastic static no-release allocation");
+    initial if((RS_MDU_CLASS_PRESELECT!=0 && RS_MDU_CLASS_PRESELECT!=1) ||
+        (RS_MDU_CLASS_PRESELECT!=0 && (ISSUE_PIPELINE!=0 || RS_ALLOC_EMPTY_BYPASS!=0)))
+        $fatal(1,"Row MDU class preselect requires saved unpipelined issue");
     initial if((RS_QUALIFIED_OPERAND_WRITE!=0 && RS_QUALIFIED_OPERAND_WRITE!=1) ||
         (RS_QUALIFIED_OPERAND_WRITE!=0 && (DIRECT_DISPATCH_RELEASE_CREDITS!=0 || RS_ALLOC_STATIC_WRITE==0)))
         $fatal(1,"Qualified RS operand writes require static no-release rows");
@@ -1597,7 +1608,7 @@ module rv32_backend_joint #(
                 assign rs_issue_mem_size[io_lane*2 +: 2] = rob_mem_size_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
                 assign rs_issue_mem_unsigned[io_lane] = rob_mem_unsigned_mem[rs_issue_tag[io_lane*TAG_WIDTH + 3 +: ROB_SLOT_WIDTH]];
             end
-            assign rs_issue_is_mdu[io_lane] =
+            wire original_mdu_class =
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_MUL) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_MULH) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_MULHSU) ||
@@ -1606,6 +1617,16 @@ module rv32_backend_joint #(
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_DIVU) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REM) ||
                 (rs_issue_op[io_lane*`RV32IM_OP_WIDTH +: `RV32IM_OP_WIDTH] == `RV32IM_OP_REMU);
+            assign rs_issue_is_mdu[io_lane]=(RS_MDU_CLASS_PRESELECT!=0) ?
+                raw_rs_issue_mdu_class[io_lane] : original_mdu_class;
+`ifdef VERILATOR
+            if(RS_MDU_CLASS_PRESELECT!=0) begin:g_original_mdu_class_shadow
+                always @(posedge clk_i) if(!reset_i)
+                    assert(rs_issue_is_mdu[io_lane]==original_mdu_class)
+                        else $fatal(1,"Preselected MDU class changed a raw issue cycle");
+            end
+`endif
+
             if(RS_ROW_QUALIFICATION_ACTIVE!=0) begin:g_row_qualified_issue
                 assign rs_issue_allowed[io_lane]=!branch_busy_domains[0] ||
                     raw_rs_issue_recovery_qualified[io_lane];
@@ -2530,16 +2551,16 @@ module rv32_backend_joint #(
     wire [BE_WIDTH*32-1:0] raw_rs_issue_store;
     wire [BE_WIDTH*RS_METADATA_WIDTH-1:0] raw_rs_issue_metadata;
     wire [BE_WIDTH*((RS_ENTRIES <= 1) ? 1 : $clog2(RS_ENTRIES))-1:0] raw_rs_issue_slot;
-    rv32_reservation_station #(.ALLOC_EMPTY_BYPASS(RS_ALLOC_EMPTY_BYPASS), .FRESH_DEFAULT_LANE_DATA(RS_FRESH_DEFAULT_LANE_DATA), .ARITHMETIC_PRECOMPUTE(RS_ARITHMETIC_PRECOMPUTE), .COMPARISON_PRECOMPUTE(RS_COMPARISON_PRECOMPUTE), .PC_PRECOMPUTE(RS_PC_PRECOMPUTE), .OCCUPANCY_DELTA_SELECT(RS_OCCUPANCY_DELTA_SELECT), .QUALIFIED_OPERAND_WRITE(RS_QUALIFIED_OPERAND_WRITE), .RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_QUALIFICATION(RS_ROW_QUALIFICATION_ACTIVE), .ISSUE_RECOVERY_CANCEL(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) rs (
+    rv32_reservation_station #(.ALLOC_EMPTY_BYPASS(RS_ALLOC_EMPTY_BYPASS), .FRESH_DEFAULT_LANE_DATA(RS_FRESH_DEFAULT_LANE_DATA), .ARITHMETIC_PRECOMPUTE(RS_ARITHMETIC_PRECOMPUTE), .COMPARISON_PRECOMPUTE(RS_COMPARISON_PRECOMPUTE), .PC_PRECOMPUTE(RS_PC_PRECOMPUTE), .OCCUPANCY_DELTA_SELECT(RS_OCCUPANCY_DELTA_SELECT), .QUALIFIED_OPERAND_WRITE(RS_QUALIFIED_OPERAND_WRITE), .INVALID_PAYLOAD_PRELOAD(RS_INVALID_PAYLOAD_PRELOAD), .MDU_CLASS_PRESELECT(RS_MDU_CLASS_PRESELECT), .RELEASE_CREDITS(DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .ENTRIES(RS_ENTRIES), .TAG_WIDTH(TAG_WIDTH), .PHYS_ADDR_WIDTH(PAW), .WAKE_WIDTH(RS_WAKE_WIDTH), .STORE_DATA_WIDTH(32), .METADATA_WIDTH(RS_METADATA_WIDTH), .SOURCE_TAG_WIDTH(RS_SOURCE_TAG_WIDTH), .WAKE_UNIQUE_OWNER(RS_DIRECT_WAKE), .WAKE_MUX_IMPL(RS_WAKE_MUX_IMPL), .REGISTERED_BASE_PROBE(STORE_RS_LINKS), .AGE_ORDER_MATRIX(2), .LOCAL_PAYLOAD_ROWS(1), .ALLOC_STATIC_WRITE(RS_ALLOC_STATIC_WRITE), .AGE_WIDTH(RS_AGE_WIDTH), .RECOVERY_ISSUE_RELEASE(RECOVERY_APPLY_ISSUE_ACTIVE), .ISSUE_RECOVERY_QUALIFICATION(RS_ROW_QUALIFICATION_ACTIVE), .ISSUE_RECOVERY_CANCEL(RS_ISSUE_CANCEL_PREDECODE_ACTIVE)) rs (
         .entry_issue_cancel_i(rs_entry_issue_cancel), .issue_cancel_o(raw_rs_issue_cancel),
         .entry_recovery_qualified_i(rs_entry_recovery_qualified),
         .issue_recovery_qualified_o(raw_rs_issue_recovery_qualified),
         .alloc_metadata_i(rs_alloc_metadata), .issue_metadata_o(raw_rs_issue_metadata), .issue_arithmetic_o(raw_rs_issue_arithmetic), .issue_comparison_o(raw_rs_issue_comparison), .issue_pc_arithmetic_o(raw_rs_issue_pc_arithmetic), .entry_metadata_o(rs_entry_metadata),
         .entry_base_ready_o(rs_entry_base_ready), .entry_base_value_o(rs_entry_base_value),
         .alloc_slot_o(rs_alloc_slot),.entry_release_o(rs_entry_release),
-        .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rs_alloc_valid), .alloc_op_i(d_op), .alloc_pc_i(d_pc), .alloc_rob_tag_i(d_tag), .alloc_target_live_i(d_valid), .alloc_phys_rd_i(d_new_phys),
+        .clk_i(clk_i), .reset_i(reset_i), .alloc_valid_i(rs_alloc_valid), .alloc_plan_valid_i(d_rs_need), .alloc_op_i(d_op), .alloc_pc_i(d_pc), .alloc_rob_tag_i(d_tag), .alloc_target_live_i(d_valid), .alloc_phys_rd_i(d_new_phys),
         .alloc_src1_value_i(rs_src1_value), .alloc_src1_tag_i(rs_source1_identity), .alloc_src1_ready_i(rs_src1_ready), .alloc_src2_value_i(rs_src2_value), .alloc_src2_tag_i(rs_source2_identity), .alloc_src2_ready_i(rs_src2_ready), .alloc_store_data_i(d_store_data), .alloc_ready_o(rs_alloc_ready), .alloc_fire_o(rs_alloc_fire), .alloc_count_o(rs_alloc_count),
-        .wake_valid_i(rs_wake_valid), .wake_tag_i(rs_wake_tag), .wake_value_i(rs_wake_value), .issue_ready_i(raw_rs_issue_ready), .issue_valid_o(raw_rs_issue_valid), .issue_op_o(raw_rs_issue_op), .issue_pc_o(raw_rs_issue_pc), .issue_rob_tag_o(raw_rs_issue_tag), .issue_phys_rd_o(raw_rs_issue_phys), .issue_src1_value_o(raw_rs_issue_src1), .issue_src2_value_o(raw_rs_issue_src2), .issue_store_data_o(raw_rs_issue_store), .issue_slot_o(raw_rs_issue_slot), .flush_valid_i(flush_i || recovery_domains[4]), .flush_kill_mask_i(rs_flush_kill_mask), .entry_valid_o(rs_entry_valid), .entry_rob_tag_o(rs_entry_rob_tag), .occupancy_o(rs_occupancy), .allocation_release_count_o(rs_release_credit)
+        .wake_valid_i(rs_wake_valid), .wake_tag_i(rs_wake_tag), .wake_value_i(rs_wake_value), .issue_ready_i(raw_rs_issue_ready), .issue_valid_o(raw_rs_issue_valid), .issue_mdu_class_o(raw_rs_issue_mdu_class), .issue_op_o(raw_rs_issue_op), .issue_pc_o(raw_rs_issue_pc), .issue_rob_tag_o(raw_rs_issue_tag), .issue_phys_rd_o(raw_rs_issue_phys), .issue_src1_value_o(raw_rs_issue_src1), .issue_src2_value_o(raw_rs_issue_src2), .issue_store_data_o(raw_rs_issue_store), .issue_slot_o(raw_rs_issue_slot), .flush_valid_i(flush_i || recovery_domains[4]), .flush_kill_mask_i(rs_flush_kill_mask), .entry_valid_o(rs_entry_valid), .entry_rob_tag_o(rs_entry_rob_tag), .occupancy_o(rs_occupancy), .allocation_release_count_o(rs_release_credit)
     );
 
     genvar pipe_lane;

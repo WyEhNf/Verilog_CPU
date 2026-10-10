@@ -15,6 +15,8 @@ module rv32_reservation_station #(
     parameter integer PC_PRECOMPUTE = 0,
     parameter integer OCCUPANCY_DELTA_SELECT = 0,
     parameter integer QUALIFIED_OPERAND_WRITE = 0,
+    parameter integer INVALID_PAYLOAD_PRELOAD = 0,
+    parameter integer MDU_CLASS_PRESELECT = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ENTRIES = 8,
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
@@ -49,6 +51,7 @@ module rv32_reservation_station #(
     input  wire                         clk_i,
     input  wire                         reset_i,
     input  wire [BE_WIDTH-1:0]           alloc_valid_i,
+    input  wire [BE_WIDTH-1:0]           alloc_plan_valid_i,
     input  wire [(BE_WIDTH*OP_WIDTH)-1:0] alloc_op_i,
     input  wire [(BE_WIDTH*32)-1:0]      alloc_pc_i,
     input  wire [(BE_WIDTH*TAG_WIDTH)-1:0] alloc_rob_tag_i,
@@ -77,6 +80,7 @@ module rv32_reservation_station #(
     input  wire [ENTRIES-1:0]            entry_issue_cancel_i,
     output wire [BE_WIDTH-1:0]           issue_cancel_o,
     output wire  [BE_WIDTH-1:0]           issue_valid_o,
+    output wire [BE_WIDTH-1:0] issue_mdu_class_o,
     output wire  [(BE_WIDTH*OP_WIDTH)-1:0] issue_op_o,
     output wire  [(BE_WIDTH*32)-1:0]      issue_pc_o,
     output wire  [(BE_WIDTH*TAG_WIDTH)-1:0] issue_rob_tag_o,
@@ -402,6 +406,20 @@ end
         (QUALIFIED_OPERAND_WRITE!=0 && (RELEASE_CREDITS!=0 ||
          ALLOC_STATIC_WRITE==0 || LOCAL_PAYLOAD_ROWS==0)))
         $fatal(1,"Qualified RS operands require static local no-release rows");
+    initial if((INVALID_PAYLOAD_PRELOAD!=0 && INVALID_PAYLOAD_PRELOAD!=1) ||
+        (INVALID_PAYLOAD_PRELOAD!=0 && (RELEASE_CREDITS!=0 || ALLOC_STATIC_WRITE==0 ||
+         LOCAL_PAYLOAD_ROWS==0 || QUALIFIED_OPERAND_WRITE!=0 || BE_WIDTH>ENTRIES)))
+        $fatal(1,"RS preload requires static local no-release rows and original operand owners");
+    initial if((MDU_CLASS_PRESELECT!=0 && MDU_CLASS_PRESELECT!=1) ||
+        (MDU_CLASS_PRESELECT!=0 && (ALLOC_EMPTY_BYPASS!=0 || OP_WIDTH<`RV32IM_OP_WIDTH)))
+        $fatal(1,"RS MDU class preselect requires saved full opcodes without allocation bypass");
+`ifdef VERILATOR
+    generate if(INVALID_PAYLOAD_PRELOAD!=0) begin:g_plan_contract
+        always @(posedge clk_i) if(!reset_i && !flush_valid_i)
+            assert(alloc_valid_i==0 || alloc_valid_i==alloc_plan_valid_i)
+                else $fatal(1,"RS preload actual batch differs from atomic planned batch");
+    end endgenerate
+`endif
     genvar export_lane,export_row;
     generate
         for(export_lane=0;export_lane<BE_WIDTH;export_lane=export_lane+1) begin:g_allocation_identity
@@ -437,6 +455,7 @@ end
         localparam integer LANE_LEAVES=(BE_WIDTH<=1)?1:(1<<$clog2(BE_WIDTH));
         wire [COUNT_WIDTH-1:0] free_before [0:ENTRIES-1];
         wire [COUNT_WIDTH-1:0] accepted_before [0:BE_WIDTH-1];
+        wire [COUNT_WIDTH-1:0] planned_before [0:BE_WIDTH-1];
         wire [BE_WIDTH-1:0] slot_grants [0:ENTRIES-1];
         genvar rank_row,local_rank_lane,rank_source,local_rank_node;
         // The kth accepted lane owns the kth free physical row. Both counts
@@ -463,8 +482,12 @@ end
         end
         for(local_rank_lane=0;local_rank_lane<BE_WIDTH;local_rank_lane=local_rank_lane+1) begin:g_lane_rank
             wire [COUNT_WIDTH-1:0] count_tree [1:2*LANE_LEAVES-1];
+            wire [COUNT_WIDTH-1:0] plan_tree [1:2*LANE_LEAVES-1];
             wire [SLOT_WIDTH-1:0] slot_tree [1:2*SLOT_LEAVES-1];
             for(rank_source=0;rank_source<LANE_LEAVES;rank_source=rank_source+1) begin:g_count_leaf
+                if(INVALID_PAYLOAD_PRELOAD!=0 && rank_source<local_rank_lane)
+                    assign plan_tree[LANE_LEAVES+rank_source]=COUNT_WIDTH'(alloc_plan_valid_i[rank_source]);
+                else assign plan_tree[LANE_LEAVES+rank_source]=0;
                 if(rank_source<local_rank_lane) begin : g_named_376_42
 assign count_tree[LANE_LEAVES+rank_source]=COUNT_WIDTH'(alloc_fire_o[rank_source]);
 end
@@ -474,8 +497,10 @@ end
             end
             for(local_rank_node=1;local_rank_node<LANE_LEAVES;local_rank_node=local_rank_node+1) begin:g_count_sum
                 assign count_tree[local_rank_node]=count_tree[2*local_rank_node]+count_tree[2*local_rank_node+1];
+                assign plan_tree[local_rank_node]=plan_tree[2*local_rank_node]+plan_tree[2*local_rank_node+1];
             end
             assign accepted_before[local_rank_lane]=count_tree[1];
+            assign planned_before[local_rank_lane]=plan_tree[1];
             for(rank_source=0;rank_source<SLOT_LEAVES;rank_source=rank_source+1) begin:g_slot_leaf
                 if(rank_source<ENTRIES)
                     begin : g_named_385_20
@@ -506,7 +531,13 @@ end
         end
         for (ar = 0; ar < ENTRIES; ar = ar + 1) begin : g_row
             wire [BE_WIDTH-1:0] allocation_match_bits, grants;
+            wire [BE_WIDTH-1:0] planned_matches,planned_grants;
             for (al = 0; al < BE_WIDTH; al = al + 1) begin : g_grant
+                assign planned_matches[al]=(INVALID_PAYLOAD_PRELOAD!=0) &&
+                    allocation_available_rows[ar] && alloc_plan_valid_i[al] &&
+                    free_before[ar]==planned_before[al];
+                if(al==BE_WIDTH-1) assign planned_grants[al]=planned_matches[al];
+                else assign planned_grants[al]=planned_matches[al] && !(|planned_matches[BE_WIDTH-1:al+1]);
                 assign allocation_match_bits[al] = slot_grants[ar][al];
                 if (al == BE_WIDTH-1) begin : g_named_411_38
 assign grants[al] = allocation_match_bits[al];
@@ -517,7 +548,8 @@ end
             end
             localparam integer WORDS=(ALLOC_PAYLOAD_WIDTH+15)/16;
             wire [BE_WIDTH*WORDS-1:0] payload_grants;
-            wire [BE_WIDTH-1:0] payload_events=(QUALIFIED_OPERAND_WRITE!=0) ?
+            wire [BE_WIDTH-1:0] payload_events=(INVALID_PAYLOAD_PRELOAD!=0) ?
+                (planned_grants & {BE_WIDTH{!reset_i && !flush_valid_i}}) : (QUALIFIED_OPERAND_WRITE!=0) ?
                 (grants & {BE_WIDTH{!reset_i && !flush_valid_i}}) : grants;
             rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(WORDS)) grant_tree (
                 .signal_i(payload_events),.views_o(payload_grants));
@@ -539,6 +571,20 @@ end
             assign alloc_row_grants[ar] = grants;
             assign alloc_row_write[ar] = |allocation_match_bits;
             assign alloc_row_payload[ar] = payload;
+`ifdef VERILATOR
+            if(INVALID_PAYLOAD_PRELOAD!=0) begin:g_original_packet_shadow
+                wire [BE_WIDTH*ALLOC_PAYLOAD_WIDTH-1:0] original_values;
+                wire [ALLOC_PAYLOAD_WIDTH-1:0] original_packet;
+                wire unused_original_write;
+                for(genvar ref_lane=0;ref_lane<BE_WIDTH;ref_lane=ref_lane+1)
+                    assign original_values[ref_lane*ALLOC_PAYLOAD_WIDTH +: ALLOC_PAYLOAD_WIDTH]=alloc_lane_payload[ref_lane];
+                rv32_frequency_event_select #(.WIDTH(ALLOC_PAYLOAD_WIDTH),.EVENTS(BE_WIDTH),.PRIORITY(0)) original_select (
+                    .events_i(grants),.values_i(original_values),.write_o(unused_original_write),.value_o(original_packet));
+                always @(posedge clk_i) if(!reset_i && !flush_valid_i && alloc_row_write[ar])
+                    assert(!valid_mem[ar] && payload==original_packet)
+                        else $fatal(1,"RS prepared row changed an actual full allocation packet");
+            end
+`endif
         end
     end endgenerate
 
@@ -662,7 +708,8 @@ end
                 .PHYS_ADDR_WIDTH(PHYS_ADDR_WIDTH),.STORE_DATA_WIDTH(STORE_DATA_WIDTH),
                 .METADATA_WIDTH(METADATA_WIDTH),.AGE_WIDTH(AGE_WIDTH),
                 .PAYLOAD_WIDTH(ALLOC_PAYLOAD_WIDTH),.ALLOC_ISSUE_REPLACE(RELEASE_CREDITS),
-                .QUALIFIED_OPERAND_WRITE(QUALIFIED_OPERAND_WRITE)) row (
+                .QUALIFIED_OPERAND_WRITE(QUALIFIED_OPERAND_WRITE),
+                .INVALID_PAYLOAD_PRELOAD(INVALID_PAYLOAD_PRELOAD)) row (
                 .clk_i(clk_i),.reset_i(reset_i),.flush_i(flush_valid_i),
                 .kill_i(flush_kill_mask_i[owner_row] ||
                     ((RECOVERY_ISSUE_RELEASE!=0) && issue_release_mask[owner_row])),
@@ -810,6 +857,36 @@ end
     end else begin:g_original_pc_arithmetic
         for(genvar row=0;row<ENTRIES;row=row+1) assign row_pc_arithmetic[row]=0;
         for(genvar lane=0;lane<BE_WIDTH;lane=lane+1) assign incoming_pc_arithmetic[lane]=0;
+    end endgenerate
+    function automatic mdu_opcode;
+        input [OP_WIDTH-1:0] op;
+        begin
+            mdu_opcode=op==`RV32IM_OP_MUL || op==`RV32IM_OP_MULH ||
+                op==`RV32IM_OP_MULHSU || op==`RV32IM_OP_MULHU ||
+                op==`RV32IM_OP_DIV || op==`RV32IM_OP_DIVU ||
+                op==`RV32IM_OP_REM || op==`RV32IM_OP_REMU;
+        end
+    endfunction
+    generate if(MDU_CLASS_PRESELECT!=0) begin:g_mdu_class_preselection
+        for(genvar lane=0;lane<BE_WIDTH;lane=lane+1) begin:g_lane
+            wire class_tree [1:2*ISSUE_DATA_LEAVES-1];
+            for(genvar row=0;row<ISSUE_DATA_LEAVES;row=row+1) begin:g_row
+                if(row<ENTRIES)
+                    assign class_tree[ISSUE_DATA_LEAVES+row]=ready_candidates[row] &&
+                        ready_rank_match[row][lane] && mdu_opcode(op_mem[row]);
+                else assign class_tree[ISSUE_DATA_LEAVES+row]=0;
+            end
+            for(genvar node=1;node<ISSUE_DATA_LEAVES;node=node+1)
+                assign class_tree[node]=class_tree[2*node] || class_tree[2*node+1];
+            assign issue_mdu_class_o[lane]=class_tree[1];
+`ifdef VERILATOR
+            always @(posedge clk_i) if(!reset_i)
+                assert(issue_mdu_class_o[lane]==mdu_opcode(issue_op_o[lane*OP_WIDTH +: OP_WIDTH]))
+                    else $fatal(1,"Row MDU class differs from original selected opcode");
+`endif
+        end
+    end else begin:g_original_mdu_class
+        assign issue_mdu_class_o=0;
     end endgenerate
     genvar issue_lane,issue_row,issue_word,issue_node;
     generate for(issue_lane=0;issue_lane<BE_WIDTH;issue_lane=issue_lane+1) begin:g_issue_payload

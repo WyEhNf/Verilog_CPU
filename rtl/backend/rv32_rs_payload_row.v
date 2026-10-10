@@ -6,6 +6,7 @@
 module rv32_rs_payload_row #(
     parameter integer ALLOC_ISSUE_REPLACE=0,
     parameter integer QUALIFIED_OPERAND_WRITE=0,
+    parameter integer INVALID_PAYLOAD_PRELOAD=0,
     parameter integer OP_WIDTH=6,TAG_WIDTH=17,PHYS_ADDR_WIDTH=6,
     parameter integer SOURCE_TAG_WIDTH=TAG_WIDTH,
     parameter integer STORE_DATA_WIDTH=32,METADATA_WIDTH=70,AGE_WIDTH=8,
@@ -58,7 +59,33 @@ module rv32_rs_payload_row #(
         assign src2_write_data[operand_word*16 +: 16]=alloc_views[5+operand_word] ?
             new_value2[operand_word*16 +: 16] : wake2_value_i[operand_word*16 +: 16];
     end endgenerate
-    generate if(QUALIFIED_OPERAND_WRITE!=0) begin:g_qualified_operands
+    generate if(INVALID_PAYLOAD_PRELOAD!=0) begin:g_prepared_operands
+        // Only old-invalid payload changes speculatively. Actual valid/ready
+        // ownership still changes on the original allocation edge below.
+        wire [31:0] value1=valid_i ? wake1_value_i : new_value1;
+        wire [31:0] value2=valid_i ? wake2_value_i : new_value2;
+        rv32_frequency_word_bank #(.WIDTH(32)) src1_value_owner (
+            .clk_i(clk_i),.write_i(!valid_i || wake1_write),.data_i(value1),.data_o(src1_value_o));
+        rv32_frequency_word_bank #(.WIDTH(32)) src2_value_owner (
+            .clk_i(clk_i),.write_i(!valid_i || wake2_write),.data_i(value2),.data_o(src2_value_o));
+`ifdef VERILATOR
+        reg [31:0] original1,original2;
+        always @(posedge clk_i) begin
+            if(src1_write) original1<=src1_write_data;
+            if(src2_write) original2<=src2_write_data;
+            if(!reset_i) begin
+                assert(!allocation || !valid_i)
+                    else $fatal(1,"RS preload allocated a valid row");
+                if(src1_write) assert(value1==src1_write_data)
+                    else $fatal(1,"RS preload changed actual operand1 write");
+                if(src2_write) assert(value2==src2_write_data)
+                    else $fatal(1,"RS preload changed actual operand2 write");
+                if(valid_i) assert({src1_value_o,src2_value_o}=={original1,original2})
+                    else $fatal(1,"RS preload changed saved live operands");
+            end
+        end
+`endif
+    end else if(QUALIFIED_OPERAND_WRITE!=0) begin:g_qualified_operands
         // The caller's row payload is already qualified by actual allocation
         // and reset/flush. No-release allocation owns an old-invalid row;
         // wake writes own old-valid rows. Their data paths are disjoint.
@@ -104,18 +131,21 @@ module rv32_rs_payload_row #(
     initial if((QUALIFIED_OPERAND_WRITE!=0 && QUALIFIED_OPERAND_WRITE!=1) ||
         (QUALIFIED_OPERAND_WRITE!=0 && ALLOC_ISSUE_REPLACE!=0))
         $fatal(1,"Qualified RS operand writes require no allocation/issue replacement");
+    initial if((INVALID_PAYLOAD_PRELOAD!=0 && INVALID_PAYLOAD_PRELOAD!=1) ||
+        (INVALID_PAYLOAD_PRELOAD!=0 && (ALLOC_ISSUE_REPLACE!=0 || QUALIFIED_OPERAND_WRITE!=0)))
+        $fatal(1,"RS preload requires original no-release operand owners");
     localparam integer META_BITS=OP_WIDTH+32+TAG_WIDTH+PHYS_ADDR_WIDTH+STORE_DATA_WIDTH+METADATA_WIDTH;
     wire [META_BITS-1:0] metadata_payload;
     assign {op_o,pc_o,rob_tag_o,phys_rd_o,store_data_o,metadata_o}=metadata_payload;
     rv32_frequency_word_bank #(.WIDTH(META_BITS)) metadata_owner (
-        .clk_i(clk_i),.write_i(alloc_views[0]),
+        .clk_i(clk_i),.write_i((INVALID_PAYLOAD_PRELOAD!=0)?!valid_i:alloc_views[0]),
         .data_i({new_op,new_pc,new_tag,new_phys,new_store,new_metadata}),
         .data_o(metadata_payload));
     // Allocation wins over a simultaneous wake, exactly as the old NBA order.
     always @(posedge clk_i) begin
-        if(alloc_views[1])
+        if((INVALID_PAYLOAD_PRELOAD!=0)?!valid_i:alloc_views[1])
             src1_tag_o<=new_tag1;
-        if(alloc_views[2])
+        if((INVALID_PAYLOAD_PRELOAD!=0)?!valid_i:alloc_views[2])
             src2_tag_o<=new_tag2;
         if(reset_i)
         begin
@@ -144,4 +174,20 @@ module rv32_rs_payload_row #(
                 target_live_o<=0;
         end
     end
+`ifdef VERILATOR
+    generate if(INVALID_PAYLOAD_PRELOAD!=0) begin:g_original_metadata_shadow
+        reg [META_BITS-1:0] original_metadata;
+        reg [SOURCE_TAG_WIDTH-1:0] original_tag1,original_tag2;
+        always @(posedge clk_i) begin
+            if(allocation) begin
+                original_metadata<={new_op,new_pc,new_tag,new_phys,new_store,new_metadata};
+                original_tag1<=new_tag1;original_tag2<=new_tag2;
+            end
+            if(!reset_i && valid_i)
+                assert({metadata_payload,src1_tag_o,src2_tag_o}==
+                    {original_metadata,original_tag1,original_tag2})
+                    else $fatal(1,"RS preload changed live metadata/full source identities");
+        end
+    end endgenerate
+`endif
 endmodule

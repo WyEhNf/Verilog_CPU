@@ -141,6 +141,14 @@ def validate_parameters(text, profile):
     if p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] not in (0,1) or (p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] and
             (not p["ALLOC_LOAD_SELECTION_BYPASS"] or not p["STORE_ALLOC_EARLY_ADDRESS"])):
         raise ValueError("Allocation load request bypass requires allocation selection and address")
+    if p["RS_INVALID_PAYLOAD_PRELOAD"] not in (0,1) or (p["RS_INVALID_PAYLOAD_PRELOAD"] and
+            (not p["DISPATCH_PIPELINE"] or not p["DISPATCH_ELASTIC"] or not p["RS_ALLOC_STATIC_WRITE"] or
+             p["DIRECT_DISPATCH_RELEASE_CREDITS"] or p["RS_QUALIFIED_OPERAND_WRITE"] or
+             p["RS_ALLOC_EMPTY_BYPASS"] or p["BE_WIDTH"]>p["RS_ENTRIES"])):
+        raise ValueError("RS preload requires atomic elastic static no-release allocation")
+    if p["RS_MDU_CLASS_PRESELECT"] not in (0,1) or (p["RS_MDU_CLASS_PRESELECT"] and
+            (p["ISSUE_PIPELINE"] or p["RS_ALLOC_EMPTY_BYPASS"])):
+        raise ValueError("Row MDU class preselect requires saved unpipelined issue")
     if p["RS_QUALIFIED_OPERAND_WRITE"] not in (0,1) or (p["RS_QUALIFIED_OPERAND_WRITE"] and
             (p["DIRECT_DISPATCH_RELEASE_CREDITS"] or not p["RS_ALLOC_STATIC_WRITE"])):
         raise ValueError("Qualified RS operands require static no-release row ownership")
