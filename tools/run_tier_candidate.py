@@ -141,6 +141,14 @@ def validate_parameters(text, profile):
     if p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] not in (0,1) or (p["LSQ_ALLOC_LOAD_REQUEST_BYPASS"] and
             (not p["ALLOC_LOAD_SELECTION_BYPASS"] or not p["STORE_ALLOC_EARLY_ADDRESS"])):
         raise ValueError("Allocation load request bypass requires allocation selection and address")
+    if p["RS_QUALIFIED_OPERAND_WRITE"] not in (0,1) or (p["RS_QUALIFIED_OPERAND_WRITE"] and
+            (p["DIRECT_DISPATCH_RELEASE_CREDITS"] or not p["RS_ALLOC_STATIC_WRITE"])):
+        raise ValueError("Qualified RS operands require static no-release row ownership")
+    if p["LSQ_FORWARD_PARALLEL_CLASS"] not in (0,1) or (p["LSQ_FORWARD_PARALLEL_CLASS"] and
+            (not p["LSQ_FORWARD_ONEHOT"] or (p["LSQ_ENTRIES"] & (p["LSQ_ENTRIES"]-1)))):
+        raise ValueError("Parallel forwarding classes require power-two onehot LSQ forwarding")
+    if p["LSQ_FORWARD_OFFSET_PREDECODE"] not in (0,1):
+        raise ValueError("LSQ stored offset predecode must be 0 or 1")
     if p["RS_OCCUPANCY_DELTA_SELECT"] not in (0,1):
         raise ValueError("RS count delta policy must be 0 or 1")
     if p["MDU_QUALIFIED_ISSUE_CLASS"] not in (0,1) or (p["MDU_QUALIFIED_ISSUE_CLASS"] and p["MUL_IMPL"]!=2):

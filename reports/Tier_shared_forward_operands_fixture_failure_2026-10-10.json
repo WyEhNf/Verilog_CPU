@@ -1,0 +1,15 @@
+{
+  "status": "FAILED_UNSUPPORTED_FINITE_FIXTURE_CONFIGURATION",
+  "run_directory": "F:\\CPU2026TierRuns\\forward_operands_control_sample_20261010",
+  "cpu_test_run": false,
+  "candidate_accepted": false,
+  "file_sha256": {
+    "F:\\CPU2026TierRuns\\forward_operands_control_sample_20261010\\limited.compile.log": "cee4c53ac3886cb64300174e59bb240923d9fbc8c5eaa322f6009e422389631c",
+    "F:\\CPU2026TierRuns\\forward_operands_control_sample_20261010\\limited.simulation.log": "66ebfc6d7b131d19c14b454cbb8b3221be01b92cd581fb1f6efb723b1c19de08",
+    "F:\\CPU2026TierRuns\\forward_operands_control_sample_20261010\\limited\\Vrv32_forward_operands_control_tb.exe": "0461a4d1cb7441ee00d692c9d28b6782a2ae32eda07a049201aeb67b13a69912",
+    "F:\\CPU2026TierRuns\\forward_operands_control_sample_20261010\\source\\tb\\unit\\rv32_forward_operands_control_tb.v": "2b5a7b52d4dde63d237be3e55106a8439b32931879995f4955bcd972a2c59ee2",
+    "F:\\CPU2026TierRuns\\forward_operands_control_sample_20261010\\source\\rtl\\backend\\rv32_rs_payload_row.v": "e3646a2ddd9d3a861d501a2bee8c740f131960a9c560e644c1fc1d6002904c4d"
+  },
+  "failure": "[0] %Fatal: rv32_backend_joint.v:872: Assertion failed in rv32_forward_operands_control_tb.staged.g_backend[1].dut: Qualified RS operand writes require static no-release rows\n%Error: F:\\CPU2026TierRuns\\forward_operands_control_sample_20261010\\source\\rtl\\backend\\rv32_backend_joint.v:872: Verilog $stop\nAborting...\n",
+  "repair": "Enable RS_ALLOC_STATIC_WRITE=1 in both actual backend instances, as required by the qualified local no-release row guard. Guard and stimulus/assertions retained. Before valid run, also bound original wake-write mask views to16 bits. No PPA/CPU/perf exists for this attempt."
+}

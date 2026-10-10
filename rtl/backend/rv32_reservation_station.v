@@ -14,6 +14,7 @@ module rv32_reservation_station #(
     parameter integer COMPARISON_PRECOMPUTE = 0,
     parameter integer PC_PRECOMPUTE = 0,
     parameter integer OCCUPANCY_DELTA_SELECT = 0,
+    parameter integer QUALIFIED_OPERAND_WRITE = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer ENTRIES = 8,
     parameter integer OP_WIDTH = `RV32IM_OP_WIDTH,
@@ -397,6 +398,10 @@ end
     assign allocation_available_rows=~valid_entries | allocation_released_rows;
     initial if(RELEASE_CREDITS!=0 && ALLOC_STATIC_WRITE==0)
         $fatal(1,"RS release credits require static row allocation");
+    initial if((QUALIFIED_OPERAND_WRITE!=0 && QUALIFIED_OPERAND_WRITE!=1) ||
+        (QUALIFIED_OPERAND_WRITE!=0 && (RELEASE_CREDITS!=0 ||
+         ALLOC_STATIC_WRITE==0 || LOCAL_PAYLOAD_ROWS==0)))
+        $fatal(1,"Qualified RS operands require static local no-release rows");
     genvar export_lane,export_row;
     generate
         for(export_lane=0;export_lane<BE_WIDTH;export_lane=export_lane+1) begin:g_allocation_identity
@@ -512,8 +517,10 @@ end
             end
             localparam integer WORDS=(ALLOC_PAYLOAD_WIDTH+15)/16;
             wire [BE_WIDTH*WORDS-1:0] payload_grants;
+            wire [BE_WIDTH-1:0] payload_events=(QUALIFIED_OPERAND_WRITE!=0) ?
+                (grants & {BE_WIDTH{!reset_i && !flush_valid_i}}) : grants;
             rv32_frequency_control_tree #(.WIDTH(BE_WIDTH),.LEAVES(WORDS)) grant_tree (
-                .signal_i(grants),.views_o(payload_grants));
+                .signal_i(payload_events),.views_o(payload_grants));
             wire [ALLOC_PAYLOAD_WIDTH-1:0] payload;
             for(alloc_word=0;alloc_word<WORDS;alloc_word=alloc_word+1) begin:g_word
                 localparam integer LOW=alloc_word*16;
@@ -654,7 +661,8 @@ end
             rv32_rs_payload_row #(.OP_WIDTH(OP_WIDTH),.TAG_WIDTH(TAG_WIDTH),.SOURCE_TAG_WIDTH(SOURCE_TAG_WIDTH),
                 .PHYS_ADDR_WIDTH(PHYS_ADDR_WIDTH),.STORE_DATA_WIDTH(STORE_DATA_WIDTH),
                 .METADATA_WIDTH(METADATA_WIDTH),.AGE_WIDTH(AGE_WIDTH),
-                .PAYLOAD_WIDTH(ALLOC_PAYLOAD_WIDTH),.ALLOC_ISSUE_REPLACE(RELEASE_CREDITS)) row (
+                .PAYLOAD_WIDTH(ALLOC_PAYLOAD_WIDTH),.ALLOC_ISSUE_REPLACE(RELEASE_CREDITS),
+                .QUALIFIED_OPERAND_WRITE(QUALIFIED_OPERAND_WRITE)) row (
                 .clk_i(clk_i),.reset_i(reset_i),.flush_i(flush_valid_i),
                 .kill_i(flush_kill_mask_i[owner_row] ||
                     ((RECOVERY_ISSUE_RELEASE!=0) && issue_release_mask[owner_row])),

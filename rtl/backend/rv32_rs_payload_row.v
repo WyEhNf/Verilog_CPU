@@ -5,6 +5,7 @@
 // feedback mux after its qualified and priced local write driver.
 module rv32_rs_payload_row #(
     parameter integer ALLOC_ISSUE_REPLACE=0,
+    parameter integer QUALIFIED_OPERAND_WRITE=0,
     parameter integer OP_WIDTH=6,TAG_WIDTH=17,PHYS_ADDR_WIDTH=6,
     parameter integer SOURCE_TAG_WIDTH=TAG_WIDTH,
     parameter integer STORE_DATA_WIDTH=32,METADATA_WIDTH=70,AGE_WIDTH=8,
@@ -57,10 +58,52 @@ module rv32_rs_payload_row #(
         assign src2_write_data[operand_word*16 +: 16]=alloc_views[5+operand_word] ?
             new_value2[operand_word*16 +: 16] : wake2_value_i[operand_word*16 +: 16];
     end endgenerate
+    generate if(QUALIFIED_OPERAND_WRITE!=0) begin:g_qualified_operands
+        // The caller's row payload is already qualified by actual allocation
+        // and reset/flush. No-release allocation owns an old-invalid row;
+        // wake writes own old-valid rows. Their data paths are disjoint.
+        wire [31:0] value1,value2;
+        wire [1:0] wake1_views,wake2_views;
+        rv32_frequency_control_tree #(.LEAVES(2)) wake1_tree (
+            .signal_i(wake1_write),.views_o(wake1_views));
+        rv32_frequency_control_tree #(.LEAVES(2)) wake2_tree (
+            .signal_i(wake2_write),.views_o(wake2_views));
+        for(genvar word_id=0;word_id<2;word_id=word_id+1) begin:g_word
+            assign value1[word_id*16 +: 16]=new_value1[word_id*16 +: 16] |
+                ({16{wake1_views[word_id]}} & wake1_value_i[word_id*16 +: 16]);
+            assign value2[word_id*16 +: 16]=new_value2[word_id*16 +: 16] |
+                ({16{wake2_views[word_id]}} & wake2_value_i[word_id*16 +: 16]);
+        end
+        rv32_frequency_qualified_word_bank #(.WIDTH(32)) src1_value_owner (
+            .clk_i(clk_i),.write_i(src1_write),.data_i(value1),.data_o(src1_value_o));
+        rv32_frequency_qualified_word_bank #(.WIDTH(32)) src2_value_owner (
+            .clk_i(clk_i),.write_i(src2_write),.data_i(value2),.data_o(src2_value_o));
+`ifdef VERILATOR
+        reg [31:0] original1,original2;
+        always @(posedge clk_i) begin
+            if(src1_write) original1<=src1_write_data;
+            if(src2_write) original2<=src2_write_data;
+            if(!reset_i) begin
+                assert(!allocation || !valid_i)
+                    else $fatal(1,"Qualified RS operands reused a valid allocation row");
+                if(src1_write) assert(value1==src1_write_data)
+                    else $fatal(1,"Qualified RS operand1 changed a write");
+                if(src2_write) assert(value2==src2_write_data)
+                    else $fatal(1,"Qualified RS operand2 changed a write");
+                if(valid_i) assert({src1_value_o,src2_value_o}=={original1,original2})
+                    else $fatal(1,"Qualified RS operands changed saved live values");
+            end
+        end
+`endif
+    end else begin:g_original_operands
     rv32_frequency_word_bank #(.WIDTH(32)) src1_value_owner (
         .clk_i(clk_i),.write_i(src1_write),.data_i(src1_write_data),.data_o(src1_value_o));
     rv32_frequency_word_bank #(.WIDTH(32)) src2_value_owner (
         .clk_i(clk_i),.write_i(src2_write),.data_i(src2_write_data),.data_o(src2_value_o));
+    end endgenerate
+    initial if((QUALIFIED_OPERAND_WRITE!=0 && QUALIFIED_OPERAND_WRITE!=1) ||
+        (QUALIFIED_OPERAND_WRITE!=0 && ALLOC_ISSUE_REPLACE!=0))
+        $fatal(1,"Qualified RS operand writes require no allocation/issue replacement");
     localparam integer META_BITS=OP_WIDTH+32+TAG_WIDTH+PHYS_ADDR_WIDTH+STORE_DATA_WIDTH+METADATA_WIDTH;
     wire [META_BITS-1:0] metadata_payload;
     assign {op_o,pc_o,rob_tag_o,phys_rd_o,store_data_o,metadata_o}=metadata_payload;

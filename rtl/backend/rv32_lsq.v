@@ -61,6 +61,8 @@ module rv32_lsq #(
     // Exact youngest-byte selection for the circular power-of-two queue.
     // The original tournament remains the default/other-geometry fallback.
     parameter integer FORWARD_ONEHOT = 0,
+    parameter integer FORWARD_PARALLEL_CLASS = 0,
+    parameter integer FORWARD_OFFSET_PREDECODE = 0,
     // Route the same oldest current request packet with circular one-hot
     // grants; default and other geometry retain the original tournament.
     parameter integer PICK_ONEHOT = 0,
@@ -581,6 +583,12 @@ module rv32_lsq #(
     // Only the wrap bit needs to traverse a balanced tournament: the
     // physical order of its left/right subtrees is already static.
     localparam CIRCULAR_ORDER_POWER2=((LSQ_ENTRIES & (LSQ_ENTRIES-1))==0);
+    initial if((FORWARD_PARALLEL_CLASS!=0 && FORWARD_PARALLEL_CLASS!=1) ||
+        (FORWARD_PARALLEL_CLASS!=0 && (FORWARD_ONEHOT==0 || !CIRCULAR_ORDER_POWER2)))
+        $fatal(1,"Parallel forwarding classes require power-two onehot forwarding");
+    initial if(FORWARD_OFFSET_PREDECODE!=0 && FORWARD_OFFSET_PREDECODE!=1)
+        $fatal(1,"Forwarding stored offset predecode must be 0 or 1");
+
     wire [8*LSQ_ENTRIES-1:0] circular_wrap_views;
     localparam integer HAZARD_WRAP_GROUPS=(LSQ_ENTRIES+3)/4;
     wire [LSQ_ENTRIES*HAZARD_WRAP_GROUPS-1:0] hazard_wrap_views;
@@ -982,10 +990,23 @@ module rv32_lsq #(
             wire [3:0] local_load_mask,local_overlap;
             assign {local_load_addr,local_load_mask}=
                 forward_query_views[age_slot*FORWARD_QUERY_WIDTH +: FORWARD_QUERY_WIDTH];
-            rv32_lsq_forward_window window_owner (
+            rv32_lsq_forward_window #(.STORE_OFFSET_PREDECODE(FORWARD_OFFSET_PREDECODE)) window_owner (
                 .store_data_i(data_mem[age_slot]),.store_offset_i(addr_mem[age_slot][3:0]),
                 .store_mask_i(mask_mem[age_slot]),.load_offset_i(local_load_addr[3:0]),
                 .load_mask_i(local_load_mask),.mask_o(local_overlap),.data_o(store_forward_data[age_slot]));
+`ifdef VERILATOR
+            if(FORWARD_OFFSET_PREDECODE!=0) begin:g_original_window_shadow
+                wire [3:0] original_mask;
+                wire [31:0] original_data;
+                rv32_lsq_forward_window original_window (
+                    .store_data_i(data_mem[age_slot]),.store_offset_i(addr_mem[age_slot][3:0]),
+                    .store_mask_i(mask_mem[age_slot]),.load_offset_i(local_load_addr[3:0]),
+                    .load_mask_i(local_load_mask),.mask_o(original_mask),.data_o(original_data));
+                always @(posedge clk_i) if(!reset_i)
+                    assert({local_overlap,store_forward_data[age_slot]}=={original_mask,original_data})
+                        else $fatal(1,"Stored-offset predecode changed a raw forwarding window");
+            end
+`endif
             assign store_overlap[age_slot] =
                 valid_mem[age_slot] && store_mem[age_slot] &&
                 addr_ready_mem[age_slot] && data_ready_mem[age_slot] &&
@@ -1184,6 +1205,7 @@ module rv32_lsq #(
             // no wrapped byte overlaps. Grants express that same order.
             for(forward_byte=0;forward_byte<4;forward_byte=forward_byte+1) begin:g_byte
                 wire [LSQ_ENTRIES-1:0] eligible,wrapped_eligible,grants;
+                wire [LSQ_ENTRIES-1:0] ordinary_grants,wrapped_grants;
                 wire [LSQ_ENTRIES*8-1:0] values;
                 localparam integer GRANT_DOMAINS=(LSQ_ENTRIES+3)/4;
                 wire [GRANT_DOMAINS-1:0] no_wrapped_views;
@@ -1205,13 +1227,40 @@ module rv32_lsq #(
                     end
                     assign grants[forward_slot]=last_wrapped ||
                         (no_wrapped_views[forward_slot/4] && last_ordinary);
+                    assign ordinary_grants[forward_slot]=last_ordinary;
+                    assign wrapped_grants[forward_slot]=last_wrapped;
                     assign values[forward_slot*8 +: 8]=store_forward_data[forward_slot][forward_byte*8 +: 8];
                 end
                 assign tree_forward_mask[forward_byte]=|eligible;
+                if(FORWARD_PARALLEL_CLASS!=0) begin:g_parallel_classes
+                    // Prepare the youngest packet of both classes before
+                    // the late class-existence choice. This choice now owns
+                    // eight output bits instead of all row grant masks.
+                    wire [7:0] ordinary_data,wrapped_data;
+                    wire unused_ordinary_write,unused_wrapped_write;
+                    wire wrapped_view;
+                    rv32_frequency_event_select #(.WIDTH(8),.EVENTS(LSQ_ENTRIES),.PRIORITY(0)) ordinary_selector (
+                        .events_i(ordinary_grants),.values_i(values),.write_o(unused_ordinary_write),.value_o(ordinary_data));
+                    rv32_frequency_event_select #(.WIDTH(8),.EVENTS(LSQ_ENTRIES),.PRIORITY(0)) wrapped_selector (
+                        .events_i(wrapped_grants),.values_i(values),.write_o(unused_wrapped_write),.value_o(wrapped_data));
+                    rv32_frequency_control_tree #(.LEAVES(1)) class_choice (
+                        .signal_i(|wrapped_eligible),.views_o(wrapped_view));
+                    assign tree_forward_data[forward_byte*8 +: 8]=wrapped_view ? wrapped_data : ordinary_data;
+`ifdef VERILATOR
+                    wire [7:0] original_byte;
+                    wire unused_original_write;
+                    rv32_frequency_event_select #(.WIDTH(8),.EVENTS(LSQ_ENTRIES),.PRIORITY(0)) original_selector (
+                        .events_i(grants),.values_i(values),.write_o(unused_original_write),.value_o(original_byte));
+                    always @(posedge clk_i) if(!reset_i)
+                        assert(tree_forward_data[forward_byte*8 +: 8]==original_byte)
+                            else $fatal(1,"Parallel forwarding classes changed a raw byte");
+`endif
+                end else begin:g_original_class
                 wire  unused_byte_selector_write_o;
                 rv32_frequency_event_select #(.WIDTH(8),.EVENTS(LSQ_ENTRIES),.PRIORITY(0)) byte_selector (
                     .events_i(grants),.values_i(values),.write_o(unused_byte_selector_write_o),
                     .value_o(tree_forward_data[forward_byte*8 +: 8]));
+                end
             end
         end else begin:g_original_forward
         // Each byte independently selects the youngest overlapping older
