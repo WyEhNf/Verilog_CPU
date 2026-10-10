@@ -26,6 +26,7 @@ module rv32_lsq #(
     parameter integer REPORT_RANGE_PREDECODE = 0,
     parameter integer REPORT_RANGE_CARRY_SELECT = 0,
     parameter integer REPORT_PREFIX_IDENTITY_QUERY = 0,
+    parameter integer REPORT_PACKET_PREFIX_SELECT = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -1607,6 +1608,11 @@ module rv32_lsq #(
         (REPORT_PREFIX_IDENTITY_QUERY!=0 && (HELD_LOAD_IDENTITY_ACTIVE==0 ||
          LSQ_ENTRIES<2 || LSQ_ENTRIES>32 || LSQ_ENTRIES!=(1<<SLOT_WIDTH))))
         $fatal(1,"Report prefix query requires original saved/head/held identity and exact power-of-two slots");
+    initial if((REPORT_PACKET_PREFIX_SELECT!=0 && REPORT_PACKET_PREFIX_SELECT!=1) ||
+        (REPORT_PACKET_PREFIX_SELECT!=0 && (HEAD_LOAD_PACKET_ACTIVE==0 ||
+         HELD_LOAD_IDENTITY_QUERY!=0 || REPORT_PREFIX_IDENTITY_QUERY!=0 ||
+         LSQ_ENTRIES<2 || LSQ_ENTRIES>32 || LSQ_ENTRIES!=(1<<SLOT_WIDTH))))
+        $fatal(1,"Packet prefix requires complete original saved/head packets and shared held query");
     localparam integer NORMAL_IDENTITY_WIDTH=ROB_TAG_WIDTH+REPORT_ROB_QUERY_WIDTH;
     localparam integer NORMAL_IDENTITY_WORDS=(NORMAL_IDENTITY_WIDTH+15)/16;
     wire [NORMAL_IDENTITY_WIDTH-1:0] normal_identity_tree [1:2*REPORT_ROWS-1];
@@ -1620,6 +1626,12 @@ module rv32_lsq #(
     localparam integer SAVED_IDENTITY_QUERY_LSB=(HEAD_LOAD_PACKET_ACTIVE!=0) ? REPORT_BASE_WIDTH : ROB_TAG_WIDTH;
     localparam integer REPORT_IDENTITY_WORDS=(REPORT_IDENTITY_WIDTH+15)/16;
     wire [REPORT_IDENTITY_WIDTH-1:0] saved_identity_tree [1:2*REPORT_ROWS-1];
+    wire [REPORT_IDENTITY_WIDTH-1:0] qualified_saved_identity;
+    wire qualified_report_valid;
+    wire [SLOT_WIDTH-1:0] qualified_report_slot;
+`ifndef SYNTHESIS
+    wire [REPORT_IDENTITY_WIDTH-1:0] original_saved_identity_tree [1:2*REPORT_ROWS-1];
+`endif
     wire [ACK_WIDTH-1:0] ack_payload_tree [1:2*REPORT_ROWS-1];
     wire ack_valid_tree [1:2*REPORT_ROWS-1];
     wire [LSQ_ENTRIES-1:0] query_ack_accepted;
@@ -1651,7 +1663,7 @@ module rv32_lsq #(
             localparam integer LOW=head_choice_word*16;
             localparam integer BITS=(REPORT_BASE_WIDTH-LOW>=16)?16:REPORT_BASE_WIDTH-LOW;
             assign prepared_report_payload[LOW +: BITS]=head_choice_views[head_choice_word] ?
-                head_packet[LOW +: BITS] : saved_identity_tree[1][LOW +: BITS];
+                head_packet[LOW +: BITS] : qualified_saved_identity[LOW +: BITS];
         end
     end else begin:g_original_load_packet
         assign head_packet_metadata=0;
@@ -1706,7 +1718,7 @@ module rv32_lsq #(
     wire [LSQ_ENTRIES-1:0] report_eligible,report_upper,report_first;
     wire [LSQ_ENTRIES-1:0] prefix_eligible,prefix_wrapped,prefix_range,prefix_grants;
     wire prefix_covered;
-    generate if(REPORT_PREFIX_IDENTITY_QUERY!=0) begin:g_prefix_identity_selection
+    generate if(REPORT_PREFIX_IDENTITY_QUERY!=0 || REPORT_PACKET_PREFIX_SELECT!=0) begin:g_prefix_identity_selection
         rv32_lsq_report_prefix_select #(.ENTRIES(LSQ_ENTRIES)) selector (
             .eligible_i(prefix_eligible),.wrapped_i(prefix_wrapped),.range_i(prefix_range),
             .grants_o(prefix_grants),.covered_o(prefix_covered));
@@ -1730,6 +1742,7 @@ module rv32_lsq #(
     wire report_hold_valid;
     wire [TAG_WIDTH-1:0] report_hold_tag;
     wire [LSQ_ENTRIES-1:0] report_hold_matches;
+    wire [LSQ_ENTRIES-1:0] raw_report_hold_matches;
     localparam integer REPORT_HOLD_DOMAINS=(LSQ_ENTRIES+3)/4;
     wire [REPORT_HOLD_DOMAINS*TAG_WIDTH-1:0] report_hold_tag_views;
     rv32_frequency_control_tree #(.WIDTH(TAG_WIDTH),.LEAVES(REPORT_HOLD_DOMAINS)) report_hold_tag_tree (
@@ -1851,6 +1864,13 @@ module rv32_lsq #(
                 end else begin:g_original_query
                     assign report_payload=base_report_payload;
                 end
+                wire [REPORT_WIDTH-1:0] held_report_payload;
+                if(REPORT_PACKET_PREFIX_SELECT!=0) begin:g_prepared_held_packet
+                    assign held_report_payload={
+                        report_payload[REPORT_BASE_WIDTH +: REPORT_ROB_QUERY_WIDTH],saved_report_payload};
+                end else begin:g_original_report_packet
+                    assign held_report_payload=report_payload;
+                end
                 assign fast_head_store_acks[report_row]=(HEAD_STORE_ACK_ACTIVE!=0) &&
                     !reset_i && !flush_i && !recovery_valid_i && occupancy_reg!=0 &&
                     head_query_views[report_row*SLOT_WIDTH +: SLOT_WIDTH]==report_row &&
@@ -1897,10 +1917,11 @@ module rv32_lsq #(
                     !report_wrap_tree[REPORT_ROWS+report_row];
                 // A held packet is already saved; keep new-return validity
                 // out of the full-tag lock -> priority control path.
-                assign report_hold_matches[report_row]=row_in_report_range &&
+                assign raw_report_hold_matches[report_row]=
                     valid_mem[report_row] && load_mem[report_row] && complete_mem[report_row] &&
                     !load_reported_mem[report_row] &&
                     tag_matches_slot(report_hold_tag_views[(report_row/4)*TAG_WIDTH +: TAG_WIDTH],report_row);
+                assign report_hold_matches[report_row]=row_in_report_range && raw_report_hold_matches[report_row];
                 wire report_priority;
                 assign report_first[report_row]=report_hold_live_views[report_row/4]?
                     report_hold_matches[report_row]:
@@ -1919,7 +1940,7 @@ module rv32_lsq #(
                 assign prefix_wrapped[report_row]=report_wrap_tree[REPORT_ROWS+report_row];
                 assign prefix_range[report_row]=row_in_report_range;
 `ifndef SYNTHESIS
-                always @(posedge clk_i) if(!reset_i && REPORT_PREFIX_IDENTITY_QUERY!=0)
+                always @(posedge clk_i) if(!reset_i && (REPORT_PREFIX_IDENTITY_QUERY!=0 || REPORT_PACKET_PREFIX_SELECT!=0))
                     assert((prefix_grants[report_row] && prefix_covered)===report_priority)
                         else $fatal(1,"Report prefix changed original range-qualified priority");
 `endif
@@ -1943,8 +1964,17 @@ module rv32_lsq #(
                 if(HEAD_LOAD_IDENTITY_ACTIVE!=0) begin:g_saved_identity_candidate
                     // Neither saved priority nor held identity depends on
                     // current response-valid. Preselect this full candidate.
-                    wire saved_grant=report_hold_live_views[report_row/4] ?
+                    wire original_saved_grant=report_hold_live_views[report_row/4] ?
                         report_hold_matches[report_row] : report_priority;
+                    wire saved_grant=(REPORT_PACKET_PREFIX_SELECT!=0) ?
+                        prefix_grants[report_row] : original_saved_grant;
+`ifndef SYNTHESIS
+                    assign original_saved_identity_tree[REPORT_ROWS+report_row]=
+                        {REPORT_IDENTITY_WIDTH{original_saved_grant}} &
+                        ((HEAD_LOAD_PACKET_ACTIVE!=0) ?
+                         {report_payload[REPORT_BASE_WIDTH +: REPORT_ROB_QUERY_WIDTH],saved_report_payload} :
+                         REPORT_IDENTITY_WIDTH'({report_payload[REPORT_BASE_WIDTH +: REPORT_ROB_QUERY_WIDTH],rob_tag_mem[report_row]}));
+`endif
                     if(SAVED_IDENTITY_WORD_MASK!=0) begin:g_saved_identity_words
                         wire [REPORT_IDENTITY_WIDTH-1:0] identity;
                         wire [REPORT_IDENTITY_WORDS-1:0] grant_views;
@@ -1974,6 +2004,9 @@ module rv32_lsq #(
                     end
                 end else begin:g_no_saved_identity_candidate
                     assign saved_identity_tree[REPORT_ROWS+report_row]=0;
+`ifndef SYNTHESIS
+                    assign original_saved_identity_tree[REPORT_ROWS+report_row]=0;
+`endif
                 end
 `ifndef CPU2026_WORD_SIM
                 assign commit_valid_tree[REPORT_ROWS+report_row]=valid_mem[report_row] && store_mem[report_row] &&
@@ -1985,14 +2018,18 @@ module rv32_lsq #(
                     valid_mem[report_row] && store_mem[report_row] &&
                     (store_ack_mem[report_row] || fast_head_store_acks[report_row]);
                 rv32_frequency_control_tree #(.LEAVES(REPORT_WORDS)) report_selection_tree (
-                    .signal_i(report_first[report_row]),.views_o(report_select));
+                    .signal_i((REPORT_PACKET_PREFIX_SELECT!=0) ? raw_report_hold_matches[report_row] :
+                        report_first[report_row]),.views_o(report_select));
                 rv32_frequency_control_tree #(.LEAVES(ACK_WORDS)) ack_selection_tree (
                     .signal_i(ack_valid_tree[REPORT_ROWS+report_row]),.views_o(ack_select));
                 for(report_word=0;report_word<REPORT_WORDS;report_word=report_word+1) begin:g_result_word
                     localparam integer LOW=report_word*16;
                     localparam integer BITS=REPORT_WIDTH-LOW>=16?16:REPORT_WIDTH-LOW;
                     assign report_payload_tree[REPORT_ROWS+report_row][LOW +: BITS]=
-                        {BITS{report_select[report_word]}} & report_payload[LOW +: BITS];
+                        {BITS{report_select[report_word]}} &
+                        ((REPORT_PACKET_PREFIX_SELECT!=0) ?
+                         held_report_payload[LOW +: BITS] :
+                         report_payload[LOW +: BITS]);
                 end
                 for(report_word=0;report_word<ACK_WORDS;report_word=report_word+1) begin:g_ack_word
                     localparam integer LOW=report_word*16;
@@ -2010,12 +2047,19 @@ module rv32_lsq #(
 `endif
                 assign report_payload_tree[REPORT_ROWS+report_row]=0;
                 assign saved_identity_tree[REPORT_ROWS+report_row]=0;
+`ifndef SYNTHESIS
+                assign original_saved_identity_tree[REPORT_ROWS+report_row]=0;
+`endif
                 assign normal_identity_tree[REPORT_ROWS+report_row]=0;
                 assign ack_payload_tree[REPORT_ROWS+report_row]=0;
                 assign ack_valid_tree[REPORT_ROWS+report_row]=0;
             end
         end
         for(report_node=1;report_node<REPORT_ROWS;report_node=report_node+1) begin:g_report_merge
+`ifndef SYNTHESIS
+            assign original_saved_identity_tree[report_node]=original_saved_identity_tree[2*report_node] |
+                original_saved_identity_tree[2*report_node+1];
+`endif
             if(HELD_LOAD_IDENTITY_ACTIVE!=0) begin:g_normal_identity_pair
                 rv32_lsq_identity_pair_or #(.WIDTH(NORMAL_IDENTITY_WIDTH)) pair (
                     .left_i(normal_identity_tree[2*report_node]),
@@ -2051,6 +2095,44 @@ module rv32_lsq #(
             assign ack_valid_tree[report_node]=ack_valid_tree[2*report_node] || ack_valid_tree[2*report_node+1];
         end
     endgenerate
+
+    generate if(REPORT_PACKET_PREFIX_SELECT!=0) begin:g_complete_packet_prefix
+        wire [SLOT_WIDTH-1:0] raw_normal_slot;
+        // Encode the raw one-hot minimum without a count-qualified tournament.
+        for(genvar slot_bit=0;slot_bit<SLOT_WIDTH;slot_bit=slot_bit+1) begin:g_slot_bit
+            wire [LSQ_ENTRIES-1:0] terms;
+            for(genvar slot_row=0;slot_row<LSQ_ENTRIES;slot_row=slot_row+1) begin:g_row
+                assign terms[slot_row]=prefix_grants[slot_row] && ((slot_row>>slot_bit)&1);
+            end
+            assign raw_normal_slot[slot_bit]=|terms;
+        end
+        rv32_lsq_report_packet_qualify #(.WIDTH(REPORT_IDENTITY_WIDTH),.SLOT_WIDTH(SLOT_WIDTH)) qualify (
+            .normal_i(saved_identity_tree[1]),.held_i(report_payload_tree[1]),
+            .covered_i(prefix_covered),.held_live_i(report_hold_live),.fast_head_i(fast_head_present),
+            .normal_slot_i(raw_normal_slot),.held_slot_i(report_hold_tag[TAG_SLOT_LSB +: SLOT_WIDTH]),
+            .head_i(head_reg),.packet_o(qualified_saved_identity),
+            .valid_o(qualified_report_valid),.slot_o(qualified_report_slot));
+`ifndef SYNTHESIS
+        always @(posedge clk_i) if(!reset_i) begin
+            assert($onehot0(raw_report_hold_matches))
+                else $fatal(1,"Complete full-tag held query matched multiple physical slots");
+            assert(qualified_saved_identity===original_saved_identity_tree[1])
+                else $fatal(1,"Packet prefix changed full original saved/held packet including invalid cycles");
+            assert(qualified_report_valid===report_valid_tree[1])
+                else $fatal(1,"Packet prefix changed original completion valid");
+            assert(32'(qualified_report_slot)===(report_valid_tree[1] ?
+                (report_hold_live_views[REPORT_HOLD_DOMAINS] ?
+                 32'(report_hold_tag[TAG_SLOT_LSB +: SLOT_WIDTH]) :32'(report_slot_tree[1])) :32'(head_reg)))
+                else $fatal(1,"Packet prefix changed original complete slot including invalid default");
+        end
+`endif
+    end else begin:g_original_complete_packet
+        assign qualified_saved_identity=saved_identity_tree[1];
+        assign qualified_report_valid=report_valid_tree[1];
+        assign qualified_report_slot=report_valid_tree[1] ?
+            (report_hold_live_views[REPORT_HOLD_DOMAINS] ?
+             report_hold_tag[TAG_SLOT_LSB +: SLOT_WIDTH] :report_slot_tree[1]) :head_reg;
+    end endgenerate
 
     generate if(HEAD_LOAD_IDENTITY_ACTIVE!=0) begin:g_load_report_identity_candidates
         wire [REPORT_ROB_QUERY_WIDTH-1:0] head_query;
@@ -2102,9 +2184,9 @@ module rv32_lsq #(
                 ({REPORT_ROB_QUERY_WIDTH{normal_covered}} & normal_identity_tree[1][ROB_TAG_WIDTH +: REPORT_ROB_QUERY_WIDTH])};
             assign load_report_identity_held_o=report_hold_live;
         end else begin:g_original_saved_held_identity
-            assign load_report_identity_tags_o={head_tag,saved_identity_tree[1][0 +: ROB_TAG_WIDTH]};
+            assign load_report_identity_tags_o={head_tag,qualified_saved_identity[0 +: ROB_TAG_WIDTH]};
             assign load_report_identity_queries_o={head_query,
-                saved_identity_tree[1][SAVED_IDENTITY_QUERY_LSB +: REPORT_ROB_QUERY_WIDTH]};
+                qualified_saved_identity[SAVED_IDENTITY_QUERY_LSB +: REPORT_ROB_QUERY_WIDTH]};
             assign load_report_held_identity_tag_o=0;
             assign load_report_held_identity_query_o=0;
             assign load_report_identity_held_o=1'b0;
@@ -2133,7 +2215,7 @@ module rv32_lsq #(
         if(HEAD_LOAD_PACKET_ACTIVE!=0) begin:g_prepared_packet_query
             assign load_complete_rob_query_o=load_report_identity_head_o ?
                 load_report_identity_queries_o[REPORT_ROB_QUERY_WIDTH +: REPORT_ROB_QUERY_WIDTH] :
-                saved_identity_tree[1][SAVED_IDENTITY_QUERY_LSB +: REPORT_ROB_QUERY_WIDTH];
+                qualified_saved_identity[SAVED_IDENTITY_QUERY_LSB +: REPORT_ROB_QUERY_WIDTH];
         end else begin:g_original_packet_query
             assign load_complete_rob_query_o=report_payload_tree[1][REPORT_BASE_WIDTH +: REPORT_ROB_QUERY_WIDTH];
         end
@@ -2142,10 +2224,8 @@ module rv32_lsq #(
     end endgenerate
 
     always @* begin
-        complete_slot_found=report_valid_tree[1];
-        complete_slot_select=complete_slot_found?
-            (report_hold_live_views[REPORT_HOLD_DOMAINS]?
-             32'(report_hold_tag[TAG_SLOT_LSB +: SLOT_WIDTH]):32'(report_slot_tree[1])):32'(head_reg);
+        complete_slot_found=qualified_report_valid;
+        complete_slot_select=32'(qualified_report_slot);
         load_complete_valid_o=complete_slot_found;
         {load_complete_cancel_o,load_complete_unretired_o,load_complete_phys_rd_o,load_complete_error_o,load_complete_value_o,load_complete_lsq_tag_o,load_complete_rob_tag_o}=prepared_report_payload;
         store_ack_valid_o=ack_valid_tree[1];

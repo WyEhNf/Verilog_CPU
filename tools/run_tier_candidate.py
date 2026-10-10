@@ -57,6 +57,13 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["LSQ_REPORT_PACKET_PREFIX_SELECT"] not in (0,1) or (p["LSQ_REPORT_PACKET_PREFIX_SELECT"] and
+            (not p["LSQ_HEAD_LOAD_PACKET_PRESELECT"] or not p["LSQ_HEAD_LOAD_IDENTITY_QUERY"] or
+             p["LSQ_HELD_LOAD_IDENTITY_QUERY"] or p["LSQ_REPORT_PREFIX_IDENTITY_QUERY"] or
+             not p["LSQ_SAVED_REPORT_PRIORITY"] or p["LOAD_COMPLETION_BYPASS"]!=2 or
+             not p["LSQ_HEAD_STORE_ACK_BYPASS"] or not p["LSQ_STORE_ACK_SOURCE_QUERY"] or
+             p["LSQ_ENTRIES"]<2 or p["LSQ_ENTRIES"]>32 or p["LSQ_ENTRIES"]&(p["LSQ_ENTRIES"]-1))):
+        raise ValueError("Complete packet prefix requires original shared saved/held lookup and power-of-two slots")
     if p["LSQ_RESPONSE_WORD_PRESELECT"] not in (0,1):
         raise ValueError("LSQ word response preselection must be0 or1")
     if p["ICACHE_CONTROL_REGION_PREQUERY"] not in (0,1) or (p["ICACHE_CONTROL_REGION_PREQUERY"] and
