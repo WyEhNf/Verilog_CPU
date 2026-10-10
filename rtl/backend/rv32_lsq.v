@@ -20,6 +20,8 @@ module rv32_lsq #(
     parameter integer PHASED_ALLOC_EXCLUSIVE = 0,
     // Address selector already supplies zero whenever its write is absent.
     parameter integer QUALIFIED_ADDRESS_WRITE = 0,
+    // Static/ready/lifecycle commands already emit zero on an absent write.
+    parameter integer QUALIFIED_METADATA_WRITE = 0,
     parameter integer INVALID_PAYLOAD_PRELOAD = 0,
     parameter integer REPORT_RANGE_PREDECODE = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
@@ -2859,22 +2861,22 @@ module rv32_lsq #(
 
     genvar storage_row;
     generate for(storage_row=0;storage_row<LSQ_ENTRIES;storage_row=storage_row+1) begin:g_state_row
-        rv32_lsq_owned_field #(.WIDTH(1)) valid_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) valid_mem_owner (
             .clk_i(clk_i),.write_i(valid_mem_write_enable[storage_row]),
             .data_i(valid_mem_write_data[storage_row]),.data_o(valid_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) load_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) load_mem_owner (
             .clk_i(clk_i),.write_i(load_mem_write_enable[storage_row]),
             .data_i(load_mem_write_data[storage_row]),.data_o(load_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) store_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) store_mem_owner (
             .clk_i(clk_i),.write_i(store_mem_write_enable[storage_row]),
             .data_i(store_mem_write_data[storage_row]),.data_o(store_mem[storage_row]));
         rv32_lsq_owned_field #(.WIDTH(ROB_TAG_WIDTH-1+1)) rob_tag_mem_owner (
             .clk_i(clk_i),.write_i(rob_tag_mem_write_enable[storage_row]),
             .data_i(rob_tag_mem_write_data[storage_row]),.data_o(rob_tag_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) retired_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) retired_mem_owner (
             .clk_i(clk_i),.write_i(retired_mem_write_enable[storage_row]),
             .data_i(retired_mem_write_data[storage_row]),.data_o(retired_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(GENERATION_WIDTH-1+1)) generation_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(GENERATION_WIDTH-1+1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) generation_mem_owner (
             .clk_i(clk_i),.write_i(generation_mem_write_enable[storage_row]),
             .data_i(generation_mem_write_data[storage_row]),.data_o(generation_mem[storage_row]));
         if(SINGLE_GENERATION_OWNER!=0) begin:g_single_generation
@@ -2882,20 +2884,20 @@ module rv32_lsq #(
                 (generation_mem[storage_row]=={GENERATION_WIDTH{1'b1}}) ?
                 {{(GENERATION_WIDTH-1){1'b0}},1'b1} : generation_mem[storage_row]+1'b1;
         end else begin:g_dual_generation
-        rv32_lsq_owned_field #(.WIDTH(GENERATION_WIDTH-1+1)) generation_next_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(GENERATION_WIDTH-1+1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) generation_next_mem_owner (
             .clk_i(clk_i),.write_i(generation_next_mem_write_enable[storage_row]),
             .data_i(generation_next_mem_write_data[storage_row]),.data_o(generation_next_mem[storage_row]));
         end
-        rv32_lsq_owned_field #(.WIDTH(1+1)) size_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1+1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) size_mem_owner (
             .clk_i(clk_i),.write_i(size_mem_write_enable[storage_row]),
             .data_i(size_mem_write_data[storage_row]),.data_o(size_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) unsigned_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) unsigned_mem_owner (
             .clk_i(clk_i),.write_i(unsigned_mem_write_enable[storage_row]),
             .data_i(unsigned_mem_write_data[storage_row]),.data_o(unsigned_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) addr_ready_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) addr_ready_mem_owner (
             .clk_i(clk_i),.write_i(addr_ready_mem_write_enable[storage_row]),
             .data_i(addr_ready_mem_write_data[storage_row]),.data_o(addr_ready_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) data_ready_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) data_ready_mem_owner (
             .clk_i(clk_i),.write_i(data_ready_mem_write_enable[storage_row]),
             .data_i(data_ready_mem_write_data[storage_row]),.data_o(data_ready_mem[storage_row]));
         rv32_lsq_owned_field #(.WIDTH(31+1),.QUALIFIED_INPUT(QUALIFIED_ADDRESS_WRITE)) addr_mem_owner (
@@ -2914,19 +2916,19 @@ module rv32_lsq #(
             .clk_i(clk_i),.write_i(data_mem_write_enable[storage_row]),
             .data_i(data_mem_write_data[storage_row]),.data_o(data_mem[storage_row]));
         end
-        rv32_lsq_owned_field #(.WIDTH(3+1)) mask_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(3+1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) mask_mem_owner (
             .clk_i(clk_i),.write_i(mask_mem_write_enable[storage_row]),
             .data_i(mask_mem_write_data[storage_row]),.data_o(mask_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) request_sent_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) request_sent_mem_owner (
             .clk_i(clk_i),.write_i(request_sent_mem_write_enable[storage_row]),
             .data_i(request_sent_mem_write_data[storage_row]),.data_o(request_sent_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) response_wait_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) response_wait_mem_owner (
             .clk_i(clk_i),.write_i(response_wait_mem_write_enable[storage_row]),
             .data_i(response_wait_mem_write_data[storage_row]),.data_o(response_wait_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) complete_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) complete_mem_owner (
             .clk_i(clk_i),.write_i(complete_mem_write_enable[storage_row]),
             .data_i(complete_mem_write_data[storage_row]),.data_o(complete_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) load_reported_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) load_reported_mem_owner (
             .clk_i(clk_i),.write_i(load_reported_mem_write_enable[storage_row]),
             .data_i(load_reported_mem_write_data[storage_row]),.data_o(load_reported_mem[storage_row]));
         if(PHASED_DATA_OWNER==0) begin:g_load_result
@@ -2934,10 +2936,10 @@ module rv32_lsq #(
             .clk_i(clk_i),.write_i(complete_value_mem_write_enable[storage_row]),
             .data_i(complete_value_mem_write_data[storage_row]),.data_o(complete_value_mem[storage_row]));
         end
-        rv32_lsq_owned_field #(.WIDTH(1)) complete_error_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) complete_error_mem_owner (
             .clk_i(clk_i),.write_i(complete_error_mem_write_enable[storage_row]),
             .data_i(complete_error_mem_write_data[storage_row]),.data_o(complete_error_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(3+1)) forward_mask_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(3+1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) forward_mask_mem_owner (
             .clk_i(clk_i),.write_i(forward_mask_mem_write_enable[storage_row]),
             .data_i(forward_mask_mem_write_data[storage_row]),.data_o(forward_mask_mem[storage_row]));
         if(PHASED_DATA_OWNER==0) begin:g_load_forward
@@ -2945,13 +2947,13 @@ module rv32_lsq #(
             .clk_i(clk_i),.write_i(forward_data_mem_write_enable[storage_row]),
             .data_i(forward_data_mem_write_data[storage_row]),.data_o(forward_data_mem[storage_row]));
         end
-        rv32_lsq_owned_field #(.WIDTH(1)) store_commit_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) store_commit_mem_owner (
             .clk_i(clk_i),.write_i(store_commit_mem_write_enable[storage_row]),
             .data_i(store_commit_mem_write_data[storage_row]),.data_o(store_commit_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) store_ack_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) store_ack_mem_owner (
             .clk_i(clk_i),.write_i(store_ack_mem_write_enable[storage_row]),
             .data_i(store_ack_mem_write_data[storage_row]),.data_o(store_ack_mem[storage_row]));
-        rv32_lsq_owned_field #(.WIDTH(1)) store_ack_error_mem_owner (
+        rv32_lsq_owned_field #(.WIDTH(1),.QUALIFIED_INPUT(QUALIFIED_METADATA_WRITE)) store_ack_error_mem_owner (
             .clk_i(clk_i),.write_i(store_ack_error_mem_write_enable[storage_row]),
             .data_i(store_ack_error_mem_write_data[storage_row]),.data_o(store_ack_error_mem[storage_row]));
     end endgenerate
@@ -2966,4 +2968,6 @@ module rv32_lsq #(
                 if ((k < target_lane) && fire[k]) alloc_count_before_lane = alloc_count_before_lane + 1;
         end
     endfunction
+    initial if(QUALIFIED_METADATA_WRITE!=0 && QUALIFIED_METADATA_WRITE!=1)
+        $fatal(1,"Qualified LSQ metadata write must be 0 or 1");
 endmodule

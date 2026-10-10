@@ -57,6 +57,8 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["LSQ_QUALIFIED_METADATA_WRITE"] not in (0,1):
+        raise ValueError("LSQ qualified metadata write must be 0 or 1")
     if p["LSQ_INVALID_PAYLOAD_PRELOAD"] not in (0,1) or (p["LSQ_INVALID_PAYLOAD_PRELOAD"] and
             (not p["DISPATCH_PIPELINE"] or not p["DISPATCH_ELASTIC"] or not p["LSQ_ALLOC_SLOT_PRESELECT"] or
              not p["LSQ_ALLOC_PAYLOAD_PRESELECT"] or not p["LSQ_PHASED_DATA_OWNER"] or
