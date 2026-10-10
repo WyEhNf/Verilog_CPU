@@ -1,0 +1,75 @@
+{
+  "status": "FINITE_METADATA_SAMPLE_AND_STRUCTURAL_LINT_PASSED_ONE_OFFICIAL_PPA_RUNNING",
+  "accepted": false,
+  "source_commit": "f9c84d6b6630aaa40f137a58de14072d8a252f30",
+  "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_metadata_owner_20261010",
+  "manifest_sha256": "1ba5114926adc8169322b3ffdfc8c2718642202ec9d5e6dba83f8222cae18789",
+  "parameter_count": 211,
+  "profile_path": "configs/tier3_shared_500_metadata_owner_candidate.json",
+  "existing205_parameter_values_unchanged": true,
+  "added_parameters": {
+    "RS_QUALIFIED_OPERAND_WRITE": 0,
+    "LSQ_FORWARD_PARALLEL_CLASS": 0,
+    "LSQ_FORWARD_OFFSET_PREDECODE": 0,
+    "RS_INVALID_PAYLOAD_PRELOAD": 0,
+    "RS_MDU_CLASS_PRESELECT": 0,
+    "LSQ_QUALIFIED_METADATA_WRITE": 1
+  },
+  "required_area_maximum_um2": 35891.672317998215,
+  "required_fmax_minimum_mhz": 500,
+  "required_geomean_ipc_minimum": 1.1152626918348099,
+  "required_maximum_cycles": {
+    "perf_median": 7572,
+    "perf_multiply": 17490,
+    "perf_qsort": 143485,
+    "perf_rsort": 153155,
+    "perf_towers": 4739,
+    "perf_vvadd": 3725
+  },
+  "lint": {
+    "status": "PASSED",
+    "returncode": 0,
+    "seconds": 25.598719400004484,
+    "word_sim": false,
+    "counts": {
+      "errors": 0,
+      "latches": 0,
+      "unoptflat": 0
+    },
+    "log_sha256": "94764a7ed486ee1a37a7fa590ca02340a88d5e0a12b4a40b8feed8db729d9767"
+  },
+  "finite_protocol": "reports/Tier_shared_metadata_owner_protocol_2026-10-10.json",
+  "previous_candidate_terminal": "reports/Tier3_shared_rs_preload_mdu_2026-10-10.json",
+  "frozen_source_tool_library_hashes_verified": true,
+  "session_id": 10865,
+  "observed_live_processes": [
+    {
+      "Id": 48916,
+      "ProcessName": "python",
+      "CPU": 0.171875,
+      "StartTime": "/Date(1791616286654)/"
+    },
+    {
+      "Id": 102104,
+      "ProcessName": "python",
+      "CPU": 0.390625,
+      "StartTime": "/Date(1791616285953)/"
+    },
+    {
+      "Id": 111508,
+      "ProcessName": "yosys",
+      "CPU": 68.3125,
+      "StartTime": "/Date(1791616287209)/"
+    }
+  ],
+  "observation_is_not_terminal_evidence": true,
+  "ppa_metrics": null,
+  "ipc": null,
+  "cycles": null,
+  "canonical_profiles_promoted": false,
+  "cpu_build_started": false,
+  "perf_started": false,
+  "smoke_started": false,
+  "current_goal_turn_progress": "Close210 candidate PPA and reject frequency regression; implement default-off qualified LSQ metadata owners with unchanged original commands/edges/full widths; one finite protocol binary passes all20 raw metadata fields; freeze211 parameters; original full-core lint passes; start one official PPA and verify actual live processes.",
+  "next_action": "Wait on this exact official PPA; verify hashes and actual area/Fmax before CPU phases. Retain strict nonregression/500MHz gates and parameterized shared CPU. Do not restart for sparse output."
+}
