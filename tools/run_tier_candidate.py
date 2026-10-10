@@ -57,6 +57,10 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["LSQ_REPORT_RANGE_CARRY_SELECT"] not in (0,1) or (p["LSQ_REPORT_RANGE_CARRY_SELECT"] and
+            (p["LSQ_REPORT_RANGE_PREDECODE"] or p["LSQ_ENTRIES"]<2 or p["LSQ_ENTRIES"]>32 or
+             p["LSQ_ENTRIES"]&(p["LSQ_ENTRIES"]-1))):
+        raise ValueError("Carry range requires original range and power-of-two LSQ2..32")
     if p["LSQ_QUALIFIED_METADATA_WRITE"] not in (0,1):
         raise ValueError("LSQ qualified metadata write must be 0 or 1")
     if p["LSQ_INVALID_PAYLOAD_PRELOAD"] not in (0,1) or (p["LSQ_INVALID_PAYLOAD_PRELOAD"] and

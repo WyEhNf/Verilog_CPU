@@ -24,6 +24,7 @@ module rv32_lsq #(
     parameter integer QUALIFIED_METADATA_WRITE = 0,
     parameter integer INVALID_PAYLOAD_PRELOAD = 0,
     parameter integer REPORT_RANGE_PREDECODE = 0,
+    parameter integer REPORT_RANGE_CARRY_SELECT = 0,
     parameter integer BE_WIDTH = `RV32IM_BE_WIDTH_DEFAULT,
     parameter integer LSQ_ENTRIES = 8,
     parameter integer TAG_WIDTH = `RV32IM_ROB_TAG_WIDTH_DEFAULT,
@@ -1527,6 +1528,18 @@ module rv32_lsq #(
     wire [REPORT_BOUND_WIDTH-1:0] report_end=
         {{(REPORT_BOUND_WIDTH-SLOT_WIDTH){1'b0}},report_head}+
         {{(REPORT_BOUND_WIDTH-COUNT_WIDTH){1'b0}},occupancy_reg};
+    wire [LSQ_ENTRIES-1:0] carry_report_range;
+    generate if(REPORT_RANGE_CARRY_SELECT!=0) begin:g_carry_report_range
+        rv32_lsq_report_range_carry #(.ENTRIES(LSQ_ENTRIES),.SLOT_WIDTH(SLOT_WIDTH),
+            .COUNT_WIDTH(COUNT_WIDTH)) range_mask (
+            .head_i(report_head),.count_i(occupancy_reg),.range_o(carry_report_range));
+    end else begin:g_original_carry_range_unused
+        assign carry_report_range=0;
+    end endgenerate
+    initial if((REPORT_RANGE_CARRY_SELECT!=0 && REPORT_RANGE_CARRY_SELECT!=1) ||
+        (REPORT_RANGE_CARRY_SELECT!=0 && (REPORT_RANGE_PREDECODE!=0 || LSQ_ENTRIES<2 ||
+         LSQ_ENTRIES>32 || LSQ_ENTRIES!=(1<<SLOT_WIDTH) || COUNT_WIDTH<SLOT_WIDTH)))
+        $fatal(1,"Carry range requires exact power-of-two slots and complete count");
     wire [LSQ_ENTRIES-1:0] predecoded_report_range;
     generate if(REPORT_RANGE_PREDECODE!=0) begin:g_predecoded_report_range
         rv32_lsq_report_range_mask #(.ENTRIES(LSQ_ENTRIES),.SLOT_WIDTH(SLOT_WIDTH),
@@ -1836,12 +1849,12 @@ module rv32_lsq #(
                     (32'(head_query_views[report_row*SLOT_WIDTH +: SLOT_WIDTH]) & (REPORT_AGE_MODULUS-1));
                 wire original_row_in_report_range=wrapped ?
                     (32'(row_end)>REPORT_AGE_MODULUS+ROW_MOD) : (32'(row_end)>ROW_MOD);
-                wire row_in_report_range=(REPORT_RANGE_PREDECODE!=0) ?
-                    predecoded_report_range[report_row] : original_row_in_report_range;
+                wire row_in_report_range=(REPORT_RANGE_CARRY_SELECT!=0) ? carry_report_range[report_row] :
+                    (REPORT_RANGE_PREDECODE!=0) ? predecoded_report_range[report_row] : original_row_in_report_range;
 `ifndef SYNTHESIS
-                always @(posedge clk_i) if(!reset_i && REPORT_RANGE_PREDECODE!=0)
+                always @(posedge clk_i) if(!reset_i && (REPORT_RANGE_PREDECODE!=0 || REPORT_RANGE_CARRY_SELECT!=0))
                     assert(row_in_report_range===original_row_in_report_range)
-                        else $fatal(1,"Predecoded LSQ range differs from full original bound");
+                        else $fatal(1,"Optimized LSQ range differs from full original bound");
 `endif
                 assign report_valid_tree[REPORT_ROWS+report_row]=row_in_report_range &&
                     valid_mem[report_row] && load_mem[report_row] && (complete_mem[report_row] || row_fast_response) && !load_reported_mem[report_row];
