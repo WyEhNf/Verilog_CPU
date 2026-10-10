@@ -89,3 +89,6 @@
 ../rtl/course/rv32_axi_lite_bridge.v
 ../rtl/course/rv32_axi_response_fifo.v
 ../rtl/course/student_top.v
+
+../rtl/backend/rv32_lsq_report_range_mask.v
+../rtl/common/rv32_frequency_live_match_bank_masks.v

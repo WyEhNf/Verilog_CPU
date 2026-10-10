@@ -63,6 +63,8 @@ module rv32_backend_joint #(
     parameter integer LSQ_DISTRIBUTED_LOAD_FORMAT = 0,
     parameter integer LSQ_PHASED_ALLOC_EXCLUSIVE = 0,
     parameter integer LSQ_QUALIFIED_ADDRESS_WRITE = 0,
+    parameter integer LSQ_REPORT_RANGE_PREDECODE = 0,
+    parameter integer LSQ_REPORT_LIVE_MATCH_PREQUERY = 0,
     parameter integer LSQ_ALLOC_SLOT_PRESELECT = 0,
     parameter integer LSQ_ALLOC_PAYLOAD_PRESELECT = 0,
     parameter integer LSQ_ALLOC_FIRE_DISTRIBUTE = 0,
@@ -1049,14 +1051,41 @@ module rv32_backend_joint #(
             end else begin:g_original_completion_state
                 assign candidate_state[identity_candidate*3 +: 3]=0;
             end
-            rv32_frequency_array_read_bank_masks #(.WIDTH(ROB_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),
-                .INDEX_WIDTH(ROB_SLOT_WIDTH)) live_read (
-                .rows_i(rob_live_rows),
-                .query_i(query),
-                .value_o(live_state));
-            assign candidate_live[identity_candidate]=tag[0] &&
-                32'(tag[3 +: ROB_SLOT_WIDTH])<ROB_ENTRIES && live_state[ROB_GENERATION_WIDTH] &&
-                tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]==live_state[0 +: ROB_GENERATION_WIDTH];
+            if(LSQ_REPORT_LIVE_MATCH_PREQUERY!=0) begin:g_full_generation_prequery
+                wire match;
+                rv32_frequency_live_match_bank_masks #(.ENTRIES(ROB_ENTRIES),
+                    .GENERATION_WIDTH(ROB_GENERATION_WIDTH),.INDEX_WIDTH(ROB_SLOT_WIDTH)) live_match (
+                    .rows_i(rob_live_rows),.generation_i(tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]),
+                    .query_i(query),.match_o(match));
+                assign candidate_live[identity_candidate]=tag[0] &&
+                    32'(tag[3 +: ROB_SLOT_WIDTH])<ROB_ENTRIES && match;
+                assign live_state=0;
+`ifndef SYNTHESIS
+                wire [ROB_LIVE_WIDTH-1:0] original_live_state;
+                rv32_frequency_array_read_bank_masks #(.WIDTH(ROB_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),
+                    .INDEX_WIDTH(ROB_SLOT_WIDTH)) original_live_read (
+                    .rows_i(rob_live_rows),.query_i(query),.value_o(original_live_state));
+                wire original_live=tag[0] && 32'(tag[3 +: ROB_SLOT_WIDTH])<ROB_ENTRIES &&
+                    original_live_state[ROB_GENERATION_WIDTH] &&
+                    tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]==original_live_state[0 +: ROB_GENERATION_WIDTH];
+                always @(posedge clk_i) if(!reset_i) begin
+                    assert(candidate_live[identity_candidate]===original_live)
+                        else $fatal(1,"Full generation prequery differs from original live lookup");
+                    if(tag[0]) begin
+                        assert($onehot0(query[0 +: 1<<LSQ_ROB_LOW_BITS]) &&
+                            $onehot0(query[(1<<LSQ_ROB_LOW_BITS) +: 1<<LSQ_ROB_HIGH_BITS]))
+                            else $fatal(1,"Report query banks do not identify a single full tag");
+                    end
+                end
+`endif
+            end else begin:g_original_live_query
+                rv32_frequency_array_read_bank_masks #(.WIDTH(ROB_LIVE_WIDTH),.ENTRIES(ROB_ENTRIES),
+                    .INDEX_WIDTH(ROB_SLOT_WIDTH)) live_read (
+                    .rows_i(rob_live_rows),.query_i(query),.value_o(live_state));
+                assign candidate_live[identity_candidate]=tag[0] &&
+                    32'(tag[3 +: ROB_SLOT_WIDTH])<ROB_ENTRIES && live_state[ROB_GENERATION_WIDTH] &&
+                    tag[3+ROB_SLOT_WIDTH +: ROB_GENERATION_WIDTH]==live_state[0 +: ROB_GENERATION_WIDTH];
+            end
         end
         if(LSQ_HELD_LOAD_IDENTITY_ACTIVE!=0) begin:g_choose_recovery_held
             assign lsq_report_identity_recovery_kill=lsq_report_identity_held ? candidate_recovery_kill[2] :
@@ -2624,7 +2653,7 @@ module rv32_backend_joint #(
     );
 
     wire [(((LSQ_ENTRIES) <= 1) ? 1 : $clog2((LSQ_ENTRIES)))-1:0] unused_lsq_tail_o;
-    rv32_lsq #(.SINGLE_GENERATION_OWNER(TAG_SINGLE_GENERATION_OWNER), .RELEASE_CREDITS((LSQ_DIRECT_POP_CREDIT!=0)?2:DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .ACK_SOURCE_QUERY(LSQ_STORE_ACK_SOURCE_QUERY), .HEAD_STORE_ACK_BYPASS(LSQ_HEAD_STORE_ACK_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .SAVED_REPORT_PRIORITY(LSQ_SAVED_REPORT_PRIORITY), .HEAD_LOAD_IDENTITY_QUERY(LSQ_HEAD_LOAD_IDENTITY_QUERY), .HELD_LOAD_IDENTITY_QUERY(LSQ_HELD_LOAD_IDENTITY_QUERY), .HEAD_LOAD_PACKET_PRESELECT(LSQ_HEAD_LOAD_PACKET_PRESELECT), .SAVED_IDENTITY_WORD_MASK(LSQ_SAVED_IDENTITY_WORD_MASK), .SAVED_IDENTITY_BALANCED_MERGE(LSQ_SAVED_IDENTITY_BALANCED_MERGE), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .ALLOC_LOAD_REQUEST_BYPASS(LSQ_ALLOC_LOAD_REQUEST_BYPASS), .SAVED_REQUEST_QUERY(LSQ_SAVED_REQUEST_QUERY), .SAVED_CANDIDATE_STATE_QUERY(LSQ_SAVED_CANDIDATE_STATE_QUERY), .PHASED_DATA_OWNER(LSQ_PHASED_DATA_OWNER), .PHASED_DIRECT_WRITE_EVENTS(LSQ_PHASED_DIRECT_WRITE_EVENTS), .DISTRIBUTED_LOAD_FORMAT(LSQ_DISTRIBUTED_LOAD_FORMAT), .PHASED_ALLOC_EXCLUSIVE(LSQ_PHASED_ALLOC_EXCLUSIVE), .QUALIFIED_ADDRESS_WRITE(LSQ_QUALIFIED_ADDRESS_WRITE), .ALLOC_SLOT_PRESELECT(LSQ_ALLOC_SLOT_PRESELECT_ACTIVE), .ALLOC_PAYLOAD_PRESELECT(LSQ_ALLOC_PAYLOAD_PRESELECT_ACTIVE), .ALLOC_FIRE_DISTRIBUTE(LSQ_ALLOC_FIRE_DISTRIBUTE), .RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .SECOND_REPORT_RECLAIM(LSQ_SECOND_REPORT_RECLAIM), .EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .COMMITTED_STORE_BYPASS(LSQ_COMMITTED_STORE_BYPASS), .PICK_LOCAL_VALIDITY(LSQ_PICK_LOCAL_VALIDITY), .FORWARD_ONEHOT(LSQ_FORWARD_ONEHOT), .PICK_ONEHOT(LSQ_PICK_ONEHOT), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .RESPONSE_SOURCE_QUERY(LSQ_RESPONSE_SOURCE_QUERY), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
+    rv32_lsq #(.SINGLE_GENERATION_OWNER(TAG_SINGLE_GENERATION_OWNER), .RELEASE_CREDITS((LSQ_DIRECT_POP_CREDIT!=0)?2:DIRECT_DISPATCH_RELEASE_CREDITS), .BE_WIDTH(BE_WIDTH), .LSQ_ENTRIES(LSQ_ENTRIES), .STORE_ADMISSION_BYPASS(LSQ_STORE_ADMISSION_BYPASS), .ACK_SOURCE_QUERY(LSQ_STORE_ACK_SOURCE_QUERY), .HEAD_STORE_ACK_BYPASS(LSQ_HEAD_STORE_ACK_BYPASS), .STORE_ADDRESS_PROBE(EARLY_STORE_ADDRESS == 2), .REQUEST_PIPELINE(1), .LOAD_ADDRESS_LOOKTHROUGH(EARLY_LOAD_ADDRESS>=3), .LOAD_COMPLETION_BYPASS(LOAD_COMPLETION_BYPASS), .SAVED_REPORT_PRIORITY(LSQ_SAVED_REPORT_PRIORITY), .HEAD_LOAD_IDENTITY_QUERY(LSQ_HEAD_LOAD_IDENTITY_QUERY), .HELD_LOAD_IDENTITY_QUERY(LSQ_HELD_LOAD_IDENTITY_QUERY), .HEAD_LOAD_PACKET_PRESELECT(LSQ_HEAD_LOAD_PACKET_PRESELECT), .SAVED_IDENTITY_WORD_MASK(LSQ_SAVED_IDENTITY_WORD_MASK), .SAVED_IDENTITY_BALANCED_MERGE(LSQ_SAVED_IDENTITY_BALANCED_MERGE), .LOAD_WAKE_BYPASS(RS_LOAD_RETURN_WAKE), .ALLOC_LOAD_SELECTION_BYPASS(ALLOC_LOAD_SELECTION_BYPASS), .ALLOC_LOAD_REQUEST_BYPASS(LSQ_ALLOC_LOAD_REQUEST_BYPASS), .SAVED_REQUEST_QUERY(LSQ_SAVED_REQUEST_QUERY), .SAVED_CANDIDATE_STATE_QUERY(LSQ_SAVED_CANDIDATE_STATE_QUERY), .PHASED_DATA_OWNER(LSQ_PHASED_DATA_OWNER), .PHASED_DIRECT_WRITE_EVENTS(LSQ_PHASED_DIRECT_WRITE_EVENTS), .DISTRIBUTED_LOAD_FORMAT(LSQ_DISTRIBUTED_LOAD_FORMAT), .PHASED_ALLOC_EXCLUSIVE(LSQ_PHASED_ALLOC_EXCLUSIVE), .QUALIFIED_ADDRESS_WRITE(LSQ_QUALIFIED_ADDRESS_WRITE), .REPORT_RANGE_PREDECODE(LSQ_REPORT_RANGE_PREDECODE), .ALLOC_SLOT_PRESELECT(LSQ_ALLOC_SLOT_PRESELECT_ACTIVE), .ALLOC_PAYLOAD_PRESELECT(LSQ_ALLOC_PAYLOAD_PRESELECT_ACTIVE), .ALLOC_FIRE_DISTRIBUTE(LSQ_ALLOC_FIRE_DISTRIBUTE), .RECLAIM_WIDTH(LSQ_RECLAIM_WIDTH), .SECOND_REPORT_RECLAIM(LSQ_SECOND_REPORT_RECLAIM), .EMPTY_SELECTION_BYPASS(LSQ_EMPTY_SELECTION_BYPASS), .COMMITTED_STORE_BYPASS(LSQ_COMMITTED_STORE_BYPASS), .PICK_LOCAL_VALIDITY(LSQ_PICK_LOCAL_VALIDITY), .FORWARD_ONEHOT(LSQ_FORWARD_ONEHOT), .PICK_ONEHOT(LSQ_PICK_ONEHOT), .LOCAL_REPORT_CANCEL(LOCAL_EXEC_RECOVERY), .REPORT_ROB_PREDECODE(LSQ_ROB_QUERY_PREDECODE), .RESPONSE_QUERY_PREDECODE(LSQ_RESPONSE_QUERY_PREDECODE), .RESPONSE_SOURCE_QUERY(LSQ_RESPONSE_SOURCE_QUERY), .TAG_WIDTH(TAG_WIDTH), .ROB_TAG_WIDTH(TAG_WIDTH), .ROB_ENTRIES(ROB_ENTRIES), .PHYS_ADDR_WIDTH(PAW)) lsq (
         .early_addr_valid_i(shared_store_addr_valid), .early_addr_tag_i(shared_store_addr_tag),
         .early_addr_i(shared_store_addr), .store_addr_pending_o(lsq_store_addr_pending),
         .store_addr_rob_tag_o(lsq_store_addr_rob_tag), .store_addr_lsq_tag_o(lsq_store_addr_lsq_tag),
@@ -3216,4 +3245,17 @@ module rv32_backend_joint #(
     end endgenerate
 `endif
 
+
+    initial begin
+        if(LSQ_REPORT_RANGE_PREDECODE!=0 && LSQ_REPORT_RANGE_PREDECODE!=1)
+            $fatal(1,"LSQ report range predecode must be 0/1");
+        if(LSQ_REPORT_RANGE_PREDECODE!=0 &&
+                (LSQ_ENTRIES<2 || LSQ_ENTRIES>32 || (LSQ_ENTRIES&(LSQ_ENTRIES-1))!=0))
+            $fatal(1,"LSQ report range predecode requires entries 2..32 power of two");
+        if(LSQ_REPORT_LIVE_MATCH_PREQUERY!=0 && LSQ_REPORT_LIVE_MATCH_PREQUERY!=1)
+            $fatal(1,"LSQ report live prequery must be 0/1");
+        if(LSQ_REPORT_LIVE_MATCH_PREQUERY!=0 &&
+                (LSQ_HEAD_LOAD_IDENTITY_ACTIVE==0))
+            $fatal(1,"LSQ report live prequery requires the full decoded report identities");
+    end
 endmodule

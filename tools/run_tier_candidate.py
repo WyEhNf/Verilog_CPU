@@ -57,6 +57,14 @@ def validate_parameters(text, profile):
         if key not in defaults or type(value) is not int or value < 0:
             raise ValueError("Invalid override: " + key)
     p = defaults | overrides
+    if p["LSQ_REPORT_RANGE_PREDECODE"] not in (0,1) or (p["LSQ_REPORT_RANGE_PREDECODE"] and
+            (p["LSQ_ENTRIES"]<2 or p["LSQ_ENTRIES"]>32 or p["LSQ_ENTRIES"]&(p["LSQ_ENTRIES"]-1))):
+        raise ValueError("Report range predecode requires power-of-two LSQ entries 2..32")
+    if p["LSQ_REPORT_LIVE_MATCH_PREQUERY"] not in (0,1) or (p["LSQ_REPORT_LIVE_MATCH_PREQUERY"] and
+            (not p["LSQ_HEAD_LOAD_IDENTITY_QUERY"] or not p["LSQ_SAVED_REPORT_PRIORITY"] or
+             not p["LSQ_STORE_ACK_SOURCE_QUERY"] or
+             p["LOAD_COMPLETION_BYPASS"]!=2 or not p["LSQ_HEAD_STORE_ACK_BYPASS"])):
+        raise ValueError("Report live prequery requires original full decoded report identities")
     if p["COMPLETION_SOURCE_STATE_QUERY"] not in (0,1,2) or (p["COMPLETION_SOURCE_STATE_QUERY"] and p["COMPLETION_BYPASS"]!=2):
         raise ValueError("Completion source state query requires direct completion")
     if p["ROB_RECOVERY_WINDOW_OWNER"] not in (0,1) or (p["ROB_RECOVERY_WINDOW_OWNER"] and not p["ROB_RECOVERY_PENDING_OWNER"]):
