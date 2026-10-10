@@ -1,0 +1,75 @@
+{
+  "status": "FINITE_COMPLETE_CDB_CANDIDATE_SAMPLE_AND_FULL_STRUCTURAL_LINT_PASSED_ONE_OFFICIAL_PPA_RUNNING",
+  "accepted": false,
+  "source_commit": "a2938851c645e36fb2ed176c3d16b92e39fa0121",
+  "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_completion_load_packet_fold_20261010",
+  "parameter_count": 217,
+  "manifest_sha256": "47f873aeb57f80a254848575ab6d0d288c73af7847c82a831abc5dd6613c1073",
+  "profile_path": "configs/tier3_shared_500_completion_load_packet_fold_candidate.json",
+  "all_existing216_parameter_values_unchanged": true,
+  "added_parameters": {
+    "COMPLETION_LOAD_PACKET_FOLD": 1
+  },
+  "combined_with_previously_rejected_packet_prefix": true,
+  "independent_failed_policy_not_remeasured": true,
+  "existing_metadata_root_held_tag_capture_preserved": true,
+  "no_extra_register_or_latency": true,
+  "required_area_maximum_um2": 35891.672317998215,
+  "required_fmax_minimum_mhz": 500,
+  "required_geomean_ipc_minimum": 1.1152626918348099,
+  "required_maximum_cycles": {
+    "perf_median": 7572,
+    "perf_multiply": 17490,
+    "perf_qsort": 143485,
+    "perf_rsort": 153155,
+    "perf_towers": 4739,
+    "perf_vvadd": 3725
+  },
+  "lint": {
+    "status": "PASSED",
+    "returncode": 0,
+    "seconds": 26.980538700008765,
+    "word_sim": false,
+    "counts": {
+      "errors": 0,
+      "latches": 0,
+      "unoptflat": 0
+    },
+    "log_sha256": "9566742183b0defdec21cc1a44e3a7d74ef11c9489495874d73ffaec1f621a1d"
+  },
+  "finite_protocol": "reports/Tier_shared_completion_load_packet_fold_protocol_2026-10-10.json",
+  "previous_candidate_terminal": "reports/Tier3_shared_report_packet_prefix_2026-10-10.json",
+  "frozen_source_tool_library_hashes_verified": true,
+  "helpers_in_both_active_filelists": true,
+  "session_id": 38850,
+  "observed_live_processes": [
+    {
+      "Id": 32464,
+      "ProcessName": "python",
+      "CPU": 0.1875,
+      "StartTime": "/Date(1791628640761)/"
+    },
+    {
+      "Id": 50180,
+      "ProcessName": "python",
+      "CPU": 0.4375,
+      "StartTime": "/Date(1791628640029)/"
+    },
+    {
+      "Id": 41176,
+      "ProcessName": "yosys",
+      "CPU": 178.421875,
+      "StartTime": "/Date(1791628641320)/"
+    }
+  ],
+  "observation_is_not_terminal_evidence": true,
+  "ppa_metrics": null,
+  "ipc": null,
+  "cycles": null,
+  "canonical_profiles_promoted": false,
+  "cpu_build_started": false,
+  "perf_started": false,
+  "smoke_started": false,
+  "current_goal_turn_progress": "Implement default-off whole CDB LOAD candidate tag class and payload fold: full eligibility/live/held tag comparisons before head/saved choice and direct source masking folded into complete metadata/value choice. Retain existing metadata-root held-tag capture, original public packets and state edges. One actual paired backend/direct network finite binary passes first attempt, no repeated512-point prefix point. Commit/freeze217 pins; full original NO_WORD_SIM structural lint passes; start one official PPA and verify actual live runner/synth/Yosys.",
+  "next_action": "Observe this exact live PPA without restarting on sparse output/timeouts. Verify terminal source/tool/result hashes and bounded current paths; strict area/F500 gates precede CPU build/perf. Original dynamic instructions/all6 cycle/IPC nonregression precedes one array1 smoke. Keep canonical accepted profiles unchanged and full goals1..5 active."
+}

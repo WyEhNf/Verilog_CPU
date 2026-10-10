@@ -1,7 +1,7 @@
 # Complete LSQ candidate folding into direct CDB selection
 
-Status: default-off implementation and one finite sample pass; structural
-lint and PPA verification are pending. This document records the transformation
+Status: default-off implementation, one finite sample and full original
+structural lint pass; one official PPA is running, with no metric acceptance. This document records the transformation
 and its exact obligations.
 It establishes no new area, frequency, IPC, cycle count or accepted profile.
 The completed216 experiment is rejected for frequency regression; its evidence
@@ -101,3 +101,7 @@ to a new release. Full goals1..5 remain active.
 A default-off complete LOAD candidate CDB fold prepares full tag eligibility/held comparisons before head/saved choice, and folds full candidate metadata/value selection into the original direct source grant. Original public packets, priority, full tag locks and state edges remain unchanged; existing direct metadata tag capture is retained. One paired backend plus14-edge actual direct-network finite binary passes on its first attempt, including10 held-lane observations and2 high-full-tag locks. Complete packet prefix1 is fixed in both sides; its previous isolated PPA remains rejected. Frozen/current source and result hashes verify. [Finite evidence](../reports/Tier_shared_completion_load_packet_fold_protocol_2026-10-10.json) does not establish PPA/IPC. The new combined candidate awaits one full structural lint and official PPA; canonical profiles are unchanged.
 
 Elapsed compile plus simulation101.910194s; actual simulation2us /0.035s. Native original complete packet, full tag qualification/equality and direct selected payload shadows pass. Direct140/staged157 edges retain all original metadata and recovery checks. Standalone optional branch/store payloads exercise the widest complete packet; the actual backends exercise both omitted optional fields. No all-input/all-geometry or whole-CPU claim. No prior512-point prefix probe is repeated.
+
+## Structural lint and live PPA
+
+The217-pin `a2938851` complete LOAD candidate tag/payload fold combination is frozen with source/tool/library hashes verified. Full original structural lint without WORD_SIM passes in26.980539s with errors/latches/UNOPTFLAT=0. One official PPA is running under verified live runner/synth/Yosys processes. This dated running observation is not a metric result or500MHz acceptance. No CPU phases run; IPC/cycles are unknown. [Progress evidence](../reports/Tier3_shared_completion_load_packet_fold_progress_2026-10-10.json).
