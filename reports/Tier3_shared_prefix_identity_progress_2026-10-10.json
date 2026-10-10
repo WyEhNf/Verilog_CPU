@@ -1,0 +1,71 @@
+{
+  "status": "FINITE_PREFIX_IDENTITY_AND_STRUCTURAL_LINT_PASSED_ONE_OFFICIAL_PPA_RUNNING",
+  "accepted": false,
+  "source_commit": "03a4f3e9bb599e30a685f7f6dc5fc4eae058f12b",
+  "run_directory": "F:\\CPU2026TierRuns\\tier3_shared_500_prefix_identity_20261010",
+  "parameter_count": 213,
+  "manifest_sha256": "b0b35c4fa17c20763184f1815291338410d636127c91682d5268552057d4bf93",
+  "profile_path": "configs/tier3_shared_500_prefix_identity_candidate.json",
+  "changed_values_vs212": {
+    "LSQ_HELD_LOAD_IDENTITY_QUERY": 1,
+    "LSQ_REPORT_PREFIX_IDENTITY_QUERY": 1
+  },
+  "all_other212_parameter_values_unchanged": true,
+  "required_area_maximum_um2": 35891.672317998215,
+  "required_fmax_minimum_mhz": 500,
+  "required_geomean_ipc_minimum": 1.1152626918348099,
+  "required_maximum_cycles": {
+    "perf_median": 7572,
+    "perf_multiply": 17490,
+    "perf_qsort": 143485,
+    "perf_rsort": 153155,
+    "perf_towers": 4739,
+    "perf_vvadd": 3725
+  },
+  "lint": {
+    "status": "PASSED",
+    "returncode": 0,
+    "seconds": 30.470939999970142,
+    "word_sim": false,
+    "counts": {
+      "errors": 0,
+      "latches": 0,
+      "unoptflat": 0
+    },
+    "log_sha256": "db02a1dce7f254dd48920fac4b3c67c5e9c8d26f54a50e844e0804a09c69fa6a"
+  },
+  "finite_protocol": "reports/Tier_shared_prefix_identity_protocol_2026-10-10.json",
+  "previous_candidate_terminal": "reports/Tier3_shared_range_carry_mdu_2026-10-10.json",
+  "frozen_source_tool_library_hashes_verified": true,
+  "session_id": 70927,
+  "observed_live_processes": [
+    {
+      "Id": 14520,
+      "ProcessName": "python",
+      "CPU": 0.453125,
+      "StartTime": "/Date(1791621200185)/"
+    },
+    {
+      "Id": 78664,
+      "ProcessName": "python",
+      "CPU": 0.203125,
+      "StartTime": "/Date(1791621200914)/"
+    },
+    {
+      "Id": 99856,
+      "ProcessName": "yosys",
+      "CPU": 82.4375,
+      "StartTime": "/Date(1791621201536)/"
+    }
+  ],
+  "observation_is_not_terminal_evidence": true,
+  "ppa_metrics": null,
+  "ipc": null,
+  "cycles": null,
+  "canonical_profiles_promoted": false,
+  "cpu_build_started": false,
+  "perf_started": false,
+  "smoke_started": false,
+  "current_goal_turn_progress": "Close212 official PPA with complete hash/area/Fmax/path evidence. Implement default-off full occupied-prefix qualification after normal identity/ROB lookup with existing held query1 in the same CPU. One finite actual backend pair/raw512 input point passes; commit/freeze213 pins, full original structural lint passes; start one official PPA and verify live process tree.",
+  "next_action": "Wait on this exact PPA; verify frozen/result hashes and numeric area/Fmax before CPU phases. No restart for sparse output; no individual held-policy sweep. Strict500MHz/nonregression gates and full goals1..5 remain active."
+}
