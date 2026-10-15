@@ -1,0 +1,76 @@
+{
+  "status": "LATEST_COURSE_SYNCED_CURRENT_DEFAULT_ASSESSMENT_RUNNING",
+  "user_request": "Complete current default area, six-benchmark IPC and frequency using the newest official framework; no CPU optimization during assessment",
+  "source_commit": "fe35375041b7c33719134db1c416346f7954dc36",
+  "cpu_rtl_reference_commit": "8e2448d9ede31c124f2e9d86b5dec96436d3478f",
+  "cpu_rtl_unchanged": true,
+  "framework_commit": "302f0cf3cccdaa5de084a2120e0d950c663e4cf5",
+  "testcases_commit": "29f980727f7d99a1842a58f34091c7579ba3fe85",
+  "run_directory": "F:\\CPU2026CourseRuns\\default_latest_302f0cf3_20261015",
+  "manifest_sha256": "963bda782370dafb346d3ef9f5e8987a6439967b4855634f17f656abc7c36205",
+  "frozen_source_tool_library_hashes_verified": true,
+  "parameters": {
+    "FE_WIDTH": 4,
+    "BE_WIDTH": 2,
+    "ROB_ENTRIES": 32,
+    "PHYS_REGS": 56,
+    "RS_ENTRIES": 8,
+    "LSQ_ENTRIES": 16,
+    "ICACHE_LINES": 128,
+    "DCACHE_LINES": 1024
+  },
+  "all_numeric_parameters_count": 217,
+  "parameter_overrides": {},
+  "official_scripts_and_makefile_byte_identical": true,
+  "official_fakeram_restored": true,
+  "abc_constraints": {
+    "driving_cell": "INVx1_ASAP7_75t_R",
+    "output_load_ff": 5.0
+  },
+  "clock_period_ns": 2.0,
+  "latency": 10,
+  "environment": "WINDOWS_NATIVE",
+  "simulation_options": {
+    "word_sim": 1,
+    "native_bits": 1,
+    "split_schedule": 1,
+    "stable_mdu": 0,
+    "ico_pair": 0,
+    "pgo": 0
+  },
+  "execution_order": [
+    "synth",
+    "build",
+    "all_six_perf",
+    "one_array1_smoke",
+    "aggregate_report"
+  ],
+  "execution_mode": "Sequential to bound memory on the current Windows host",
+  "run_session_id": 37357,
+  "observed_live_processes": [
+    {
+      "Id": 39100,
+      "ProcessName": "python",
+      "CPU": 0.1875,
+      "StartTime": "/Date(1792063402930)/"
+    },
+    {
+      "Id": 111872,
+      "ProcessName": "python",
+      "CPU": 0.46875,
+      "StartTime": "/Date(1792063402020)/"
+    },
+    {
+      "Id": 86468,
+      "ProcessName": "yosys",
+      "CPU": 241.171875,
+      "StartTime": "/Date(1792063403730)/"
+    }
+  ],
+  "observation_is_not_terminal_evidence": true,
+  "metric_evaluation_is_not_gated_on_tier_pass": true,
+  "no_repeated_or_broad_correctness_tests": true,
+  "current_metrics": null,
+  "assessment_result_pending": true,
+  "next_action": "Follow exact session37357 and its actual child processes. Obtain all requested metrics before further optimization. Do not restart a live phase. When terminal, verify hashes, all6 original instruction counts/cycles and area/STA reports, publish a self-contained current result with default ABC constraints and Windows platform scope."
+}
