@@ -42,9 +42,13 @@ one small correctness point. `check` verifies immutable inputs; `report`
 aggregates terminal results without rerunning phases. Existing output
 directories and phase records are never overwritten or restarted implicitly.
 
-Status: synchronization complete; updated-flow metrics remain pending until
-the frozen official reports and six benchmark results have completed.
+Status: synchronization and updated-flow assessment complete. The final
+measurements and benchmark evidence are linked in the completed section below.
 
 ## Frozen assessment running
 
 Snapshot `fe353750` retains all217 numeric defaults and no parameter overrides. Actual PPA runner/synthesis/Yosys processes are live. Source, native adapter, tool and library hashes verify. To bound current host memory, the recorded execution is sequential synthesis, build, six perf and one array1 smoke; the optional parallel run action is not used. [Dated progress](../reports/Current_default_latest_course_progress_2026-10-15.json) is not a metric result. The user-requested assessment must finish before further CPU optimization; no old area/IPC/frequency is substituted.
+
+## Completed assessment
+
+Total area37981.394558μm², geometric mean IPC1.115262691835, estimated frequency338.065368MHz. All requested metrics complete, original six answers and one array1 pass, frozen/result hashes verified. [Final evidence](../reports/Current_default_latest_course_2026-10-15.md) supersedes the dated running snapshot.

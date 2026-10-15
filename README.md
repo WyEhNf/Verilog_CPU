@@ -96,18 +96,27 @@ For binaries built with the configured F-drive MinGW toolchain, `python tools/ru
 
 ## Current implementation and verified results
 
-| Item | A109 default / existing measured result |
+The current default CPU was reassessed on2026-10-15 using the latest official
+course framework `302f0cf3`, including its new default ABC buffering/cell sizing.
+CPU RTL is unchanged from `8e2448d9`; source freeze is `fe353750`.
+
+| Item | Current default / latest official flow |
 |---|---:|
 | Frontend / commit width | 4 / 2 |
-| Integer issue / CDB width | 2 / 2 |
 | ROB / physical registers / RS / LSQ | 32 / 56 / 8 / 16 |
-| I-cache | 128 lines, 2 ways, 16 bytes/line |
-| D-cache | 1024 lines, 2 ways, 16 bytes/line |
-| Six-benchmark IPC GEOMEAN | 1.115262692 |
-| Total area, including SRAM | 35,891.672318 um² |
-| Course synthesis/STA estimated Fmax | 321.608040 MHz |
+| I-cache / D-cache lines | 128 / 1024 |
+| Six-benchmark IPC GEOMEAN | 1.115262691835 |
+| Total area, including SRAM | 37981.394558 μm² |
+| Course synthesis/STA estimated Fmax | 338.065368 MHz |
+| Tier3 joint area/IPC/300MHz requirements | FAIL |
+| Tier3 joint area/IPC/500MHz requirements | FAIL |
 
-These existing results meet the course Tier3 thresholds. They are measurements of the frozen A109 sources under the pinned course tools, not a new OJ result or post-layout frequency. See [the verified A109 report](reports/ER1_A109_Tier3_verified_2026-10-06.md) for the exact correctness runs, budgets, tool versions, and source identity.
+Six original perf answers and one array1 smoke pass at latency10. The new flow
+uses INVx1_ASAP7_75t_R /5fF and a2ns clock target, with native Windows pinned
+synthesis tools. [Complete current results and source/tool evidence](reports/Current_default_latest_course_2026-10-15.md).
+The [A109 report](reports/ER1_A109_Tier3_verified_2026-10-06.md) and Tier1/Tier2
+records below retain their historical source/tool scope; their older metrics
+are not measurements of this updated flow.
 
 ### Area tiers and optimization acceptance
 
