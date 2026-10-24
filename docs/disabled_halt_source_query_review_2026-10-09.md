@@ -1,15 +1,15 @@
-# Disabled HALT sentinel and source-query timing
+# 禁用的 HALT 哨兵与源查询时序
 
-This is an unimplemented source review while one fresh-RS-data PPA is running. It does not change any RTL, profile, frozen run or acceptance status.
+这是一次尚未实现的源码审阅，进行时有一批新 RS 数据 PPA 正在运行。不改变 RTL、配置、冻结运行或验收状态。
 
-The measured combined Tier1 path at `a7e64b80` reaches `core.backend_rs1[4]` at 1.466 ns, then the direct RAT/PRF operand preview. `cpu_core` selects backend RS1/RS2/op using `is_halt_trace`, currently derived from the decoded opcode comparison even when `LEGACY_SENTINEL_HALT=0`. Course `student_top` explicitly sets `LEGACY_SENTINEL_HALT(0)` and `RETURN_VALUE_ENABLE(0)`.
+`a7e64b80` 的实测组合 Tier1 路径在 1.466 ns 到达 `core.backend_rs1[4]`，随后进入直接 RAT／PRF 操作数预览。`cpu_core` 通过 `is_halt_trace` 选择后端 RS1/RS2/op；即使 `LEGACY_SENTINEL_HALT=0`，它当前仍由译码操作码比较产生。课程 `student_top` 显式设置 `LEGACY_SENTINEL_HALT(0)` 和 `RETURN_VALUE_ENABLE(0)`。
 
-The shared decoder assigns HALT only in its final `LEGACY_SENTINEL_HALT!=0 && inst_i==32'h0ff00513` override. With that parameter zero, every instruction, including illegal encodings and unsupported system forms, produces another opcode. The sentinel word remains ordinary ADDI a0, zero, 255. The instruction stream is unrestricted; this is a parameter-level decoder invariant, not a benchmark restriction.
+共享译码器仅在最后的 `LEGACY_SENTINEL_HALT!=0 && inst_i==32'h0ff00513` 覆盖逻辑中赋予 HALT。该参数为零时，每条指令（含非法编码及不支持的系统形式）都会产生其他操作码。哨兵字仍是普通 ADDI a0, zero, 255。指令流不受限；这是参数级译码不变量，不是基准限制。
 
-With `DECODE_PIPELINE=0`, the downstream decoded opcode is that decoder's direct output. With a decode queue, every valid saved packet was written from the same decoder output on a storage push. Reset/flush clear count, hiding any stale or uninitialized payload. Empty bypass validity requires input validity; queued validity refers only to occupied rows. FULL_REPLACE changes ownership at the same edge but writes another decoder output. Missing frontend lanes supply zero instructions and invalid input. Thus every valid downstream decoded packet has op!=HALT when the sentinel parameter is zero. Invalid payload may contain arbitrary bits and cannot create architectural work.
+`DECODE_PIPELINE=0` 时，下游译码操作码直接来自译码器。存在译码队列时，每个有效保存包都在入队边沿写自同一译码器输出。复位／清除清空计数，隐藏过期或未初始化载荷。空队列直通的有效性要求输入有效；排队有效性仅指向已占用行。FULL_REPLACE 在同一边沿改变所有权，但仍写入另一份译码输出。不存在的前端通道提供零指令及无效输入。因此，哨兵参数为零时，每个有效下游译码包都有 op!=HALT。无效载荷可含任意位，但不能产生架构工作。
 
-A possible later change is `is_halt_trace = (LEGACY_SENTINEL_HALT!=0) && (dec_op==HALT)`. It keeps the entire legacy-enabled behavior, and lets the parameter-disabled profile remove HALT-derived backend opcode and source-register muxes. A simulation-only assertion should require non-HALT for every valid downstream packet in that mode, using the original opcode. No opcode/tag/state bits need be removed. The common decoder, queue and backend remain shared across widths.
+后续可考虑改为 `is_halt_trace = (LEGACY_SENTINEL_HALT!=0) && (dec_op==HALT)`。这保留全部旧哨兵启用行为，并允许参数禁用配置消除 HALT 派生的后端操作码及源寄存器多路选择器。仿真专用断言应使用原操作码，要求该模式每个有效下游包均非 HALT。不需删除操作码、标签或状态位。不同宽度仍共享译码器、队列和后端。
 
-This might remove an early decode dependency from the measured source-query path. It is not implemented yet; no area, frequency or IPC improvement is claimed. The current fresh-data freeze must finish first. If it passes its gates, retain its evidence; any later candidate must be measured under its own source identity. If it fails frequency, review the new timing path before combining this change with any further optimization. Do not rerun the current PPA or a whole correctness suite for this review.
+此改动可能从实测源查询路径移除一项提前译码依赖，但尚未实现，不宣称面积、频率或 IPC 收益。当前新数据冻结批次必须先结束。若通过验收门则保留证据，后续候选必须按自身源码身份测量；若频率失败，先审阅新时序路径，再组合此改动和其他优化。不为本次审阅重跑当前 PPA 或整套正确性测试。
 
-The reviewed parameter guard is now implemented as default-off `DECODE_STATIC_HALT_CLASS`, with a production non-HALT-on-valid-packet simulation assertion. It is combined with a saved LSQ candidate-state query in `configs/tier1_shared_static_source_query.json`; measurements for that new freeze are still pending. See `docs/static_source_saved_state_review_2026-10-09.md`.
+上述参数约束现已实现为默认关闭的 `DECODE_STATIC_HALT_CLASS`，并加入生产逻辑仿真断言：有效包不能是 HALT。它与保存 LSQ 候选状态查询组合于 `configs/tier1_shared_static_source_query.json`；新冻结版本测量仍待完成。见 `docs/static_source_saved_state_review_2026-10-09.md`。

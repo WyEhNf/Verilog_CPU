@@ -6,7 +6,7 @@
 
 成功的整机案例必须满足 `halted=1 && error=0 && return_value==expected`，并且没有触发总周期或连续无退休 watchdog。失败时 runner 保存首个失败案例的 stdout/stderr 和 manifest 报告；波形路径由具体 CPU runner 追加到同一报告。
 
-## C++ reference 逐条差分
+## C++ 参考模型逐条差分
 
 `tools/reference_trace.cpp` 是只读参考适配器。它只包含参考仓库公开的
 `simulator.h/module_io.h`，并在每周期 evaluate/arbitrate 之后、latch 之前读取

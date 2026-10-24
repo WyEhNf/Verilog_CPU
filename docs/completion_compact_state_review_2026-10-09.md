@@ -1,39 +1,39 @@
-# Compact consumed completion metadata
+# 精简实际消费的完成元数据
 
-## Measured reason
+## 实测动机
 
-The 76bc5f42 mode-1 freeze improves Tier1 frequency from 290.578888 to 299.853587 MHz, but increases area from 8893.003375 to 9021.088675 um2. It fails both gates, missing frequency by 0.146413 MHz and exceeding area by 21.088675 um2. No build/perf/smoke was run. This follow-up targets replication introduced by the earlier current-table query rather than changing resource capacity or instruction cycles.
+76bc5f42 的模式 1 冻结版本将 Tier1 频率从 290.578888 提高到 299.853587 MHz，但面积从 8893.003375 增至 9021.088675 um2。两项均未通过：频率差 0.146413 MHz，面积超出 21.088675 um2。未运行构建／性能／冒烟测试。本轮针对之前当前状态表查询造成的复制开销，不改变资源容量或指令周期。
 
-The mapped mode-1 candidate's two early LSQ three-bit state readers each report 3.4992 um2 including their own control subtrees. Their cost alone cannot explain or recover the full 128.085300 um2 total area increase: whole-design mapping also changes. Merely pruning two unconsumed size bits on LOAD/MDU is not sufficient evidence of a 21 um2 gain. The final compact variant additionally reuses size already captured in the ALU's complete result packet, allowing redundant ROB size payload storage/read logic to become unused where RS inline metadata is active. A new full PPA is still necessary; no predicted area gain is treated as measured.
+已映射模式 1 候选中，两个提前执行的 LSQ 三位状态读取器各占 3.4992 um2，包含各自控制子树。它们本身不足以解释或收回 128.085300 um2 的整机面积增加，因为整机映射也发生变化。仅删除 LOAD/MDU 未消费的两个 size 位，不足以证明能减少 21 um2。最终精简版还复用 ALU 完整结果包已捕获的 size，使启用 RS 内联元数据时，冗余 ROB size 载荷存储／读取逻辑可被消除。仍须新完整 PPA，预测面积收益不作为实测结果。
 
-## Source metadata contract
+## 源元数据契约
 
-COMPLETION_SOURCE_STATE_QUERY remains the same parameter throughout the shared top/core/backend: 0 retains the original post-CDB table query, 1 retains the complete three-bit source query, and 2 selects only consumed source metadata. Both nonzero modes require direct completion. No alternative width-specific backend, storage owner, pipeline stage, tag width or resource capacity is added.
+COMPLETION_SOURCE_STATE_QUERY 在共享 top/core/backend 中保持同一参数：0 保留原 CDB 后状态表查询；1 保留完整三位源查询；2 只选择实际消费的源元数据。两个非零模式均要求直接完成。不新增按宽度分离的后端、存储所有者、流水级、标签宽度或资源容量。
 
-In mode 2 every completion source still performs the exact current load_error_mem query. It is not replaced by a zero flag or a private LOAD ownership certificate. The existing early head/saved/held LOAD candidate query/choice is retained; each candidate reads one error bit rather than three error/size bits. Fallback predecoded and raw-tag LOAD queries likewise retain their original identity and current error. MDU reads its current error with its original raw tag.
+模式 2 下，每个完成源仍执行准确的当前 load_error_mem 查询，不以零标志或 LOAD 私有所有权证书替换。既有提前队首／已保存／保持中 LOAD 候选查询与选择保留，每候选只读取一个错误位，而非错误／大小三位。备用预译码和原始标签 LOAD 查询也保留原身份及当前错误。MDU 使用原原始标签读取当前错误。
 
-Only an ALU source can supply STORE class. An ALU already captures calc_mem_size=issue_mem_size_i together with its full result tag in its existing result word owner, and publishes exec_mem_size_o with that same retained result. Those inputs came from the instruction's original size metadata, either inline RS metadata or the legacy ROB issue table. Mode 2 uses that existing two-bit field for ALU sources. For a valid STORE result, its full ROB tag still passes the original live/generation checks; the row cannot be reused before ordinary completion is accepted. A fast STORE completed on actual D/LSQ allocation has store_without_agu set, so d_rs_need excludes its RS allocation; it creates no ALU completion copy. The ordinary producer loop itself still accepts every valid nonredirecting ALU STORE. A normal RS STORE remains dependent on that ordinary completion before retirement. The ALU holds the same tag/size packet until its original ready/cancel event. The scalar table's original allocation/clear/update ordering and all CDB/recovery clock edges stay intact.
+只有 ALU 源能提供 STORE 类别。ALU 原有结果字所有者已经将 calc_mem_size=issue_mem_size_i 与完整结果标签一起捕获，并随同一保持结果发布 exec_mem_size_o。输入来自指令原始大小元数据，即 RS 内联元数据或旧 ROB 发射表。模式 2 对 ALU 源使用这两个既有位。有效 STORE 结果的完整 ROB 标签仍通过原存活／generation 检查；普通完成被接受前，该行不能复用。若快速 STORE 在真实 D/LSQ 分配时完成，则 store_without_agu 置位，d_rs_need 排除其 RS 分配，因此不会生成 ALU 完成副本。普通生产者循环本身仍接受全部有效、非重定向的 ALU STORE。普通 RS STORE 在退休前仍依赖该普通完成。ALU 保持同一标签／大小包，直到原 ready／取消事件。标量状态表原分配、清除和更新顺序，以及全部 CDB／恢复时钟边沿不变。
 
-Both normal and shifted recovery mask conversions remain gated by their original cdb_is_store source class and packet validity. MDU and LSQ report producers keep STORE class zero in actual producer construction, so their size bits can be zero without changing a consumed field. LOAD request/report formatting continues using its original LSQ size/unsigned metadata. No size is removed from any valid STORE, and the exact same-edge LOAD error contribution is unchanged.
+普通及移位恢复掩码转换仍由原 cdb_is_store 源类别和包有效性限定。真实生产者构造中，MDU 与 LSQ 报告源的 STORE 类别保持零，因此将其 size 位设为零不会改变被消费字段。LOAD 请求／报告格式继续使用原 LSQ size／unsigned 元数据。有效 STORE 的 size 不被删除，同边沿 LOAD 错误贡献也完全不变。
 
-Every simulation valid ROB writeback checks unique source ownership and exact current error equality against the original selected-tag query. Mode 1 also compares both size bits on every valid writeback, preserving its original three-bit contract. Mode 2 compares both size bits whenever the selected CDB packet is STORE, including a held CDB result. Another production assertion checks that the MDU and LSQ sources never acquire STORE class. These references are simulation-only; no new synthesized proof state is introduced.
+每次仿真中的有效 ROB 写回都检查源所有权唯一性，并与原选中标签查询比较当前错误是否完全一致。模式 1 在每次有效写回比较两个 size 位，保持原三位契约；模式 2 在选中 CDB 包为 STORE 时比较两个 size 位，包含保持中的 CDB 结果。另一条生产逻辑断言检查 MDU 和 LSQ 源不会取得 STORE 类别。这些参考检查仅用于仿真，不新增综合证明状态。
 
-## Bounded evaluation
+## 有界评估
 
-Reuse the finite original-versus-new BE2/ROB8/PHYS40/RS4/LSQ4 backend stimulus, in direct/staged recovery, with source query 0/2. Enable RS inline metadata in both pairs. Replace one of the existing eight row-reuse ADDIs by an iterative MUL and require its actual source mask to be observed. Delayed older LOAD, ordinary ALU completion, branch capture/hold/apply, reset/whole flush, full row-generation reuse, SB/SH/SW requests with real ACKs, and head LOAD error/registered terminal record are retained. Compare valid public packets/cycles and ROB/allocator identity, original error/STORE-size assertions, exact three STORE masks/words and MDU source coverage. This is one finite protocol sequence, not a whole CPU/backend proof.
+复用原版与新版 BE2/ROB8/PHYS40/RS4/LSQ4 后端的有限激励，对直接／分阶段恢复比较源查询 0/2，两侧均启用 RS 内联元数据。将原八个行复用 ADDI 中的一项换成迭代 MUL，并要求观察到真实源掩码。保留延迟的更老 LOAD、普通 ALU 完成、分支捕获／保持／应用、复位／整机清除、完整行 generation 复用、带真实 ACK 的 SB/SH/SW 请求，以及队首 LOAD 错误／寄存终止记录。比较有效公共包／周期、ROB／分配器身份、原错误／STORE 大小断言、准确的三种 STORE 掩码／字数据及 MDU 源覆盖。这是一组有限协议序列，不是整 CPU／后端证明。
 
-An intermediate compact variant already passed the same bounded sequence before ALU size reuse, but was not committed or sent to PPA; its old source freeze is retained separately. The final ALU-size reuse requires its own finite sample. Only after that passes should one committed Tier1 freeze undergo original structural lint and one official PPA. Require area <=9000 and Fmax >=300 without rounding into a pass, then one build/six-case perf. Enforce IPC >=0.6000 and every case cycle no larger than c2a09eaa before one array1 smoke. No canonical profile replacement or new CPU metrics are established by the implementation.
+中间精简版本在复用 ALU size 前已通过同一有界序列，但未提交或送入 PPA；旧源码冻结副本单独保留。最终 ALU size 复用需独立通过有限样例，之后才提交一次 Tier1 冻结版本，执行原结构静态检查和一次官方 PPA。要求面积 <=9000、Fmax >=300，不得通过四舍五入宣称通过；再构建一次并运行六项性能测试。要求 IPC >=0.6000 且每项周期不大于 c2a09eaa，才执行一次 array1 冒烟测试。实现本身不确立正式配置替换或新的 CPU 指标。
 
-## Final bounded sample result
+## 最终有界样例结果
 
-The final ALU-size-reuse sequence passed once. Exact frozen inputs/build/executable/simulation hashes and the retained earlier compact pass are recorded in reports/Tier_shared_completion_compact_state_protocol_2026-10-09.json. Direct/staged pairs each retained three captures, three previews and one apply; reset/whole flush canceled the other two pending owners. MDU source coverage and the original error/STORE-size comparisons were asserted. No CPU PPA/IPC acceptance follows from this sample.
+最终 ALU size 复用序列通过一次。准确冻结输入、构建、可执行文件与仿真哈希，以及保留的早期精简版通过记录，见 reports/Tier_shared_completion_compact_state_protocol_2026-10-09.json。直接／分阶段配对各保留三次捕获、三次预览和一次应用；复位／整机清除取消另外两个待处理所有者。MDU 源覆盖和原错误／STORE 大小比较已通过断言。此样例不构成 CPU PPA／IPC 验收。
 
-## Fast STORE lifecycle wording correction
+## 快速 STORE 生命周期措辞修正
 
-A later source recheck confirms that the ordinary producer loop does not filter ALU STORE packets by FAST_STORE_COMPLETE_ACTIVE. Its explicit exclusion is for redirecting branches and ordinary LOAD address results. The fast STORE ownership argument instead comes from actual D/LSQ allocation: store_without_agu publishes the fast completion only with lsq_alloc_fire and also removes that instruction from d_rs_need before RS allocation. This wording correction changes no RTL or frozen PPA inputs. The original per-valid-STORE size assertion remains the independent reference check.
+后续源码复核确认，普通生产者循环不会按 FAST_STORE_COMPLETE_ACTIVE 过滤 ALU STORE 包；它明确排除的是重定向分支及普通 LOAD 地址结果。快速 STORE 所有权的依据来自真实 D/LSQ 分配：store_without_agu 仅随 lsq_alloc_fire 发布快速完成，并在 RS 分配前将该指令从 d_rs_need 中移除。此措辞修正不改变 RTL 或冻结 PPA 输入。原逐有效 STORE 的 size 断言仍是独立参考检查。
 
-## Terminal CPU PPA
+## CPU PPA 最终结果
 
-The 0bc24c2a freeze measured 8996.258935 um2 / 292.822419 MHz in one official PPA (493.946667 seconds). Area passes by 3.741065 um2; frequency fails. Compared with mode 1, area decreases 24.829740 um2 but frequency decreases 7.031168 MHz. No build/perf/smoke ran and IPC is unknown. The dated running record remains historical; reports/Tier1_shared_completion_compact_state_2026-10-09.json is terminal evidence.
+0bc24c2a 冻结版本完成一次官方 PPA，用时 493.946667 秒，测得 8996.258935 um2 / 292.822419 MHz。面积余量为 3.741065 um2，频率失败。相对模式 1，面积减少 24.829740 um2，但频率降低 7.031168 MHz。未运行构建／性能／冒烟测试，IPC 未知。带日期的运行中记录保留为历史；reports/Tier1_shared_completion_compact_state_2026-10-09.json 为最终证据。
 
-The worst path still crosses D-cache return, completion and ROB store admission before next LSQ selection/forwarding and phased result capture. The formatted upper sign node has 16 consumers, 9.03 fF, and 0.136 ns delay; arrival is 3.3550 ns. Endpoint _116365_/QN is _001767_; _060397_ drives complete_value_mem[1][28], verified in this mapped.v. This source policy is not promoted and establishes no current-source Tier2/Tier3 result.
+最差路径仍经数据缓存返回、完成逻辑和 ROB 存储准入，再进入下一次 LSQ 选择／转发及分阶段结果捕获。格式化高位符号节点有 16 个消费者，负载 9.03 fF，延迟 0.136 ns，到达时间为 3.3550 ns。终点 _116365_/QN 对应 _001767_；_060397_ 驱动 complete_value_mem[1][28]，已在此 mapped.v 中核对。此源策略未被提升为正式配置，也不构成当前源码的 Tier2/Tier3 结果。

@@ -1,34 +1,34 @@
-# Direct LSQ phased payload write events
+# LSQ 分阶段载荷的直接写入事件
 
-## Measured reason
+## 实测动机
 
-The previous 366f4726 frozen Tier1 candidate measured 8960.946175 um2 / 284.286507 MHz and was rejected for frequency. Its longest path starts at D-cache metadata, passes LOAD reporting/completion and ROB qualification into LSQ selection/byte forwarding, then captures the formatted forwarded value in the shared phased data owner. Mapped _115579_/QN is _001611_; an inverter drives complete_value_mem[3][16]. Minimum period is 3.517578125 ns, with data arrival 3.4696 ns. No CPU build/perf/smoke was run for that source.
+上一 366f4726 Tier1 冻结候选测得 8960.946175 um2 / 284.286507 MHz，因频率失败被拒绝。最长路径从数据缓存元数据出发，经 LOAD 报告／完成和 ROB 资格判断进入 LSQ 选择／字节转发，再将格式化转发值捕获到共享分阶段数据所有者。映射的 _115579_/QN 为 _001611_，经反相器驱动 complete_value_mem[3][16]。最低周期 3.517578125 ns，数据到达时间 3.4696 ns。未对该源码运行 CPU 构建／性能／冒烟测试。
 
-The original phased owner chooses a forwarded or memory response result in a 32-bit result selector, then chooses that result in another 32-bit phase selector. STORE updates and allocation likewise pass a data selector before the phase selector. These nested payload qualifiers are on the measured path, while the retained register boundary is already needed for protocol correctness.
+原分阶段所有者先用一个 32 位结果选择器选择转发或主存响应结果，再用另一 32 位阶段选择器选择该结果；STORE 更新和分配也先经过数据选择，再经过阶段选择。这些嵌套载荷限定处于实测路径上，而保留的寄存边界本身是协议正确性所需。
 
-## Exact event composition
+## 精确事件组合
 
-LSQ_PHASED_DIRECT_WRITE_EVENTS defaults to zero throughout the same core/backend/LSQ. It requires PHASED_DATA_OWNER=1. Mode zero keeps the original selectors. Mode one composes their original last-event priorities into a single 32-bit selector with 3*BE_WIDTH+3 events, ordered low to high:
+LSQ_PHASED_DIRECT_WRITE_EVENTS 在同一 core/backend/LSQ 中默认为零，要求 PHASED_DATA_OWNER=1。模式零保留原选择器。模式一将原最后事件优先级组合成一个含 3*BE_WIDTH+3 个事件的 32 位选择器，由低到高排序如下：
 
-1. STORE data updates and wakeups: original first 2*BE_WIDTH data events, still qualified by original valid/store row state.
-2. LOAD partial forwarding capture: original forward event, qualified by valid/load row state.
-3. LOAD forwarded result, then memory response result: the original two result events and values, qualified by valid/load row state.
-4. Actual allocation lanes, in their original last-lane order: full incoming STORE word for a STORE, zero for a LOAD.
+1. STORE 数据更新和唤醒：原先前 2*BE_WIDTH 个数据事件，仍由原有效／存储行状态限定。
+2. LOAD 部分转发捕获：原转发事件，由有效／加载行状态限定。
+3. LOAD 转发结果，然后是主存响应结果：原两个结果事件和值，由有效／加载行状态限定。
+4. 实际分配通道，沿原最后通道优先顺序：STORE 使用完整输入存储字，LOAD 使用零。
 
-Original allocation events are the highest data-selector events and also the highest phase event. Replacing their nested data/class selection by each lane's complete allocation word preserves last-lane priority even if multiple events are presented. Actual allocator grants still select distinct row identities. Removing lower-priority duplicate allocation events does not change write enable: the direct allocation event remains present. If no allocation occurs, data selector membership is precisely its first 2*BE_WIDTH events. Result event 1 still beats event 0; result phase still beats forwarding capture; both still beat STORE updates. Simultaneous events keep the original priority rather than relying on a new mutual-exclusion assumption.
+原分配事件既是数据选择器最高事件，也是最高阶段事件。将嵌套的数据／类别选择换为逐通道完整分配字，即使同时出现多个事件也保留最后通道优先级。真实分配器许可仍选择互异行身份。删除低优先级重复分配事件不改变写使能，因为直接分配事件仍存在。若无分配，数据选择器成员准确为原前 2*BE_WIDTH 个事件。结果事件 1 仍优先于事件 0；结果阶段优先于转发捕获；两者都优先于 STORE 更新。同时事件保留原优先级，不依赖新的互斥假设。
 
-All original event guards, reset/flush/recovery handling, response full tag/GEN checks, byte masks, formatting, complete words, allocation priority and payload-owner clock edges are retained. No storage bits or queue capacity change. Original forwarding data admission qualification remains present. This changes only how the existing complete word is selected before its write edge.
+原事件保护、复位／清除／恢复处理、响应完整标签／GEN 检查、字节掩码、格式化、完整字、分配优先级及载荷所有者时钟边沿均保留。存储位和队列容量不变，原转发数据准入限定仍存在。只改变既有完整字在写入边沿前的选择方式。
 
-Every simulation payload row computes the original composed selector in parallel. It asserts exact write-enable equivalence on every edge and exact complete 32-bit data whenever a write occurs. That original query/selector is simulation-only in direct mode. Existing overlap and allocation-class assertions also remain active. Independent nonphased LSQ owners are untouched.
+仿真中每个载荷行并行计算原组合选择器，每边沿断言写使能完全等价，写入时断言完整 32 位数据准确相等。直接模式下，该原查询／选择器仅用于仿真。既有重叠和分配类别断言仍生效；独立非分阶段 LSQ 所有者不变。
 
-## Evaluation boundary
+## 评估边界
 
-Reuse one existing finite paired BE2/LSQ4 stimulus, varying direct events 0/1 while both use saved query, saved candidate state and the phased owner. Its fresh/held LOAD, partial/full forwarding, delayed STORE data, held result, irrelevant update, full-row reuse/stale response, MMIO and recovery cases compare public valid packets/cycles plus the production full write-edge/data assertions. RELEASE_CREDITS=2 is only this reuse fixture; production Tier1 remains zero. The sample is not a whole CPU proof or an independent Boolean mirror test.
+复用一组既有有限 BE2/LSQ4 配对激励，直接事件取 0/1，两侧均使用保存查询、保存候选状态及分阶段所有者。其新鲜／保持 LOAD、部分／完整转发、延迟 STORE 数据、保持结果、无关更新、整行复用／过期响应、MMIO 和恢复情况，比较公共有效包／周期及生产逻辑完整写入边沿／数据断言。RELEASE_CREDITS=2 仅属于此复用夹具，生产 Tier1 仍为零。样例不是整 CPU 证明或独立布尔镜像测试。
 
-The candidate configs/tier1_shared_direct_phase_events.json retains the STORE-route/MSHR-owner parameter profile, enables this direct selector, and leaves the separate pending-recovery optimization disabled. Run one structural full-core lint and one frozen official PPA; CPU build/perf only after area <=9000 and frequency >=300. Enforce IPC >=0.6000 and no case-cycle regression from c2a09eaa before one array1 smoke. No new CPU metrics or accepted-profile replacement are established by this implementation.
+候选 configs/tier1_shared_direct_phase_events.json 保留 STORE 路由／MSHR 所有者参数配置，启用直接选择器，并关闭独立待处理恢复优化。运行一次完整核心结构静态检查及一次冻结官方 PPA；面积 <=9000、频率 >=300 后才构建 CPU／运行性能测试。IPC >=0.6000 且每项周期相对 c2a09eaa 不回退后，才执行一次 array1 冒烟测试。实现本身不确立新 CPU 指标或已验收配置替换。
 
-## Terminal PPA result
+## PPA 最终结果
 
-The aea34a6f freeze completed its one official PPA in 604.716523 s: 8893.003375 um2 / 290.578888 MHz. Area passes, frequency fails, and the candidate is rejected without build/perf/smoke. Compared with its immediate predecessor it improves area by 67.942800 um2 and frequency by 6.292380 MHz, but remains 4.351988 MHz below the earlier better-clocked 8af905db candidate. No accepted configuration is replaced.
+aea34a6f 冻结版本用 604.716523 s 完成唯一一次官方 PPA：8893.003375 um2 / 290.578888 MHz。面积通过、频率失败，候选被拒绝，未构建／运行性能／冒烟测试。相对直接前驱，面积减少 67.942800 um2，频率提高 6.292380 MHz，但仍比更早、频率更好的 8af905db 候选低 4.351988 MHz。不替换已验收配置。
 
-Minimum period is 3.44140625 ns and worst arrival is 3.3968 ns. The path still crosses D-cache metadata, LSQ LOAD report/completion, ROB qualification, LSQ selected request and byte forwarding, request-owner forwarding data, and phased result capture. Mapped endpoint _114340_/QN is _001846_; inverter _059386_ drives complete_value_mem[0][26], checked in this mapped.v. The local selector rewrite reduced area and improved this immediate predecessor, but did not remove the wider response-to-request chain. Exact source/tool/report/log hashes and scalar area components are in reports/Tier1_shared_direct_phase_events_2026-10-09.json; the earlier progress record remains historical.
+最低周期 3.44140625 ns，最差到达时间 3.3968 ns。路径仍经数据缓存元数据、LSQ LOAD 报告／完成、ROB 资格判断、LSQ 选中请求及字节转发、请求所有者转发数据，最后到分阶段结果捕获。映射终点 _114340_/QN 为 _001846_；反相器 _059386_ 驱动 complete_value_mem[0][26]，已在此 mapped.v 核对。局部选择器改写降低面积并改善直接前驱，但没有消除更宽的响应到请求链。准确源码／工具／报告／日志哈希和各面积分量见 reports/Tier1_shared_direct_phase_events_2026-10-09.json；早期进度记录仅保留为历史。

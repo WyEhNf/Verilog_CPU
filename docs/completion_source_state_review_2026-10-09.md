@@ -1,35 +1,35 @@
-# Completion source-side ROB state query
+# 完成源侧的 ROB 状态查询
 
-## Measured reason
+## 实测动机
 
-The aea34a6f Tier1 freeze measured 8893.003375 um2 / 290.578888 MHz and was rejected without CPU build/perf/smoke. Its longest response-to-request path goes through the direct completion selected tag, then the three-bit ROB state reader, before ROB completion/commit qualification and the next LSQ request. The post-arbitration state reader ends around 1.8925 ns in that report; the complete path arrives at the phased LOAD result owner at 3.3968 ns. This is an actual mapped path observation, not a new timing estimate for the change below.
+aea34a6f 的 Tier1 冻结版本测得 8893.003375 um2 / 290.578888 MHz，被拒绝，未运行 CPU 构建／性能／冒烟测试。最长响应到请求路径先经过直接完成所选标签，再进入三位 ROB 状态读取器，之后才执行 ROB 完成／提交资格判断及下一次 LSQ 请求。该报告中仲裁后的状态读取器约在 1.8925 ns 结束；完整路径在 3.3968 ns 到达分阶段 LOAD 结果所有者。这是实际映射路径的观察，不是以下改动的新时序估计。
 
-## Same lookup, different order
+## 查询相同，顺序不同
 
-COMPLETION_SOURCE_STATE_QUERY defaults to zero in the shared course top/core/backend. Mode one requires COMPLETION_BYPASS=2. No alternative CPU/backend is introduced, no pipeline stage or storage bit is added, and source priority, held-result ownership, CDB readiness, recovery shifting and all original valid/full-tag/generation checks remain unchanged.
+COMPLETION_SOURCE_STATE_QUERY 在共享课程 top/core/backend 中默认为零。模式一要求 COMPLETION_BYPASS=2。不引入另一套 CPU／后端，不增加流水级或存储位；源优先级、保持结果所有权、CDB 就绪、恢复移位，以及原有全部有效性／完整标签／generation 检查不变。
 
-The direct completion network exports the exact selected source mask already used to select its tag/value payload, including its original reset/flush qualification. Non-direct modes export zero. The backend reads the current {load_error_mem, rob_mem_size_mem} table using each source identity before arbitration, then chooses those three bits with the original source mask. It does not cache metadata: a stalled source sees the same current table contents that the old selected-tag reader would see on each edge. It does not assume that an unreported LOAD has a zero error flag or omit any identity check.
+直接完成网络输出原本用于选择标签／值载荷的准确选中源掩码，包含原 reset/flush 限定。非直接模式输出零。后端在仲裁前根据各源身份读取当前 {load_error_mem, rob_mem_size_mem} 表，再用原源掩码选择这三位。它不缓存元数据：源阻塞时，每个边沿所见表内容与原选中标签读取器完全相同。不假设尚未报告的 LOAD 错误标志为零，也不省略身份检查。
 
-For ALU/MDU, the registered source tag drives the same array lookup. A LOAD with the existing early head/saved/held identity query reads each original candidate with that exact candidate query, then uses the unchanged head/saved/held choice. A LOAD without those early identities uses its existing predecoded report query, or its original raw report tag when predecode is disabled. The current table, complete tags, explicit range tests, live generation predicates, same-edge LOAD-error contribution and STORE size-to-mask conversion remain intact.
+对 ALU/MDU，寄存源标签驱动相同数组查询。若 LOAD 启用了既有提前队首／已保存／保持中身份查询，则逐个使用原候选的准确查询，再沿用原选择。没有这些提前身份时，LOAD 使用既有预译码报告查询；关闭预译码时使用原始报告标签。当前状态表、完整标签、显式范围测试、存活 generation 谓词、同边沿 LOAD 错误贡献及 STORE 大小到掩码转换全部保留。
 
-For one valid selected source j, its selected CDB tag equals source j's tag; selecting table[source[j]] therefore equals table[selected_tag]. The network has at most one source per direct CDB lane. Invalid metadata values may differ, but all consuming normal and shifted recovery packets retain their original validity gates. In simulation every valid ROB writeback, including a stalled CDB lane, checks both one-hot source ownership and equality of all three bits against the original selected-tag lookup. The reference reader is simulation-only; mode zero retains the original reader.
+对某个有效选中源 j，选中 CDB 标签等于源 j 的标签，因此选择 table[source[j]] 等价于 table[selected_tag]。每条直接 CDB 通道至多有一个源。无效元数据值可以不同，但普通及移位恢复包的所有消费者保留原有效性门。仿真对每次有效 ROB 写回（含阻塞的 CDB 通道）检查独热源所有权，并将全部三位与原选中标签查询比较。参考读取器仅用于仿真；模式零保留原读取器。
 
-## Evaluation boundary
+## 评估边界
 
-Use one finite paired actual BE2/ROB8/PHYS40/RS4/LSQ4 backend stimulus with source state 0/1, direct and staged recovery, head/saved LOAD identity and held identity enabled in one pair. It reuses the pending-recovery sequence, then samples SB/SH/SW requests with real ACKs and a head LOAD error (no response-edge commit, then the original registered terminal record). Public valid packets/cycles, ROB/allocator state, exact STORE masks/words and the original selected-state assertions are compared. This is a bounded protocol sample, not a whole CPU or backend proof.
+使用一组真实 BE2/ROB8/PHYS40/RS4/LSQ4 后端有限配对激励，对比 source state 0/1、直接及分阶段恢复；其中一组启用队首／已保存 LOAD 身份和保持身份。复用待处理恢复序列，随后采样带真实 ACK 的 SB/SH/SW 请求及队首 LOAD 错误：响应边沿不提交，随后输出原寄存终止记录。比较有效公共包／周期、ROB／分配器状态、准确 STORE 掩码／字数据及原选中状态断言。这是有界协议样例，不是整 CPU 或后端证明。
 
-The Tier1 profile derives from the latest direct phased-event candidate and enables only this new policy. After the finite sample, run one committed freeze, one original structural full-core lint and one official PPA. Require area <=9000 and frequency >=300 before CPU build/perf. Require IPC >=0.6000 and no per-case cycle regression from c2a09eaa before one array1 smoke. No CPU metrics or accepted-profile replacement are established by the implementation or parameter checker.
+Tier1 配置从最新直接分阶段事件候选派生，仅启用此新策略。有限样例之后，提交冻结一次，运行一次原完整核心结构静态检查和一次官方 PPA。面积 <=9000 且频率 >=300 后才构建 CPU／运行性能测试；IPC >=0.6000 且相对 c2a09eaa 每项周期不回退后，才运行一次 array1 冒烟测试。实现或参数检查器本身不确立 CPU 指标或已验收配置替换。
 
-## Finite stimulus correction
+## 有限激励修正
 
-The first run and its diagnostic rerun reached the final error LOAD without any source-state equality assertion failure. The fixture incorrectly forbade the original registered error terminal commit record. The diagnostic showed both reference/new pairs have response valid/error with no commit at 775 ns, then registered head-ready/head-error and the terminal record at 785 ns. Original ROB logic deliberately publishes that terminal record before setting error_o and blocks younger lanes. The fixture was corrected to expect the record and separately assert no response-edge commit plus registered error state; no production RTL fix was needed. Both failed fixture logs are retained, and the corrected sample remains the same bounded sequence.
+首次运行及诊断重跑到达最后的错误 LOAD 时，均无源状态相等断言失败。测试夹具错误地禁止了原寄存错误终止提交记录。诊断显示，参考／新版两组在 775 ns 均有有效错误响应且无提交，随后在 785 ns 出现寄存的队首就绪／错误和终止记录。原 ROB 逻辑有意先发布终止记录，再置位 error_o，并阻塞更年轻通道。夹具已修正为期望该记录，并独立断言响应边沿无提交及寄存错误状态；无需修复生产 RTL。两份失败夹具日志保留，修正后的样例仍为同一有界序列。
 
-## Bounded sample result
+## 有界样例结果
 
-The corrected sequence passed once. Exact frozen source/executable/build/simulation hashes, elapsed time and both retained fixture failures are in reports/Tier_shared_completion_source_state_protocol_2026-10-09.json. Each actual reference/new backend pair retained identical valid public packets, handshake cycles and ROB/allocator state. SB/SH/SW masks and words, real ACKs, response-edge error suppression and the original registered terminal record were checked. The production original-state equality assertion remained active on every valid ROB writeback. This sample is not CPU IPC/PPA evidence.
+修正后序列通过一次。准确冻结源码、可执行文件、构建、仿真哈希、耗时及保留的两次夹具失败见 reports/Tier_shared_completion_source_state_protocol_2026-10-09.json。各真实参考／新版后端配对保留相同的有效公共包、握手周期和 ROB／分配器状态。已检查 SB/SH/SW 掩码与字数据、真实 ACK、响应边沿错误抑制及原寄存终止记录。每次有效 ROB 写回上，生产逻辑的原状态相等断言持续生效。此样例不是 CPU IPC／PPA 证据。
 
-## Terminal mode-1 PPA
+## 模式 1 PPA 最终结果
 
-The 76bc5f42 freeze completed one official PPA in 621.197068 s: 9021.088675 um2 / 299.853587 MHz. Both gates fail; no build/perf/smoke was run. Frequency improves 9.274699 MHz but area increases 128.085300 um2 versus aea34a6f. Combinational area grows 125.752500 um2, sequential mapped area grows 2.332800 um2, and SRAM area is unchanged; no explicit pipeline/storage owner was added by this source rewrite. Minimum period is 3.3349609375 ns, worst arrival 3.2743 ns. The endpoint is _116483_/QN (_001628_), inverted by _060405_ into complete_value_mem[3][25], checked in mapped.v. The broad cache-response/LOAD-completion/ROB/LSQ-selection/forwarding/phase-capture chain remains limiting. Exact source/tool/log/report hashes and scalar components are in reports/Tier1_shared_completion_source_state_2026-10-09.json.
+76bc5f42 冻结版本用 621.197068 s 完成一次官方 PPA，测得 9021.088675 um2 / 299.853587 MHz。两项门均失败，未运行构建／性能／冒烟测试。相对 aea34a6f，频率提高 9.274699 MHz，但面积增加 128.085300 um2；组合面积增加 125.752500 um2，映射后时序面积增加 2.332800 um2，SRAM 面积不变。此源级改写未显式增加流水线或存储所有者。最低周期为 3.3349609375 ns，最差到达时间为 3.2743 ns。终点为 _116483_/QN（_001628_），经 _060405_ 反相后进入 complete_value_mem[3][25]，已在 mapped.v 中核对。缓存响应／LOAD 完成／ROB／LSQ 选择／转发／分阶段捕获的长链仍限制时序。准确源码、工具、日志、报告哈希及各面积分量见 reports/Tier1_shared_completion_source_state_2026-10-09.json。
 
-Inspection of actual consumers shows both ordinary and shifted-recovery size-to-mask conversions are gated by cdb_is_store. MDU and LSQ report sources have STORE class zero in the actual producer construction. Their size fields are therefore unconsumed; a narrower source-query variant can keep every source's exact current error bit and ALU sources' exact size, without assuming any error bit is zero. This is a targeted area refinement basis, not a new metric or acceptance.
+检查真实消费者发现，普通及移位恢复的大小到掩码转换都由 cdb_is_store 限定。真实生产者构造中，MDU 和 LSQ 报告源的 STORE 类别为零，因此其 size 字段未被消费。可进一步收窄源查询，保留每个源准确的当前错误位及 ALU 源准确的 size，不假设任何错误位为零。这仅是定向面积细化的依据，不是新指标或验收结果。

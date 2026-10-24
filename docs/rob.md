@@ -1,24 +1,24 @@
 # 重排序缓冲（B-03）
 
-`rtl/backend/rv32_rob.v` 是按程序顺序分配、按 head 连续提交的环形 ROB。每个 slot
-保存 PC、原始指令、逻辑/物理寄存器信息、结果、store 元数据、HALT/error 标志和 branch
-checkpoint。slot 的 generation 在复用时递增并跳过零；completion、store ack 和 recovery
-都必须同时匹配 valid、slot 和 generation，旧响应不会写入新一代 entry。
+`rtl/backend/rv32_rob.v` 是按程序顺序分配、从队首连续提交的环形 ROB。每个槽位
+保存 PC、原始指令、逻辑／物理寄存器信息、结果、存储元数据、停机／错误标志和分支
+检查点。槽位的代际在复用时递增并跳过零；完成结果、存储确认和恢复
+都必须同时匹配有效位、槽位和代际，旧响应不会写入新一代条目。
 
-store 到达 head 后先通过 `store_commit_valid_o` 请求 LSQ/Cache 提交许可，收到
-`store_ack_valid_i` 后才产生 CommitRecord 并 pop；`store_ack_error_i` 会记录在匹配
-entry 中，并与 completion error 一样仅在该 entry 提交时更新 `error_o`。普通结果只在
-head 连续 ready 时提交。HALT、error 和返回值只在该精确提交沿更新。
+存储到达队首后先通过 `store_commit_valid_o` 请求 LSQ／缓存提交许可，收到
+`store_ack_valid_i` 后才产生 CommitRecord 并弹出；`store_ack_error_i` 会记录在匹配
+条目中，并与完成错误一样仅在该条目提交时更新 `error_o`。普通结果只在
+队首连续就绪时提交。停机、错误和返回值只在该精确提交沿更新。
 
-branch recovery 以 distance-from-head 选择最老的 live request，恢复该 entry 的 opaque
-checkpoint，保留 branch 及其以前的 entry，截断年轻 ROB 项并递增 epoch。恢复优先于普通
-completion、commit 和 allocation。
+分支恢复以距队首的距离选择最老的存活请求，恢复该条目的不透明
+检查点，保留分支及其以前的条目，截断年轻 ROB 项并递增代次。恢复优先于普通
+完成、提交和分配。
 
-Recovery tag 已包含 ROB slot，因此候选选择直接用 tag 中的 slot 索引 live generation，
-再比较相对 head 的 age 以选择最老 recovery；不会再为每个 lane 扫描全部 ROB entry。
-Completion 和 store-ack 的时序写回仍保留逐 entry 常量索引形式：当前小容量 FF-reference
-综合证明 variable-index 写入会增加 decoder/mux 面积，不能只按 blackbox memory 推断结果
+恢复标记已包含 ROB 槽位，因此候选选择直接用标记中的槽位索引有效代际，
+再比较相对队首的年龄以选择最老恢复；不会再为每个通道扫描全部 ROB 条目。
+完成结果和存储确认的时序写回仍保留逐条目常量索引形式：当前小容量触发器参考实现
+综合证明动态索引写入会增加译码器／多路选择器面积，不能只按黑盒存储器推断结果
 判断收益。
 
-验证命令：`make b03`，覆盖 BE_WIDTH=1/2/4、generation stale completion、store ordering、
-branch recovery、HALT、completion error 和 store-ack precise error。
+验证命令：`make b03`，覆盖 BE_WIDTH=1/2/4、代际过期的完成结果、存储顺序、
+分支恢复、HALT、完成错误和存储确认的精确错误。

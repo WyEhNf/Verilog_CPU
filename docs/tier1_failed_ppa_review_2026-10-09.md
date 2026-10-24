@@ -1,83 +1,38 @@
-# Review of the first shared Tier1 IPC pass
+# 首个共享 Tier1 IPC 通过版本的审阅
 
-Freeze: `c2a09eaa`, directory
-`F:/CPU2026TierRuns/tier1_shared_store_retire_20261009`.
-Manifest SHA256:
-`c97384c64cba50f386977adaac3f940f7f81ef56c5e5a10ae6f01afe15cc839c`.
+冻结版本：`c2a09eaa`，目录 `F:/CPU2026TierRuns/tier1_shared_store_retire_20261009`。
+清单 SHA256：`c97384c64cba50f386977adaac3f940f7f81ef56c5e5a10ae6f01afe15cc839c`。
 
-IPC 0.6012842155901663 passes, but area 9555.824755000795 um² and
-Fmax 236.3804247460757 MHz fail. Six answers/instruction counts passed;
-no CPU correctness smoke was run. No accepted configuration was replaced.
-The one PPA took 661.445286 seconds. Logic area is 8318.283660 um²
-(2250.277200 sequential, 6068.006460 combinational); SRAM area is
-1237.541095 um². These are measurements, not estimates for a later candidate.
+IPC 0.6012842155901663 通过，但面积 9555.824755000795 um²、Fmax 236.3804247460757 MHz 均失败。六项答案／指令数通过，未运行 CPU 正确性冒烟测试，不替换已验收配置。唯一一次 PPA 耗时 661.445286 秒。逻辑面积 8318.283660 um²（时序 2250.277200、组合 6068.006460），SRAM 面积 1237.541095 um²。这些是该版本实测，不是后续候选估计。
 
-## Timing evidence
+## 时序证据
 
-The worst path starts at instruction SRAM `rd_out[99]` and ends at an LSQ
-selection payload flip-flop. Selected nets from the original critical-path
-JSON have these arrival times in ns:
+最差路径从指令 SRAM `rd_out[99]` 出发，终止于 LSQ 选择载荷触发器。原关键路径 JSON 中部分网络的到达时间如下，单位 ns：
 
-| Signal | Arrival |
+| 信号 | 到达时间 |
 |---|---:|
-| Instruction SRAM rdata[99] | 0.2309 |
+| 指令 SRAM rdata[99] | 0.2309 |
 | backend_rs1[4] | 1.5500 |
 | preview_read_phys[4] | 1.8380 |
 | d_replace_rs_demand[0] | 2.2530 |
 | dcache_req_addr[1] | 2.7820 |
 | LSQ raw_forward_mask[0] | 3.2600 |
-| LSQ request owner valid | 3.3140 |
+| LSQ 请求所有者有效位 | 3.3140 |
 | dcache_req_mask[4] | 3.4840 |
-| MMIO predicate | 3.6680 |
+| MMIO 谓词 | 3.6680 |
 | dcache_req_ready | 3.8460 |
-| selection payload write enable | 3.9800 |
+| 选择载荷写使能 | 3.9800 |
 
-The path does not justify arbitrarily inserting a latency stage: the IPC pass
-has only 0.214% margin. It motivates separating incoming allocation offers
-from queries for already-owned request packets.
+该路径不足以支持任意插入延迟级，因为 IPC 通过余量仅 0.214%。它提示应分离输入分配请求和已有所有权请求包的查询。
 
-## Candidate changes to review before another evaluation
+## 下一评估前需审阅的候选改动
 
-1. **Move previous-write SRAM forwarding to PRF read ports.** Currently each
-   nonzero row combines its raw SRAM word with the previous CDB word before
-   the operand read tree. With 36 rows and two ports, forwarding at the ports
-   would replace many row-wide muxes with two muxes and two full physical-ID
-   comparisons. Current-cycle CDB forwarding must retain highest-lane priority.
-   Crucially, saved store-address addition/classification must use the corrected
-   previous-write value too, not merely the final `read_data_o`. Raw-output rows
-   must be a default-off option, restricted to SRAM/local rows and the parallel
-   read implementation until the generic read path is supported. P0, illegal
-   indices, reset, consecutive writes and simultaneous allocation must retain
-   their existing behavior. No area saving is measured yet.
+1. **将 SRAM 上次写入转发移至 PRF 读端口。** 当前各非零行在操作数读取树前，将原始 SRAM 字与上次 CDB 字合并。36 行、两个端口下，端口转发可将许多逐行宽选择器替换为两个选择器和两次完整物理 ID 比较。当前周期 CDB 转发必须保留最高通道优先级。关键在于，保存存储地址加法／分类也必须使用修正后的上次写入值，不能只修正最终 `read_data_o`。原始输出行须默认关闭，通用读取路径支持之前仅限 SRAM／局部行和并行读取实现。P0、非法索引、复位、连续写入及同拍分配保留既有行为。尚无实测面积收益。
 
-2. **Classify MMIO for ready from saved request metadata.** Keep valid-qualified
-   bus routing and ACK logic unchanged, as described in the Tier3 clock review.
-   For the allocation-load request bypass, computing classification from the
-   visible fresh packet would retain the incoming decode path. A fresh load
-   offer is already forbidden whenever *any* old valid store exists. Thus a
-   classifier based on the existing selection packet AND the reduction of
-   `allocation_present_stores` can correctly return false for every fresh load,
-   while preserving classification for valid ordinary store requests. This
-   also prevents an invalid stale exit packet from misclassifying a fresh load.
-   The optional request register needs classification of its own saved packet.
-   Assert equivalence to the original predicate on every valid request.
+2. **根据保存请求元数据为 ready 分类 MMIO。** 按 Tier3 时序审阅，保持受 valid 限定的总线路由及 ACK 逻辑不变。分配加载请求旁路若根据可见新鲜包分类，会保留输入译码路径。存在任意旧有效存储时，既有规则已禁止新鲜加载请求。因此，基于既有选择包 AND `allocation_present_stores` 归约结果的分类器，可对全部新鲜加载准确返回假，同时保留有效普通存储请求分类，也防止无效过期退出包误分类新鲜加载。可选请求寄存器须按自身保存包分类。每个有效请求上断言与原谓词等价。
 
-3. **Keep forwarding queries on existing request metadata.** Fresh allocation
-   requests are loads with no old valid stores, so they cannot forward and
-   cannot have an unresolved older-store hazard. Existing request slot/address/
-   size metadata can feed the forwarding query, while fresh requests explicitly
-   use zero forwarding mask/data/hazard. Do not simply zero forwarding for all
-   allocated loads or change ordinary load eligibility. Review every age,
-   mask, formatting and forwarding-hold consumer before implementing this.
-   This targets the measured new-address-to-forward-mask segment directly.
+3. **让转发查询继续使用既有请求元数据。** 新鲜分配请求是无旧有效存储的加载，因此不能转发，也不可能有未解析更老存储冒险。既有请求槽位／地址／大小元数据可驱动转发查询，新鲜请求显式使用零转发掩码／数据／冒险。不应简单对全部新分配加载置零转发，也不改变普通加载资格。实现前审阅全部年龄、掩码、格式化及保持转发消费者，直接针对实测新地址到转发掩码段。
 
-If further area is needed, store operand data and load completion data occupy
-mutually exclusive row classes in LSQ. A shared 32-bit owner may be possible,
-but allocation must dominate an old completion when a row is reused, current
-load results must not be overwritten by irrelevant data-update events, and
-store forwarding must retain its exact bytes. Production tags/metadata cannot
-be narrowed to pay for the area budget.
+若还需面积，LSQ 存储操作数数据与加载完成数据属于互斥行类别，可能共享一个 32 位所有者。但行复用时分配必须优先于旧完成；当前加载结果不得被无关数据更新覆盖；存储转发必须保留准确字节。不能通过收窄生产标签／元数据满足面积预算。
 
-These are reviewed directions, not implemented or validated optimizations.
-Combine a meaningful area and timing change before another expensive PPA;
-do not sweep small capacity/policy variations or run a correctness suite.
+这些是已审阅方向，不是已实现或已验证优化。下一次昂贵 PPA 前，组合有意义的面积和时序改动；不扫描小容量／策略变化，也不运行正确性套件。

@@ -1,19 +1,19 @@
-# Owned AXI read counters
+# 具有明确所有权的 AXI 读取计数器
 
-## Actual current timing path
+## 当前实际时序路径
 
-The current 049da02c Tier3 official PPA measured 34888.262138 um2 / 331.177232 MHz, improving historical PPA but failing 500MHz. Its worst arrival is 2.959ns. ALU tag bit7 crosses original ROB producer identity, redirect and frontend/request control into bus read-lifecycle counter feedback. With READ_LINES8/RPW3, lifecycle input bit16 is exactly read_allocate; its tree driver arrives at 2.762ns. Thus late admission participates in the old counter reset/hold/update cone. Exact terminal evidence is in reports/Tier3_shared_exclusive_2026-10-09.json. The final logical endpoint counter bit was not independently mapped.
+当前 049da02c Tier3 的官方 PPA 为 34888.262138 um2 / 331.177232 MHz，较历史 PPA 改善，但未达到 500MHz。最差到达时间为 2.959ns。ALU 标签 bit7 经原 ROB 生产者身份判断、重定向及前端／请求控制，进入总线读取生命周期计数器的反馈路径。在 READ_LINES8/RPW3 下，生命周期输入 bit16 正是 read_allocate；其树形驱动节点到达时间为 2.762ns。因此，晚到的准入信号参与了旧计数器的复位、保持和更新逻辑锥。完整结束证据见 reports/Tier3_shared_exclusive_2026-10-09.json。尚未独立映射最终逻辑终点对应的计数器位。
 
-## One shared default-off ownership policy
+## 同一共享实现中默认关闭的所有权策略
 
-AXI_READ_COUNTERS_OWNED defaults to zero on student_top and passes to READ_COUNTERS_OWNED on the same rv32_axi_lite_bridge. Original CPU/cache/bus interfaces, capacities, FIFO depths, SRAM payload implementation, clock edge and all handshakes remain. Original read-valid allocation/fill/reset authority is identical. Mode zero retains original counter equations. Mode one clears sent/received/error only while that row is pre-edge invalid; while valid, original issue/return events and sticky error updates are identical. Reset retains original unowned counter behavior and clears original validity.
+student_top 的 AXI_READ_COUNTERS_OWNED 默认为零，并传递到同一个 rv32_axi_lite_bridge 的 READ_COUNTERS_OWNED。CPU、缓存和总线接口、容量、FIFO 深度、SRAM 载荷实现、时钟边沿及全部握手均保留原样。原有读取有效位的分配、填充和复位权限不变。模式零保留原计数器方程；模式一仅在某行于边沿前无效时清零 sent/received/error。行有效时，原发送／返回事件及粘滞错误更新完全相同。复位保留原有无所有者计数器行为，并清除原有效位。
 
-Allocation chooses read_free_candidates=!read_valid, without borrowing the row filled on this edge. All issue candidates require read_valid && sent<4. All reply candidates require read_valid && received==4 and original response capacity. AXI word metadata is FIFO ordered; four issued words have all returned before a completed line is freed. Therefore an actual issue/return targets a currently valid row and cannot coincide with allocation of that row. On an allocation edge the old invalid row is initialized to zero by the new unconditional invalid-row path, so its post-edge acquired state equals original allocation initialization. Completed rows retain their original counter/error values through the original fill edge; subsequent invalid values have no ownership or valid consumer.
+分配从 read_free_candidates=!read_valid 中选择，不借用在当前边沿完成填充的行。全部发送候选要求 read_valid && sent<4；全部回复候选要求 read_valid && received==4 及原响应容量。AXI 字元数据按 FIFO 排序，完成行被释放前，其四个已发字必须全部返回。因此，真实发送／返回只作用于当前有效行，不会与该行分配同时发生。分配边沿上，旧的无效行由新增的无条件无效行路径初始化为零，边沿后取得所有权的状态与原分配初始化一致。完成行在原填充边沿仍保留原计数／错误值；随后无效状态下的值没有所有者，也没有有效消费者。
 
-This removes late allocation from valid counter next-state/hold logic. It does not remove admission from actual row-valid acquisition or request payload capture; those and upstream redirect control may still limit frequency. Invalid unowned counter clearing can change idle raw payload values, while every valid packet and public handshake must remain equal. No other validity predicate is relaxed. Simulation checks allocation into invalid rows and actual issue/return into valid rows. A simulation-only original-priority shadow counter compares every valid row each half-cycle. No synthesized certificate state, timing exception or area exemption is added.
+这会将晚到分配信号移出有效计数器的下一状态／保持逻辑，但不会将准入从真实行有效位获取或请求载荷捕获中移除；这些逻辑及上游重定向控制仍可能限制频率。清零无所有者计数器可能改变空闲原始载荷值，但每个有效包和公共握手必须一致，其他有效性谓词不放宽。仿真检查分配只进入无效行、真实发送／返回只进入有效行；仅用于仿真的原优先级影子计数器在每个半周期比较全部有效行。不增加综合证书状态、时序例外或面积豁免。
 
-## One finite paired sample
+## 一组有限配对样例
 
-One original/owned pair passed at current Tier3 READ_LINES8/WRITE_LINES4/WORD_QUEUE16, FIFO2 and SRAM read payload1. The existing fixed sequence has 12 line reads/six writes, 48 read words/20 write words/one MMIO word, staggered READY, errors, response backpressure, blocked instruction response with data progress, and independent AW/W. It requires and observes actual read-row reuse. Every public cycle/handshake and valid complete I/D/AXI packet, full validity vector and every valid-row counter/error field match. Production ownership/shadow assertions pass. Exact source/executable/build/simulation hashes are in reports/Tier_shared_AXI_read_counter_protocol_2026-10-09.json. This is not a full CPU/all-width/configuration/timing proof.
+一组原版／所有权版配对在当前 Tier3 READ_LINES8/WRITE_LINES4/WORD_QUEUE16、FIFO2 和 SRAM read payload1 下通过。既有固定序列包含 12 次行读取／六次写入、48 个读取字／20 个写入字／一个 MMIO 字、交错 READY、错误、响应背压、指令响应阻塞而数据侧继续前进，以及独立 AW/W。测试要求并实际观察到读取行复用。逐周期公共握手、有效的完整 I/D/AXI 包、全部有效位向量及每个有效行的计数／错误字段一致；生产逻辑中的所有权／影子断言通过。准确的源码、可执行文件、构建和仿真哈希见 reports/Tier_shared_AXI_read_counter_protocol_2026-10-09.json。这不是整 CPU、全部宽度／配置或时序证明。
 
-configs/tier3_shared_500_owned_read_candidate.json pins all 188 current numeric parameters, combining this with the separately sample-verified RS arithmetic policy. All original resource/pipeline and nonregression/500MHz thresholds remain. This preparation starts no PPA or CPU run. Review remaining redirect/control cones and combine significant changes before one committed freeze/lint/full official PPA, then only run CPU perf if complete area/frequency gates pass. Accepted historical freezes and canonical profiles remain intact; 500MHz and later goals remain unfinished.
+configs/tier3_shared_500_owned_read_candidate.json 固定当前全部 188 个数值参数，并与已单独通过样例验证的 RS 算术策略组合。原资源／流水线和不回退／500MHz 门槛保留。此处仅准备候选，不启动 PPA 或 CPU 运行。先审阅剩余重定向／控制逻辑锥，组合有实质意义的修改，再提交并冻结一次，执行静态检查和一次完整官方 PPA；只有完整面积／频率门通过后才运行 CPU 性能测试。历史已验收冻结版本及正式配置保留；500MHz 与后续目标仍未完成。

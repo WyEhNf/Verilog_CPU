@@ -1,27 +1,27 @@
-# Saved LSQ routing after the phased-payload PPA
+# 分阶段载荷 PPA 后的保存 LSQ 路由
 
-The exact `1c0a5d2a` freeze measured 9191.091475000492 um2 and 243.98379795091734 MHz. PPA execution succeeded but both Tier1 gates failed, so no CPU build, perf or smoke was run. The prior 0.6012842155901663 IPC does not belong to this snapshot. Accepted Tier2 and Tier3 remain their historical frozen revisions. All profiles instantiate the same parameterized core/backend; these options do not create a separate CPU.
+准确的 `1c0a5d2a` 冻结版本测得 9191.091475000492 um2、243.98379795091734 MHz。PPA 流程成功，但 Tier1 两门均失败，因此未构建 CPU、运行性能或冒烟测试。此前 0.6012842155901663 IPC 不属于此快照。已验收 Tier2 和 Tier3 仍为各自历史冻结版本。全部配置实例化同一参数化核心／后端，这些选项不创建独立 CPU。
 
-The worst path is Icache SRAM -> architectural rs1/RAT preview -> PRF query/ready -> direct dispatch resource demand -> fresh LSQ offer -> visible size/mask -> qualified MMIO predicate -> state FF. Public-net arrivals include architectural rs1 1.395 ns, preview physical bit 1.647 ns, replacement RS demand 2.110 ns, fresh request offer 2.857 ns, visible size bit 3.150 ns, request mask bit 3.355 ns and MMIO predicate 3.585 ns. Data arrives at the endpoint at 4.037 ns. The fresh offer's mapped inverter drives 148 loads, adding 0.3969 ns; the preceding gate adds 0.1830 ns. These are measured paths, not estimates of the next implementation.
+最差路径为指令缓存 SRAM -> 架构 rs1／RAT 预览 -> PRF 查询／ready -> 直接分派资源需求 -> 新鲜 LSQ 请求 -> 可见大小／掩码 -> 限定 MMIO 谓词 -> 状态触发器。公共网络到达时间包括架构 rs1 1.395 ns、预览物理位 1.647 ns、替代 RS 需求 2.110 ns、新鲜请求 2.857 ns、可见大小位 3.150 ns、请求掩码位 3.355 ns 及 MMIO 谓词 3.585 ns；数据在 4.037 ns 到终点。新鲜请求映射反相器驱动 148 个负载，增加 0.3969 ns，前级门增加 0.1830 ns。这些是实测路径，不是下一实现的估计。
 
-## Implemented clock changes
+## 已实现的时序修改
 
-1. With SAVED_REQUEST_QUERY=1, the existing fresh offer selects its packet through the existing bounded control-tree primitive, one leaf per <=16 payload bits. No packet field or edge changes. The old scalar selector remains in mode zero.
-2. The fresh request certificate already proves actual allocation, found/not-waiting, no old owner competing and no old or prior-batch stores. Request-owner validity is now `(not flush/recovery) AND (fresh OR (found AND not waiting AND old-query-not-fully-forwarded))` in saved-query mode. The former expression was `admitted AND (fresh OR old-query-not-fully-forwarded)`, with found/wait including the fresh selector. They agree because fresh implies found AND not waiting. An assertion retains that implication. No unknown-store or full-forward guard is removed.
-3. New default-off MMIO_SAVED_ROUTE_CLASS requires saved-query mode. On every valid LSQ request, the saved classifier already equals the exact original store/address/16-bit-mask exit predicate. Thus `valid AND saved_class` equals the original qualified predicate. For a fresh load there are no owned old stores, so the saved live-store guard suppresses any invalid stale exit packet. For an existing load its saved load bit excludes MMIO. Every actual store owns a live row; exact aligned exit address plus saved four-byte store mask is the original line mask. Invalid requests are qualified off. A production assertion compares the new route predicate to the original on every nonreset edge, in addition to the existing valid-request classification assertion.
+1. SAVED_REQUEST_QUERY=1 时，既有新鲜请求通过既有有界控制树原语选择包，每叶负责 <=16 个载荷位。包字段和边沿不变；模式零保留旧标量选择器。
+2. 新鲜请求证书已证明真实分配、found／不等待、无旧所有者竞争、无旧存储或此前同批存储。保存查询模式下，请求所有者有效性现为 `(not flush/recovery) AND (fresh OR (found AND not waiting AND old-query-not-fully-forwarded))`。原表达式是 `admitted AND (fresh OR old-query-not-fully-forwarded)`，其中 found/wait 包含新鲜选择。两者因 fresh 蕴含 found AND not waiting 而一致，并保留断言检查。不删除未知存储或完整转发保护。
+3. 新增默认关闭的 MMIO_SAVED_ROUTE_CLASS，要求保存查询模式。每个有效 LSQ 请求中，保存分类器已等于原准确存储／地址／16 位掩码退出谓词，因此 `valid AND saved_class` 等于原限定谓词。新鲜加载没有旧存储所有者，故保存的存活存储保护抑制无效过期退出包；既有加载由保存 load 位排除 MMIO。真实存储都有存活行所有权；准确对齐退出地址加保存四字节存储掩码等于原行掩码。无效请求被限定关闭。除既有有效请求分类断言外，生产断言每个非复位边沿还比较新路由谓词和原谓词。
 
-The optional CPU request pipeline uses classification from its saved output packet, so route reuse follows that stage's owner rather than the live LSQ input. No ACK, ROB store admission, external AXI ready, write-capacity, tag, recovery or response ownership is relaxed. Payloads and actual accepted transfers remain unchanged; the classifier is used only after valid qualification for side effects.
+可选 CPU 请求流水线使用其保存输出包的分类，因此路由复用跟随该阶段所有者，而非实时 LSQ 输入。不放宽 ACK、ROB 存储准入、外部 AXI ready、写容量、标签、恢复或响应所有权。载荷和真实接受传输不变；只有经有效性限定后，分类器才可影响副作用。
 
-One finite paired sample compares SAVED_REQUEST_QUERY=0/1 of the same LSQ with identical phased storage. It covers accepted/held fresh loads, partial/full forwarding, held completion/irrelevant data update, delayed store operand, full-row same-edge generation reuse with stale response, exact held MMIO, ACK/pop, stale exit followed by fresh load, store and recovery guards. Public handshake/cycle and owned payloads agree, and valid-qualified saved MMIO classification equals the original predicate. This sample does not instantiate cpu_core and is not a whole-CPU proof. Full-core structural lint follows on a frozen combined profile; no further full PPA is warranted for these timing-only changes while area is still over the limit.
+一组有限配对样例比较同一 LSQ 的 SAVED_REQUEST_QUERY=0/1，使用相同分阶段存储，覆盖接受／保持新鲜加载、部分／完整转发、保持完成／无关数据更新、延迟存储操作数、满行同边沿 generation 复用及过期响应、准确保持 MMIO、ACK／出队、过期退出后新鲜加载、存储和恢复保护。公共握手／周期及有所有者载荷一致，经 valid 限定的保存 MMIO 分类等于原谓词。样例不实例化 cpu_core，不是整 CPU 证明。随后应在冻结组合配置上做完整核心结构静态检查；面积仍超限时，仅针对这些时序改动不应再运行完整 PPA。
 
-## Remaining area review
+## 剩余面积审阅
 
-The measured candidate still exceeds 9000 um2 by 191.091475000492 um2. A promising cycle-neutral direction is capturing the LSQ's raw relative 32-bit request word instead of a preinserted 128-bit line in the synchronous D-cache query owner, then reconstructing the exact zero-padded insertion after capture. This needs an explicit optional narrow-word interface, preservation of generic cache mode, valid-request equivalence assertion and a finite cache sample before adoption. It is not implemented here.
+实测候选仍比 9000 um2 上限多 191.091475000492 um2。一项可能不改变周期的方向是：同步数据缓存查询所有者捕获 LSQ 原相对 32 位请求字，而非预先插入的 128 位整行，再在捕获后重建准确零填充插入。采用前需显式可选窄字接口、保留通用缓存模式、有效请求等价断言及有限缓存样例。此处未实现。
 
-Conditional MDU sign correction can use a balanced prefix-OR/XOR formulation instead of a conditional incrementer plus output mux, retaining the original arithmetic and completion edge. This is also unimplemented and requires boundary review; deleting unused temporary expressions alone does not save mapped area.
+MDU 条件符号修正可用平衡前缀 OR／XOR 公式替代条件递增器加输出选择器，保留原算术和完成边沿。也尚未实现，须边界审阅；只删除未用临时表达式不会减少映射面积。
 
-Merging the two D-cache way holds into one selected-way word was rejected by source review. Held queries can observe later refill/tag/LRU updates, so the selected hit or victim way can change while held. Without a reread, the other way's prior data would be lost; adding a reread may regress IPC. No cache way/capacity or tag-generation narrowing was made.
+源码审阅拒绝将数据缓存两路保持字合成一个选中路字。保持查询可观察后续填充／标签／LRU 更新，因此保持期间命中或被替换路可能改变。不重读就会丢失另一路旧数据，而增加重读可能导致 IPC 回退。未修改缓存路数／容量，也未收窄标签 generation。
 
-## Frozen preflight
+## 冻结预检
 
-Source `8b9d2d01`, profile `configs/tier1_shared_saved_route.json`, freeze `F:/CPU2026TierRuns/tier1_shared_saved_route_20261009`. Original structural full-core lint completed in 7.422355999995489 seconds with return code zero, zero errors, zero latch warnings and zero UNOPTFLAT warnings; other warning classes are not claimed absent. Exact manifest/log hashes and profile are recorded in `reports/Tier1_shared_saved_route_preflight_2026-10-09.json`. No PPA/build/perf/smoke was run on this freeze.
+源码 `8b9d2d01`，配置 `configs/tier1_shared_saved_route.json`，冻结目录 `F:/CPU2026TierRuns/tier1_shared_saved_route_20261009`。原完整核心结构静态检查用时 7.422355999995489 秒，返回码零，错误、锁存器警告和 UNOPTFLAT 警告均为零；不声称其他警告类别不存在。准确清单／日志哈希及配置见 `reports/Tier1_shared_saved_route_preflight_2026-10-09.json`。此冻结版本未运行 PPA／构建／性能／冒烟测试。

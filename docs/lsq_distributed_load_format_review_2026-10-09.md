@@ -1,33 +1,33 @@
-# Distributed LOAD capture formatting
+# 分布式 LOAD 捕获格式化
 
-## Measured path and scope
+## 实测路径与范围
 
-The compact metadata freeze 0bc24c2a failed frequency at 8996.258935 um2 / 292.822419 MHz. Its worst path reaches request_owner/forward_data_o[7] at 3.074 ns, then the formatted upper-sign NAND drives 16 consumers / 9.03 fF and takes 0.136 ns. Arrival at phased complete_value_mem[1][28] is 3.355 ns. The next candidate targets this measured late qualification/sign-extension segment. No measured area/frequency improvement is inferred before a new official PPA.
+精简元数据冻结版本 0bc24c2a 测得 8996.258935 um2 / 292.822419 MHz，频率失败。最差路径在 3.074 ns 到达 request_owner/forward_data_o[7]；随后格式化高位符号 NAND 驱动 16 个消费者／9.03 fF，耗时 0.136 ns；在 3.355 ns 到达分阶段 complete_value_mem[1][28]。下一候选针对该实测晚到限定／符号扩展段。新官方 PPA 前，不推断实测面积／频率改善。
 
-LSQ_DISTRIBUTED_LOAD_FORMAT is a default-zero boolean passed from the shared course top through cpu_core and rv32_backend_joint to the same LSQ. It does not select another CPU implementation. The new common combinational formatter owns no state. Resource sizes, tag width/full generation, request selection, CDB, architectural STORE admission, forwarding masks/priority, recovery and all clock edges stay unchanged. Existing profiles keep their default policy.
+LSQ_DISTRIBUTED_LOAD_FORMAT 是默认零的布尔参数，经共享课程顶层、cpu_core、rv32_backend_joint 传入同一 LSQ，不选择另一套 CPU。新公共组合格式化器不拥有状态。资源大小、标签宽度／完整 generation、请求选择、CDB、架构 STORE 准入、转发掩码／优先级、恢复及全部时钟边沿不变。既有配置保留默认策略。
 
-## Exact algebra
+## 精确代数关系
 
-The original request owner already computes admitted_load from its exact flush/recovery/found/wait/load predicate. Its qualified forwarding word is admitted_load ? owner_forward_data : 0. It now also exposes that same scalar predicate; no independent authority or relaxed qualification is computed.
+原请求所有者已根据准确的 flush／恢复／found／wait／load 谓词计算 admitted_load，其限定转发字为 admitted_load ? owner_forward_data : 0。现在额外输出同一标量谓词，不计算独立权限或放宽限定。
 
-For each of the four size codes and either unsigned flag, format(0)=0. Therefore format(admitted_load ? raw : 0) = admitted_load ? format(raw) : 0, including invalid, waiting, flushed and recovery cycles. This is an exact combinational identity, not a private ownership invariant. The public qualified forwarding word and target/forward masks remain unchanged. Only the internal full-forward result formatter uses the raw word and qualifies its output. The partial-forward capture still uses the original qualified word. Memory-response formatting remains original.
+四种 size 编码和两种 unsigned 标志下均有 format(0)=0，因此 format(admitted_load ? raw : 0) = admitted_load ? format(raw) : 0，包含无效、等待、清除及恢复周期。这是准确组合恒等式，不是私有所有权不变量。公共限定转发字、目标／转发掩码不变；只有内部完整转发结果格式化器使用原始字，并在输出处限定。部分转发捕获仍使用原限定字，主存响应格式化不变。
 
-Size 0 selects the low byte; size 1 selects the low halfword; both size 2 and size 3 preserve default full-word behavior. Upper sign is !unsigned && !size[1] && (size[0] ? raw[15] : raw[7]). Bits 8..15 select that sign only for byte size; bits 16..31 OR it with size[1]-qualified original bits. Sign, byte/word class and final admission are distributed in the existing bounded control-tree implementation, with at most eight result bits per final leaf. No constant inverter delay chains or area exemptions are introduced.
+size 0 选择低字节，size 1 选择低半字，size 2 和 size 3 都保留默认完整字行为。高位符号为 !unsigned && !size[1] && (size[0] ? raw[15] : raw[7])。位 8..15 仅在字节大小时选择该符号；位 16..31 将符号与受 size[1] 限定的原位 OR 合并。符号、字节／字类别及最终准入通过既有有界控制树分发，每个最终叶节点最多负责八个结果位。不引入常量反相器延迟链或面积豁免。
 
-An original format_relative_value(fwd_data,size,unsigned) assertion compares all 32 bits on every nonreset edge, including invalid packet cycles. Existing direct-phase reference assertions compare every write edge and the complete selected word, preserving allocation/response/result/partial/STORE priority.
+原 format_relative_value(fwd_data,size,unsigned) 断言在每个非复位边沿比较全部 32 位，包括无效包周期。既有直接阶段参考断言比较每个写入边沿及完整选中字，保留分配／响应／结果／部分转发／STORE 优先级。
 
-## Bounded validation and gates
+## 有界验证与验收门
 
-Reuse one paired BE2/LSQ4 fixture with direct-phase events 1 in both instances and distributed format 0/1. Preserve existing fresh/held requests, partial/full forwarding, delayed STORE operand, held result/irrelevant update, full-generation row reuse/stale response, MMIO and recovery scenarios. Replace one existing delayed forwarding word LOAD with a signed halfword and check ffffccdd. Add sixteen standalone formatter points covering four size codes, signed/unsigned and qualified/unqualified with negative byte/half signs. This remains one finite sequence, not a correctness suite.
+复用一组 BE2/LSQ4 配对夹具，两实例 direct-phase events 均为 1，distributed format 取 0/1。保留既有新鲜／保持请求、部分／完整转发、延迟 STORE 操作数、保持结果／无关更新、完整 generation 行复用／过期响应、MMIO 及恢复情况。将一个既有延迟转发的字 LOAD 换成有符号半字，检查 ffffccdd。另加十六个独立格式化点，覆盖四种 size、有符号／无符号、受限定／未受限定，以及负字节／半字符号。这仍是一组有限序列，不是正确性套件。
 
-After that sample passes, commit and freeze one Tier1 candidate, run one original full-core structural lint and one official PPA. Require area <=9000 and Fmax >=300 before any build/perf. Then require IPC >=0.6000 and no case cycle regression from c2a09eaa before one array1 smoke. No canonical configuration is replaced by implementation or sample evidence. Current-source Tier2/Tier3 profiles remain unmeasured; the accepted historical results remain their baselines.
+样例通过后，提交冻结一个 Tier1 候选，运行一次原完整核心结构静态检查及一次官方 PPA。面积 <=9000、Fmax >=300 后才允许构建／性能测试；随后要求 IPC >=0.6000 且每项周期相对 c2a09eaa 不回退，再运行一次 array1 冒烟测试。实现或样例证据不替换正式配置。当前源码 Tier2/Tier3 配置仍未测量，已验收历史结果仍为各自基线。
 
-## Finite result
+## 有限样例结果
 
-The paired sequence passed once. Frozen source/build/executable/log hashes are recorded in reports/Tier_shared_LSQ_distributed_load_format_protocol_2026-10-09.json. All request/completion comparisons, original full-format comparisons and direct-phase write references passed. No CPU metrics or canonical replacement follow from this sample.
+配对序列通过一次。冻结源码／构建／可执行文件／日志哈希见 reports/Tier_shared_LSQ_distributed_load_format_protocol_2026-10-09.json。全部请求／完成比较、原完整格式比较和直接阶段写入参考检查通过。样例不构成 CPU 指标或正式配置替换依据。
 
-## Terminal Tier1 acceptance
+## Tier1 最终验收
 
-The 509377c4 freeze passed one original structural lint (6.878091 seconds, zero errors/latches/UNOPTFLAT), one official PPA (599.524668 seconds), one build, six official performance cases and one array1 smoke. Area is 8968.688155 um2; Fmax is 305.854241 MHz; geomean IPC is 0.6012842155901663. All six cycles and instruction counts exactly match the c2a09eaa IPC-passing reference. The same CPU source is accepted for this Tier1 profile. Full identities and hashes are in reports/Tier1_shared_verified_2026-10-09.json.
+509377c4 冻结版本通过一次原结构静态检查（6.878091 秒，错误／锁存器／UNOPTFLAT 均为零）、一次官方 PPA（599.524668 秒）、一次构建、六项官方性能程序和一次 array1 冒烟测试。面积 8968.688155 um2，Fmax 305.854241 MHz，IPC 几何平均 0.6012842155901663。六项周期及动态指令数与已通过 IPC 的 c2a09eaa 参考完全相同。同一 CPU 源码的此 Tier1 配置获验收。完整身份与哈希见 reports/Tier1_shared_verified_2026-10-09.json。
 
-Area decreases 27.570780 um2 and frequency increases 13.031822 MHz versus the immediate rejected compact freeze. Sequential and SRAM area remain identical; total area reduction is combinational mapping. The new worst arrival is 3.208 ns / minimum period 3.26953125 ns and ends in LSQ selection-payload capture through forwarding coverage/request-fire; the previous sign-extension endpoint is no longer worst. The new formatter hierarchy reports 4.85514 um2. This local area is not the whole-design area delta. No current-source Tier2/Tier3 metric or 500 MHz claim follows.
+相对直接前驱、已拒绝的精简冻结版本，面积减少 27.570780 um2，频率提高 13.031822 MHz。时序和 SRAM 面积完全相同，总面积降低来自组合映射。新最差到达时间 3.208 ns，最低周期 3.26953125 ns；路径经转发覆盖／request-fire 终止于 LSQ 选择载荷捕获，原符号扩展终点已不再最差。新格式化器层次面积为 4.85514 um2，但该局部面积不等于整机面积差。不据此声明当前源码 Tier2/Tier3 指标或 500 MHz 通过。

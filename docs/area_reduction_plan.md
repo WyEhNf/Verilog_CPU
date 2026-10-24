@@ -1,4 +1,4 @@
-# 面积缩减方案（Area Reduction Plan）
+# 面积缩减方案
 
 > 历史说明（2026-09-16）：本文记录早期探索，面积口径和部分优先级已经过时。
 > 当前决策以 `area_optimization_strategy_2026-09-08.md`、`STATUS.md` 及
