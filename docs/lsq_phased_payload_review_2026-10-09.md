@@ -1,29 +1,65 @@
-# 分阶段 LSQ 载荷存储审阅，2026-10-09
+# Review of phased LSQ payload storage, 2026-10-09
 
-这是对 `5f4e376e` 的源码审阅，不是已实现策略或实测优化。共享 PRF 端口／保存查询 PPA 另行运行中。
+This is a source review of `5f4e376e`, not an implemented policy or a measured
+optimization. The shared PRF-port/saved-query PPA is running separately.
 
-既有 LSQ 每行保留三个独立 32 位载荷：`data_mem` 保存存储操作数，`forward_data_mem` 保存未完成加载的部分转发值，`complete_value_mem` 保存已完成加载结果。按指令类别和加载阶段，其所有权似乎可区分为：
+The existing LSQ retains three independent 32-bit payloads per row:
+`data_mem` for a store operand, `forward_data_mem` for an outstanding load's
+partial forwarding, and `complete_value_mem` for a completed load. Their
+ownership appears separable by instruction class and load phase:
 
-| 存活行阶段 | 可被消费的字 |
+| Live row phase | Word that can be consumed |
 |---|---|
-| 存储，包括未提交／已提交／保持请求 | 存储操作数 |
-| 加载的缓存请求被接受之前 | 没有保留结果／转发字 |
-| 加载等待缓存响应 | 保存的部分转发字 |
-| 加载已完成，包括阻塞或保持的报告 | 完整结果 |
+| Store, including uncommitted/committed/held request | store operand |
+| Load before cache-request acceptance | no retained result/forward word |
+| Load waiting for its cache response | saved partial-forward word |
+| Load completed, including a stalled or held report | complete result |
 
-源消费者分别是请求包／转发窗口（`data_mem`）、由完整 generation 限定的响应查询（`forward_data_mem`）及仅加载报告包（`complete_value_mem`）。元数据、完整错误、完整 ROB/LSQ 标签、转发掩码和请求所有权必须不变。缓存响应先将旧部分转发字与返回字节合并，再捕获新的结果字。完整转发直接完成，不接受缓存请求。加载完成会清除响应等待，因此后续重复响应不能合法消费旧转发字。
+Source consumers are request packets/forward windows (`data_mem`), the
+full-generation-qualified response query (`forward_data_mem`), and the
+load-only report packet (`complete_value_mem`). Metadata, complete error,
+full ROB/LSQ tags, forwarding mask and request ownership must stay unchanged.
+The cache response combines the OLD partial word with returned bytes before
+capturing the resulting NEW word. Full forwarding completes directly without
+accepting a cache request. Completing a load clears response wait, so a
+subsequent duplicate response cannot legitimately consume its old forward word.
 
-一种可能默认关闭的共享字策略必须保留以下优先级：
+A possible default-off shared-word policy must preserve these priorities:
 
-1. 当前物理行的真实分配优先于旧响应／转发／数据更新事件。按既有选择器规则取最高分配通道。存储取得真实分配操作数，加载取得零。断言每次真实分配恰有 load/store 之一置位。
-2. 无分配时，既有存储仅接受原数据更新选择器。缓存 ACK／结果事件不得覆盖存储操作数。存储转发和保持请求载荷必须逐字节准确。
-3. 无分配时，既有加载先接受结果事件（响应或完整转发），再接受请求转发事件；忽略无关存储数据更新／唤醒。完成后在报告阻塞期间保留结果。
-4. 行在响应／报告／出队边沿复用时，既有消费者组合读取旧字，新分配拥有下一边沿。恢复保留原响应取消限定并禁止新分配。无效载荷值不具有权限。
+1. Any actual allocation of this physical row wins over old response/forward/
+   data-update events. Choose the highest allocation lane, as the existing
+   selectors do. A store gets its actual allocated operand; a load gets zero.
+   Assert each actual allocation has exactly one of load/store set.
+2. With no allocation, an existing store accepts only its original data-update
+   selector. Cache ACK/result events must not overwrite its operand. Store
+   forwarding and retained request payload remain byte-exact.
+3. With no allocation, an existing load accepts result events (response or full
+   forwarding) before request-forward events. Ignore irrelevant store-data
+   updates/wakeups. After completion, retain the result through report stalls.
+4. For a row reused on the response/report/pop edge, existing consumers read
+   the old word combinationally and the new allocation owns the next edge.
+   Recovery retains original response-cancel qualification and disallows fresh
+   allocation. Invalid payload values have no authority.
 
-一组短 BE2/LSQ4 配对样例应覆盖部分转发后缓存字节合并、完整转发完成、延迟存储数据、保持加载报告、同边沿出队／重分配及过期完整 generation 响应。不应据此运行整套正确性或容量／策略扫描。
+A single short paired BE2/LSQ4 sample should cover partial forwarding followed
+by cached byte merge, full-forward completion, delayed store data, held load
+report, same-edge pop/reallocation and stale full-generation responses. No
+whole correctness suite or capacity/policy sweep is justified.
 
-若安全且有用，三个分组合为一个可使每条 LSQ 行减少 64 个触发器位（LSQ4 为 256 位）。这只是结构计数；选择器变化和映射可能抵消收益。不宣称面积、频率或 IPC 改善；所有宽度仍使用同一参数化 LSQ。
+If safe and useful, three banks becoming one remove 64 FF bits per LSQ row
+(256 bits for LSQ4). This is a structural count only; selector changes and
+mapping may offset savings. No area, frequency or IPC improvement is claimed.
+It remains part of the same parameterized LSQ at every width.
 
-## 实现跟进
+## Implementation follow-through
 
-以上保留为实现前论证。此前 PRF 端口／保存查询 PPA 测得 9352.973215 um2 / 212.757116 MHz，已拒绝。`LSQ_PHASED_DATA_OWNER=1` 现实现共享字，默认关闭。结果选择器删除未用的分配置零逻辑锥，转发选择器仅保留请求事件；阶段选择拥有分配置零和最高优先级真实分配。一组 BE2/LSQ4 配对夹具通过 610 ns 的公共周期／载荷比较，包含满队列队首加载出队及同一行存储分配，随后注入过期响应。准确冻结输入及范围见 `reports/Tier_shared_LSQ_phased_payload_protocol_2026-10-09.json`。样例不确立 CPU 指标。
+The review above is preserved as the pre-implementation argument. The earlier
+PRF-port/saved-query PPA completed at 9352.973215 um2 / 212.757116 MHz and was
+rejected. `LSQ_PHASED_DATA_OWNER=1` now implements the shared word, default off.
+The result selector drops its unused allocation-zero cone and the forwarding
+selector becomes its sole request event; phase selection owns allocation
+zeroing and highest-priority actual allocation. One paired BE2/LSQ4 fixture
+passed 610 ns of public cycle/payload comparisons, including a full queue's
+head load pop and same-row store allocation, followed by a stale response.
+See `reports/Tier_shared_LSQ_phased_payload_protocol_2026-10-09.json` for exact
+frozen inputs and scope. No CPU metrics are established by this sample.

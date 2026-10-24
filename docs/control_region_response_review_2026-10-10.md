@@ -1,39 +1,39 @@
-# 完整区域比较与 WORD 响应投影
+# Complete region comparison and WORD response projection
 
-固定 213 个参数的 `03a4f3e9` 前缀／保持身份组合测得 36078.98157799465um2 / 388.3200606750095MHz，超过两项面积上限且频率回退，已拒绝。此前固定 212 个参数的 `3a586c66` 候选仍是历史面积上限内频率较高的候选：35861.85621799505um2 / 393.99769141977686MHz；但未达到 500MHz，且 IPC／周期未知，仍未验收。[213 参数候选最终证据](../reports/Tier3_shared_prefix_identity_2026-10-10.json)。
+The213-pin `03a4f3e9` prefix/held identity combination is rejected at36078.98157799465um2 /388.3200606750095MHz: it exceeds both area ceilings and regresses frequency. The previous212-pin `3a586c66` candidate remains the higher-frequency candidate inside the historical area ceiling at35861.85621799505um2 /393.99769141977686MHz, still unaccepted because500MHz fails and IPC/cycles are unknown. [213 terminal evidence](../reports/Tier3_shared_prefix_identity_2026-10-10.json).
 
-213 参数版本的实际路径经过数据缓存元数据 row38、LSQ 响应源有效性 0.6353ns、直接响应查询选择 1.083ns、RS 并行唤醒值分发 1.664ns，最后在 2.515ns 到达匿名触发器。接近最差的路径经过指令缓存控制目标选择 1.106ns、控制查询分发 1.450ns、way0/domain5 区域匹配 1.595ns 和 MSHR row4 行写入 2.346ns。不推断匿名触发器的原始位身份。新的 215 参数实验保留全部 212 个原值，将已拒绝的前缀／保持查询置为 0，组合两个新组合投影，针对上述实际串行查询／格式化路径。不单独重测已拒绝策略。
+Actual213 paths cross DCache metadata row38, LSQ response-source validity0.6353ns, direct response-query selection1.083ns and RS parallel-wake value distribution1.664ns before an anonymous FF at2.515ns. Near-worst paths cross ICache control-target selection1.106ns, control-query distribution1.450ns, way0/domain5 region match1.595ns and MSHR row4 line write2.346ns. Anonymous FF bit identities are not inferred. The new215-pin experiment retains all212 values, keeps rejected prefix/held queries0, and combines two new combinational projections targeting these actual serial query/format paths. It does not remeasure individual rejected policies.
 
-## 在目标选择前比较指令缓存的完整高位区域
+## ICache complete upper-region equality before target selection
 
-原四个 JAL 候选、完整 32 位算术／无符号比较、行外谓词，以及优选／首字优先级均不变。按前缀构造的优先级许可对任意输入指令都满足 onehot0。若唯一选中许可为 k，原完整控制目标就等于候选 k；若无许可，原 OR 选择器结果准确为 0。因此，对每路完整区域前缀 P，与所选目标高 R 位相等的条件准确为：
+The original four JAL candidates, full32-bit arithmetic/unsigned comparison, outside-line predicate and preferred/first-word priority are unchanged. Those priority grants are onehot0 for arbitrary input instructions by their prefix construction. With one selected grant k, the original complete control target equals candidate k. With no grants, the original OR selector yields exactly0. Therefore, for the complete per-way region prefix P, equality to the selected target's upper R bits is exactly:
 
-`OR(grants[k] AND (P == candidate[k].upper_R)) OR (no_grants AND P == 0)`。
+`OR(grants[k] AND (P == candidate[k].upper_R)) OR (no_grants AND P == 0)`.
 
-辅助逻辑在晚到许可前准备四个完整区域比较，再将所选标量相等结果分发到既有查询域。无许可时与零目标相等的情况保留，也包含无效周期。原生非复位检查将每个域视图与原完整所选目标的高位区域比较相对照，并检查原许可满足 onehot0。不新增状态、标签所有权、有效门、请求优先级、epoch 或 MSHR 边沿。
+The helper prepares all four complete region comparisons before late grants, then distributes the selected scalar equality to the existing query domains. The no-grant zero-target equality is retained, including invalid cycles. Native nonreset checks compare every domain view to the original complete selected target's upper-region comparison and check the original grants are onehot0. No new state, tag ownership, valid gate, request priority, epoch or MSHR edge is added.
 
-只有目标低 32-R 位通过既有晚到控制查询树，因为其消费者需要组索引和完整存储低位标签；完整高位区域由独立精确谓词检查。内部查询视图的高位填充有意改变，但完整控制目标、完整缓存身份比较、原始控制匹配向量及存在性／公共包保持原样。不丢弃标签位。约束要求原区域标签／并行／非阻塞缓存策略及完整低标签几何。两个辅助模块均列入两份活动源码文件清单。
+Only the lower32-R target bits traverse the existing late control-query tree, because its consumers require set and complete stored low tag bits; the full upper region is checked by the independent exact predicate. Internal query-view upper padding changes intentionally, while the full control target, complete cache identity comparison, raw control-match vector and presence/public packets remain original. No tag bit is discarded. Guards require original region-tag/parallel/nonblocking cache policies and original complete low-tag geometry. Both helpers are present in both active source filelists.
 
-新区域策略在 WORD_SIM 下也使用生产查询逻辑，对该策略禁用旧的整个缓存字查询捷径。原按需／预取／控制语义保留；有限样例之后执行不启用 WORD_SIM 的原完整核心结构静态检查。
+The new region policy uses its production query logic under WORD_SIM, disabling the old whole-cache word-query shortcut for this policy. Original demand/prefetch/control semantics remain and original full-core structural lint without WORD_SIM follows the finite point.
 
-## 在完整响应行优先级选择前进行 LSQ WORD 合并与格式化
+## LSQ WORD merge/format before full response-row priority
 
-原响应行谓词保留每一项 LSQ 完整 generation、valid 和响应等待检查。原响应选择器选最高匹配行；无匹配时选 row0，任意重复匹配／无效周期也如此，因此始终选出一条完整行。对选中行的 WORD 响应进行格式化，等价于选择该行预先格式化的响应。各行根据完整 32 位保存转发数据、当前 WORD 数据、原 size 和 unsigned 标志，预先完成原字节掩码合并。四个字节掩码位、大小编码 0..3（2/3 保留原完整字）及符号扩展定义不变。
+The original response-row predicate retains every LSQ full generation, valid and response-wait check. The original response selector chooses the highest matching row, or row0 when no row matches, including arbitrary duplicate matches/invalid cycles. This always identifies one complete row. Thus formatting the selected row's WORD response equals selecting that same row's already-formatted response. Each row prepares the original byte-mask merge with its full32-bit saved forwarding data, current WORD data, original size and unsigned flag. All four byte-mask bits, size codes0..3 (2/3 retain original full word) and signed extension retain their original definitions.
 
-新 32 位格式化值选择器使用原最高匹配／默认 row0 事件。WORD 输入视图限定为四行一域。任意整行响应仍采用原提取／合并／格式化结果；CPU 实际字响应端口允许裁剪未使用的行级逻辑锥。原生非复位检查在每个边沿将完整原始响应值与原选中元数据格式化器比较，包含无效／flush 周期。完整响应查询／标签字段及全部行状态边沿保持原样；不改变响应 ready、公共包、计数、GEN 或恢复，也不增加延迟。
+The new32-bit formatted-value selector uses the original highest-match/default-row0 events. WORD input views are bounded to four-row domains. Arbitrary full-line responses take the original extraction/merge/format result unchanged; the CPU's actual word-response port permits unused line cones to prune. Native nonreset checks compare the complete raw response value to the original selected-metadata formatter on every edge, including invalid/flush cycles. The full response query/tag fields and all row state edges remain original; no response-ready/public packet/count/GEN/recovery change or new latency is introduced.
 
-## 一个有限测试程序与分阶段验收门
+## One finite binary and staged gates
 
-一个有限可执行程序组合真实 BE2/ROB8/PHYS40/RS8/LSQ4 后端配对，覆盖直接／分阶段恢复及直接／寄存发射，仅 WORD 预选择 0/1 不同。两侧固定此前进位范围、无效 LSQ 预加载及原未流水化 MDU 类别策略；前缀／保持查询为 0，完整译码响应源查询为 1，原环形恢复保持不变，既有源端口由真实响应身份驱动。比较公共周期／完整包、原始响应值／匹配，以及全部 20 类原始 LSQ 元数据／完整 generation。
+One finite binary combines actual BE2/ROB8/PHYS40/RS8/LSQ4 backend pairs in direct/staged recovery and direct/registered issue, differing only WORD preselection0/1. Prior carry range, invalid LSQ preload and original unpipelined MDU class are fixed in both. Prefix/held queries0, full decoded response source query1 and original circular recovery are fixed, with genuine response identity driving the existing source port. Public cycles/full packets, raw response value/matches and all20 raw LSQ metadata families/full generations are compared.
 
-同一程序还包含一组真实 ICache128/ways2/MSHR8/region12/domain16 配对，仅区域预查询 0/1 不同，target-prefix/class-send 固定为 1。保留原按需／控制／顺序请求竞争、保持中的指令回复、epoch 重定向、过期普通／保留控制返回及按需错误预期。比较完整原始控制目标／匹配向量／存在性、公共周期／包及 MSHR 生命周期／身份。不强制设置缓存或队列状态。
+The same binary contains one genuine ICache128/ways2/MSHR8/region12/domain16 pair differing only region prequery0/1, with target-prefix/class-send fixed1. Original demand/control/sequential competition, held instruction replies, epoch redirect, stale ordinary/retained control return and demand error expectations remain. Complete raw control target/match vector/presence, public cycles/packets and MSHR lifecycle/identity are compared. No cache or queue state is forced.
 
-两个微型生产辅助逻辑输入探针增加 128 个 WORD 合并／格式化点（16 掩码／四种大小／两种 unsigned 选择）和 15 个区域点（无许可／四种单一独热许可、三组前缀对、匹配／不匹配／零情况）。不重复无关的 LSQ16 计划／范围／复用点。覆盖有界，不宣称整 CPU、全部几何／操作数或全面缓存正确性。
+Two tiny production-helper input probes add128 WORD merge/format points (16 masks/four sizes/both unsigned choices) and15 region points (no grant/all four onehot grants, three prefix pairs, matching/nonmatching/zero cases). No unrelated LSQ16 plan/range/reuse point is repeated. Coverage is bounded, not a full CPU, all geometries/operands or comprehensive cache correctness claim.
 
-首次有限测试因夹具计数器使用保留标识符 `matches` 而在编译时停止，未运行仿真。冻结输入哈希、编译日志及失败保留在原目录。仅将该计数器改名为 `hit_count`；RTL 和断言不变，在新 fresh_r1 目录编译同一有限测试一次。
+The initial finite attempt stops at compilation because the fixture counter used reserved identifier `matches`; no simulation runs. Frozen input hashes, compile log and failure are preserved in the original directory. Only that counter is renamed to `hit_count`; RTL and assertions are unchanged. The same finite point is compiled once in a fresh_r1 directory.
 
-有限样例通过后，提交并冻结 215 个数值参数，运行不启用 WORD_SIM 的原完整核心结构静态检查，再运行一次官方 PPA。严格面积 <=35891.672317998215 且 F>=500 后才构建 CPU／执行六项原始性能程序；原动态指令数、IPC>=1.1152626918348099 和每项已验收周期上限均满足后，才运行一次 array1 冒烟测试。不计划单策略 PPA 扫描或广泛正确性套件。共享参数化 CPU 的全部新控制默认为 0，正式已验收配置不变。最终 500MHz／最新源码三档验证，以及后续 IPC1.5/1GHz／不限面积探索仍待完成。
+After finite PASS, commit/freeze215 numeric pins, run original full-core structural lint without WORD_SIM, then one official PPA. Strict area<=35891.672317998215 and F>=500 permit CPU build/six original performance cases. Original dynamic instructions, IPC>=1.1152626918348099 and every accepted cycle ceiling permit one array1 smoke. No individual-policy PPA sweep or broad correctness suite is planned. All new controls default0 in the shared parameterized CPU and canonical accepted profiles remain unchanged. Final500MHz/latest-source three-tier verification and IPC1.5/1GHz/unrestricted-area exploration remain outstanding.
 
-## 有限样例结果
+## Finite result
 
-修复后的同一有限测试在 96.465152s 内通过；仿真执行 2us，用时 0.039s。直接／分阶段后端观察到 140/157 个非复位边沿及计数 0/1/2，原始响应值／完整匹配谓词和全部 20 类元数据／完整 GEN 一致。真实指令缓存配对观察到 5 次主存发送、3 次回复、9 个保持回复边沿、一次三类请求竞争和一次过期普通响应检查。128 个 WORD 格式点及 15 个控制区域点通过（两路合计 5 次区域匹配／25 次未命中）。冻结／当前 RTL、夹具、工具、Verilator 哈希及保留的首次编译失败哈希核对通过。[准确有限证据](../reports/Tier_shared_control_region_response_protocol_2026-10-10.json)。不据此宣称全部几何、整 CPU、IPC 或 PPA 通过。
+The repaired same finite point passes in96.465152s; simulation completes2us in0.039s. Direct/staged backends observe140/157 nonreset edges and counts0/1/2, with raw response value/full match predicates and all20 metadata families/full GEN agreeing. The genuine ICache pair observes5 memory sends,3 replies,9 held reply edges, one three-class competition and one stale ordinary response check. The128 WORD format points and15 control-region points pass (5 region matches/25 misses across two ways). Frozen/current RTL/fixture/tool/Verilator hashes and preserved initial compile-failure hashes verify. [Exact finite evidence](../reports/Tier_shared_control_region_response_protocol_2026-10-10.json). No all-geometries/full CPU, IPC or PPA claim follows.

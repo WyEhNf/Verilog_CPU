@@ -1,39 +1,39 @@
-# 不借用释放信用的分阶段 LSQ 捕获
+# No-release phased LSQ capture
 
-## 实测动机
+## Measured motivation
 
-Tier1 509377c4 仍以 8968.688155 um2 / 305.854241 MHz / IPC 0.6012842155901663 获验收。当前源码 Tier2 c85c56ea 冻结版本测得 17336.078412 um2 / 343.854936 MHz。面积较历史 5be74e01 减少 660.940560 um2，但频率回退 11.824119 MHz。未构建／运行性能／冒烟测试，IPC 未知。最差到达时间 2.848 ns，周期 2.908203125 ns。
+Tier1 509377c4 remains accepted at 8968.688155 um2 / 305.854241 MHz / IPC 0.6012842155901663. The current-source Tier2 c85c56ea freeze measured 17336.078412 um2 / 343.854936 MHz. Its area improves 660.940560 um2 from historical 5be74e01, but frequency regresses 11.824119 MHz. No build/perf/smoke ran; IPC is unknown. The worst arrival is 2.848 ns / period 2.908203125 ns.
 
-实测路径由主存桥错误／数据缓存响应，经 LOAD 报告／CDB／PRF 信用进入 d_valid[0]，再经 LSQ 分配和较低优先级部分转发许可，最后捕获到分阶段字。在生产模式不借用释放信用的策略下，分配与当前有效行本来互斥，但晚到分配谓词仍抑制既有有效行数据事件。本轮针对该实际控制路径。历史 Tier3 ALU／仲裁路径仅作审阅，未实现或宣称算术预计算。
+The measured path goes from memory-bridge error/D-cache response through LOAD report/CDB/PRF credit into d_valid[0], then LSQ allocation and the lower-priority partial-forward grant before phased-word capture. A late allocation predicate suppresses an existing valid-row data event, despite allocation and a currently valid row being mutually exclusive under the production no-release policy. This follow-up changes that actual control path. The historical Tier3 ALU/arbitration path was reviewed only; no arithmetic precomputation is implemented or claimed.
 
-## 同一共享实现中默认关闭的策略
+## One shared default-off policy
 
-LSQ_PHASED_ALLOC_EXCLUSIVE 是默认零的布尔参数，经同一课程 top、cpu_core、rv32_backend_joint 传入 LSQ。要求分阶段数据、直接写事件、DIRECT_DISPATCH_RELEASE_CREDITS=0 和 LSQ_DIRECT_POP_CREDIT=0；通用 LSQ 还拒绝任何 RELEASE_CREDITS!=0。不引入按宽度分离的 CPU、队列容量、流水级、额外存储字、完整标签宽度、时钟边沿或握手。正式已验收配置不变。
+LSQ_PHASED_ALLOC_EXCLUSIVE is a default-zero boolean passed through the same course top, cpu_core, rv32_backend_joint and LSQ. It requires phased data, direct write events, DIRECT_DISPATCH_RELEASE_CREDITS=0 and LSQ_DIRECT_POP_CREDIT=0. The generic LSQ additionally rejects any RELEASE_CREDITS!=0. No width-specific CPU, queue capacity, pipeline stage, extra storage word, full-tag width, clock edge or handshake is introduced. Accepted canonical profiles are left unchanged.
 
-原直接事件顺序为 STORE 更新／唤醒、部分转发捕获、完整转发结果、响应结果、分配通道。该策略在存活行组内部及分配通道内部保留原最后事件优先级；已限定的 32 位字采用 OR 合成，写使能仍为同一组原事件的 OR。分配谓词不再屏蔽每个存活行许可。
+The original direct event order is STORE updates/wakes, partial-forward capture, fully forwarded result, response result, allocation lanes. With this policy, the original last-event priority is retained within the live-row group and within allocation lanes. Their already-qualified 32-bit words are OR-composed; write enable remains the OR of the same original events. The allocation predicate no longer masks every live-row grant.
 
-## 所有权论证
+## Ownership argument
 
-RELEASE_CREDITS=0 时，free_count 等于 LSQ_ENTRIES 减去边沿前占用，当前周期出队不提供容量。真实分配槽位来自边沿前 tail 和已接受的稀疏访存前缀，因此全部分配处于当前空闲区间。元数据通常只使已出队的队首前缀失效；选择性恢复截断推测后缀，在恢复边沿更新 tail／占用，且该边沿禁止普通分配。复位／整机清除清空生命周期权限，同样禁止载荷分配。已提交存储和未报告加载保留原 FIFO 成员关系。这些生命周期及身份规则均不改变。
+With RELEASE_CREDITS=0, free_count is LSQ_ENTRIES minus pre-edge occupancy. Current-cycle pops contribute no capacity. Actual allocation slots come from the pre-edge tail and the accepted sparse memory prefix, so all allocations stay in the currently free interval. Metadata normally invalidates only the popped head prefix; selective recovery truncates the speculative suffix and updates tail/occupancy on the recovery edge, when normal allocations are disabled. Reset/whole flush clear lifecycle authority and likewise disable payload allocations. Committed stores and unreported loads retain their original FIFO membership. None of these lifecycle or identity rules is changed.
 
-既有 ALLOC_SLOT_PRESELECT 调用方契约仍要求任意分配发生时，计划与真实 fire 完全一致。生产断言新增：将每次真实载荷分配槽位与原完整输出 LSQ 标签槽位比较，拒绝分配当前有效行，拒绝同一行同时发生存活组／分配组写入。全部完整 generation、响应、转发、恢复、报告及架构准入检查保留。此证书不支持借用在当前边沿释放的行；参数约束明确拒绝该配置。
+The existing ALLOC_SLOT_PRESELECT caller contract still requires its plan to equal actual fire whenever any allocation occurs. Production assertions now compare each actual payload allocation slot to its original full emitted LSQ tag slot, reject allocation of a currently valid row, and reject simultaneous live-group/allocation-group writes for a row. All full generation, response, forwarding, recovery, report and architectural admission checks remain in place. This certificate does not support borrowing a row released on this edge; the parameter guards explicitly reject that configuration.
 
-准确的原四阶段选择器仅用于仿真，比较每次写使能及完整选中字，包含分配／响应优先级。新策略不假设 STORE 更新通道独热，也不改变其最后通道顺序。
+An exact original four-phase selector remains simulation-only and compares every write enable and every complete selected word, including allocation/response priority. The new policy does not assume STORE update lanes are one-hot or change their last-lane ordering.
 
-## 受限定的数据所有者
+## Qualified data owner
 
-每个事件选择器无事件时输出零，因此 OR 合成写入为零时，OR 合成数据也为零。在此输入契约下，D=data | (Q & !write) 等于原 write ? data : Q。通用限定字分组保留相同数量的未复位触发器、相同边沿前旧值消费者、分配置零及完整字写入边沿，同时省去对已选输入数据的冗余限定。它用既有有界控制树分发保持控制，每个叶节点最多控制 16 个既有位。每个仿真边沿检查空闲零输入契约。即使在 WORD_SIM 下也直接仿真该 OR／保持实现，不隐藏在原 if-write 仿真分支后。
+Every event selector outputs zero when it has no event. Therefore the OR-composed data is zero whenever its OR-composed write is zero. For such input, D=data | (Q & !write) equals the former write ? data : Q. The generic qualified word bank retains the same unreset FF count, same pre-edge old consumers, allocation zeroing and full-word write edges, while omitting a redundant qualification of already-selected input data. It distributes hold control to at most 16 existing bits per leaf, using the existing bounded control tree. Its idle-zero input contract is checked each simulation edge. This OR/hold implementation is directly simulated even under WORD_SIM; it is not hidden behind the original if-write simulator branch.
 
-该策略只对既有 LSQ 分阶段字使用此分组。其他 LSQ 字段及所有其他字分组保留原实现。不允许任意原始／PRF 数据进入受限定分组。不新增假路径、时序例外、SRAM 改动或面积豁免。
+The policy uses this bank only for the existing phased LSQ word. Other LSQ fields and every other word bank keep their original implementation. No arbitrary raw/PRF data is admitted to a qualified bank. No false path, timing exception, SRAM change or area exemption is added.
 
-## 有限样例与评估
+## Finite sample and evaluation
 
-一组 BE2/LSQ4 原版／新版配对通过，两侧均启用直接事件／分布式格式化，独占捕获取 0/1，真实 RELEASE_CREDITS=0，启用计划槽位／载荷分配及双行回收。复用新鲜／保持请求、部分／完整转发、有符号半字／延迟 STORE 操作数、保持结果／无关更新、满队列及过期响应、MMIO／恢复。满队首复用点改在下一边沿分配，符合生产不借用释放信用的要求。一组双通道访存束，以及同拍不同的行上发生 LOAD 响应／STORE 分配，检查两份完整字、原身份和占用。全部原写入／数据参考及证书断言通过。准确冻结输入、构建、可执行文件和日志哈希见 reports/Tier_shared_LSQ_exclusive_capture_protocol_2026-10-09.json。这是一组有限协议序列，不是整 CPU 证明。
+One BE2/LSQ4 old/new pair passed, with direct events/distributed format enabled in both, exclusive capture 0/1, real RELEASE_CREDITS=0, planned slot/payload allocation and two-row reclaim enabled. It reuses fresh/held requests, partial/full forwarding, signed halfword/delayed STORE operand, held result/irrelevant update, full queue and stale response, MMIO/recovery. The full-head reuse point now allocates on the following edge, as production no-release requires. One two-lane memory bundle and simultaneous different-row LOAD response/STORE allocation check both complete words, original identities and occupancy. Every original write/data reference and certificate assertion passed. Exact frozen inputs/build/executable/log hashes are in reports/Tier_shared_LSQ_exclusive_capture_protocol_2026-10-09.json. This is one finite protocol sequence, not a whole CPU proof.
 
-下一 Tier2 配置保留 c85c56ea 资源与策略，仅启用此新增参数。提交／冻结一次，运行一次原结构静态检查及一次官方 PPA。面积 <=17997.018972010097、Fmax >=355.67905522750954 后，才构建 CPU／测试性能。随后要求 IPC >=0.8561418961675636、原指令数不变、逐项周期 <=8534/17439/162821/294021/6301/5592，再运行一次 array1 冒烟测试。实现或样例证据不确立验收或 CPU 指标改善。更早准备的 Tier3 冻结版本未测量，也未送入 EDA。
+The next Tier2 profile keeps c85c56ea resources and policies and enables only this additional parameter. Commit/freeze once, run one original structural lint and one official PPA. Require area <=17997.018972010097 and Fmax >=355.67905522750954 before any CPU build/perf. Then IPC >=0.8561418961675636, unchanged instruction counts and case cycles <=8534/17439/162821/294021/6301/5592 before one array1 smoke. No acceptance or improved CPU metric is established by implementation or sample evidence. The older prepared Tier3 freeze is unmeasured and has not been sent to EDA.
 
-## Tier2 最终结果
+## Terminal Tier2 result
 
-4e707df9 冻结版本通过唯一一次原结构静态检查，并在一次官方 PPA 中测得 17349.185832 um2 / 337.063858 MHz，未达到历史 355.679055 MHz 不回退门槛。相对 c85c56ea，面积增加 13.107420 um2，频率降低 6.791078 MHz，未证实预期时序改善。未运行 CPU 构建／性能／冒烟测试；IPC 未知，已验收配置保留。Reports/Tier2_shared_exclusive_capture_2026-10-09.json 取代带日期运行中快照。
+The 4e707df9 freeze passed its one original structural lint and measured 17349.185832 um2 / 337.063858 MHz in one official PPA. It fails the historical 355.679055 MHz nonregression gate. Relative to c85c56ea it adds 13.107420 um2 and loses 6.791078 MHz, so the proposed timing improvement is not established. No CPU build/perf/smoke ran; IPC is unknown and accepted profiles remain intact. Reports/Tier2_shared_exclusive_capture_2026-10-09.json supersedes the dated running snapshot.
 
-当前最差路径为 2.907 ns，从数据缓存元数据 row18 经 LOAD 响应／报告／CDB 及真实分配，到 row0 限定字的写入树和保持反馈。分配谓词仍参与合成写使能，仅拆分存活／分配数据选择不能消除该保持控制路径。不宣称受限定分组普遍改善时序。时序和 SRAM 面积不变。该直接分派 Tier2 结果不代表寄存分派 Tier3 组合；应先测量一次完整当前 Tier3 集成，再判断历史 ALU 路径是否仍主导。
+The worst path is now 2.907 ns from D-cache metadata row18 through LOAD response/report/CDB and actual allocation to the row0 qualified-word write tree and hold feedback. The allocation predicate still contributes to the combined write enable; splitting live/allocation data selection alone does not remove that hold-control path. No claim is made that the qualified bank universally improves timing. Sequential and SRAM areas are unchanged. This direct-dispatch Tier2 result does not measure the registered-dispatch Tier3 combination; measure one full current Tier3 integration before assuming the historical ALU path still dominates.

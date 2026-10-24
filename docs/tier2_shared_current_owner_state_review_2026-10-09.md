@@ -1,27 +1,27 @@
-# 当前源码共享 Tier2 的准备
+# Current-source shared Tier2 preparation
 
-历史已验收 5be74e01 冻结版本报告 17997.018972 um2 / 355.679055 MHz / IPC 0.8561418961675636，逐项周期为 8534 / 17439 / 162821 / 294021 / 6301 / 5592，面积余量仅 2.981028 um2。这些数字属于该源码冻结版本，不是当前统一 RTL。configs/tier2.json 仍为历史已验证配置。
+The historically accepted 5be74e01 freeze reports 17997.018972 um2 / 355.679055 MHz / IPC 0.8561418961675636, with case cycles 8534 / 17439 / 162821 / 294021 / 6301 / 5592. Its area margin is only 2.981028 um2. Those numbers belong to that source freeze, not the current unified RTL. configs/tier2.json remains the historical verified profile.
 
-configs/tier2_shared_current_owner_state_candidate.json 在 Tier1 验收后，为同一共享 CPU 准备当前源码复测。保留 FE2/BE2/INT2/CDB2、ROB16/PHYS40/RS3/LSQ4、Icache64/Dcache512、SRAM PRF 及直接分派。根据当前顶层默认值加历史已验证覆盖值，固定当前全部 184 个公开数值参数，再启用已审阅的通用当前状态表／载荷／所有权策略，记录见 reports/Tier2_shared_current_owner_state_preparation_2026-10-09.json。不新增流水级、不改变完整标签宽度、不创建按宽度分离 CPU。
+configs/tier2_shared_current_owner_state_candidate.json prepares the same shared CPU for current-source remeasurement after Tier1 acceptance. It retains FE2/BE2/INT2/CDB2, ROB16/PHYS40/RS3/LSQ4, Icache64/Dcache512, the SRAM PRF and direct dispatch. It pins all 184 currently exposed numeric parameters using the current top defaults plus the historical verified overrides, then enables the reviewed generic current-table/payload/ownership policies recorded in reports/Tier2_shared_current_owner_state_preparation_2026-10-09.json. It does not add pipeline stages, change full tag widths or create a separate width-specific CPU.
 
-组合增加源状态查询、私有待处理恢复所有权、单 generation 所有权、保存 LSQ 查询及分阶段／直接数据、窄缓存请求字及无所有权 MSHR 清除抑制、MMIO 保存 STORE 路由／写就绪、SRAM PRF 端口转发／原始写入、MDU 前缀符号修正及平衡有界控制树。既有取指所有者和 MDU 余数复用保持启用。Tier1 空 RS／新鲜数据、新鲜 LOAD 请求和完成／STORE 同边沿退休旁路保持关闭；首个 Tier2 组合针对保持原周期的结构改善。
+The combination adds source-state query, private pending recovery ownership, single generation ownership, saved LSQ queries and phased/direct data, narrow cache request words and unowned MSHR clear suppression, MMIO saved STORE routing/write readiness, SRAM PRF port forwarding/raw writes, MDU prefix sign correction and balanced bounded control trees. Existing fetch owner and MDU remainder reuse stay enabled. Tier1's empty RS/fresh-data, fresh LOAD request and completion/STORE same-edge retirement bypass policies remain disabled; this initial Tier2 combination targets structural improvement with the original cycles.
 
-参数检查通过；准备阶段不执行 Tier2 冻结、静态检查、EDA、构建、性能或 CPU 冒烟测试。固定当前数值不证明与历史硬接线 RTL 选择等价。有限策略样例不是完整 Tier2 证明，不确立新 CPU 指标或已验收配置。
+The parameter checker passes; no Tier2 freeze, lint, EDA, build, perf or CPU smoke is run during this preparation. Current numeric pinning does not prove equivalence with historical hard-wired RTL choices. Finite policy samples are not a whole Tier2 proof, and no new CPU metric or accepted profile is established.
 
-Tier1 验收后，提交冻结一次并执行原结构静态检查，再做一次官方 PPA。除课程面积 <=18000／Fmax >=300／IPC >=0.8450 外，还要求相对历史已验收版本不回退：面积 <=17997.018972010097、Fmax >=355.67905522750954、IPC >=0.8561418961675636，且每项周期不大于上述参考。只有面积／频率／不回退均通过的 PPA，才进入一次构建和六项性能测试；全部 IPC／周期门通过后，再执行一次 array1 冒烟测试。替换正式配置要求全部门通过，且使用同一当前共享源码；仅保留旧标签不代表当前源码获验收。
+After Tier1 acceptance, use one committed freeze and original structural lint, then one official PPA. In addition to course area <=18000 / Fmax >=300 / IPC >=0.8450, require no regression from the historical accepted freeze: area <=17997.018972010097, Fmax >=355.67905522750954, IPC >=0.8561418961675636 and every case cycle <= its reference above. Only a PPA passing area/frequency/nonregression proceeds to one build and six-case perf; one array1 smoke follows all IPC/cycle gates. Canonical profile replacement requires every gate and the same current shared source; preserving an old tag alone does not establish current-source acceptance.
 
-## 已验证 Tier1 后的集成
+## Integration after verified Tier1
 
-共享 509377c4 源码以 8968.688155 um2 / 305.854241 MHz / IPC 0.6012842155901663 通过 Tier1，六项周期全部不变，一次 array1 冒烟测试通过。此 Tier2 准备配置现固定全部 185 个数值参数，启用 COMPLETION_SOURCE_STATE_QUERY=2 和 LSQ_DISTRIBUTED_LOAD_FORMAT=1，保留此前流水线／资源。这些是有限 BE2 后端／LSQ 样例已覆盖、Tier1 已测的相同通用策略，不是分离宽度实现。源／查询／格式化器改动不增加周期，Tier1 结果不构成 Tier2 测量。
+The shared 509377c4 source passed Tier1 at 8968.688155 um2 / 305.854241 MHz / IPC 0.6012842155901663, with all six case cycles unchanged and one array1 smoke. This prepared Tier2 profile now pins all 185 numeric parameters, enables COMPLETION_SOURCE_STATE_QUERY=2 and LSQ_DISTRIBUTED_LOAD_FORMAT=1, and keeps its previous pipeline/resources. These are the same generic policies exercised by the finite BE2 backend/LSQ samples and measured in Tier1; they are not separate width implementations. The source/query/formatter changes do not add cycles. No Tier2 measurement follows from the Tier1 result.
 
-配置门槛现直接编码面积 <= 17997.018972010097、IPC >= 0.8561418961675636、Fmax >= 355.67905522750954，防止运行器仅凭课程最低门槛继续。原课程门槛另保留于准备记录。全部逐项周期检查仍为必要条件。Reports/Tier2_shared_load_format_profile_preparation_2026-10-09.json 记录后续仅参数修订，更早准备保留为历史。
+The profile thresholds now encode area <= 17997.018972010097, IPC >= 0.8561418961675636, Fmax >= 355.67905522750954 directly so the runner cannot proceed on course minimums alone. The original course thresholds are retained separately in the preparation record. All per-case cycle checks above remain mandatory. Reports/Tier2_shared_load_format_profile_preparation_2026-10-09.json records this later parameter-only revision; older preparations remain historical.
 
-## 当前源码冻结预检
+## Current-source frozen preflight
 
-c85c56ea 冻结目录为 F:/CPU2026TierRuns/tier2_shared_distributed_load_format_20261009，在 12.893507 秒内通过一次原完整核心结构静态检查，错误／锁存器／UNOPTFLAT 均为零，冻结哈希已核验。一次官方 PPA 正在运行。Reports/Tier2_shared_distributed_load_format_progress_2026-10-09.json 记录准确冻结、会话及带日期存活进程。目前无新 Tier2 指标或正式配置替换。RTL／文件清单／运行器与已验证 Tier1 509377c4 源码逐字节相同，通过参数差异在同一模块中选择双发射。
+The c85c56ea freeze at F:/CPU2026TierRuns/tier2_shared_distributed_load_format_20261009 passed one original full-core structural lint in 12.893507 seconds with zero errors/latches/UNOPTFLAT, and its frozen hashes were verified. One official PPA is running. Reports/Tier2_shared_distributed_load_format_progress_2026-10-09.json records the exact freeze, session and dated live process. No new Tier2 metrics or accepted profile replacement exist yet. The RTL/filelists/runner are byte-identical to the verified Tier1 source 509377c4; parameter differences select the dual-issue configuration in the same modules.
 
-## 当前源码 PPA 最终拒绝
+## Terminal current-source PPA rejection
 
-c85c56ea 冻结版本用 733.584556 秒完成一次官方 PPA：17336.078412 um2 / 343.854936 MHz。相对 5be74e01 面积减少 660.940560 um2，但频率降低 11.824119 MHz。虽课程 PPA 通过，编码的不回退门失败。未运行构建／性能／冒烟测试，IPC 未知，正式 Tier2 仍为历史版本。Reports/Tier2_shared_distributed_load_format_2026-10-09.json 取代带日期运行中记录。
+The c85c56ea freeze completed one official PPA in 733.584556 seconds: 17336.078412 um2 / 343.854936 MHz. Area improves 660.940560 um2 versus 5be74e01 but frequency falls 11.824119 MHz. Although course PPA passes, the encoded nonregression gate fails. No build/perf/smoke ran; IPC is unknown and canonical Tier2 remains historical. Reports/Tier2_shared_distributed_load_format_2026-10-09.json supersedes the dated running record.
 
-最差到达时间 2.848 ns，路径为主存桥错误／数据缓存响应 -> LOAD 报告／CDB -> PRF／分派信用 -> d_valid -> LSQ 分配 -> 部分转发载荷许可 -> 分阶段字。这是分配优先级／控制路径，不是历史 Tier3 ALU 减法路径。准备的 Tier3 冻结版本尚未测量。
+Worst arrival is 2.848 ns through memory-bridge error/D-cache response -> LOAD report/CDB -> PRF/dispatch credit -> d_valid -> LSQ allocation -> partial-forward payload grant -> phased word. This is an allocation-priority/control path, not the historical Tier3 ALU subtraction path. The prepared Tier3 freeze has not been measured.

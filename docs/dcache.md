@@ -1,7 +1,19 @@
-# A-05 数据缓存
+# A-05 D-Cache
 
-`rv32_dcache` 是一个容量为 4 KiB、缓存行大小为 16 字节的直接映射缓存，采用写回和写分配策略。每个请求携带 LSQ 与 ROB 标签。加载返回完整缓存行及提取出的字节、半字或字；已提交存储将 16 位字节掩码对应的数据合并到缓存行，并返回存储确认。
+`rv32_dcache` is a 4 KiB direct-mapped cache with 16-byte lines and
+write-back/write-allocate replacement. Each request carries the LSQ and ROB
+tags; loads return the complete line plus an extracted byte/half/word value,
+while committed stores merge their 16-bit byte mask into the line and return a
+store acknowledge.
 
-命中经过三级寄存流水线。缺失使用一个 MSHR：先将脏的被替换行整行写回，再经 H-03 主存端口填充请求的缓存行。即使加载响应随后因 `flush_i` 被丢弃，填充数据仍会安装到缓存中；存储一旦被缓存接收就不会取消。地址或 ID 不匹配的主存响应不被消费；主存错误转换为带标签、行为确定的加载错误或存储确认错误。
+Hits pass through three registered stages. A miss uses one MSHR. A dirty victim
+is written back as a full line before the requested line is refilled from the
+H-03 memory port. Refill data is installed even when a load response is later
+dropped by `flush_i`; stores are never canceled once accepted by the cache.
+Memory address/ID mismatches remain unconsumed, and memory errors become
+deterministic tagged load errors or store-ack errors.
 
-验证入口 `make a05` 使用真实的 50 周期双端口主存模型，覆盖冷访问与热访问、实测三级命中时序、背压下响应载荷稳定性、字节合并和符号扩展提取、脏行冲突替换与写回、被清除的加载缺失，以及主存越界错误。
+Verification entry `make a05` uses the real 50-cycle dual-port memory model and
+covers cold and warm accesses, measured three-stage hit timing, stable response
+payloads under backpressure, byte merge and signed extraction, dirty conflict
+eviction/writeback, flushed load misses, and out-of-range memory errors.

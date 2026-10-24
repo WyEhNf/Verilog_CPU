@@ -1,31 +1,31 @@
-# 共享 RS 的算术预计算
+# Shared RS arithmetic precompute
 
-## 范围
+## Scope
 
-RS_ARITHMETIC_PRECOMPUTE 默认为零，经同一 top/core/backend 传至原参数化 RS/ALU，要求 RS_ISSUE_METADATA=1。通用 RS metadata[31:0] 必须包含准确分配立即数，并保留完整操作码宽度。任何发射宽度都不使用独立 CPU。
+RS_ARITHMETIC_PRECOMPUTE defaults to zero and passes through the same top/core/backend to the original parameterized RS/ALU. It requires RS_ISSUE_METADATA=1. Generic RS metadata[31:0] must contain the exact allocated immediate, with full opcode width. There is no separate CPU for any issue width.
 
-历史 A109 时序在 32 位前缀／进位选择网络前存在晚到所选操作码 SUB 控制。逐行算术可与原 ready／排名仲裁重叠。当前 Tier3 PPA 独立运行于不含此选项的冻结 049da02c，下一完整 PPA 必须由其真实最终路径支持。本实现／样例不确立 CPU 时序改善。
+Historical A109 timing has late selected-opcode SUB control before the 32-bit prefix/carry-select network. Row arithmetic can overlap original ready/rank arbitration. Current Tier3 PPA is independently running on frozen 049da02c without this option; its actual terminal paths must justify the next full PPA. This implementation/sample establishes no CPU timing improvement.
 
-## 包与边沿论证
+## Packet and edge argument
 
-各行对 ADD/SUB 选择 rhs=有效 source2，否则 rhs=本行立即数。SUB 计算 lhs-rhs，其他情况计算模 2^32 的 lhs+rhs。操作数为原保存／当前唤醒视图，完整标签、唤醒匹配／重复优先级及就绪不变。辅助逻辑使用原八个四位分组的进位选择及 1/2/4 前缀方程，带局部有界减法控制；真实前缀实现在 WORD_SIM 中也运行。
+Each row chooses rhs=effective source2 for ADD/SUB, otherwise rhs=its immediate. Compute lhs-rhs for SUB, otherwise lhs+rhs modulo 2^32. Operands are the original saved/current-wakeup views; full tags, wake matching/duplicate priority and readiness are unchanged. The helper uses the original eight-nibble carry-select and 1/2/4 prefix equations with local bounded subtraction control. Its actual prefix implementation also runs under WORD_SIM.
 
-将组合字附加到同一原包，仍由相同 ready 候选及年龄／排名许可选择。接受的新鲜分配发射使用原输入通道操作数／立即数／许可。该字不驱动就绪、分配或释放。原字段保留在包低位；恢复限定／取消边带跟随同一所选行。仿真断言将每个有效选中字与同一所选完整包比较。
+Append that combinational word to the same original packet selected by the same ready candidates and age/rank grants. Accepted fresh allocation issue uses its original incoming lane operands/immediate/grants. The word never drives readiness, allocation or release. Original fields keep their positions in the lower packet; recovery qualification/cancel sidebands follow their same selected row. A simulation assertion compares every valid selected word against the same selected complete packet.
 
-直接发射不增加触发器或周期。ISSUE_PIPELINE=1 将既有包扩宽 32 位，沿用原 valid/ready/保持/reset/flush/recovery 控制器，将相同操作数／标签／字一起保存。不增加阶段或独立权限。ALU 捕获／输出／背压／恢复不变。ADD/SUB 消费寄存器算术；ADDI、LOAD/STORE 地址和 JALR 消费立即数算术。PC 相对目标／结果、移位及比较不变。每个有效 ALU 包都有独立算术参考断言。
+Direct issue adds no FF or cycle. ISSUE_PIPELINE=1 extends the existing packet by 32 bits and uses the original valid/ready/hold/reset/flush/recovery controller, saving the same operands/tag/word together. There is no new stage or separate authority. ALU capture/output/backpressure/recovery remain original. ADD/SUB consume register arithmetic; ADDI, LOAD/STORE address and JALR consume immediate arithmetic. PC-relative targets/results, shifts and comparisons remain original. Every valid ALU packet has an independent arithmetic reference assertion.
 
-## 成本与验收门
+## Cost and gates
 
-启用模式将每条整数发射通道的两个加法器，换为每条 RS 行一个加法器，并在需要新鲜发射时增加输入算术。更宽选择器、唤醒时序及其他路径可能抵消收益。默认算术方程仍为原式，但层次／参数增加可能影响映射，旧指标不归于此源码。不改变容量、标签／generation 宽度、SRAM 模型、面积豁免或时序例外。
+Enabled mode trades two adders per integer issue lane for one per RS row, plus incoming arithmetic when fresh issue needs it. Wider selectors, wake timing and other paths can offset that benefit. Default arithmetic equations remain original, but hierarchy/parameter additions may affect mapping; old metrics are not attributed to this source. No capacities, tag/generation widths, SRAM model, area exemption or timing exceptions change.
 
-configs/tier3_shared_500_arithmetic_candidate.json 固定 187 个数值参数，在此前集成配置上仅增加此选项；参数约束通过。面积 <=35891.672317998215、Fmax >=500 后才构建／测试 CPU 一次；随后要求 IPC >=1.1152626918348099、原指令数及逐项周期 <=7572/17490/143485/153155/4739/3725，再执行一次 array1 冒烟测试。已验收冻结／正式配置不变。
+configs/tier3_shared_500_arithmetic_candidate.json pins 187 numeric parameters and adds only this option to the previous integration profile. Parameter guards pass. Require area <=35891.672317998215 and Fmax >=500 before one CPU build/perf. Then IPC >=1.1152626918348099, original instruction counts and each case cycle <=7572/17490/143485/153155/4739/3725 before one array1 smoke. Accepted freezes/canonical profiles are unchanged.
 
-## 一组有限样例
+## One finite sample
 
-一组 BE2/ROB8/PHYS40/RS4/LSQ4 配对使用 arithmetic0/1，双方完成模式均为 2。直接恢复使用直接发射；分阶段恢复使用既有寄存发射级。五个算术点使用真实重命名操作数：双通道 ADDI 生产者束之后，立即接回绕 ADD、借位 SUB 及负数 ADDI。复位后另一条真实 ADDI 重新取得非零基址，用于 SB/SH/SW 地址回绕，并检查原准确掩码及真实 ACK。
+One BE2/ROB8/PHYS40/RS4/LSQ4 pair uses arithmetic0/1 and identical completion mode2. Direct recovery uses direct issue; staged recovery uses the existing registered issue stage. Five arithmetic points use real renamed operands: a two-lane ADDI producer bundle immediately followed by wrapping ADD, borrowing SUB and negative ADDI. After reset another actual ADDI reacquires a nonzero base for wrapping SB/SH/SW addresses with original exact masks and real ACKs.
 
-原延迟 LOAD／保持完成、分支／年轻取消、复位／整机清除、完整标签行复用、MUL0*0 及精确 LOAD 错误保留。公共周期／有效完整包和 ROB／分配器状态一致，全部 RS／ALU 算术断言通过。每个恢复模式观察到三次捕获／三次预览／一次应用；flush/reset 取消其他捕获。不是整 CPU／全部宽度／配置／时序证明。一次运行在约 1us 仿真范围内通过，用时 70.107403 秒；准确冻结输入、可执行文件、构建、仿真哈希见 reports/Tier_shared_RS_arithmetic_protocol_2026-10-09.json。
+The original delayed LOAD/held completion, branch/young cancellation, reset/whole flush, full-tag row reuse, MUL0*0 and precise LOAD error remain. Public cycles/valid complete packets and ROB/allocator state match; all RS/ALU arithmetic assertions pass. Each recovery mode observes three captures/three previews/one apply; flush/reset cancel the other captures. This is not a whole CPU/all-width/configuration/timing proof. One run passed in 70.107403 seconds around 1us; exact frozen inputs/executable/build/simulation hashes are in reports/Tier_shared_RS_arithmetic_protocol_2026-10-09.json.
 
-## 当前 Tier3 时序证据
+## Current Tier3 timing evidence
 
-独立 049da02c PPA 完成于 34888.262138 um2 / 331.177232 MHz。最差路径由 ALU 生产者存活身份／重定向，经请求控制进入 AXI 读取生命周期计数器反馈，包含 2.762ns 的晚到 read_allocate。因此不将此算术选项单独送入另一次完整 PPA；在优化真实控制路径期间，它保持默认关闭、仅通过有限样例验证的实现候选。Reports/Tier3_shared_exclusive_2026-10-09.json 保留准确最终证据；由于 500MHz 门失败，未运行 CPU IPC。
+The separate 049da02c PPA completed at 34888.262138 um2 / 331.177232 MHz. Its worst path is ALU producer-live identity/redirect through request control into AXI read-lifecycle counter feedback, including late read_allocate at 2.762ns. Thus this arithmetic option alone is not sent to another full PPA. It remains a default-off, finite-sample-verified implementation candidate while the actual control path is optimized. Reports/Tier3_shared_exclusive_2026-10-09.json retains exact terminal evidence; no CPU IPC was run because the 500MHz gate fails.

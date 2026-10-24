@@ -109,7 +109,7 @@
 
 ## 5. 后端结构优化
 
-### 5.1 固定完成结果生产者位置
+### 5.1 固定 completion producer 位置
 
 `rv32_backend_joint.v` 当前把 ALU、MDU、LSQ 三个候选动态压缩为连续前缀，搬运 tag、phys、value、address、branch target、128-bit store data 和大量 flag，再通过 `alu_rank/mdu_rank/load_rank` 反解 ready。`rv32_completion_network.v` 实际已经能跳过 valid=0 的 source，并只对 fire 的 source 分配 FIFO 槽。
 
@@ -117,7 +117,7 @@
 
 需要检查：无效或 target-live=false 的 source 是否会阻塞后续 source；recovery 当拍的 kill 与 ready/fire 优先级；FIFO 满时 payload 保持。不能仅凭静态阅读宣称已经等价。
 
-### 5.2 重构空闲列表与分支恢复
+### 5.2 重构 free list 与分支恢复
 
 当前 checkpoint 已从 1024 bit/ROB 项压到 `32 × PAW` 的 RAT 状态，这是已经实现的收益，不能再次计数。真正的热点是恢复时的一周期组合逻辑：扫描 RAT、扫描全部幸存 ROB old-phys、构造 `PHYS_REGS` 位 reserved、遍历全部物理寄存器，并用运行时 prefix index 把空闲号压成宽 free-list 总线。
 
@@ -169,7 +169,7 @@
 
 tag 中包含 slot 时，先用 slot 直接索引，再比较 valid+generation，避免对每个条目全 tag CAM。LSQ4/8 可以保留并行候选资格逻辑；LSQ16 再考虑拆成两拍或 load/store queue 分离。旧方案中“LSQ 总是平方增长”的说法应限定为当前多个候选各扫全部 store 的实现，并非所有 LSQ 的必然复杂度。
 
-### 5.5 ROB 与联合模块元数据只保留一份
+### 5.5 ROB 与 joint 元数据只保留一份
 
 joint 当前另建了按 ROB 深度的 `rob_to_lsq`、phys、old_phys、rd、rd_we、pc、load_error、imm、prediction metadata、mem metadata 等 side table；ROB 自身也保存 PC、inst、rd、old/new phys、result、store 数据和 checkpoint。
 
@@ -185,7 +185,7 @@ joint 当前另建了按 ROB 深度的 `rob_to_lsq`、phys、old_phys、rd、rd_
 
 ### 5.6 收窄 ROB、RS 和恢复运算
 
-- 完成／恢复从标记提取槽位，先进行一次有效位与代际校验，再共享独热写使能；避免 BE×ROB 全标记匹配后分别更新每个字段。
+- completion/recovery 从 tag 提取 slot，先进行一次 valid+generation 校验，再共享 one-hot write enable；避免 BE×ROB 全 tag 匹配后分别更新每个字段。
 - ROB/RS/LSQ 容量为 2 的幂时，指针 wrap 使用参数位宽的截断加法。free-list 容量不是 2 的幂时使用一次比较减法。
 - 用明确位宽的环形 distance 替代 Verilog `integer` 年龄差。Yosys 可能会优化 integer，但显式位宽有利于控制综合结果。
 - RS 当前每项有两份 32-bit operand、两份完整 tag 和 32-bit age。把 age 改为 ROB slot/generation 或较窄的环形序号；不能简单截短全局 counter 导致回绕乱序。
@@ -207,7 +207,7 @@ variable-index 写入会让小 ROB payload 转为未计价 memory，并使 FF-re
 - BE=2/4 再探索 tag-only RS：RS 只存 phys tag/ready，issue 后读 PRF。它能减少 RS 数据存储和宽 wakeup，但会增加 PRF 读口、一级 latency、仲裁失败和重发，必须作为完整架构 A/B。
 - 可在宽核中把 source wakeup 主总线改用 phys tag，ROB generation 校验集中在 completion 入口；仍需保证被复用的物理号不会被旧结果误唤醒。
 
-### 5.8 完成 FIFO 与数据平面分路
+### 5.8 completion FIFO 与数据平面分路
 
 completion FIFO 当前深度固定 16，每项携带普通写回数据外，还携带 address、branch target、128-bit store data 和多种 flag。建议：
 
@@ -308,7 +308,7 @@ BE=2 后参考 SonicBOOM 使用偶/奇双 bank、每 bank 1R1W SRAM 支持不同
 
 BE=2 推荐首个真实扩宽点：2-way rename/dispatch/commit、2 个整数/branch issue、1 LSU、1 MUL、1 DIV、2 CDB/write ports。BE=4 可先做 4-way rename/commit、2 或 4 INT、2 LSU banks、1 MUL、1 DIV、2 或 3 write ports，而不是四倍复制所有结构。
 
-### 8.2 同指令束依赖与资源分配
+### 8.2 同 bundle 依赖与资源分配
 
 - rename lane i 必须看到本 bundle 更早 lane 的新映射，覆盖 RAW/WAW。
 - free bitmap 需要一次选出连续有效前缀所需的 0–BE 个物理寄存器。
@@ -447,7 +447,7 @@ stall 与 occupancy 计数
 
 ### 阶段 E：真正 BE2/BE4
 
-1. 完成采用压紧总线的多通道前端、译码、重命名、分派与提交。
+1. 完成 packed multi-lane frontend/decode/rename/dispatch/commit。
 2. BE2 使用共享 LSU/MUL/DIV 与 2 CDB，先闭正确性和 P/A。
 3. 按数据决定 BE4 是否采用 2×2 分簇、banked D-Cache、PRF bank/复制。
 4. 从所有非支配点选择 P0/P1/P2/P3，检查每级 1.3× 门槛。
@@ -479,16 +479,16 @@ stall 与 occupancy 计数
 
 ## 14. 业界思路及适用边界
 
-1. [BOOM 重命名阶段](https://docs.boom-core.org/en/latest/sections/rename-stage.html)：RAT snapshot、committed map、branch allocation list 和 ROB unwind，为本项目 checkpoint pool/rollback/free bitmap 提供直接参考。
-2. [BOOM 寄存器文件与旁路](https://docs.boom-core.org/en/latest/sections/reg-file-bypass-network.html)：动态仲裁可以减少 RF 端口，但失败指令必须取消和重发；不能只砍端口。
-3. [BOOM 发射单元](https://docs.boom-core.org/en/latest/sections/issue-units.html)：分离 issue queue、age ordering、fast/slow wakeup；支持本项目比较 data-less RS 与不搬移的年龄选择。
+1. [BOOM Rename Stage](https://docs.boom-core.org/en/latest/sections/rename-stage.html)：RAT snapshot、committed map、branch allocation list 和 ROB unwind，为本项目 checkpoint pool/rollback/free bitmap 提供直接参考。
+2. [BOOM Register Files and Bypass](https://docs.boom-core.org/en/latest/sections/reg-file-bypass-network.html)：动态仲裁可以减少 RF 端口，但失败指令必须取消和重发；不能只砍端口。
+3. [BOOM Issue Unit](https://docs.boom-core.org/en/latest/sections/issue-units.html)：分离 issue queue、age ordering、fast/slow wakeup；支持本项目比较 data-less RS 与不搬移的年龄选择。
 4. [Complexity-Effective Superscalar Processors](https://ftp.cs.wisc.edu/sohi/papers/1997/isca.complexity.pdf)：rename、wakeup/select、bypass 随宽度增长，是 BE4 分簇而非全连接复制的理论依据。
 5. [SonicBOOM](https://carrv.github.io/2020/papers/CARRV2020_paper_15_Zhao.pdf)：双 bank 1R1W D-Cache、小 uBTB 等适合宽核；data-less RS 并不是本文特有贡献。
-6. [香山昆明湖 V2 数据路径](https://docs.xiangshan.cc/projects/design/en/kunminghu-v2/backend/DataPath/DataPath/)：RF 端口仲裁、失败重发和 RegCache 可作为 BE4 后期选项，小 PRF 不应直接照搬。
-7. [Ibex 乘法器／除法器](https://ibex-core.readthedocs.io/en/latest/03_reference/instruction_decode_execute.html)：slow/fast/single-cycle 三档，尤其 17×17 + 34-bit MAC 是本项目乘法中档的重要参考。
-8. [CVA6 发射阶段](https://cva6.readthedocs.io/en/latest/03_cva6_design/issue_stage.html)：借鉴窄 transaction ID 与结果定位；它是顺序发射，不能替代本项目 OoO issue。
+6. [香山昆明湖 V2 DataPath](https://docs.xiangshan.cc/projects/design/en/kunminghu-v2/backend/DataPath/DataPath/)：RF 端口仲裁、失败重发和 RegCache 可作为 BE4 后期选项，小 PRF 不应直接照搬。
+7. [Ibex Multiplier/Divider](https://ibex-core.readthedocs.io/en/latest/03_reference/instruction_decode_execute.html)：slow/fast/single-cycle 三档，尤其 17×17 + 34-bit MAC 是本项目乘法中档的重要参考。
+8. [CVA6 Issue Stage](https://cva6.readthedocs.io/en/latest/03_cva6_design/issue_stage.html)：借鉴窄 transaction ID 与结果定位；它是顺序发射，不能替代本项目 OoO issue。
 9. [NoSQ 原论文](https://acg.cis.upenn.edu/papers/micro06_NoSQ.pdf)：说明删除 SQ 需要额外预测、重执行和验证机制，因此本项目优先减少重复扫描而非删除 SQ。
-10. [Yosys 存储器处理](https://yosyshq.readthedocs.io/projects/yosys/en/latest/using_yosys/synthesis/memory.html)：`memory -nomap` 会保留 memory，`memory_map` 才展开为逻辑；未映射 memory 面积为零不代表硬件免费。
+10. [Yosys Memory Handling](https://yosyshq.readthedocs.io/projects/yosys/en/latest/using_yosys/synthesis/memory.html)：`memory -nomap` 会保留 memory，`memory_map` 才展开为逻辑；未映射 memory 面积为零不代表硬件免费。
 11. [ASAP7 1X/4X 说明](https://github.com/The-OpenROAD-Project/OpenROAD/discussions/2868)：4X 是线性尺寸缩放，面积涉及平方关系；本项目仍需逐 cell 核查，不能对总数盲目除 16。
 12. [ASAP7 官方 1x LEF](https://github.com/The-OpenROAD-Project/asap7sc7p5t_27/blob/main/LEF/asap7sc7p5t_27_R_1x_201211.lef)：用于核对当前 Liberty 中 INV/BUF/DFF/逻辑门面积口径。
 

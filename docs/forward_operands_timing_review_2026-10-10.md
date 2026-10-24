@@ -1,31 +1,31 @@
-# 限定 RS 操作数写入与并行 LSQ 转发
+# Qualified RS operand writes and parallel LSQ forwarding
 
-此默认关闭的组合继续使用同一参数化共享 CPU，不改变流水线／状态、资源数量、完整身份比较、generation／范围保护、请求／响应准入或指令延迟。208 参数候选保留此前 205 个参数的全部策略，包括无效 LSQ 载荷准备，两个已拒绝的 204 参数报告策略均关闭。不替换任何已验收配置。
+This default-off combination continues the same parameterized shared CPU. No pipeline/state, resource count, full identity comparison, generation/range guard, request/response admission or instruction latency is changed. The208-pin candidate retains every prior205-pin policy, including invalid LSQ payload preparation and both rejected204 report policies disabled. No accepted profile is replaced.
 
-## 实际时序证据与目标
+## Actual timing evidence and purpose
 
-固定 205 个参数的 748804a0 冻结版本完成一次官方 PPA：35802.909277995546um2、389.2056252375523MHz。严格 500MHz 门失败，不运行 CPU 构建／性能／冒烟测试。当前映射的 FF414628 QN 反相器对应 LSQ addr_mem[9][2]，FF414091 QN 反相器对应 complete_value_mem[15][9]。最差路径经过请求资格／选择、可见查询、字节窗口对齐／最近存储转发及带符号加载格式化。四条接近最差路径经过报告资格／完整 ROB 存活限定，终止于 RS row5 operand2 写入所有者；确切操作数位编号和匿名起点位尚未证明。不跨运行复用当前映射标识符。
+The205-pin748804a0 freeze completes one official PPA at35802.909277995546um2 and389.2056252375523MHz. Strict500MHz fails; no CPU build/perf/smoke is run. The current mapped FF414628 QN inverter names LSQ addr_mem[9][2], and FF414091 QN inverter names complete_value_mem[15][9]. Its worst path goes through request eligibility/selection, the visible query, byte-window alignment/youngest forwarding and signed load formatting. Four near-worst paths traverse report eligibility/full ROB live qualification and end at RS row5 operand2 write owners; their exact operand bit numbers and anonymous start bit are unproven. Current mapped identifiers are not reused across runs.
 
-## 限定 RS 操作数写入：RS_QUALIFIED_OPERAND_WRITE
+## RS_QUALIFIED_OPERAND_WRITE
 
-受约束模式要求静态局部 RS 载荷行，且不借用发射释放信用。既有分配器只选旧无效行，原 wake_allowed 要求旧有效行，因此同一操作数的分配写入与唤醒写入互斥。原行载荷已由实际分配许可选择；此模式额外在既有逐字载荷选择前，用原 !reset && !flush 限定许可。真实分配写入之外的值为零。其他行字段、实际分配／fire／计数／排名、目标存活／ready／源标签、年龄、flush／发射边沿及槽位输出保留原行为。
+The guarded case requires static local RS payload rows and no issue-release allocation credits. The existing allocator chooses only old-invalid rows, while original wake_allowed requires old-valid. Therefore allocation and wake writes for one operand are disjoint. The original row payload is already selected by actual allocation grants; this mode additionally qualifies those grants with original !reset && !flush before the existing wordwise payload selection. It is zero outside actual allocation writes. Other row fields, actual allocation/fire/count/rank, target-live/ready/source tags, age, flush/issue edges and slot exports retain the original behavior.
 
-对每个操作数，Dwrite = 限定后的分配值 OR (原 wake_write AND 原唤醒值)，原 write = allocation OR wake_write。零空闲限定字所有者计算 D = Dwrite OR (Q AND !write)。在不借用释放信用的约束下，它逐边沿等价于原 write ? (allocation ? new_value : wake_value) : Q。每个唤醒控制视图限定 16 位；两个源都保留完整 32 位值，标签／唤醒匹配不变。不增加私有操作数写入边沿。原消费者不能写入的 reset/flush 周期，可以将原始组合分配载荷置零；这不表示每根未用内部连线都一致。
+For each operand, Dwrite = qualified allocation value OR (original wake_write AND original wake value). Original write = allocation OR wake_write. The zero-idle qualified word owner computes D = Dwrite OR (Q AND !write). This equals the original write ? (allocation ? new_value : wake_value) : Q on every edge under the no-release guard. Each wake control view qualifies16 bits. Both sources keep complete32-bit values; tags/wakeup matches are untouched. No private operand write edge is added. The raw combinational allocation payload may be zeroed on reset/flush, when its original consumers cannot write; this is not a claim that every unused internal wire is identical.
 
-原生仿真将每次真实源写入与原分配／唤醒多路选择器比较，将全部存活行两份保存操作数值与原写入影子值比较，并检查限定所有者空闲时数据为零（含 reset/flush）。断言真实分配从不写入有效行。通用释放信用配置保留默认 0。
+Native simulation checks every actual source write against the original allocation/wake mux, compares both saved operand values for every live row with original-write shadows, and checks zero data whenever a qualified owner is idle (including reset/flush). It asserts that actual allocation never writes a valid row. Generic release-credit configurations remain default0.
 
-## LSQ 转发偏移预译码：LSQ_FORWARD_OFFSET_PREDECODE
+## LSQ_FORWARD_OFFSET_PREDECODE
 
-当 store_offset、load_offset 为 0..15，d 为 -3..3 时，原五位模 32 条件 (load-store)==d 精确等价于 expected=(store+d) modulo32、expected[4]==0 && load==expected[3:0]。第五位排除负值／溢出偏移，不引入四位行内回绕。提前保存的存储偏移及常量加法位于晚到选中加载相等比较前。掩码和字节路由方程一致，包含任意掩码和空／无效元数据。原生原辅助逻辑影子在每个非复位边沿比较每行原始窗口掩码／数据。不新增自然对齐或截断假设。
+For store_offset,load_offset in0..15 and d in-3..3, original five-bit (load-store)==d modulo32 is exactly equivalent to expected=(store+d) modulo32, expected[4]==0 && load==expected[3:0]. The fifth bit excludes negative/overflow offsets instead of introducing four-bit line wrap. Early saved store offset and constant additions precede the late selected load equality. Masks and byte-routing equations are identical, including arbitrary masks and empty/invalid metadata. A native original helper shadow compares every raw row window mask/data each non-reset edge. No natural-alignment or truncation assumption is added.
 
-## LSQ 并行转发类别：LSQ_FORWARD_PARALLEL_CLASS
+## LSQ_FORWARD_PARALLEL_CLASS
 
-此模式要求原二次幂、独热转发策略。对每字节，旧许可为 last_wrapped OR (no_wrapped AND last_any)。分别从 last_wrapped 与 last_any 并行计算原最近字节包；存在任一回绕合资格项时选择 wrapped_packet，否则选 any_packet。唯一许可掩码使 OR 归约与原选择器一致；无合资格字节时也产生相同零包。晚到类别存在性选择只驱动最后八位，不再驱动全部逐行许可。原字节资格、完整地址比较、年龄／回绕顺序、掩码、保持请求快照、符号／大小格式化器及完成写入准入不变。原生逐字节影子即使在无效周期也与原完整许可选择器比较。
+This mode requires the original power-two, onehot forwarding policy. For each byte the old grant is last_wrapped OR (no_wrapped AND last_any). Compute both original youngest byte packets in parallel from last_wrapped and last_any. Then select wrapped_packet when any wrapped eligibility exists, otherwise any_packet. Unique grant masks make the OR reductions identical to the original selector; no eligible byte yields the same zero packet. The late class-existence choice drives eight final bits instead of all per-row grants. Original byte eligibility, complete full address comparison, age/wrap ordering, masks, held request snapshots, sign/size formatter and completion-write admission remain unchanged. Native per-byte shadows compare the original full grant selector even in invalid cycles.
 
-## 有限验证与验收门
+## Finite verification and gates
 
-修复后的一个有限程序配对真实直接／分阶段 BE2/ROB8/PHYS40/RS8/LSQ4 后端，两侧固定静态局部 RS 行、寄存弹性分派及此前无效 LSQ 预加载为 1；仅此三个新策略取 0/1。复用原架构 LOAD／BNE 唤醒、MUL0、回绕算术、STORE 确认／错误和恢复／复位／清除激励。一个生产 LSQ16 配对计划／保持／完整 generation 复用／过期响应测试点，加入真实更老 SW、更年轻 SB 及完整转发的有符号 LH：低字节 44 来自更老字存储，高字节 AA 来自更年轻字节存储，预期 FFFFAA44，不发主存请求。十三个原始字节窗口点覆盖行两端、偏移差、带空洞掩码和零掩码。不强制设置状态。该有限范围不能证明全部宽度、全部回绕转发情况、整 CPU 行为、IPC 或 PPA。
+One repaired finite binary pairs actual direct/staged BE2/ROB8/PHYS40/RS8/LSQ4 backends, both with static local RS rows, registered elastic dispatch and prior invalid LSQ preload fixed1. Only these three new policies differ0/1. It reuses the original architectural LOAD/BNE wake, MUL0, wrap arithmetic, STORE acknowledgement/error and recovery/reset/flush stimulus. A productionLSQ16 paired plan/hold/full-generation-reuse/stale-response point adds genuine older SW plus younger SB and a fully forwarded signed LH: low byte44 from the older word and high byteAA from the younger byte, expectedFFFFAA44, without a memory request. Thirteen raw byte-window points include both line boundaries, offset differences, hole masks and zero masks. State is not forced. This finite scope does not prove all widths, all wrapped forwarding cases, whole CPU behavior, IPC or PPA.
 
-初始夹具遗漏在两后端实例中设置 RS_ALLOC_STATIC_WRITE=1，违反新增显式约束；冻结编译／运行证据保留，不能用于验证限定的局部操作数行。修复夹具在两参考实例启用静态行，因此配置／周期不得归给此前旧 RS 夹具。这是夹具修正，不是删除正确性断言。修复还在有效有限运行前加入有界唤醒控制视图。
+The initial fixture forgot RS_ALLOC_STATIC_WRITE=1 in both backend instances and therefore violates the new explicit guard; its frozen compile/runtime evidence is preserved. It cannot validate qualified local operand rows. The repaired fixture enables static rows in both references, so its configuration/cycles must not be attributed to the earlier legacy-RS fixture. This is a fixture correction, not removal of a correctness assertion. The repair also includes bounded wake control views before the valid finite run.
 
-有限测试通过后，冻结已提交的 208 参数源码，执行一次不启用 WORD_SIM 的完整原核心结构静态检查及一次官方 PPA。面积 <=35891.672317998215、F>=500 后才构建 CPU 一次并运行六项原始性能程序；原动态指令数、逐项周期上限及几何平均 IPC>=1.1152626918348099 满足后，才运行一次 array1 冒烟测试。全部验收门及最新源码三档收尾通过前，历史已验收 T1/T2/T3 结果仍为权威依据。不计划扫描或重复正确性套件。
+After this finite point passes, freeze the committed208-pin source, run one full original-core structural lint without WORD_SIM, and then one official PPA. Only area<=35891.672317998215 and F>=500 permit one CPU build/six original perf cases. Only the original dynamic instruction counts, per-case cycle ceilings and geomeanIPC>=1.1152626918348099 permit one array1 smoke. Historical accepted T1/T2/T3 results remain authoritative until all gates and latest-source tier finalization pass. No sweep or redundant correctness suite is planned.

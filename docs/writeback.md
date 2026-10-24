@@ -1,5 +1,12 @@
-# B-07 完成网络、公共数据总线与写回
+# B-07 Completion, CDB, and Writeback
 
-`rv32_completion_network` 按固定优先级接收五个带标签的完成源（ALU、MUL、DIV、加载、分支），并将接受的结果存入 FIFO。每周期最多在 CDB 上呈现 `BE_WIDTH` 项；未获 `cdb_ready_i` 许可的条目继续缓冲，并保留其元数据。
+`rv32_completion_network` accepts five tagged completion sources in a fixed
+priority order (ALU, MUL, DIV, load, branch) and stores accepted results in a
+FIFO. Up to `BE_WIDTH` entries are presented on the CDB each cycle; entries
+not granted by `cdb_ready_i` remain buffered and preserve their metadata.
 
-网络将每个获准通道同时送至 ROB 就绪／值端口以及 RS／LSQ 唤醒端口。只有产生寄存器结果的非存储条目才使能 PRF 写入和唤醒。存储元数据仍供 ROB／LSQ 使用，但不占用 PRF 写端口。无效目标标签、过期完整标签，以及被清除的条目在仲裁前移除。
+The network mirrors each granted lane to ROB-ready/value and RS/LSQ wakeup
+ports. PRF writes and wakeups are enabled only for register-producing,
+non-store entries. Store metadata remains available to ROB/LSQ but never
+consumes a PRF write port. Invalid target tags, stale complete tags, and
+flushes are removed before arbitration.

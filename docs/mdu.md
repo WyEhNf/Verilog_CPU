@@ -1,9 +1,25 @@
-# B-06 乘法与除法单元
+# B-06 Multiply and Divide Units
 
-`MUL_IMPL=0` 选择 `rv32m_multiplier`，即三级寄存的 valid/ready 流水线。它支持 `MUL`、`MULH`、`MULHSU` 和 `MULHU`，保留 ROB 标签和物理目的寄存器，在背压下保持已完成结果。数据路径使用 32 行显式部分积、多级 3:2 进位保留压缩器、Wallace 归约树，以及最后一级进位传播加法器；完整结构见 `docs/multiplier.md`。
+`MUL_IMPL=0` selects `rv32m_multiplier`, a three-stage registered valid/ready pipeline. It
+supports `MUL`, `MULH`, `MULHSU`, and `MULHU`, preserves the ROB tag and
+physical destination, and holds a completed result under backpressure. Its
+datapath uses 32 explicit partial-product rows, repeated 3:2 carry-save
+compressors, a Wallace reduction tree, and one final carry-propagate adder;
+see `docs/multiplier.md` for the complete structure.
 
-`MUL_IMPL=1` 选择 `rv32m_multiplier_radix4`，即保持相同外部协议的紧凑 16 次迭代 radix-4 移位加法实现。共享单元忙时，MDU 保留站保存后续乘除任务。面积优先的单发射配置可使用紧凑实现，乘法吞吐优先的宽配置保留 Wallace 实现。
+`MUL_IMPL=1` selects `rv32m_multiplier_radix4`, a compact 16-iteration
+radix-4 shift/add implementation with the same external protocol. The MDU
+reservation station holds later multiply/divide work while this shared unit is
+busy. Use the compact implementation for the area-oriented single-issue point
+and retain Wallace for multiply-throughput-oriented wide configurations.
 
-`rv32m_divider` 每次接受一个请求，执行 32 步恢复余数除法。它实现有符号和无符号商与余数、除零，以及 RV32 有符号 `INT_MIN / -1` 溢出结果。迭代进行时，请求就绪信号保持为低。两个单元在发布完成结果前都会丢弃无效或标签过期的结果。
+`rv32m_divider` accepts one request at a time and performs 32 restoring
+division steps. It implements signed and unsigned quotient/remainder,
+divide-by-zero, and the RV32 signed `INT_MIN / -1` overflow result. Its
+request-ready signal stays low while the iteration is active. Both units
+discard invalid or stale-tagged results before completion.
 
-MDU 包装模块向乘法器和除法器同时传递 `TAG_WIDTH` 与 `PHYS_ADDR_WIDTH`，包括 ROB=64 / PHYS_REGS=96 配置。分支恢复不会全局清空共享长延迟单元：更老任务正常排空，被清除任务的结果由 ROB generation 校验丢弃。
+The MDU wrapper propagates both `TAG_WIDTH` and `PHYS_ADDR_WIDTH` into the
+multiplier/divider, including the ROB=64 / PHYS_REGS=96 configuration. A
+branch recovery does not globally flush the shared long-latency unit: older
+work drains normally and ROB generation validation discards squashed work.

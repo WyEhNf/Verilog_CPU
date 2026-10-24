@@ -1,37 +1,37 @@
-# 无所有权 MSHR 写数据的清除审阅
+# MSHR unowned write-data clear review
 
-以下是 a7e64b80 时期的实现前历史面积审阅，当时未启动该方向的 RTL 或评估。后续实现记录在下方。全部配置保留同一参数化 CPU。
+The following is the historical preimplementation area review at a7e64b80. At that point no RTL or evaluation of this direction was started. A later implementation is documented below. All profiles retain the same parameterized CPU.
 
-实际 rtl/cache/rv32_dcache_mshr_data_bank.v 分组每个 MSHR 保留 128 位。当前最高优先级复位／预取事件清除全部字节，按需分配／存储提升写完整行，存储合并仅写选中字节。每字节使用双事件选择器及原字所有者。即使无有效存储能观察这些位，清除事件仍限定 WDATA 和全部字节写使能。
+The actual bank at rtl/cache/rv32_dcache_mshr_data_bank.v retains 128 bits per MSHR. Its current highest-priority reset/prefetch event clears all bytes, a demand allocation/store promotion writes the whole line, and store merge writes only selected bytes. Each byte uses a two-event selector plus its original word owner. The clear event qualifies WDATA and all byte write enables even when no valid store can observe those bits.
 
-rv32_dcache_nonblocking.v 的缓存请求动作译码区分：匹配预取提升为存储（action 6）、匹配存储合并（7）、新按需／绕过分配（8/9）。提升和分配调用分组整行 write_word。生命周期仅在这两种同边沿操作置位 mshr_store；复位／预取分配将其清零。存储合并保留原有所有权数据及掩码。按需加载分配也写原完整行；预取提升为加载只改变描述符，store 仍为假。
+The cache request action decoder in rv32_dcache_nonblocking.v distinguishes store promotion of a matching prefetch (action 6), store merge of a matching store (7), and new demand/around allocation (8/9). Promotion and allocation invoke the bank's whole-line write_word. The lifecycle sets mshr_store only on those two same-edge operations; reset/prefetch allocation set it to zero. Store merge preserves existing owned data and masks. A demand load allocation also writes the original full line; a load promotion of a prefetch changes its descriptor but leaves store false.
 
-当前每个架构消费者都具有存储／掩码权限：
+Every current architectural consumer of the bank's store-data word has store/mask authority:
 
-- 匹配存储转发要求 matching_found、mshr_store，且完整覆盖请求掩码。因此有效存储必先经过整行写入，再进行合并。保留最初完整输入行，包括未掩码字节，以维持公共字响应载荷。
-- 主存填充字节合并仅在响应 mshr_store 为真、对应保存掩码位置位时选择存储数据；非存储／预取填充使用主存数据。
-- 本地无需 RFO 的填充候选要求有效存储行、未发送／未写回／未提供 RFO，且 mask 为 ffff。
-- 普通主存写回使用独立所有者的 victim_data；绕过写入也使用从分配请求捕获的 victim_data。提案不能改变该被替换数据所有者。读取命令 WDATA 经原写有效掩码保持零。
-- 复位使全部 MSHR 生命周期所有者失效。预取分配创建掩码为零的有效非存储所有者；旧存储数据字在后续整行存储提升初始化之前，不应具有可观察权限。
+- Matching-store forwarding requires matching_found, mshr_store and complete coverage of the requested mask. A valid store therefore started with a whole-line write before any merge. Keep the full originally supplied line, including unmasked bytes, to preserve the public word-response payload.
+- Memory refill byte merge chooses store data only when response mshr_store is true and the corresponding saved mask bit is set. A nonstore/prefetch refill uses memory data.
+- A local no-RFO fill candidate requires a valid store row, not sent/writeback/RFO-offered, with mask ffff.
+- Normal memory writeback uses separately owned victim_data; writearound also uses victim_data captured from the allocation request. This proposal must not alter that victim owner. Read-command WDATA stays zero through its original write-valid mask.
+- Reset invalidates all MSHR lifecycle owners. Prefetch allocation creates a valid nonstore owner with mask zero; its old store-data word should have no observable authority until a later whole-line store promotion initializes it.
 
-一种可能默认关闭的 MSHR_DATA_NO_CLEAR 策略可在复位／预取时抑制载荷写入，但保留全部生命周期／掩码清除，并在真实整行／掩码合并更新时使用原始输入 WDATA。旧清除事件出现时，仍必须抑制同拍低优先级写入。不改变寄存器容量、时钟边沿、字节合并优先级、未完成请求身份或 SRAM。模式零保留原分组。仿真专用初始化证书可断言每条有效存储行自复位／预取复用后都经过整行写入。
+A possible default-off MSHR_DATA_NO_CLEAR policy could suppress payload writes on reset/prefetch while retaining every existing lifecycle/mask clear, and use raw incoming WDATA on actual whole-line/masked-merge updates. It must continue to suppress simultaneous lower-priority writes whenever the old clear event is present. No register capacity, clock edge, byte merge priority, outstanding request identity or SRAM changes are permitted. The original bank remains mode zero. A simulation-only initialized certificate can assert that any valid store row has undergone a whole-line write since reset/prefetch reuse.
 
-实现前检查准确复位和预取行冲突顺序、旧版／分组选择约束、RFO 已提供时预取到存储的提升、响应失败，以及全部原始分组数据调试／公共别名。有限缓存配对样例需先有意留下非零旧字节，再复位／预取复用、有效非存储填充、存储提升及部分合并；比较公共有效传输／周期和全部使能数据。此前窄查询样例 PREFETCH=0，不覆盖此所有权转换。本审阅不确立映射面积或时序收益。
+Before implementation, review the exact reset and prefetched-row collision ordering, the legacy/banked selection guard, prefetch-to-store promotion while an RFO is already offered, response failures, and all raw bank-data debug/public aliases. A finite paired cache sample would need deliberate nonzero stale bytes before reset/prefetch reuse, a valid nonstore refill, then store promotion and partial merging; compare public valid transfers/cycles and all enabled data. The previous narrow-query sample had PREFETCH=0, so it does not cover this ownership transition. No mapped area or timing saving is established by this review.
 
-机会在控制和空闲数据门控，不是删除保留的 128 位，因为多字存储合并可能需要全部字节。此改动单独可能太小，不足以支持再做一次 PPA；只有当前测量结果需要时，才与其他有实质意义的改动组合。
+The expected opportunity is control and idle-data gating, not removing the 128 retained bits: multiword store coalescing can require all bytes. This may be too small by itself to justify another PPA and should be combined with further substantive changes only if the current measured result requires them.
 
-审阅源码 SHA256：
+Reviewed source SHA256:
 
 - rtl/cache/rv32_dcache_nonblocking.v: 9d7c6cae3e7bec698a2ca0e2d32daa8c77de315869d146319f4129de009a9fde
 
 - rtl/cache/rv32_dcache_mshr_data_bank.v: f9a71ce8d8d147b9c115b277718da9b378029861f7ff598669bbe1ce13621b73
 
-## 后续实现：DCACHE_MSHR_DATA_NO_CLEAR
+## Later implementation: DCACHE_MSHR_DATA_NO_CLEAR
 
-core/top 策略默认为零，向同一非阻塞缓存传递 MSHR_DATA_NO_CLEAR，向既有数据分组传递 NO_UNOWNED_CLEAR，要求分组 STATIC_UPDATES=2 和非阻塞缓存。模式零保留原清除选择器。模式一保留全部 128 位和字节所有者，但驱动原始输入字节，仅在 update AND NOT (reset OR this-row-prefetch-clear) 时写入。因此复位和预取仍优先于同拍分配／合并；原生命周期和掩码写入不变。不改变 SRAM、队列容量、标签／generation 或时钟边沿。
+The core/top policy defaults to zero and passes MSHR_DATA_NO_CLEAR to the same nonblocking cache and NO_UNOWNED_CLEAR to its existing data banks. It requires banked STATIC_UPDATES=2 and a nonblocking cache. Mode zero preserves the original clear selector. Mode one retains all 128 bits and byte owners but drives raw incoming byte data and writes only when update AND NOT (reset OR this-row-prefetch-clear). Reset and prefetch therefore still win over simultaneous allocation/merge; their existing lifecycle and mask writes are unchanged. No SRAM, queue capacity, tag/generation or clock edge changes.
 
-已直接检查缓存生命周期顺序：复位清除 valid/store；预取分配是最后一个分配写入者，并清除 store；新按需／绕过分配及存储提升，在完整数据分组字写入的同边沿确立 store。合并保留原所有权字，只写使能字节。响应失败清除生命周期权限，不发布无所有权分组字节；被替换数据和绕过写入数据仍保留在各自原独立所有者中。不清除策略不改变响应／错误分类或这些字节消费者。
+Cache lifecycle ordering was checked directly: reset clears valid/store; prefetch allocation is the last allocation writer and clears store; new demand/around allocation and store promotion establish store on the same edge as a complete data-bank word write. Merge retains the original owned word and writes only enabled bytes. Response failure clears lifecycle authority without publishing unowned bank bytes; victim data and writearound data remain in their separate original owner. No-clear changes neither response/error classification nor those byte consumers.
 
-仿真专用初始化证书在复位／预取复用时清除，整字写入时置位，并在掩码合并前断言。真实缓存还断言每个有效存储行均有该初始化证书。此状态不参与综合。即使字响应，完整掩码及完整原数据也重要：掩码填充、转发及后续整行脏写回应准确一致。
+A simulation-only initialized certificate clears on reset/prefetch reuse, sets on a complete word write, and asserts before a masked merge. The actual cache additionally asserts that every valid store row has that initialized certificate. This state is excluded from synthesis. Full masks and complete original data remain important even for word responses: masked refill, forwarding and a later full-line dirty writeback must agree exactly.
 
-有限缓存配对夹具使用 PREFETCH=1、字响应、保持 RFO／ACK／响应，不清除策略取 0/1。先故意向两个分组写非零数据，复位后将含旧数据预取提升为存储，合并第二次部分存储，检查字数据及真实脏写回中的全部 128 字节，再将旧字节复用为非存储预取并核对主存结果。逐周期比较每个有效公共传输和握手。最初夹具失败不是等价失败：两实现均在首个填充阻塞时保持同组第二次缺失；随后夹具又错误地要求 WORD_RESPONSE 接口返回整行数据。这些假设已修正，失败冻结日志保留。有限样例不是完整缓存或整 CPU 证明。
+The finite paired cache fixture uses PREFETCH=1, word responses, held RFO/ACK/response and no-clear 0/1. It deliberately seeds both banks with nonzero data, resets them, promotes a stale prefetch into a store, merges a second partial store, checks words and all 128 bytes of the actual dirty writeback, then reuses stale bytes as a nonstore prefetch and checks its memory result. It compares every valid public transfer and handshake cycle. Initial fixture failures were not equivalence failures: both implementations held a second miss to the same set while the first refill was stalled, then the fixture incorrectly expected full line-data from a WORD_RESPONSE interface. Those assumptions were corrected; frozen failed logs are retained. A finite sample is not a whole-cache or whole-CPU proof.

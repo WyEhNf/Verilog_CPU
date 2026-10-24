@@ -1,9 +1,25 @@
-# B-08 加载存储队列与访存顺序
+# B-08 LSQ and Memory Ordering
 
-`rv32_lsq` 按程序顺序分配加载和存储条目，为每项赋予 `{generation, slot, kind, valid}` 格式的 LSQ 标签。地址和存储数据唤醒均校验标签，因此已清除或已复用槽位的响应不会更新新指令。
+`rv32_lsq` allocates load/store entries in program order and gives every entry
+an `{generation, slot, kind, valid}` LSQ tag. Address and store-data wakeups
+are tag-qualified, so a response from a flushed or reused slot cannot update a
+new instruction.
 
-加载按字节扫描更老的存储。更老存储的地址未知时，阻塞该加载；重叠存储的数据未知时，仅阻塞重叠字节。已就绪存储逐字节转发最近的值。未覆盖的字节向数据缓存请求，在合并转发字节后，再按 `LB/LBU/LH/LHU/LW` 进行符号扩展或零扩展。
+Loads scan older stores by byte. An older unknown address blocks the load; an
+overlapping store with unknown data blocks only the overlap. Ready stores
+forward the nearest value per byte. Uncovered bytes are requested from the
+D-cache and merged with the forwarded bytes before applying `LB/LBU/LH/LHU/LW`
+sign/zero extension.
 
-存储可推测计算地址和数据，但只有匹配的 ROB 提交握手完成、且该项位于 LSQ 队首时，才向数据缓存发出存储请求。匹配的数据缓存确认随后保留在 `store_ack_*` 上，直到 ROB 接收。加载和存储完成输出在对应 ready 输入为低时保持稳定。
+Stores may calculate their address and data speculatively, but a D-cache store
+request is emitted only after the matching ROB commit handshake and only for
+the LSQ head. A matching D-cache acknowledgement is then held on
+`store_ack_*` until the ROB accepts it. Load and store completion outputs are
+held stable while their ready input is low.
 
-请求载荷采用公共 `MemoryRequest` 字段：操作、地址、大小、符号属性、字节掩码、整行写数据、ROB 标签和 LSQ 标签。响应携带 LSQ 标签、可选的 128 位行数据（或备用的 32 位字数据）及错误位。LSQ 将错误与已完成加载或已确认存储一起保留，直到相应 ready/valid 握手完成，使后端可在 ROB 退休时精确报告错误。
+The request payload follows the shared `MemoryRequest` fields: operation,
+address, size, signedness, byte mask, line write data, ROB tag, and LSQ tag.
+Responses carry an LSQ tag, optional 128-bit line data (or a 32-bit word
+fallback), and an error bit. The LSQ retains the error alongside a completed
+load or acknowledged store until the corresponding ready/valid handshake, so
+the backend can report it precisely at ROB retirement.

@@ -1,57 +1,114 @@
-# Tier3 时序路径分析，2026-10-09
+# Tier3 clock-path analysis, 2026-10-09
 
-这是对 `c2a09eaa` 的实现审阅，不是新时序测量。原章节是只读快照；下方记录默认关闭的待处理查询实现，尚无新的 CPU PPA／IPC 验收。已通过 IPC 的 Tier1 冻结版本正在独立做 PPA。Tier2 仍仅在 `5be74e01` 冻结版本获验收。
+This is an implementation review of `c2a09eaa`, not a new timing measurement.
+The original sections were read-only snapshots. A default-off pending lookup implementation is recorded below; it has no new CPU PPA/IPC acceptance yet.
+Tier1 PPA of its IPC-passing freeze is running independently. Tier2 remains
+accepted only at its `5be74e01` freeze.
 
-历史 A109 Tier3 时序报告位于 `F:/CPU2026CourseRuns/ER1_A109_tier3_20261006/result/synth/opt/timing.rpt`。报告显示恢复标签路径经过 ROB 存活 generation 查询、LSQ 身份／恢复限定、RS 发射限定及 ALU 结果捕获。另一限制路径包含缓存 ready 前的 LSQ 转发限定和准确 MMIO 请求谓词。这些观察不确立当前源码时序或 500 MHz 通过。目标要求在课程时序模型（包括建立时间约束）下实测 Fmax 至少 500 MHz。
+The historical A109 Tier3 timing report is at
+`F:/CPU2026CourseRuns/ER1_A109_tier3_20261006/result/synth/opt/timing.rpt`.
+It reports a recovery-tag path through the ROB live-generation query, LSQ
+identity/recovery qualification, RS issue qualification and ALU result capture.
+Another limiting route contains LSQ forwarding qualification and the exact
+MMIO request predicate before cache ready. These observations do not establish
+current-source timing or a 500 MHz pass. The goal needs a measured Fmax of at
+least 500 MHz under the course timing model, including its setup constraints.
 
-## 待处理分支所有权
+## Pending branch ownership
 
-`branch_capture_match` 要求 `branch_training_live`，后者检查已分配 ROB 行及其完整 generation。待处理包保留完整标签。生产者循环将**每个重定向 ALU 结果**排除在普通完成之外，因此已捕获重定向分支不能通过该路径变为就绪或退休。只有一次待处理恢复；捕获要求待处理队列为空。branch_pending 置位期间，待处理包注入 ROB 完成。直接模式在应用时完成；分阶段模式可在预览时就绪，但 recovery_hold 在描述符／应用区间阻止退休。应用清除待处理所有者，复位和整机清除也如此。新增可选普通完成／提交旁路明确排除分支。
+`branch_capture_match` requires `branch_training_live`, which checks the
+allocated ROB row and its full generation. The pending packet retains its full
+tag. The producer loop excludes **every redirecting ALU result** from ordinary
+completion, so a captured redirecting branch cannot become ready or retire
+through that route. There is only one pending recovery; capture requires the
+pending queue to be empty. The pending packet is injected into ROB completion while branch_pending is set.
+Direct mode completes it on apply; staged mode can make it ready on preview,
+but recovery_hold blocks its retirement through the descriptor/apply interval.
+Apply clears the pending owner. Reset and whole flush also
+clear it. The new optional ordinary completion/commit bypass explicitly
+excludes branches.
 
-这表明调用方所有权证书可能从待处理标签路径移除*第二次*存活查询，但必须保留完整标签和完整 generation 存储。实现前须证明：任何配置下都不能从其他路径完成同一分支；证书置位时恢复不能删除该行；分阶段／直接应用在行复用前清除证书。每次使用证书，仿真断言必须核对原完整存活查询。既有预览失败时清除待处理状态的路径须仔细审阅；未建立不变量前，不能仅用断言替换该清除逻辑。
+This suggests a caller-owned certificate could remove the *second* live-query
+from the pending-tag path. It must retain the full tag and full generation
+storage. Before implementing it, prove that no configuration can complete the
+same branch through another route, that no recovery can remove its row while
+the certificate remains set, and that staged/direct apply clear the certificate
+before row reuse. A simulator assertion must check the original full live-query
+whenever a certificate is used. The existing pending clear on failed preview
+must be reviewed carefully; replacing it by an assertion without establishing
+the invariant would be incorrect.
 
-## MMIO ready 分类
+## MMIO ready classification
 
-当前准确退出谓词为 valid AND store AND 地址 `0x80000000` AND 行掩码 `0x000f`。LSQ 公共 store／mask 输出在晚到请求所有权处限定，而所选请求包在最终 valid 限定前，已有加载／存储类别、地址及相对掩码。
+The current exact exit predicate is valid AND store AND address `0x80000000`
+AND line mask `0x000f`. LSQ public store/mask outputs are qualified late by
+request ownership. The selected request packet already contains load/store
+class, address and relative mask before that final valid qualification.
 
-可根据所选 store、准确地址和相对掩码 `0xf` 进行载荷分类，**仅用于选择 ready**。该地址使字节偏移为零，因此相对掩码等价于行掩码 `0x000f`。可选请求寄存器必须根据自身保存包分类，不能根据当前所选 LSQ 行。每个有效请求的分类必须等于原谓词，无效 ready 值可以不同。
+A payload classification could select **ready only** from the selected store,
+exact address and relative mask `0xf`. The address fixes the byte offset to
+zero, making that relative mask equivalent to line mask `0x000f`. For the
+optional request register, classification must come from that register's saved
+packet rather than the currently selected LSQ row. On every valid request it
+must equal the original predicate. Invalid ready values may differ.
 
-全部副作用、ACK 捕获和主存总线路由必须继续使用原 valid 限定谓词。尤其无效过期退出载荷可以与有效普通缓存填充／写回事务共存；若用原始分类路由总线，会破坏该事务。非阻塞 SRAM 查询的 ready 依赖保存查询，使仅按载荷选择 ready 有可能不引入分配反馈环。其他缓存模式仍需审阅和明确支持策略保护。
+All side effects, ACK capture and memory-bus routing must continue using the
+original valid-qualified predicate. In particular, an invalid stale exit
+payload can coexist with a valid normal cache refill/writeback transaction;
+using its raw classification for bus routing would corrupt that transaction.
+The nonblocking SRAM query's ready depends on its saved query, making the
+payload-only ready selection plausible without an allocation feedback cycle.
+Other cache modes still need review and an explicit supported-policy guard.
 
-## LSQ 加载到 ROB 的所有权委托
+## LSQ load-to-ROB ownership delegation
 
-加载在真实分派时取得完整 ROB 身份，其 ALU 地址执行被排除在普通结果完成之外。因此尚未报告的存活加载不可能已通过此前 LSQ 报告退休。响应仍必须执行完整 LSQ generation 检查；已报告行、保持报告、完整标签行复用及同边沿恢复需独立分析。当前提前返回唤醒已检查未报告／未退休成员关系及恢复取消。
+Loads acquire their full ROB identity at actual dispatch. Their ALU address
+execution is excluded from ordinary result completion. An unreported live load
+therefore cannot have retired through a previous LSQ report. Full LSQ generation
+checks remain essential for responses; reported rows, held reports, full-tag
+row reuse and same-edge recovery need separate analysis. The current early
+return wake already checks unreported/unretired membership and recovery cancel.
 
-将完成的 ROB 所有权委托给未报告 LSQ 行，可能移除另一重复查询，但成熟度低于上述两项审阅：报告仲裁、保持身份、完成背压和错误发布，在任何 RTL 改动前需共同不变量。不能仅凭有效 LSQ 行推断安全，因为已报告加载及已提交存储的寿命可能长于其 ROB 行。
+Delegating a completion's ROB ownership to an unreported LSQ row might remove
+another repeated lookup. This is less mature than the two reviews above:
+report arbitration, held identity, completion backpressure and error publication
+all need a common invariant before any RTL change. Do not infer safety merely
+from a valid LSQ row, since reported loads and committed stores can outlive their
+ROB rows.
 
-## 评估边界
+## Evaluation boundary
 
-各宽度使用同一参数化核心／后端。在所有权论证及短定向协议样例准备好之前，策略保持默认关闭。组合可能缩短实测关键路径的改动，再执行一次冻结性能／PPA 评估。探索阶段前拒绝 IPC、面积或频率回退。保留历史已验收冻结版本，不将其数字归于后续源码。
+Use the same parameterized core/backend at every width. Leave a default-off
+policy until its ownership argument and a short directed protocol sample are
+ready. Combine changes that plausibly shorten the measured critical paths,
+then run one frozen performance/PPA evaluation. Reject IPC, area or frequency
+regression before the exploratory phase. Preserve the historical accepted
+freezes, and do not attribute their numbers to later source revisions.
 
-## db75467c 时的待处理所有权生命周期复核
+## Pending ownership lifecycle recheck at db75467c
 
-这是后续只读细化，进行时有一个 Tier1 MMIO 准入 PPA 在运行。尚未实现或启用待处理所有权策略，历史 A109 时序仍不是当前 500 MHz 运行证据。
+This is a later read-only refinement while one Tier1 MMIO-admission PPA runs. No pending ownership policy has been implemented or enabled. Historical A109 timing is still not evidence of current 500 MHz operation.
 
-公共后端仅从私有 `branch_pending` 驱动 lane0 的 ROB 恢复有效性，更高通道均为零。捕获要求 !reset、!flush、!branch_pending、已接受所选重定向的有效／ready 及 branch_training_live。后者根据 ALU 标签检查保存完整 ROB generation 和有效行。只有该捕获会写入待处理完整标签／值／物理目的／PC 包。
+The common backend drives ROB recovery validity only from its private `branch_pending` on lane 0; all higher recovery lanes are zero. Capture requires !reset, !flush, !branch_pending, accepted selected redirect validity/ready and branch_training_live. The latter checks the saved full ROB generation and valid row against the ALU tag. Only that capture writes the pending full tag/value/physical-destination/PC packet.
 
-生产者构造将**每个** `alu_exec_redirect_valid` 结果排除在普通完成之外，与提前重定向、捕获 ready 或捕获阶段策略无关。因此在此捕获的重定向没有普通完成副本，不能由该副本使 ROB 分支行就绪。MDU、LOAD 报告及 STORE ACK 是不同已分配指令类别，保留各自完整原身份，不能合法完成此分支。普通完成／提交旁路也排除分支。私有待处理队列阻止另一分支捕获。
+The producer construction rejects **every** `alu_exec_redirect_valid` result from ordinary completion, independent of early-redirect, capture-ready or capture-phase policy. Thus a redirect captured here has no ordinary completion copy that could make its ROB branch row ready. MDU, LOAD-report and STORE-ACK sources are distinct allocated instruction classes and preserve their original complete identities; they cannot legitimately complete this branch. Ordinary completion/commit bypass also excludes branches. The private pending queue blocks another branch capture.
 
-ROB 恢复选择独立检查候选年龄与占用。即使使用调用方所有权策略，也应保留年龄／范围测试及全部所选槽位／目的、检查点、杀除掩码和 epoch 机制。建议优化只移除已捕获所有者的重复行有效／完整 generation 查询，保留全部标签存储和初始完整 generation 检查。
+ROB recovery selection separately tests candidate age against occupancy. Even a caller-ownership policy should preserve this age/range test and all selected-slot/destination, checkpoint, kill-mask and epoch machinery. The proposed optimization would remove only the repeated row-valid/full-generation lookup for an already captured owner, retaining all tag storage and initial full-generation checks.
 
-直接恢复在待处理所有者边沿预览并应用。分阶段恢复捕获保存槽位／年龄／杀除掩码，在预览到应用期间保持分配／提交（`recovery_hold_i` 及 ROB 保护），所以描述符待处理时，捕获行不能复用。后端描述符有效位及 branch_pending 在应用事件都清除，复位和整机清除也清除二者。既有备用路径在无描述符且 ROB 预览失败时清除 branch_pending，显式匹配提交备用路径在待处理标签提交时清除它。任何实现必须保留这些备用路径，不能仅以断言替换。
+Direct recovery previews and applies on the pending owner's edge. Staged recovery captures its saved slot/age/kill mask and holds allocation/commit between preview and apply (`recovery_hold_i` and the ROB guard), so a captured row cannot be reused while its descriptor remains pending. Backend descriptor validity and branch_pending both clear on the apply event. Reset and whole flush clear both validity owners. The existing fallback also clears branch_pending if no descriptor is present and ROB preview fails, and the explicit matching commit fallback clears it if the pending tag commits. These fallback paths must remain intact during any implementation; do not replace them by an assertion alone.
 
-默认关闭的调用方所有权恢复策略，可允许 ROB 对 lane0 使用既有私有 branch_pending 权限，而非再次存活／generation 查询。仿真仍须计算原完整查询，每次有效证书使用时断言，含直接／分阶段预览和应用前边沿。通用 ROB 默认行为必须继续拒绝任意过期输入恢复标签。启用声明内部调用方契约，仅应通过具有该私有队列的共享后端公开；绝不能从任意输入标签有效位推断，也不能用于 LSQ 加载／存储响应，或在无独立证明时供其他恢复生产者启用。
+A default-off caller-owned recovery policy could let the ROB use the existing private branch_pending authority for lane 0 instead of another live/generation query. A simulator must still compute the original full lookup and assert it for every valid ownership-certificate use, including direct/staged preview and the pre-apply edge. The generic ROB's default behavior must continue rejecting arbitrary stale incoming recovery tags. Enabling the policy declares an internal caller contract; it should only be exposed by the shared backend with this private pending queue. It must never be inferred from an arbitrary tag's valid bit, used for LSQ load/store responses, or enabled for another recovery producer without its own proof.
 
-任何实测候选前，有界共享后端样例应覆盖捕获／保持／应用、捕获附近更老完成、直接和分阶段所有者清除、复位／整机清除及应用后行复用，并在每次证书使用时检查原完整查询。既有单元清单包含 `tb/unit/rv32_backend_joint_tb.v`；此审阅未运行新样例或整套正确性。生命周期审阅是实现依据，不是整 CPU 形式证明或实测 IPC／频率结果。
+Before any measured candidate, a bounded shared-backend sample should exercise capture/hold/apply, older completion around capture, direct and staged owner clearing, reset/whole flush and row reuse after apply, while checking the original full query whenever the certificate is used. Existing unit inventory contains `tb/unit/rv32_backend_joint_tb.v`; no new sample or whole correctness suite was run for this review. This lifecycle review is an implementation basis, not a whole CPU formal proof or measured IPC/frequency result.
 
-## 默认关闭的待处理查询实现
+## Default-off pending lookup implementation
 
-ROB_RECOVERY_PENDING_OWNER 经共享课程 top/core/backend 传给既有 ROB 的 RECOVERY_CALLER_OWNED。模式零保留两种原存活查询实现及通用过期输入拒绝。模式一声明私有调用方契约：只有后端已捕获 branch_pending 可向有效恢复 lane0 供包，其他通道均零。仅将重复行 valid/GEN 查询替换为 tag-valid 加显式槽位边界。原年龄相对占用、最老通道选择、目的／检查点、回收／杀除／epoch、完整待处理标签存储及全部捕获／预览／应用边沿不变。直接和分阶段恢复使用同一策略实现。
+ROB_RECOVERY_PENDING_OWNER is passed through the shared course top/core/backend to RECOVERY_CALLER_OWNED in the existing ROB. Mode zero retains both original live-query implementations and generic stale-input rejection. Mode one declares a private caller contract: only the backend's captured branch_pending may supply valid recovery lane 0, all other lanes remain zero. It replaces only that repeated row-valid/GEN query by tag-valid plus an explicit slot bound. Original relative age versus occupancy, oldest lane selection, destinations/checkpoints, reclaim/kill/epoch, full pending tag storage and all capture/preview/apply edges are unchanged. Both direct and staged recovery use the same policy implementation.
 
-初始所有权获取仍使用 branch_training_live 的完整 valid/GEN 查询，仅接受未取消 ALU 重定向。普通生产者构造排除全部重定向 ALU 结果；MDU、LSQ 报告和 STORE ACK 保留各自不同指令身份。生产者契约有仿真断言，拒绝与待处理分支完整标签相同的普通生产者。每次有效调用方证书还调用仅仿真的原 ROB 存活／generation 读取器并断言结果，在预览和应用前边沿检查，不仅在捕获时检查。调试读取器／寄存器不产生综合状态。
+The initial ownership acquisition still uses branch_training_live's full valid/GEN query and accepts only an uncanceled ALU redirect. Ordinary producer construction excludes every redirecting ALU result. MDU, LSQ report and STORE ACK preserve their own different instruction identities. The producer contract has a simulation assertion rejecting an ordinary producer with the pending branch's complete tag. Every valid caller certificate also invokes a simulation-only original ROB live/generation reader and asserts its result; this is checked on the pre-edge of preview and apply, not merely at capture. None of these debug readers/registers creates synthesized state.
 
-必要的生命周期澄清：branch_pending 置位时，分支恢复完成包一直注入，包含分阶段预览边沿。因此与本审阅最早措辞不同，分支可以在分阶段应用前就绪，但不能在此区间退休：STAGED_RECOVERY 的 recovery_hold 自首个待处理边沿起阻止提交和分配，应用也抑制普通提交。直接模式完成与应用在首个待处理边沿同时发生，之前捕获分支 ready 为零。可选后端恢复分配信用可在直接应用时针对保留前缀安装新工作，但不能替换分支行。代码注释已据此修正。全部待处理／描述符的 apply/reset/flush 清除，以及既有预览失败和匹配提交备用清除均不变。
+A necessary lifecycle clarification: the branch's recovery completion packet is injected whenever branch_pending is set, including a staged preview edge. Thus it may be ready before staged apply, contrary to the earliest wording of this review. It cannot retire in that interval: STAGED_RECOVERY's recovery_hold blocks commit and allocation from the first pending edge, and apply also suppresses ordinary commit. In direct mode, completion and apply share the first pending edge; captured branch readiness is zero before that edge. Optional backend recovery allocation credits may install new work against the retained prefix on direct apply, but cannot replace the branch row. The code comment was corrected accordingly. All pending/descriptor apply/reset/flush clears and existing failed-preview and matching-commit fallback clears are unchanged.
 
-一组有限共享后端配对样例通过，采用 BE2/ROB8/PHYS40/RS4/LSQ4，在直接／分阶段模式比较原查询和调用方所有权查询。覆盖延迟的更老加载、更老普通 ALU 完成、重定向与年轻指令一起分配、保留有序提交、原完整 generation 行复用，以及所有者待处理时复位／整机清除。比较各模式配对的有效公共包、握手和 ROB／分配器身份状态。这不是伪造证书的通用过期输入测试，也不是整 CPU 证明。尚无档位配置或运行中 Tier1 源码冻结启用此新策略，其 CPU 面积、频率、IPC 均未测量。
+A finite paired shared-backend sample passed with BE2/ROB8/PHYS40/RS4/LSQ4, original versus caller-owned lookup in direct/staged modes. It exercises a delayed older load, older ordinary ALU completion, a redirect and younger instruction allocated together, retained ordered commits, row reuse with the original full generation, and reset/whole flush while an owner is pending. It compares each mode's pair of valid public packets, handshakes and ROB/allocator identity state. This is not a generic stale-input test with a fabricated certificate, and is not a whole CPU proof. No tier profile or running Tier1 source freeze enables this new policy yet; CPU area, frequency and IPC remain unmeasured for it.
 
-唯一通过的有限样例在 532 ns 结束：各模式均观察到三次捕获、三次预览和一次应用，另外两次捕获由整机清除和复位明确取消。构建／仿真耗时 76.127277 s。准确冻结输入／可执行文件／日志哈希及仿真前修正的夹具监视器错误，保留于 reports/Tier_shared_pending_recovery_owner_protocol_2026-10-09.json。未为此策略增加完整 CPU 正确性套件或 PPA。
+The one passing finite sample finished at 532 ns: each mode observed three captures, three previews and one apply; the other two captures were explicitly canceled by whole flush and reset. Build/simulation elapsed 76.127277 s. Exact frozen input/executable/log hashes and the corrected pre-simulation fixture monitor error are retained in reports/Tier_shared_pending_recovery_owner_protocol_2026-10-09.json. No full CPU correctness suite or PPA was added for this policy.
