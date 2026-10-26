@@ -47,7 +47,7 @@ measurements and benchmark evidence are linked in the completed section below.
 
 ## Frozen assessment running
 
-Snapshot `fe353750` retains all217 numeric defaults and no parameter overrides. Actual PPA runner/synthesis/Yosys processes are live. Source, native adapter, tool and library hashes verify. To bound current host memory, the recorded execution is sequential synthesis, build, six perf and one array1 smoke; the optional parallel run action is not used. [Dated progress](../reports/Current_default_latest_course_progress_2026-10-15.json) is not a metric result. The user-requested assessment must finish before further CPU optimization; no old area/IPC/frequency is substituted.
+Snapshot `fe353750` retains all217 numeric defaults and no parameter overrides. Actual PPA runner/synthesis/Yosys processes are live. Source, native adapter, tool and library hashes verify. To bound current host memory, the recorded execution is sequential synthesis, build, six perf and one array1 smoke; the optional parallel run action is not used. [Dated progress](https://github.com/WyEhNf/Verilog_CPU/blob/8837b2fa0ab3693e7670cb9ad3c6ab409950b46a/reports/Current_default_latest_course_progress_2026-10-15.json) is not a metric result. The user-requested assessment must finish before further CPU optimization; no old area/IPC/frequency is substituted.
 
 ## Completed assessment
 

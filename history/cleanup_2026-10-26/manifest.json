@@ -1,0 +1,73 @@
+{
+  "base_commit": "8837b2fa0ab3693e7670cb9ad3c6ab409950b46a",
+  "scope": "current branch only; preserve all reachable commits, refs and release artifacts",
+  "reachable_commits_reviewed": 922,
+  "reachable_historical_paths": 1969,
+  "refs": [
+    "refs/heads/codex/important-development-history 47f96b70732d3d65b55be825705d0ff15cbd97e8",
+    "refs/heads/codex/important-history 7411aabb98335d3176e25a67e4271d5a0a8f75f5",
+    "refs/heads/codex/important-research-versions 890a1e0bfaefbf5192d5199874ff44581059ae3b",
+    "refs/heads/codex/tier-optimization 8837b2fa0ab3693e7670cb9ad3c6ab409950b46a",
+    "refs/heads/master 8837b2fa0ab3693e7670cb9ad3c6ab409950b46a",
+    "refs/remotes/origin/master 8837b2fa0ab3693e7670cb9ad3c6ab409950b46a",
+    "refs/tags/codex/tier1-verified-20261008 362ca897ef734ffd2c0f874b8e5aba24b048b47c",
+    "refs/tags/codex/tier1-verified-20261009 509377c4401550667834d8ec6de4cb3e47bc61c2",
+    "refs/tags/codex/tier2-verified-20261009 5be74e01a455cb4b97561645efd86287d81c018f"
+  ],
+  "tracked_files_before": 1722,
+  "counts": {
+    "retired_tools": 499,
+    "retired_configs": 83,
+    "historical_reports": 323,
+    "obsolete_root_notes": 5
+  },
+  "kept_dependency_tools": [
+    "tools/collect_verified_course_cpu.py",
+    "tools/compare_course_snapshot_tradeoff.py",
+    "tools/observe_course_perf.py",
+    "tools/prebuild_course_windows.py",
+    "tools/prepare_functional_hierarchy.py",
+    "tools/prepare_icache_selective_hierarchy.py",
+    "tools/prepare_rob_mmio_cpu_integration.py",
+    "tools/prepare_rs_age_cpu_integration.py",
+    "tools/record_course_windows_toolchain.py",
+    "tools/run_tier_candidate.py"
+  ],
+  "removed_bytes": 8181913,
+  "protected": [
+    "rtl/",
+    "verilog/",
+    "scripts/",
+    "versions/",
+    "docs/",
+    "tb/",
+    "tests/",
+    "third_party/",
+    "configs/latest_verified_version.json",
+    "configs/tier1.json",
+    "configs/tier2.json",
+    "configs/tier3.json"
+  ],
+  "untracked_user_files_preserved": true,
+  "cleaned_on": "2026-10-26",
+  "history_rewritten": false,
+  "hardware_tests_run": false,
+  "scratch_removed_files": 19946,
+  "scratch_reclaimed_bytes": 11118152744,
+  "archived_markdown_links": 70,
+  "archived_link_documents": 18,
+  "source_and_frozen_version_bytes_preserved": true,
+  "inventory_note": "Enumerated commit metadata across every local branch, remote-tracking ref and tag; current-file retention uses executable references and transitive tool dependencies.",
+  "detailed_scratch_plan": "Local-only generated-file inventory; compiler caches are reconstructed by make, not restored from Git",
+  "validation": {
+    "frozen_release_hash_check": "PASSED",
+    "remaining_python_ast_files_checked": 244,
+    "missing_retained_tool_dependencies": 0,
+    "dangling_markdown_links_to_removed_files": 0,
+    "formal_profile_and_cpu_framework_test_bytes_unchanged": true,
+    "build_dry_run": "PASSED",
+    "tier_and_assessment_cli_help": "PASSED",
+    "hardware_tests_run": false
+  },
+  "tracked_files_after_expected": 816
+}

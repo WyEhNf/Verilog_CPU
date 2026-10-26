@@ -1,5 +1,7 @@
 # Important CPU versions
 
+The current-tree cleanup and recovery instructions are in [the history index](../README.md). The records below describe the earlier curated-history snapshot; its counts are historical, not a live count of today's repository.
+
 This index keeps the original 46 commits, significant development milestones, major architecture changes, candidates measured with the course toolchain, and the final A109 implementation. Small edits for the same version are grouped by source, verification, tooling/configuration, and documentation. Repeated source copies and debug-only changes are consolidated.
 
 - `development.json`: important early milestones and subsequent integrated changes.

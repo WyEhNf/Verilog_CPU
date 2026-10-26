@@ -5,7 +5,7 @@ structural lint pass; one official PPA is running, with no metric acceptance. Th
 and its exact obligations.
 It establishes no new area, frequency, IPC, cycle count or accepted profile.
 The completed216 experiment is rejected for frequency regression; its evidence
-is [the terminal record](../reports/Tier3_shared_report_packet_prefix_2026-10-10.json).
+is [the terminal record](https://github.com/WyEhNf/Verilog_CPU/blob/8837b2fa0ab3693e7670cb9ad3c6ab409950b46a/reports/Tier3_shared_report_packet_prefix_2026-10-10.json).
 
 ## Current source evidence
 
@@ -98,7 +98,7 @@ to a new release. Full goals1..5 remain active.
 
 ## Finite terminal result
 
-A default-off complete LOAD candidate CDB fold prepares full tag eligibility/held comparisons before head/saved choice, and folds full candidate metadata/value selection into the original direct source grant. Original public packets, priority, full tag locks and state edges remain unchanged; existing direct metadata tag capture is retained. One paired backend plus14-edge actual direct-network finite binary passes on its first attempt, including10 held-lane observations and2 high-full-tag locks. Complete packet prefix1 is fixed in both sides; its previous isolated PPA remains rejected. Frozen/current source and result hashes verify. [Finite evidence](../reports/Tier_shared_completion_load_packet_fold_protocol_2026-10-10.json) does not establish PPA/IPC. The new combined candidate awaits one full structural lint and official PPA; canonical profiles are unchanged.
+A default-off complete LOAD candidate CDB fold prepares full tag eligibility/held comparisons before head/saved choice, and folds full candidate metadata/value selection into the original direct source grant. Original public packets, priority, full tag locks and state edges remain unchanged; existing direct metadata tag capture is retained. One paired backend plus14-edge actual direct-network finite binary passes on its first attempt, including10 held-lane observations and2 high-full-tag locks. Complete packet prefix1 is fixed in both sides; its previous isolated PPA remains rejected. Frozen/current source and result hashes verify. [Finite evidence](https://github.com/WyEhNf/Verilog_CPU/blob/8837b2fa0ab3693e7670cb9ad3c6ab409950b46a/reports/Tier_shared_completion_load_packet_fold_protocol_2026-10-10.json) does not establish PPA/IPC. The new combined candidate awaits one full structural lint and official PPA; canonical profiles are unchanged.
 
 Elapsed compile plus simulation101.910194s; actual simulation2us /0.035s. Native original complete packet, full tag qualification/equality and direct selected payload shadows pass. Direct140/staged157 edges retain all original metadata and recovery checks. Standalone optional branch/store payloads exercise the widest complete packet; the actual backends exercise both omitted optional fields. No all-input/all-geometry or whole-CPU claim. No prior512-point prefix probe is repeated.
 

@@ -1,35 +1,41 @@
 {
   "framework_repository": "https://github.com/ACMClassCourse-2025/RISC-V-CPU-2026",
-  "framework_revision": "54fc150ffc290f52aa024209ffb9a29d43856f6d",
+  "framework_revision": "302f0cf3cccdaa5de084a2120e0d950c663e4cf5",
   "testcases_repository": "https://github.com/ACMClassCourse-2025/RISC-V-CPU-2026-Testcases",
   "testcases_revision": "29f980727f7d99a1842a58f34091c7579ba3fe85",
-  "vendor_policy": "The listed framework files retain the pinned upstream hashes. config.mk selects the portable host profile. scripts/ram/sram_fakeram.sv has an explicitly recorded local warning cleanup; all other listed framework files are unchanged. Clock boundaries, SRAM parameters, and the simulation protocol are retained. Machine-specific paths belong in ignored local config files.",
+  "vendor_policy": "The listed framework code and RAM files are unchanged upstream files at framework_revision. Project documentation and config.mk customizations are recorded separately. No machine tool binaries are vendored.",
   "customized_files": {
     "config.mk": {
-      "upstream_sha256": "073551bf208ca7f7e8607757a88c0d01b0f45eb786d291f30c262e7133fbcda1",
+      "upstream_sha256": "1933616248ea492db2bf10b8f5e98a707e6f4b505ff6298a5c3564808329ea75",
       "purpose": "Select tools/verilator_low_memory.py and JOBS=1; export AppImage selection, TRACE_DEPTH=1, COMPACT_IDS=0, CPP_GROUP_BYTES=2097152, OPT_FAST=-O3, SPLIT_SCHEDULE=1, WORD_SIM=1 and UNROLL_STMTS=4096. Structural simulation, diagnostic names and compiler options remain configurable. PGO links use at most two LTO workers."
     },
-    "scripts/ram/sram_fakeram.sv": {
-      "upstream_sha256": "c0a2389d5c3211fbd2fbca22a2e2e86edc38eafa9260407d72a55841274098cc",
-      "local_sha256": "633f573eab26e6f8cfcdde57b844441579540e381d6622bf9684065be3a6d37e",
-      "purpose": "Add timescale and compute masked writes in an automatic function before the original nonblocking memory assignment, removing TIMESCALEMOD and BLKSEQ. SRAM interface, parameters, edge timing and SYNTHESIS branch remain unchanged."
+    "docs/axi4-lite.md": {
+      "upstream_sha256": "051b7458ac42b3bfd257ed3a4fea23409980c6f4a29ed74120a1dd6ec190b9c2",
+      "local_sha256": "8bdf74ace7d9e63f9bc3bc7335c854d34ef7bac7a7742b22e0e0ddae7a7ffc16",
+      "purpose": "Preserve the existing project documentation and its original-language contents; framework implementation is unchanged"
+    },
+    "docs/sram.md": {
+      "upstream_sha256": "90af6935ce92ef2f9da868039b0f7943881a1b6fdff7d88fae119ffe811ba83f",
+      "local_sha256": "afb854ba269c36027e839dcfcab7befa9af6791237ab0adfa7aaccaa1bc352e0",
+      "purpose": "Preserve the existing project documentation and its original-language contents; framework implementation is unchanged"
     }
   },
   "vendored_sha256": {
-    "Makefile": "200247e351eaee15c4a90e8d927e7281d1c03ee07932d056982999e4a274e20f",
-    "docs/axi4-lite.md": "8bdf74ace7d9e63f9bc3bc7335c854d34ef7bac7a7742b22e0e0ddae7a7ffc16",
-    "docs/sram.md": "afb854ba269c36027e839dcfcab7befa9af6791237ab0adfa7aaccaa1bc352e0",
-    "scripts/build.py": "53a696ea526986a67e5affeab447e81378d61eeedce3fb37b92a45fb16318a8b",
-    "scripts/fakeram.py": "bcad1312d66d279e22c932fc548cb5aaf3ab0f795e6fcf15115e393ac87dcc21",
-    "scripts/oj_io.py": "6c2930aeabec7abfe7c9d2ba649877ae4d192bb394cbf4f4e7a34c1093878cd6",
-    "scripts/ram/sram_fakeram.sv": "c0a2389d5c3211fbd2fbca22a2e2e86edc38eafa9260407d72a55841274098cc",
-    "scripts/run.py": "7c5db9d823531482586b47f28a06a1768ecacdb87c44852d219c8e79279d83c8",
-    "scripts/sim.cpp": "8dc91fce4c30e48b2caa73d62fc2fa89f71b3d938bf53bb622efa5d0572836ec",
-    "scripts/synth.py": "f9456126fe0d35787a89f811947aa571dfd0c2bb09cacb1ec56ac69365eecbd6",
-    "scripts/synth_report.py": "e1f3967cb64786a73f112ccf17a29091cbcb094a55612285a19d09946a249924",
-    "scripts/testcase.py": "1bb479d37cac7d1f26aa1a016538429212ac49ed8ce7e73e5b56396f3d8c84f3",
-    "scripts/timing.py": "576be0b8273c7ee3616a414b759fc158634b9138500f61f2ea8db0fd133e5f3f",
-    "scripts/timing.tcl": "dc8314b75f29ef1ae483ece9d2dbbac076a4d0dd50bee6d9273f4a78c601b484",
-    "scripts/toolchain.py": "03a25cfc4b396214445e45b2b11c71a87cc7eb117ac8176c792b6d5c6f0a35fc"
-  }
+    "Makefile": "99ab6cb00add96a92eb638d19de9cafac7aa3080a8b753c4dd80f39bfaf8ba4a",
+    "docs/axi4-lite.md": "051b7458ac42b3bfd257ed3a4fea23409980c6f4a29ed74120a1dd6ec190b9c2",
+    "docs/sram.md": "90af6935ce92ef2f9da868039b0f7943881a1b6fdff7d88fae119ffe811ba83f",
+    "scripts/build.py": "0fb048c437cafc8d9733e129b44f4980d0f6181ef769678a0026c9f065365120",
+    "scripts/fakeram.py": "b50271f6c0dfb9fb7570769cbd9a601814249a2c4719be059458f5a8d7e31d48",
+    "scripts/oj_io.py": "8fadf863c0400158cb39f7b8b02273940cdaef6e30a62e1664809fd41f0eff13",
+    "scripts/ram/sram_fakeram.sv": "d075505f3bb78fdab075fd73b6ee6afc1c8edfaa32cef8feb9f9e0901ee1977a",
+    "scripts/run.py": "29d2cf49be0d00253c3bf2345775b6af92a7a2f42e8d547e2c13b62211ea3f23",
+    "scripts/sim.cpp": "34804fb9eadcaabba9ec08fa1e518779012452c6d5da0e29d0cd0b43f8520376",
+    "scripts/synth.py": "60d96e38b31216fecec75b872225a15a123ff09e073c4c0abb0a85f671cb8519",
+    "scripts/synth_report.py": "838fca0ef1364f378b99ef158d7eadcd4503083028fd64bea47544d06d0fac5a",
+    "scripts/testcase.py": "4fd7720e04dc512143565f67a8020f932b3ddda2de5272349da8f4113bd8efed",
+    "scripts/timing.py": "826c7264b3ce2c741b9b8622485fb4928bd0a291767e0370d387e10f32a4f3bc",
+    "scripts/timing.tcl": "a002bb0fc0c6853cb33394be0b62818f6dddfba62b474d4e23f8193b1e27efb1",
+    "scripts/toolchain.py": "13a0667fe197b99ac28ea5495d6de477abbaab5a375639a152990acd2f229b0b"
+  },
+  "previous_framework_revision": "54fc150ffc290f52aa024209ffb9a29d43856f6d"
 }

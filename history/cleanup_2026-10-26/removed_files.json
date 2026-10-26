@@ -1,0 +1,4555 @@
+{
+  "recover_from_commit": "8837b2fa0ab3693e7670cb9ad3c6ab409950b46a",
+  "files": [
+    {
+      "path": "RC.md",
+      "git_blob": "e394b185d302baa3ecefecfaa4e020909fff36ac",
+      "reason": "obsolete_root_note"
+    },
+    {
+      "path": "STATUS.md",
+      "git_blob": "b23ad10f42aa5a14c922a87dee39c600b02b4ede",
+      "reason": "obsolete_root_note"
+    },
+    {
+      "path": "configs/tier1_area_control.json",
+      "git_blob": "4111c94090b64297708bad04537a5e593f0936b5",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_initial_ooo.json",
+      "git_blob": "0531025fa86bc036a13d5264bc6b9fa77d102075",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_inorder_banked.json",
+      "git_blob": "98e09097192136f9440c3fcda875562a6ac3fa18",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_inorder_memory.json",
+      "git_blob": "eeedc8c797a0d929cfea39b21f4a3a71223bafc6",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_micro_frontend.json",
+      "git_blob": "c2f2bedfe0129ef2c0f3afe7b8cf38971e318ea3",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_micro_ooo.json",
+      "git_blob": "a1a7a7fbc63924fa8f40e45581a13dca03b06544",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_alloc_load_request.json",
+      "git_blob": "282de2f7ef7611749e1ffff965857a62c1c522e7",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_balanced_owner.json",
+      "git_blob": "694b92fc18fe4bf44e14601477da1616262ac266",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_capacity256.json",
+      "git_blob": "fc0c661a9c07a5e9d81018aad66df1f3085c9e9d",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_completion_commit.json",
+      "git_blob": "b77f7dd4c615f5649c6a22b1b35c4d26c5936d15",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_completion_compact_state.json",
+      "git_blob": "8ee7b24a8fb1050bf6577cb0acc344824b335b87",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_completion_source_state.json",
+      "git_blob": "a62312ab867b3e286dd5d392026b78968320df54",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_current_credits.json",
+      "git_blob": "233196a9e3d9cfcb7e28f0438c515480dc5ea7b1",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_decode_bypass.json",
+      "git_blob": "f4d9491d5b38b169ec6ab14bc290f50bda052da6",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_decode_store_window8.json",
+      "git_blob": "f26016373a8fba77e404785e23546e0e826a26fc",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_direct_free.json",
+      "git_blob": "bb260b586c5854a9b85a58be47b2d299539f4b25",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_direct_phase_events.json",
+      "git_blob": "f9abcda1c78ae0c363d8f741566b2f75138029a4",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_distributed_load_format.json",
+      "git_blob": "e88e46d79489557cea17578a9ef811fa7e11a9e0",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_empty_rs.json",
+      "git_blob": "b8bf367e3a1d596656fbdf38e0d18331cc48fd80",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_fetch2.json",
+      "git_blob": "a0e10f895cf5d60919f51c783c1c93dbdf04d707",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_fetch_owner.json",
+      "git_blob": "87292f18d07c9523a36b5834f9ca1e9541ee6433",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_fill_rs_lanes.json",
+      "git_blob": "c9ccd5af6cc245dac0c5b01a2e2ce6facac5eed8",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_fresh_data.json",
+      "git_blob": "284cd6c5569e52e5c318be21ef1496eb2c67aaf8",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_load_window8.json",
+      "git_blob": "419cecda628f8515b72e16808c9be4ea79876c60",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_lsq4_single_generation.json",
+      "git_blob": "db9ab4a17829fcc95d51fa43ba054bccf4515a0b",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_lsq_pop_credit.json",
+      "git_blob": "abd2f38ad7fcadb61139be3126d6d26fbec58070",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_mmio_admission.json",
+      "git_blob": "b73c4c62e84a156360947a9ad9e503b0e04217de",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_narrow_query.json",
+      "git_blob": "66cc6a17969dba74ba8c3287bd86dbcd3c184ecd",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_narrow_sign.json",
+      "git_blob": "796f7864238d5f3eceecff2d7e0d7f435b14ad5e",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_pc_predictor.json",
+      "git_blob": "aba7c55449e5d5ef16a6cd693e4dac8b7d04d1ab",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_phased_payload.json",
+      "git_blob": "f6f8d5848916bb737b39bc4d439d64e2c681d5dd",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_prf_saved_query.json",
+      "git_blob": "29a4f2a7a18f8ebde0e4274c4028cfc2b599d468",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_release_credits.json",
+      "git_blob": "b92bff8921bfdfe556bb35a82b53659c6aead532",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_rolling_merge.json",
+      "git_blob": "3803a5a8afbeb3f42dcce6f416faf44e0d81494e",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_saved_route.json",
+      "git_blob": "90729da01701c44000df83452e60d266f2119b9a",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_sram.json",
+      "git_blob": "c4209900b82a56d918ae17f65c57c0486a321e8a",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_sram_d128.json",
+      "git_blob": "b14bd59a32b0ffb74c15f69a7aec8332e6e29e85",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_static_source_query.json",
+      "git_blob": "d0d93a7f395a148dd7cbdaed33cc52c7f734d35d",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_store_retire.json",
+      "git_blob": "28a270bc7957cb1595224e4ba8bfdd468bcc4d22",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_store_route_owner.json",
+      "git_blob": "a5eefdaff6c5e308e9f7c3d366e0687a86c896d3",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_window8.json",
+      "git_blob": "5f0b96162c72f7b406d97ff0f86e5c9b7581a792",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_write_capacity.json",
+      "git_blob": "8153f8bff2ef8922067f34a5a5ec47a2896685ac",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier1_shared_writearound.json",
+      "git_blob": "b64b18bb59e17ca1592e97043e5e5c4d4fb5b555",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_area_control.json",
+      "git_blob": "2ddfc4a30f8c74850b3ca9d96f07d21f4d8d3839",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_balanced_memory.json",
+      "git_blob": "1bcadeaeb3b67058f24c43d9415392363313a220",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_direct_memory.json",
+      "git_blob": "feacb5bd5da492c6c00a79b90e03fde95717ae66",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_inorder_lookup.json",
+      "git_blob": "b1e91057f41ff14a7d9ef7f48f0e61d956b71f65",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_inorder_store_control.json",
+      "git_blob": "23215adbeb8c87df810ba128c9cd00f19e1e1e1d",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_micro_ooo.json",
+      "git_blob": "37f95fd929e6eac2c073ab17b1837062277842ae",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_current_owner_state_candidate.json",
+      "git_blob": "4ae252711f541742269897134ebd44569017465a",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_decode_bypass.json",
+      "git_blob": "1f4d3f5aa4966539aa3b7ec9cc74a78d17543397",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_decode_window16.json",
+      "git_blob": "b345332272b7dbbb8d820367ffd72d71fa36c08b",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_direct_free.json",
+      "git_blob": "e36906411804ebc20151ee24aeb08538c418b932",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_exclusive_capture.json",
+      "git_blob": "59d20719b5665d965d5400a837d3425e4b6c2738",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_fetch_owner.json",
+      "git_blob": "3313c4f905ee28121209e15597caeb891aefb782",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_load_credit.json",
+      "git_blob": "7f7554facf5105aa8141990416ac15b9c68ff43e",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_owner_remainder.json",
+      "git_blob": "4959a252db98a99a0f7287a56531737cd6ca5c7d",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_rolling_merge.json",
+      "git_blob": "c9fcf3f9a7a5de477aac55780e2b06a1ce5c173b",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_sram.json",
+      "git_blob": "2fb23eda8d88a88bd7c8ca702b7c66ee60e86f60",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_window16.json",
+      "git_blob": "5a8632d43fca3671ad9a280cf1cf6f103b052daa",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier2_shared_writearound.json",
+      "git_blob": "3a6dc545baaeba63a2ff1d9f2edcee6daf7d2026",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_arithmetic_candidate.json",
+      "git_blob": "9d17b11955baf27f08c052de840cbffc81d3cc77",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_cache_class_candidate.json",
+      "git_blob": "b85039d7bed6aef191c55b9369894993d2a741fa",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_candidate.json",
+      "git_blob": "df7534d1f441745be9ba4cf675c8cef209b73669",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_capture_owner_candidate.json",
+      "git_blob": "d030f6f726541380d368003a53818b407710efd2",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_class_candidate.json",
+      "git_blob": "f5ffdce8fa6c0aeb692f28112d77f2af60eabe28",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_class_pc_candidate.json",
+      "git_blob": "02118355e1a1bcf4fbd4b8c600e089928cc6fd3f",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_comparison_candidate.json",
+      "git_blob": "d229c010c8b2a1169d1a53b29226b0213c57e5d9",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_completion_load_packet_fold_candidate.json",
+      "git_blob": "6ba89a0d168d7d5c4c8457f0d805e52789954dd4",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_control_region_response_candidate.json",
+      "git_blob": "ad3aabcac5a3c3ccd300502bc1aaf6ab75c2b657",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_count_target_candidate.json",
+      "git_blob": "2c73c12710ad0bd864b7d4f4fa483345f0fd5f3f",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_exclusive_candidate.json",
+      "git_blob": "e58750f13daf9c68d0627993399652abc40713f4",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_forward_operands_candidate.json",
+      "git_blob": "9873ed31cd3843476597a7505dc5c9662e6d4057",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_invalid_preload_candidate.json",
+      "git_blob": "eedaa4aa17f479726e478ea3faac4dc3bbce2c89",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_metadata_owner_candidate.json",
+      "git_blob": "819fca23d4aed60002b7e6a5163653a280948299",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_owned_controls_candidate.json",
+      "git_blob": "943a07385221bbadc995270c720dd13bcc664df0",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_owned_read_candidate.json",
+      "git_blob": "c8da4d773657a90992abe0c46f071520a592d2ba",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_prefix_identity_candidate.json",
+      "git_blob": "f0eaf21da6769fcdb7276b539cdbde66c3095ed2",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_range_carry_mdu_candidate.json",
+      "git_blob": "cf005fd0455f7b549815cf6a840a5a423272a278",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_report_packet_prefix_candidate.json",
+      "git_blob": "82814ffcc4b83795c333820d9f4fc2354f72db44",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_report_prequery_candidate.json",
+      "git_blob": "3d032c0f5a5f23365309be98ecd72fba2b6cf84e",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_rs_preload_mdu_class_candidate.json",
+      "git_blob": "9f7cab91b56e60bb87fa8c39c9dbb0e30b84480d",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "configs/tier3_shared_500_window_candidate.json",
+      "git_blob": "d9bcb1206da2dbe25927fdee1c8471cd9e5c28a6",
+      "reason": "superseded_candidate_profile"
+    },
+    {
+      "path": "instructions.md",
+      "git_blob": "78de66b1a95bbcc81596a457c22adfa181374b6c",
+      "reason": "obsolete_root_note"
+    },
+    {
+      "path": "lead-in.md",
+      "git_blob": "dc8350df8485466aada2d39b77f250336c287a9e",
+      "reason": "obsolete_root_note"
+    },
+    {
+      "path": "plan.md",
+      "git_blob": "ad3c87ac389ec8f47c7ae655beaafc536c7fdd80",
+      "reason": "obsolete_root_note"
+    },
+    {
+      "path": "reports/Current_default_latest_course_progress_2026-10-15.json",
+      "git_blob": "83b595e609961395d2a1bf767ac644808a5bd4e5",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A100_independent_held_report_identity_2026-10-06.md",
+      "git_blob": "2bdef14bc87c500110e8af4ebcb5a097f3b7fe64",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A101_held_identity_row_query_2026-10-06.md",
+      "git_blob": "a76d5c134717f1e347b32432e36d14175a10c39c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A102_A104_recovery_and_admission_batch_2026-10-06.md",
+      "git_blob": "5e1a84a2a4da48dbd69fc22fdc433a412ef55eb8",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A105_pretest_2026-10-06.md",
+      "git_blob": "788855ec5b93710b01304f0175fd6404cf826d7f",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A105_recovery_row_live_batch_2026-10-06.md",
+      "git_blob": "9da7bace59599bc277ef0a59e58b0496f5f6d767",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A105_result_A109_frequency_batch_2026-10-06.md",
+      "git_blob": "94ac99d15fd58b1061662270c2eaaeae65fd2c78",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A106_exact_circular_recovery_2026-10-06.md",
+      "git_blob": "f1d818c49a3bb56a0f06a61b4b65c273fc736415",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A107_allocation_event_and_payload_2026-10-06.md",
+      "git_blob": "5a9e72d8dd05830ab893c77ecd79b14b6f190541",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A109_closing_pretest_2026-10-06.md",
+      "git_blob": "0829325f3b151034bea06f63c8dc8ea8420824de",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A109_partial_PPA_2026-10-06.md",
+      "git_blob": "85b03d75f7f9331391e398488134564422c974d0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A109_pi_cycle_budget_pretest_2026-10-06.md",
+      "git_blob": "dfc7685ee874fa7019970b8cb6fe9b273d97262a",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A109_pretest_2026-10-06.md",
+      "git_blob": "47d756216e3d53d4562eaa4eca56c772e2ed8802",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A110_physical_wake_match_before_choice_2026-10-06.md",
+      "git_blob": "cdcfa8c8285268fc9fa1a53e870fa53595ee1eb3",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A111_parallel_integer_arithmetic_2026-10-06.md",
+      "git_blob": "5c896f1a40aef4a0c1915c86be497095df9d0816",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A16R1_pretest_2026-10-05.md",
+      "git_blob": "33d47a5a136d5730d4e0d7e128551a631ed72e08",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A16R2_IPC_A17R1_source_progress_2026-10-05.md",
+      "git_blob": "ab1db31fbd2033fd214c2489dac8e3abe3839ab0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A16R2_pretest_2026-10-05.md",
+      "git_blob": "4a5a7548ff72ab652e828e353704193366ecdbf3",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A16_pretest_2026-10-05.md",
+      "git_blob": "e037536ae7b10b55169658f0d859df0e23003858",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A21_pretest_2026-10-05.md",
+      "git_blob": "a2e65a90f4fbe5f904f7017c691f83858187c8fe",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A21_results_A22_source_progress_2026-10-05.md",
+      "git_blob": "4429b8654bda78c914af2e87c77565b6f901dc52",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A23_A28_source_progress_2026-10-05.md",
+      "git_blob": "8572592739ef3af3e25972159b394fa4b643b976",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A36_pretest_2026-10-05.md",
+      "git_blob": "95f421a85122989ad57db6a8e4bf1c06051166c2",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A36_running_A37_source_progress_2026-10-05.md",
+      "git_blob": "d5656722e53076cbd37128b25e1f65cde7bab7d1",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A36_terminal_A39_A41_source_progress_2026-10-05.md",
+      "git_blob": "9ec22fcfdcf9b383b8d02eb70c08b5d9dd3ea743",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A36_three_case_profile_pretest_2026-10-05.md",
+      "git_blob": "6e8e38764fff05e46ff4e39c128ff1ba90c3b521",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A41_pretest_2026-10-05.md",
+      "git_blob": "50fe38ca95f8e6893d1096db6987fc406f2fe1ca",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A41_terminal_A42_A44_source_progress_2026-10-05.md",
+      "git_blob": "9da09e019a17aa47a954b606d47de5aeed6c7da4",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A45_A48_source_progress_2026-10-05.md",
+      "git_blob": "2ceede74b2fa9c2906b59fba473e666ec5d366c0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A49_A51_frequency_source_progress_2026-10-05.md",
+      "git_blob": "e11ca019f896070c37d60a14ebe3c4a148adcedb",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A52_A55_predictor_source_progress_2026-10-05.md",
+      "git_blob": "1a0895d6211fc661c5cb4160ff7fed9005b2ee13",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A55R2_A56_A57_background_progress_2026-10-05.md",
+      "git_blob": "8e592ff7b4228f14daddd8c0141dd9ee9666b5b7",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A55R2_partial_PPA_2026-10-05.md",
+      "git_blob": "645d5edef40e4ca65a287d250cc17fb6d6f181ac",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A55R2_serial_pretest_2026-10-05.md",
+      "git_blob": "3f1fdc95b9d5b41553d197127afe800690d076f9",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A55_pretest_2026-10-05.md",
+      "git_blob": "5cccece06919e98e085d189257bd0a4cab666bb6",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A58_A60_background_progress_2026-10-05.md",
+      "git_blob": "5d092c8d692e073f9120fe1d516f879ed79c5eee",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A69_pretest_2026-10-06.md",
+      "git_blob": "fbd9f435bfb3c323d88914c8acbaa6eb713faa5e",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A69_result_and_A72_direction_2026-10-06.md",
+      "git_blob": "da9498cbb51107e8c4c81f896e1c40474f216979",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A73_A75_source_changes_2026-10-06.md",
+      "git_blob": "d6814ce27354f41809428382357630a2bd12bc18",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A75_partial_PPA_A77_A78_source_changes_2026-10-06.md",
+      "git_blob": "982b756ee9490a0fc01f086b7b81cb6a80967ed0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A75_pretest_2026-10-06.md",
+      "git_blob": "b96ad75270668504b11d35d051b452af59f17f63",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A75_result_and_A78_direction_2026-10-06.md",
+      "git_blob": "bef623e04235efa432ab8807ee0b91ba3e92a006",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A76_head_load_source_changes_2026-10-06.md",
+      "git_blob": "261b45347ff8ec92c1d531642110165b62d471ba",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A79_A83_source_progress_2026-10-06.md",
+      "git_blob": "95f5072be412297c50af6cfa66e8a67c0b67dc63",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A83_pretest_2026-10-06.md",
+      "git_blob": "24fa65c2a24ee70f0342150aa07108be0c11b258",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A83_result_and_A86_direction_2026-10-06.md",
+      "git_blob": "94971c8d6ad37fff710a978e905cf9ad1e3facec",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A84_store_prefix_admission_2026-10-06.md",
+      "git_blob": "dbc9eecd1e2689511d890201497cdfb4a36cfeaa",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A85_A86_ack_query_and_head_release_2026-10-06.md",
+      "git_blob": "5a34c9eadca208c12e9032cfdc841a3abe7b74ce",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A87_A90_timing_dependency_changes_2026-10-06.md",
+      "git_blob": "7897232dfbcfb40085e0492a3384d30572ae2229",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A8_background_progress_2026-10-05.md",
+      "git_blob": "3421685e96fc5081ad5145181e442050a5864900",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A8_pretest_2026-10-05.md",
+      "git_blob": "b544684e67f852203fd1e1401542afa7d2ead99a",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A8_results_A14_source_progress_2026-10-05.md",
+      "git_blob": "1c955010fdb31e3c2787891ca38258b5afe450c5",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A91_A92_load_packet_and_source_queries_2026-10-06.md",
+      "git_blob": "69acff23ace690901048c2d134da12b9711fc2ee",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A92_frontend_failure_A93_A94_source_2026-10-06.md",
+      "git_blob": "b9f651af4bac0da0e8e42e7cf801900e5a1c42a8",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A92_pretest_2026-10-06.md",
+      "git_blob": "0462b9f60b899c3ca8d782d0c420d8fd6d013fa8",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A94_PPA_A97_A98_new_path_2026-10-06.md",
+      "git_blob": "e4340dc9eed53e1917e0bfaa4e8290688a8ac2a7",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A94_complete_result_2026-10-06.md",
+      "git_blob": "672f7da658d3bd2027e161965b1a16adba1d9542",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A94_pretest_2026-10-06.md",
+      "git_blob": "fac142536158be3ddda24b8e13191a9e8193cf8c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A95_direct_store_class_2026-10-06.md",
+      "git_blob": "9ce663143673423a924a2c1e6eb28d8fd76f9cff",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A96_parallel_ready_store_preparation_2026-10-06.md",
+      "git_blob": "c26a2a26924be192165cf949593af32fcc7ab8aa",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A99_PPA_new_recovery_path_2026-10-06.md",
+      "git_blob": "8e37a91cf121d63f1aa9c71bf0d476e7299c2c00",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A99_balanced_report_frequency_profile_2026-10-06.md",
+      "git_blob": "22e38669459e539a72c7a10d25307c34e084de6c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_A99_pretest_2026-10-06.md",
+      "git_blob": "a9a4e6b1b7b12e94e27366afa2fd2efd22891229",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_baseline_ipc_pretest_2026-10-05.md",
+      "git_blob": "e1a33466b0378df2da0cca6168f223f30d5ad3f3",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_baseline_ipc_result_2026-10-05.md",
+      "git_blob": "45e2c111591d022289ad121fb53bfbc421fc2c04",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_identifier_compat_ipc_pretest_2026-10-05.md",
+      "git_blob": "30a7b474767b93977bb4dd2845bc2998b3770622",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_minimal_closing_coverage_2026-10-06.md",
+      "git_blob": "3d8df60355270f8824f5336a53f9005dc30a1682",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_ready_store_completion_direction_2026-10-06.md",
+      "git_blob": "81283e04fffe595714dd857054416a0b195f126c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_tier3_A3_source_scope_2026-10-05.md",
+      "git_blob": "9df5bb1bed185de8c4bb3989affe215178f40193",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/ER1_tier3_source_batch_2026-10-05.md",
+      "git_blob": "e0e29dddadbc1552fcfbc6cce9fa3332e54e5206",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_control_polarity_shape_review_2026-10-09.json",
+      "git_blob": "49dc4282f5a622faf2c345a3f06e188158849269",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_alloc_load_request_2026-10-09.json",
+      "git_blob": "0a1ab7e407c85266e40a52e160e037832e148f0b",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_balanced_owner_2026-10-09.json",
+      "git_blob": "515ee2c0c0db500fb4305527772187067249665f",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_balanced_owner_path_failure_2026-10-09.json",
+      "git_blob": "597538907b18ed2fb837e576521cbbe287ce21b5",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_balanced_owner_progress_2026-10-09.json",
+      "git_blob": "f526101965a2e3b0779e90ca2bc60c5753373b16",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_capacity256_2026-10-09.json",
+      "git_blob": "fc4ad148f2cbae25eb75c4efa804eb7a92e00047",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_completion_commit_2026-10-09.json",
+      "git_blob": "3ab907282d8aa51551ca04cb4f854ccd1331a248",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_completion_compact_state_2026-10-09.json",
+      "git_blob": "beeda6af6d337bd71010162cc1195e45261c0f7a",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_completion_compact_state_progress_2026-10-09.json",
+      "git_blob": "3856cd1f55543fd42d6bd11bccc7c638d490324f",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_completion_source_state_2026-10-09.json",
+      "git_blob": "37492f81314c20f0c3fdb010d2e466a2a9faac76",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_completion_source_state_progress_2026-10-09.json",
+      "git_blob": "795999ca471deb1fab34443a6bc0f4bb6f139700",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_current_credits_2026-10-08.json",
+      "git_blob": "76acd2bbf69b7930e7fb13e644b1261a61f9157c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_decode_store_window8_2026-10-08.json",
+      "git_blob": "af81ba3af7c817b365269b8f8d64720960d757f4",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_direct_phase_events_2026-10-09.json",
+      "git_blob": "2b2c2777690d1f64776c4dc297c5b2fb6308383a",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_direct_phase_events_progress_2026-10-09.json",
+      "git_blob": "e40a0781255cf96d3822a7af25f949828d1af351",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_empty_rs_2026-10-09.json",
+      "git_blob": "1d6662331e8cacb6f1e7690701d54d6f00c3b354",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_fetch2_2026-10-08.json",
+      "git_blob": "e7b6448cf9ae1860452de25b1f3d1616a1dbd7eb",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_fetch_owner_2026-10-09.json",
+      "git_blob": "65ba99f9bb847cbdefaf7196d9fe8bff2c76deab",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_fresh_data_2026-10-09.json",
+      "git_blob": "8bb72ca3de7138c589fae70474c3b86a14def3cb",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_fresh_data_progress_2026-10-09.json",
+      "git_blob": "6b3c6e755ba4305605b58c0a6d4d66d7c8258ce6",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_load_window8_2026-10-08.json",
+      "git_blob": "12809de327f93f64b73411ec57688922e9802a01",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_lsq4_single_generation_2026-10-09.json",
+      "git_blob": "87207e1b7b1ec35d9647ace1b47c70ba162b3412",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_lsq_pop_credit_2026-10-09.json",
+      "git_blob": "2e43998d1b2ded46800123d5d5ae6dfd8672021c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_mmio_admission_2026-10-09.json",
+      "git_blob": "e019ad854b25aa23e421c3659ceeec77a131639a",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_mmio_admission_progress_2026-10-09.json",
+      "git_blob": "e48202701e28154522acbded4f17cf342eea51e8",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_pc_predictor_2026-10-08.json",
+      "git_blob": "e78f6ac36828441df4dc8ecb06033a81c3faf440",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_phased_payload_2026-10-09.json",
+      "git_blob": "3f60ccafdc30cdb64ff8804a21bfc2dd654763de",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_prf_saved_query_2026-10-09.json",
+      "git_blob": "c477c4abcc5bc78acb5054c00504afed99364d9f",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_release_credits_2026-10-09.json",
+      "git_blob": "9a9681c6a9bc9e9f4312816c77acd4c68f286b82",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_rs_lane_fill_2026-10-09.json",
+      "git_blob": "fb0df0ba9da7d1c037929def0469be45a0b530b2",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_saved_route_preflight_2026-10-09.json",
+      "git_blob": "cb272ea2d4d6109bfd79bc9a968d72241223a4b9",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_short_vvadd_observation_2026-10-09.json",
+      "git_blob": "20371ae675e79ab6a89b069a61c42a23b9374678",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_sram_d128_2026-10-08.json",
+      "git_blob": "8af48abf0d896ab3e2c381cb27f34298ed4de8d6",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_static_source_query_2026-10-09.json",
+      "git_blob": "0ebb541e1b0506942e781f2a2d3964d6bd9315a5",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_static_source_query_progress_2026-10-09.json",
+      "git_blob": "e5bae4379d870db076ca2ed2f6460d9a548a7f06",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_store_retire_2026-10-09.json",
+      "git_blob": "50e3e0ad0a645464b1ef5b13b21c2ff95a9276cb",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_store_route_owner_2026-10-09.json",
+      "git_blob": "b308ea719256a03fbaf53b76091e6613bbeb3aee",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_store_route_owner_progress_2026-10-09.json",
+      "git_blob": "eacfd543810312de06656533f21eaa09e47a65c1",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_window8_2026-10-08.json",
+      "git_blob": "e0857ae62c7a23b9d76d28c9f27746f930cb7569",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_shared_write_capacity_preflight_2026-10-09.json",
+      "git_blob": "9465a50f54663557eb8eefcf5b8a311489c54b43",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier1_verified_2026-10-08.json",
+      "git_blob": "dd77c605e76b6374daaa0a31b72a36cf9cf0b1e4",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_current_owner_state_preparation_2026-10-09.json",
+      "git_blob": "0d40ab2946a240e6c436b6a660d4e0f5dcb451fc",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_decode_bypass_2026-10-08.json",
+      "git_blob": "d9d1ef16aefb8a9fc93b31a46b3cf410101df348",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_decode_window16_2026-10-08.json",
+      "git_blob": "41e272a12df1ab59426df90e6acfbb48ac0ee7e7",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_direct_free_2026-10-08.json",
+      "git_blob": "06d9615f4b8309f89cf25281e0768e772559d2e0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_distributed_load_format_2026-10-09.json",
+      "git_blob": "f68bfcf9eeb7cff3eb61b4ed0d3520396ad674e8",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_distributed_load_format_progress_2026-10-09.json",
+      "git_blob": "2e77607938b602b27a6d90127da71f65aa691620",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_exclusive_capture_2026-10-09.json",
+      "git_blob": "b42f98c700e5bf164d68f5e7413eb8220dca70d1",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_exclusive_capture_progress_2026-10-09.json",
+      "git_blob": "3e39c5eb9293e0de697c21ca7b190f976d24e3d2",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_fetch_owner_2026-10-09.json",
+      "git_blob": "0584ef39758f61afbdfde8479d6d70ad1a1e2ddc",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_load_credit_2026-10-08.json",
+      "git_blob": "e770e10966888e7d1e4f8dc2e096745859495688",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_load_format_profile_preparation_2026-10-09.json",
+      "git_blob": "6fd648f87e0d80e478b625be00c8b8ffaf674a1c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_rolling_merge_2026-10-08.json",
+      "git_blob": "e53eeda26d200bca8ad4739311a549786120ac55",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_window16_2026-10-08.json",
+      "git_blob": "f7a9d677a284a2f04e5008c264d801ea4471c35a",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier2_shared_writearound_2026-10-08.json",
+      "git_blob": "6226b390bbcce90176c37d3ff5d987826e0ea460",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_500_profile_preparation_2026-10-09.json",
+      "git_blob": "8e48e00eb3f35cf59a4e7992d035b56e6036e447",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_500_source_state_profile_preparation_2026-10-09.json",
+      "git_blob": "fc93536ffba3dccae39b1d1ed58ccef9c99634d5",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_cache_class_2026-10-10.json",
+      "git_blob": "d597f613e36cfd2ae3b6eeca9c469984cbf57f05",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_cache_class_progress_2026-10-10.json",
+      "git_blob": "a1e580e030bb7ab987f991bc720025a67c4873ae",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_capture_owner_2026-10-09.json",
+      "git_blob": "a84b16bf480f1a6413ade96bb132d66fd673626b",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_capture_owner_progress_2026-10-09.json",
+      "git_blob": "bc70f1baaf29e6c40e06b70c416e37100016bab6",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_class_pc_2026-10-09.json",
+      "git_blob": "ff3a8756d4938cebb5c2c8c2c5a00747f98ee625",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_class_pc_progress_2026-10-09.json",
+      "git_blob": "d1d6598edf6396e473be0c5795572116418db38e",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_class_preflight_2026-10-09.json",
+      "git_blob": "525397e2c0c36b53309aeaa08a54c81c025bafdc",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_comparison_2026-10-09.json",
+      "git_blob": "4dff0f81586a464a31c102d7525e170bcd4c6697",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_comparison_progress_2026-10-09.json",
+      "git_blob": "6df9c6a4fa66fb5dc9d0d774932e18f2fdc1c781",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_control_region_response_2026-10-10.json",
+      "git_blob": "10da1ef9f524a9c41e134a89850a80375b1c2345",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_control_region_response_progress_2026-10-10.json",
+      "git_blob": "0bd1d1d7d2716dd96fcee4572d2af4089fc2a5e0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_count_target_2026-10-10.json",
+      "git_blob": "d75a29e952b07450bba330a0cd4e71f6bc1c8e81",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_count_target_frontend_failure_2026-10-10.json",
+      "git_blob": "962cbeb4a1b5ddf32ff930bd2da8aa3d75f1c453",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_count_target_progress_2026-10-10.json",
+      "git_blob": "68fe19cd35b1a317272b18ec77c51c564000907c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_exclusive_2026-10-09.json",
+      "git_blob": "28d5a471a0817232de102020a1f1a1c9965c6ef4",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_exclusive_profile_preparation_2026-10-09.json",
+      "git_blob": "8b8dd986449040fcffd370e682c4e01bb78305a1",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_exclusive_progress_2026-10-09.json",
+      "git_blob": "56c617548d7688f4a9427d3cbfbc73b24e1a260d",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_forward_operands_2026-10-10.json",
+      "git_blob": "991853f93f2caee553a0d33c86f2813026b76315",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_forward_operands_progress_2026-10-10.json",
+      "git_blob": "5c159ebcd9e315db101bcf0a55c9fac28c6e2623",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_invalid_preload_2026-10-10.json",
+      "git_blob": "3df5345bfe2d62fb1837da3aa41884237f6b56cd",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_invalid_preload_progress_2026-10-10.json",
+      "git_blob": "1c15ab58be5c7ebffcec9ad2b72ebd5d36bfe9cc",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_load_format_profile_preparation_2026-10-09.json",
+      "git_blob": "e9072aa1d3ebff7a904b6a1d90488535c199e0a3",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_metadata_owner_2026-10-10.json",
+      "git_blob": "8677940a9a3cc7e476c1f4acf054f70f079825dc",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_metadata_owner_progress_2026-10-10.json",
+      "git_blob": "0cd815f8ba41fc2822ed0bafc4a241069e86674a",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_owned_controls_2026-10-10.json",
+      "git_blob": "8298542ba628952135619ef21672d068aed5860a",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_owned_controls_progress_2026-10-09.json",
+      "git_blob": "a96730c8a6f484616f5fd6e15c188ebbf4d4f720",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_prefix_identity_2026-10-10.json",
+      "git_blob": "708f0b00853073565d06ded2a0aecb57c96b4234",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_prefix_identity_progress_2026-10-10.json",
+      "git_blob": "587c6356558ce9e01108eb1b0fde4504a1ab30a9",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_range_carry_mdu_2026-10-10.json",
+      "git_blob": "b0704f450459d7e64dc30696380fc0360680ddcc",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_range_carry_mdu_progress_2026-10-10.json",
+      "git_blob": "7cf5d5d6997ba34b5327edb0dd24e43d2e1dd7f6",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_report_packet_prefix_2026-10-10.json",
+      "git_blob": "f2e3a341daa021db90e0e8530aa4a61eada6013b",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_report_packet_prefix_progress_2026-10-10.json",
+      "git_blob": "e3974d2add3346a89c825c5581a3d1a65bf5aa8d",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_report_prequery_2026-10-10.json",
+      "git_blob": "940d12915f647110094b3b3e26e2eddf539e21b6",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_report_prequery_progress_2026-10-10.json",
+      "git_blob": "62dfab3e0db48a72c6df5bd2a1ff1443b2c6e98b",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_rs_preload_mdu_2026-10-10.json",
+      "git_blob": "a8c119c06ae8b00c098e781570914eab80915223",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_rs_preload_mdu_lint_failure_2026-10-10.json",
+      "git_blob": "b8198c8e9922c8d322cbf03deac81beabad93d97",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier3_shared_rs_preload_mdu_progress_2026-10-10.json",
+      "git_blob": "3aacf80368fc6fd7c9118766f21281c55d487bec",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_AXI_class_admission_protocol_2026-10-09.json",
+      "git_blob": "1b128e8dc0ef0c1825ff427f54ceabd25b5f0dbf",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_AXI_read_counter_protocol_2026-10-09.json",
+      "git_blob": "4329b9e58bbe871f4bef67d9d5dc2163ce166432",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_Dcache_MSHR_owner_protocol_2026-10-09.json",
+      "git_blob": "1a9a7de972c928e149f8fadb31a82e19113391ea",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_Dcache_narrow_query_protocol_2026-10-09.json",
+      "git_blob": "0decb3102dd2ee65bf7c556932ae11e6a6f7af6b",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_LSQ_direct_phase_protocol_2026-10-09.json",
+      "git_blob": "bb2c3efed44520e940e6e72d4e149ba80f9f9ee1",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_LSQ_distributed_load_format_protocol_2026-10-09.json",
+      "git_blob": "c6c6f84ed6fb618a9fa1d2ba905ddd2481b44490",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_LSQ_exclusive_capture_protocol_2026-10-09.json",
+      "git_blob": "c019de526bb25efe70c2060cecdf910b4ce4a725",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_LSQ_mmio_admission_protocol_2026-10-09.json",
+      "git_blob": "a2c337d310f54c1d168f75e822ca349f354fa033",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_LSQ_phased_payload_protocol_2026-10-09.json",
+      "git_blob": "0501d9df87dd6d5653df124c562d9c1d59068eb4",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_LSQ_saved_route_protocol_2026-10-09.json",
+      "git_blob": "06a80a8247d5cda034597a5bce713f5b60a3d1d1",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_LSQ_saved_state_protocol_2026-10-09.json",
+      "git_blob": "87c759429954fec349f0c3e25cb009d1ad558581",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_LSQ_saved_validity_protocol_2026-10-09.json",
+      "git_blob": "709c8911520fccd0e0403c4b4ee9c8fca3d6dcd1",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_MDU_prefix_sign_protocol_2026-10-09.json",
+      "git_blob": "f34c2c762dd544d14a029ebbf67f8d0428650a9f",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_MMIO_write_capacity_protocol_2026-10-09.json",
+      "git_blob": "ebc83bfb437632395da650233985043850944c73",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_PRF_raw_write_protocol_2026-10-09.json",
+      "git_blob": "fd54af9d215102d429ec80ff6758c2054d26c865",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_RS_PC_protocol_2026-10-09.json",
+      "git_blob": "fc297d1f376ade67afc55dff533127c407ae409d",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_RS_arithmetic_protocol_2026-10-09.json",
+      "git_blob": "c36efa5651c3cac6f92b20e21c7a7f000e9f81f6",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_RS_comparison_protocol_2026-10-09.json",
+      "git_blob": "b33b845c8aca256518403b9094b06ef68b8fadc7",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_RS_fresh_data_protocol_2026-10-09.json",
+      "git_blob": "8ac1544ca394edad64a5200eda4c191d1fc00a6b",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_alloc_load_request_protocol_2026-10-09.json",
+      "git_blob": "2a7dd243f4059459700786987ae7990d28894d23",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_branch_capture_owner_protocol_2026-10-09.json",
+      "git_blob": "f2f1cf844272ad7949447b76f2e8f20bfa48fce4",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_completion_commit_protocol_2026-10-09.json",
+      "git_blob": "518768f0c8dcd8e3eff5741c54ff6ee8b1d12639",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_completion_compact_state_protocol_2026-10-09.json",
+      "git_blob": "8977f23e0d9597f1b919e60d32dc401f2145053d",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_completion_load_packet_fold_protocol_2026-10-10.json",
+      "git_blob": "4155327f75b99c37e31c9579d12cb71bba918b3e",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_completion_source_state_protocol_2026-10-09.json",
+      "git_blob": "3794cf7b87200ab12f1f54feb996a1040287d2b1",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_control_polarity_protocol_2026-10-09.json",
+      "git_blob": "e45002131aa6f4cfbc91ee3820548078f44edee3",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_control_region_response_protocol_2026-10-10.json",
+      "git_blob": "cb665e218d3a870b45c360824343795c381d1850",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_count_class_control_protocol_2026-10-10.json",
+      "git_blob": "af57100dfefe9851eb1dc41bdcc37128c050fe58",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_dcache_split_response_protocol_2026-10-10.json",
+      "git_blob": "9ee8fdba16a3dbfc438875c1838b47ded5d64a1d",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_decode_bypass_protocol_2026-10-08.json",
+      "git_blob": "5804288efea307124860da6d7050431d273db614",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_forward_operands_fixture_failure_2026-10-10.json",
+      "git_blob": "d652729e86142f9e9cd65122f76348bf8f606863",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_forward_operands_protocol_2026-10-10.json",
+      "git_blob": "14ff3620c0a25e1c2cbc52a216d6522f777786df",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_icache_class_send_protocol_2026-10-10.json",
+      "git_blob": "1d44d5ea7b2ca20686e9f7882f58a01932fec5b4",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_icache_target_prefix_protocol_2026-10-10.json",
+      "git_blob": "ac65491bb5126192a1d2eec929b1eb77f851635c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_invalid_preload_protocol_2026-10-10.json",
+      "git_blob": "447d5d9a437cfee5a7ac9a265d0ddd993ef85117",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_lsq_current_pop_protocol_2026-10-09.json",
+      "git_blob": "f830710c41f0748c955bac20b53a1c0e55a7fac8",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_lsq_saved_query_protocol_2026-10-09.json",
+      "git_blob": "15821ee45e401de2f69564863de316467a96eb84",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_lsq_store_bypass_protocol_2026-10-08.json",
+      "git_blob": "ded2759646b06c6d536c865ac5de41bc13845d20",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_mdu_lsq_control_protocol_2026-10-09.json",
+      "git_blob": "164dab0366fabd190dc8b39ca8fbe2959b7b3935",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_mdu_remainder_reuse_protocol_2026-10-09.json",
+      "git_blob": "d5f4ef26ff23065cb7cf58de0afe5cb40a7c04c1",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_metadata_owner_protocol_2026-10-10.json",
+      "git_blob": "43f799b3c7787208d2139920e4634bce2bfad478",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_pending_recovery_owner_protocol_2026-10-09.json",
+      "git_blob": "42b8482eb591a34c5ada6ce53068d171e2af6069",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_prefix_identity_protocol_2026-10-10.json",
+      "git_blob": "454ea25257b335ec902e6e5719ff683969b4fb78",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_prf_port_forward_protocol_2026-10-09.json",
+      "git_blob": "99dd1418d2e98d6b1228713dc14a1092f9f04223",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_range_carry_mdu_protocol_2026-10-10.json",
+      "git_blob": "72b158f6d72388d7743b9ea29d6ff761b9be0e46",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_recovery_window_protocol_2026-10-09.json",
+      "git_blob": "e90ab66830cc5a7cb14255db5ffd2a86aedcb085",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_report_packet_prefix_protocol_2026-10-10.json",
+      "git_blob": "0cb20efa2edaa3ca7c4016a6aaef306b2381481f",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_report_prequery_protocol_2026-10-10.json",
+      "git_blob": "7a83c4d6de81b09bafcde5a144cbfcc5320cebe0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_rolling_merge_protocol_2026-10-08.json",
+      "git_blob": "2a0a981c3b93c91a280fcbb1351dfa7bb6bde3f8",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_rs_empty_bypass_protocol_2026-10-09.json",
+      "git_blob": "7662f493df156ce6135488e843a1876214abc0ed",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_rs_lane_fill_protocol_2026-10-09.json",
+      "git_blob": "e2dabfe3aefa6a7dd750bc8606355be3d0bfddd9",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_rs_preload_mdu_protocol_2026-10-10.json",
+      "git_blob": "7df7ab6f7ab5da725cf3a61acc02ce897fa8afdd",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_single_generation_protocol_2026-10-09.json",
+      "git_blob": "8db3bff5c2288d74a9b3ab8b560d0c823e5b86eb",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_store_retire_protocol_2026-10-09.json",
+      "git_blob": "8680a4f670f9f5f54f06f16cf93257e2e18596c6",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_target_class_protocol_2026-10-09.json",
+      "git_blob": "65614b0f38c84059c276613181751419902d2fbb",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/Tier_shared_writearound_protocol_2026-10-08.json",
+      "git_blob": "9b2bc59ef4f137cb033a177d37731b3ac80c2319",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/banked_layout_integration_2026-10-02.md",
+      "git_blob": "532f64f1753b835ef26b670dc8127c063fa82373",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/cache_hash_optimization_2026-09-22.md",
+      "git_blob": "cbf8201503d343f839197a4568c6a115e68d9646",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/cache_local_victim_2026-10-03.md",
+      "git_blob": "925404e69694f2144970632e75ae520d90797d4e",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/course_requirements_audit_2026-10-03.md",
+      "git_blob": "3931086a0fc43148574e4887d8982583db9eba39",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/course_standard_retest_2026-10-03.md",
+      "git_blob": "6ddcc0e7e67589375b4b32848a160a7164f7828f",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/current_candidate_2026-09-26.md",
+      "git_blob": "8d53fbb89be73845a36e5676e132d8f883e036c2",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/current_verified_cpu_2026-10-03.md",
+      "git_blob": "89e57b30d0102ec7441bd094e8831610c6c39d52",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/dcache_control_banks_integration_2026-10-02.md",
+      "git_blob": "7dbeb33651682d8917dd8214ea353875deff60f1",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/dcache_registered_index_2026-10-02.md",
+      "git_blob": "777891223c99fd0b37981b36be9afd2ddfe7242b",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/dcache_sram_integration_2026-09-30.md",
+      "git_blob": "0dc0ea15349d28a1214ae8089338e2d12b6dcc20",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/dcache_store_query_pipeline_2026-10-01.md",
+      "git_blob": "0fcf585955e59f1df1417bf048fa71026a0d1ba9",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/direct_branch_target_2026-10-01.md",
+      "git_blob": "4161ca03de83578b863312c5734e42be99398b9b",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/direct_completion_2026-10-01.md",
+      "git_blob": "cda1d95daf72167a9c17c4eb4c19b204ce6c9dbd",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_DD_background_research_2026-10-05.md",
+      "git_blob": "fc25cbdb04d3a843b7ebb57d1c6fd119036129c3",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_DD_measurement_2026-10-05.md",
+      "git_blob": "16754fffd85a66bcd63b5fdd48f182ce4f5840e3",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_DF1_background_research_2026-10-05.md",
+      "git_blob": "abc57562abb9b26494273cbcdb2a9dd1c3e280b5",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_DF1_measurement_2026-10-05.md",
+      "git_blob": "9956560a0549479edcc7709b8d382a6f268ca974",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_DM1_background_directions_2026-10-05.md",
+      "git_blob": "7681428ac84e6c90e4ebb4c7b583ccd7c2ba4315",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_DM1_measurement_2026-10-05.md",
+      "git_blob": "96bcdf5c85ffb586f2b53057d61e23d799dd616f",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_DT_measurement_2026-10-05.md",
+      "git_blob": "8e4e6036b359bb22802c61812dbaf03f468a4fb0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_EA_background_research_2026-10-05.md",
+      "git_blob": "64abb90775bea990d0c9d953407b338682572fca",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_EA_measurement_2026-10-05.md",
+      "git_blob": "7454230f2fb2f25d73713fc277cebd624e1db5d4",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_EF_background_research_2026-10-05.md",
+      "git_blob": "282fb8dc2d6489ffc48b194914c3b0f39d264714",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_EF_measurement_2026-10-05.md",
+      "git_blob": "103ae0a59624522b97cc00b71f5809a5e584ffd9",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_EL1_background_research_2026-10-05.md",
+      "git_blob": "c4c8b44e37092c87dedf44b086724187164a1b0c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_EL1_measurement_2026-10-05.md",
+      "git_blob": "ec8d71eb9eef3dab00a82543d13645b85ff464d3",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_EP_background_research_2026-10-05.md",
+      "git_blob": "0eb8380edc3658c9ed80754e13e41404987e9cc9",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_EP_measurement_2026-10-05.md",
+      "git_blob": "68ff4c66aac73226011b57b3b6dc675488c9baf6",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_ER1_background_research_2026-10-05.md",
+      "git_blob": "2c929622ee79e6d9705b52fc08f8843c096589ee",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_ER1_measurement_2026-10-05.md",
+      "git_blob": "a8d1f69a48d78c269eba061196245b2a2feb23c0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_EU_background_research_2026-10-05.md",
+      "git_blob": "b02e32653cb1cd80f9c30d91d41702e7548da89f",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_EU_measurement_2026-10-05.md",
+      "git_blob": "b26d192d5adaa28d213240b346769fe8f7176593",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_EU_source_research_2026-10-05.md",
+      "git_blob": "82e03674bab3ed708b6c7e0e995eee511d00953f",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_architecture_progress_2026-10-04.md",
+      "git_blob": "9b218f24b8b6bc6934f1dbe9363ae241e3e06137",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_CD1_pretest_2026-10-04.md",
+      "git_blob": "f14bb9f12fc39e392fbd5eed04ee3685386ea88c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_CD_pretest_2026-10-04.md",
+      "git_blob": "6a0e89a4cf475ca2ad01828b1138e77d373b9a5c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_CM_implementation_2026-10-04.md",
+      "git_blob": "01879ba3ad6df41d073dc9cf154a9f8cdcba1c22",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_CN_implementation_2026-10-04.md",
+      "git_blob": "321646432cbf8df985696ef052bac619db09e370",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_CR_implementation_2026-10-04.md",
+      "git_blob": "9b0285444b0078186f078fcf431f849607d1db46",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_CU1_implementation_2026-10-04.md",
+      "git_blob": "f4edd731fbaaf974aca90f39e742fa72110845e8",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_CV_implementation_2026-10-04.md",
+      "git_blob": "78fac80e2353c86d147593a7abff2c9cc4c89ada",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_CY_implementation_2026-10-04.md",
+      "git_blob": "39c4bc4881cbe5052ac8d24262bdabb9019603b2",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_DD_implementation_2026-10-05.md",
+      "git_blob": "0227ba039b84b993b7c348a9d5e5a46dd5455383",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_DD_pretest_2026-10-05.md",
+      "git_blob": "8ab5d1f2d52c98aead003786c3d558014af29c3b",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_DF1_pretest_2026-10-05.md",
+      "git_blob": "ca4b67f045c8c57708381344ec57acece8afecce",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_DK_pretest_2026-10-05.md",
+      "git_blob": "dd6a4ed99f6623b1cccf708b3449de4d94563f63",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_DM1_pretest_2026-10-05.md",
+      "git_blob": "37cd1ece47bef649d3d837f05dcbb622f11c225c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_DT_pretest_2026-10-05.md",
+      "git_blob": "9da10f6a8e8f9acb6d7b1e14246322e3d4b71165",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_DY_pretest_2026-10-05.md",
+      "git_blob": "4ca6856cac2cf48c47e11347adcbcf2a6338edfc",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_EA_pretest_2026-10-05.md",
+      "git_blob": "b0ce3710a8594b79aae9c8b81f23de073ac9e22e",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_EF_pretest_2026-10-05.md",
+      "git_blob": "7d4881c70c0a0d05141068840b91fc897766f8b6",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_EL1_pretest_2026-10-05.md",
+      "git_blob": "4bffaff259c63db4410caa21e58abd6c2e5d8a4a",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_EP_pretest_2026-10-05.md",
+      "git_blob": "a6da02fb764d8a2e2bb47a694c3b242d92601592",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_ER1_pretest_2026-10-05.md",
+      "git_blob": "aeb6460f4b4b46e5cc634fa804ed819287d4711f",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_ER1_scope_2026-10-05.md",
+      "git_blob": "49d123a56778a36c52cb2f41024eb71bfa2865b2",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_EU_pretest_2026-10-05.md",
+      "git_blob": "4a6f08a82666800420a9e6d7d5ea4959940d1fdb",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_EU_scope_2026-10-05.md",
+      "git_blob": "1db376526fcf40c31110af0fa2ec554092c10500",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_L_pretest_2026-10-04.md",
+      "git_blob": "fd584631ae85f32bc994b0f7aee4e44be50aa66d",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_batch_measurement_2026-10-04.md",
+      "git_blob": "de273e8d9dcc2921347b35752425672acf4282db",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_control_budget_2026-10-04.json",
+      "git_blob": "db43ba5c8cbdd4c2b8d4715c0395f21348e5c584",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_dispatch_stage_design_2026-10-04.md",
+      "git_blob": "98e13d0bcd88b8d1c1929ab6b1e12adee893d1ca",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_improvement_plan_2026-10-03.md",
+      "git_blob": "e09934aa017747e3e31957574d5bc1732c74df85",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_next_batch_research_2026-10-04.md",
+      "git_blob": "3c7a961d5553abd92207c2acdb72853098fdb6a5",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_path_checklist_2026-10-03.md",
+      "git_blob": "aab06b8ccef0f9f4582c5cb4e89fb93e1e8643b7",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_postfreeze_research_2026-10-04.md",
+      "git_blob": "d710b0f6543ac07dde508f4d3cdb6a22ed93ffb0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_research_20261003/L1_elaborated_comparison.json",
+      "git_blob": "442bcdd83c3820327129c2777bf45dd9d11532c0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_research_20261003/candidate_index.json",
+      "git_blob": "f2561c9fb54a73854f42ef3162118f7003e272d1",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_research_20261003/historical_family_summary.json",
+      "git_blob": "513d31d7fc81b260371e65dfdc41340e98f312ca",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_research_20261003/library_limits.json",
+      "git_blob": "88034be18dbcdb182db63422b523861aee189416",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_research_20261003/saved_path_analysis.json",
+      "git_blob": "a5f294e84bbcd7da16c1e12cffc2c1d064f7f5a8",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_research_plan_2026-10-03.md",
+      "git_blob": "67e1173ba0c5d88e2924451870f3a0118c49e0d2",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frequency_rtl_restructure_2026-10-04.md",
+      "git_blob": "6b78239607f6c5f88e76af85d1f417eaacf3b1ad",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frontend_onehot_2026-10-01.md",
+      "git_blob": "0471097459a853146fd950b3cc04fc7451779032",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/frozen_shared_agu_ppa_2026-10-02.md",
+      "git_blob": "8d2f1642df012c324828b43fdf0cad23b9e1b869",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/full_area_2026-09-22.md",
+      "git_blob": "8cbe089bb5dee00f1db1613dba1ef1864fe78a06",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/indexed_history_predictor_2026-10-01.md",
+      "git_blob": "3c012acdf0e80dcca56e9c77fe9f5601f74e1922",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/latest_total_area_2026-09-30.md",
+      "git_blob": "f1871a45e6fe48e3e89ca797cac2e56c6b665abd",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/lsq_tree_optimization_2026-09-22.md",
+      "git_blob": "89decf1bc99dc562e5fcf257b9cd68b7ea7d8bea",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/optimization_progress_2026-10-02.md",
+      "git_blob": "76df2c705ee534e6d763ed1d857d112e002364ba",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/p2_p48_r16_d1k_full_area.md",
+      "git_blob": "ba60d00f98ba3ed6e276aec3bc1cdb3acbbd94c3",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/p2_p48_r16_d1k_hash_full_area.md",
+      "git_blob": "a21520a9d0c4b2e4eff49f028a2aca228ca0590c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/p2_p48_r16_d1k_hash_pipe_full_area.md",
+      "git_blob": "68166600a515081688ee2e687e5f070573f3d626",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/p2_p48_r16_d1k_lsqtree_full_area.md",
+      "git_blob": "174181cdfd0254b50e22e1c5c0f22583dc12a4c8",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/p2_p48_r16_d1k_rank_full_area.md",
+      "git_blob": "d2080677651e72e84e6e5760e19e62d7c2068b3b",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/p2_p48_r16_d1k_rank_static_full_area.md",
+      "git_blob": "5dc445fe1a18b8229e41f45f7ee5c97d7967b8ec",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/p2_p48_r16_d1k_reclaim_v2_full_area.md",
+      "git_blob": "82c967769eb4383fc1f9d60d6fa053f7d3da88cf",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/p2_p48_r16_d1k_retired_full_area.md",
+      "git_blob": "2e8fc52db7192cbaf0853a235e831fd8cbcaaf4e",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/p4_p96_r64_d256_assoc2_final_ff_area.md",
+      "git_blob": "190ffd649e104e6c51d0033ed38b203acd70d9c8",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/p4_p96_r64_d512_assoc2_cp1_hash1_final_ff_area.md",
+      "git_blob": "0548fe73fb7d4aad3be95b80b63fa973545d7310",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/parallel_select_integration_2026-10-02.md",
+      "git_blob": "cac4a5d914b26565bcebd96b5db50b81ab84e5df",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/rob_banked_allocation_2026-10-02.md",
+      "git_blob": "eb96c906e67ce65a282377f1c5956d91e0da250c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/rob_banked_commit_read_2026-10-02.md",
+      "git_blob": "955e40c3a9951fc91a15311721e43e7a972169a2",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/rob_bounded_advance_2026-10-02.md",
+      "git_blob": "e91e887df72c33b74825d0e06ea7abe95c6589bf",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/rob_parallel_read_2026-10-01.md",
+      "git_blob": "889237a31d75f5777bdcefc92b9eddcc9b43b623",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/rob_reclaim_optimization_2026-09-22.md",
+      "git_blob": "5765f37aa3f3494ad8946fb007b5cd918872fec0",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/rs_issue_metadata_2026-10-02.md",
+      "git_blob": "f15d0b27deef5a428cee3e18e8d0cfef2d976faa",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/rs_window_tradeoffs_2026-10-03.md",
+      "git_blob": "8cb7d97fc1a9844e02f89a17d7c003e57e18c57c",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/scheduler_optimization_2026-09-22.md",
+      "git_blob": "33dfb044e43cd962ff02538176ef8de41fa14966",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/shared_store_address_2026-10-02.md",
+      "git_blob": "bf29382756b5c9b20d82a6bdb866cf3b7ff44a79",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/static_datapath_followups_2026-10-03.md",
+      "git_blob": "e7ce1cfb8071c8e21e349e66eec5e64185f632fe",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/store_admission_2026-10-01.md",
+      "git_blob": "eca8d21f7ae992610958853db13714b3599504ec",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/strict_area_status_2026-09-26.md",
+      "git_blob": "0c96ced24a7ccd44c7903c70107715bf34c58cea",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "reports/tier_optimization_2026-10-08.md",
+      "git_blob": "afb70f8036d7996052e368ab92b97b118f23a09e",
+      "reason": "historical_experiment_report"
+    },
+    {
+      "path": "tools/adopt_er1_a109_combined_verified.py",
+      "git_blob": "2857f4d3d5827662dc54a2cead59e3dd0ec452b1",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/adopt_er1_a109_verified.py",
+      "git_blob": "0061535baa1879e0a6aeb5cb4bb0c69a71a2cf25",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/adopt_frequency_combined.py",
+      "git_blob": "5f3d940b6493649ff00049f84fce7215b4f9611f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/adopt_legal_addi_fix.py",
+      "git_blob": "d63caae069e60b8a9f4ff63df00b9611b4eb6962",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/adopt_verified_static_datapath.py",
+      "git_blob": "c28749855736fd5a692eb07194447154d7ddf2f8",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/analyze_er1_a16r2_payload_owner_state.py",
+      "git_blob": "7b1627f6053885ba8c4eb1d639bd613b355e5788",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/analyze_er1_a21_critical_mdu_owner.py",
+      "git_blob": "32a9669f0da3bfc04f0403835e04dbf83147146c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/analyze_er1_a41_critical_frontend_owner.py",
+      "git_blob": "2b8b85da10aa6f4210545c586969851e37991f62",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/analyze_er1_area_budget.py",
+      "git_blob": "c2b3798959e04e2d485551f5fb682cae3aef874f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/analyze_er1_observable_area.py",
+      "git_blob": "70312ca89b3fc635c6a1882d473a106a6292fe38",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/analyze_er1_perf_instruction_mix.py",
+      "git_blob": "2b2c7877fc920700c8130e3891d051008eda1f4e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/analyze_er1_storage_layout.py",
+      "git_blob": "b035af510f2a3d5e5601178f6db127ca97839722",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/analyze_frequency_elaborated.py",
+      "git_blob": "d24282da79cf3523631ee8762a4e3f37fe01ff8f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/analyze_saved_frequency_paths.py",
+      "git_blob": "8af4e02ae7c97601b85b2e8e51f43ac99ceca9bc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/audit_cdb3_ready_count.py",
+      "git_blob": "4186ae142fbe9f287e537ea80fa0604571a0a03d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/audit_combined_frequency_native.py",
+      "git_blob": "12491deb79562873b4e9c8345074bbd833b0d5b0",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/audit_er1_a109_adopted_current_state.py",
+      "git_blob": "3a76706ea3a93389a4dc1719b62b05a684c5c35c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/audit_er1_a109_architecture_source.py",
+      "git_blob": "7729c3f1bbca33157ea3d706fcd61f8078dfe749",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/audit_er1_a109_combined_adopted_current_state.py",
+      "git_blob": "4cbb243e3a1977ade53659a0ab5a4cb52ec41107",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/audit_er1_minimal_closing_coverage.py",
+      "git_blob": "5798b3ac66236b2759e786684df0a5315fb85cad",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/audit_functional_area_budget.py",
+      "git_blob": "e3bc3615980af8c024f82e0c2859681d2c2d7e83",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/audit_icache_parallel_match_integration.py",
+      "git_blob": "816d15608cab7e1cca0f22c6b7db2fe0718f1e5d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/audit_icache_ready_integration.py",
+      "git_blob": "74dc62837288c14aab3e7e67ba5b6d142aa5a923",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/audit_pipeline8_native.py",
+      "git_blob": "6e747c4326b1ef180a68f528a2a7d0436dd03ebe",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/collect_rob_mmio_actual_case.py",
+      "git_blob": "820f319e34f6368b84ee622651dde94fcbee83ee",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/collect_rob_mmio_predecode_proofs.py",
+      "git_blob": "c3012383209c41578c4e9c3b9beee4d522d69a8f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/collect_verified_course_cpu_nested.py",
+      "git_blob": "d67fde3be9929b628bd279331ccfc8e58ad10f47",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/compare_course_build_results.py",
+      "git_blob": "4f8b1f2a2bf0a61b2dd5509de0bdf8e5355f5c4c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/compare_course_single_parameter_results.py",
+      "git_blob": "bff0298ec2b695b5e500d41878d61c54d9c83d86",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/compare_course_source_tradeoff.py",
+      "git_blob": "5de7a8532b9dc741da8a9cdc205a64a60cfe8e2d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/compare_course_window_tradeoff.py",
+      "git_blob": "9d0f46fc1dd49fd3ba39995de8a8eb18c43dfb24",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/finalize_er1_a109_verified_goal_evidence.py",
+      "git_blob": "0eb77c766d2e8aa1b09052b62e2cf7d5a0720a36",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/finalize_frequency_eu_scope.py",
+      "git_blob": "57105970daf336f41142692d2aeb6da65fd683c3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/finalize_legal_addi_profile.py",
+      "git_blob": "b248c996cb0fe47a4032b0f1ce8e944de6a57a0b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/freeze_frequency_batch.py",
+      "git_blob": "42542db2a1657295ddb59cf48d8096152b5a12df",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/frequency_changed_memory_cases_native.py",
+      "git_blob": "117068e9723938b22c8d179eadd701a76520c674",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/frequency_directed_cases_native.py",
+      "git_blob": "24f5c044949b06c689fc3e7596cf4cad01815073",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/inspect_dt_request_net.py",
+      "git_blob": "32693974287fb8b23b564c5341413221fb9b34b6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/integrate_frequency_implementation.py",
+      "git_blob": "5932f7fb882288e44ddd5e45d90c93235c840376",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/inventory_course_mapped_loads_native.py",
+      "git_blob": "6f5c6a22fd6ac28a05c9463ad4617b9180a9cc51",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a105_measurement.py",
+      "git_blob": "3fe3dc014509b56af0bc09a39dd63ecff36829c5",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a109_closing.py",
+      "git_blob": "839b8c3c7cf79f6f03dc4ecd6bcdbf74258a90ae",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a109_measurement.py",
+      "git_blob": "cc419ad92d4551356219eee70fd638815fe722de",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a109_pi_budget_followup.py",
+      "git_blob": "286aa7be3bcc6bd6c176bb28677848f1c224ff26",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a16_measurement.py",
+      "git_blob": "86f238f40c2d42741236c3f9c2ab2f339d5c8c8c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a16r1_measurement.py",
+      "git_blob": "ccea5b5aa70392dbe3c0bc67448a0de1231dc088",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a16r2_measurement.py",
+      "git_blob": "c1a69b916e8430db73e92f5c8e7dc6ca2b21abe8",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a21_measurement.py",
+      "git_blob": "d409f17213cf3ed44e5a902e8dbdfd51be36f7f1",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a36_measurement.py",
+      "git_blob": "0a6a889af0c646facb3cf4eb0e8f6accb6184511",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a41_measurement.py",
+      "git_blob": "7caa90532ebc3eef86efe922b8031e295d4e027d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a55_measurement.py",
+      "git_blob": "d55d0ce6b8d6f1931fc69113cb285034147563fb",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a55_serial_measurement.py",
+      "git_blob": "77497018977347af15dc9bcf355bcf8ace71c24d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a69_measurement.py",
+      "git_blob": "6235b06433de5e323b09ee89c08ea154890de0b4",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a75_measurement.py",
+      "git_blob": "975f66130c9ed556f7028f871baf1661d4e88aef",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a83_measurement.py",
+      "git_blob": "0c392f2cde53c8b634971a0edac261cb705cacfa",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a8_measurement.py",
+      "git_blob": "a86c956ba86a592eed7956361cf8b9640cf3f9dc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a92_measurement.py",
+      "git_blob": "ccebe29b34e2dccc2813819d13279d4592331e9b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a94_measurement.py",
+      "git_blob": "c82286527ccc2e95861e071574c5250e39efa59f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_a99_measurement.py",
+      "git_blob": "8a8da63d243869a6874c569e18670d5f406f88b8",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_er1_compatible_ipc.py",
+      "git_blob": "aa6bf915c941c3a5ac2c1d2121c2625075b01e4b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/manage_frozen_baseline_programs.py",
+      "git_blob": "5cf4354898322591fa557710635ca25f0ddbdace",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/observe_course_lsq_reasons.py",
+      "git_blob": "3bd80c5af9284352d1c8fe25314b360db6700050",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/observe_course_memory_flow.py",
+      "git_blob": "e996ac50149ea918e6c31cbf31952d8d8790fd87",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/observe_course_store_address_opportunity.py",
+      "git_blob": "b42eaa40b8350a74699dfcd62ac7c1ce3b66fd4d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/premeasure_course_ipc_windows.py",
+      "git_blob": "89cf2c6fdaac36c85a45a2158553c1a256172dbd",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_aligned_fetch_addresses.py",
+      "git_blob": "500ec527f30111eb8ce847fa983c110b17e9b20e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_alu_dedicated_address_adders.py",
+      "git_blob": "199497e75389872f6dc024f4b63939e32fbf8f71",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_alu_payload_lifecycle.py",
+      "git_blob": "d370d04c1441b53c7652b33b73d01a63e7e22338",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_alu_result_control_routing.py",
+      "git_blob": "32190d45cffda2c86e90e1f027eeea95cc22b362",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_axi_balanced_arbitration.py",
+      "git_blob": "cf8611c5830c3682fdb586b6cc46563abe20172e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_axi_bounded_queries.py",
+      "git_blob": "90d396bcbd01f9824049f1a51bbeb8e5c9c2ca33",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_axi_payload_owners.py",
+      "git_blob": "70a3c8c5e62856a9294f1e4c8e3a75f6777b0a87",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_axi_row_lifecycle.py",
+      "git_blob": "bf02eaf5358aeb8c6ed8c64cc6576edfa5655cc8",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_backend_balanced_map_reads.py",
+      "git_blob": "ad8fc6b15a992e7d5fbe22a538b448ad41c263dc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_backend_bounded_recovery_routing.py",
+      "git_blob": "f1b015d705b450851b1b7ffed87f9f775e9a3301",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_backend_owned_maps.py",
+      "git_blob": "6d9060465bdf29f6ccfc79bc7ad1db6fa1b5bfa7",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_backend_rob_state_queries.py",
+      "git_blob": "ec4336a00db3fb4460a3a3b8e055bb78ed1c88fb",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_booth_pipeline.py",
+      "git_blob": "fdc4e6b0400817b697a29cc616b2c30812830f64",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_bounded_barrel_shifters.py",
+      "git_blob": "0359f9a51acd5a96c1e0d45e5bfd1993e081b965",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_bounded_payload_controls.py",
+      "git_blob": "66e55d8779ebcb37b03c09d02b00ef22d8ba90fb",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_branch_capture_owner.py",
+      "git_blob": "b02b8966170a2233a9cf6bfb0eda3f526ec286de",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_branch_feedback_routing.py",
+      "git_blob": "6d190e9ddb0d3e8a16f09a0c165ae1b66e707096",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_cache_balanced_priority.py",
+      "git_blob": "b2811bca61f3427f2fdb47d08133d45e04ba4f09",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_cache_local_state_controls.py",
+      "git_blob": "273adbad279aba62009c8fd77b12f0e5604e9232",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_cache_response_match_before_select.py",
+      "git_blob": "70bcccab70b1db968a688a43ea4f182d269112f7",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_carry_select_tails.py",
+      "git_blob": "387299078b1c648f50a8cd0e5bf9888f54fca4f9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_cdb3_ready_count.py",
+      "git_blob": "f9e0135869ddaeeaa3fedd7db3290d7df29460b0",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_combined_frequency_candidate.py",
+      "git_blob": "fbe1554ae2d88f9ba7fd97bd5c3dbb3c3b527ab0",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_combined_predecode_polarity.py",
+      "git_blob": "f77375116ac98f19734453729d5cd62e95fa3fe4",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_completion_local_prf_enable.py",
+      "git_blob": "79c2d59fa74d50e58433713e557ca938c0eda4ab",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_completion_rank_arbiter.py",
+      "git_blob": "beeb2398bf56e28b83af77b6eeac16f930223405",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_control_islands.py",
+      "git_blob": "08c9b621972fe5e0151d982b1fb29994bb407979",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_bounded_payload_reads.py",
+      "git_blob": "f6dc224c78bb47865dcb5fd56d7d290aaf9af52b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_bounded_response_outputs.py",
+      "git_blob": "2997d2dcbe264cd6f2e886d291ef1e440a85d970",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_command_line.py",
+      "git_blob": "1980150a8c5b83af8eecd7040c86706b77f5370f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_load_extract_distribution.py",
+      "git_blob": "c3c2991275effd0b5c3e854603f043ec1741a74c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_merge_controls.py",
+      "git_blob": "028a31c4e334dfcff63171334a8f4b4673b700a4",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_metadata_compact_distribution.py",
+      "git_blob": "129e57f747b478ad84d471b8adcdd3a0555ca1ac",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_metadata_geometry.py",
+      "git_blob": "03651dab9daed34c6ec6b50cb9fad9d6803f21c4",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_metadata_input_distribution.py",
+      "git_blob": "764883c1af3a6436bcf41325e14594dec5a881a4",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_mshr_lifecycle.py",
+      "git_blob": "d1dc6e466532067ac4b5f665e6e179ada66d02d7",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_mshr_payload_owners.py",
+      "git_blob": "5f776ad269ee122446238f821e69248388469b01",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_query_hold_owners.py",
+      "git_blob": "641755dd85c49aea9bb0871e4bea0ae79bed76ed",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_refill_data_distribution.py",
+      "git_blob": "151fba8d4084fa5f9c9f67764256c236c133ccf5",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_response_payload_owners.py",
+      "git_blob": "5bb4996d4c95edb1bff9752e74c8e3b30b72c8e6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_tag_port_distribution.py",
+      "git_blob": "acdc99b75f75820d1293fd43f95b50f6887ea454",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dcache_waiter_owners.py",
+      "git_blob": "7db07eb5a085810dd21983bdf3eeade94d83f19c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_direct_prf_operand_bypass.py",
+      "git_blob": "f0c87dd91a841f3d1aeab58b2ee19e17193d7065",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_direct_producer_wakeup.py",
+      "git_blob": "149332332796e648d83a1b20a49b0c30bf96e3c3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_disabled_write_dontcares.py",
+      "git_blob": "44cd1a4e1ae907b9cfcdddc14a6799e2d6106f57",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dispatch_boundary.py",
+      "git_blob": "6d7d7e437b46846a5b7333ff1fc5af78dadc4416",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_divider_payload_distribution.py",
+      "git_blob": "350ba5c9f7a64ee1ff948c53bfa82f9a09642f29",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_dm1_request_locality_batch.py",
+      "git_blob": "d471cd3f254b37410ea4cc82fbec97979a457045",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_ea_narrow_store_probe_packet.py",
+      "git_blob": "2c3192d3c3ea26fa822f0f8e84ef2575a48a3145",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_ea_registered_store_probe.py",
+      "git_blob": "0f9a1621630c74501043f670b0d7c58f8b7d11b3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_ea_shared_only_store_address.py",
+      "git_blob": "a5c174b210fc95ccf14d11b303891951a7107864",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_eg_registered_store_probe.py",
+      "git_blob": "e37c8477f51edb43f0beff67931507fcd8a9bb5a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_a105_measurement_manager.py",
+      "git_blob": "6bc338cbf496ee04347aad7b23514707cc516e0f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_a109_combined_adoption.py",
+      "git_blob": "52addc3582bfa1b09a206866b395b34c90f169c0",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_a109_measurement_manager.py",
+      "git_blob": "fcb14b34e4efcf29bd7b520e7386f5374d8e785e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_a16_identifier_repair.py",
+      "git_blob": "0d021d92ea4b06168dab991b7c85905ea7b87139",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_a16_port_repair.py",
+      "git_blob": "d46c3010b83172db1ae441e3981609c3e20289b3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_a75_measurement_manager.py",
+      "git_blob": "16dabe48d37f28bd60680eb4abb6e63893cbb291",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_a83_measurement_manager.py",
+      "git_blob": "985c2fef3b508809b7e9f119cb9e7f0bb3164c4f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_a92_measurement_manager.py",
+      "git_blob": "6f2c12f60520d277a51ecac74db1d60eb177e669",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_a94_measurement_manager.py",
+      "git_blob": "ac6f726e0e03b75dc16e6d057d54bdf359ffe5c1",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_a99_measurement_manager.py",
+      "git_blob": "9b3f8138c60ddf2e69c8787f7cb9c1f4472d1d7f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_alloc_load_selection_bypass.py",
+      "git_blob": "a1dee9edd61cedc4b8f64ab4e4788a3cef32e51f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_alloc_ready_store_data.py",
+      "git_blob": "f6879286c407148a561e1a44fb8847b49136e69c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_allocation_payload_preselect.py",
+      "git_blob": "4d2897370b8bdef35129e5ea2bbdb96f2bb42a84",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_alu_parallel_add_sub.py",
+      "git_blob": "7847e62a342cf504470656cc379eda88e2fa4708",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_balanced_backend.py",
+      "git_blob": "29ed36b7e9c7a96872d9a0ff9612586cf6551507",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_balanced_saved_identity.py",
+      "git_blob": "2db5c09ec3a0432acf32eb32ffa873234dbf9750",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_branch_capture_phase_valid.py",
+      "git_blob": "2c1cd5d91272136dbae8ad4f11ec747eb1974150",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_branch_capture_redirect_ready.py",
+      "git_blob": "d9cf01eb674f62b1d94867f11af7371eabf55f52",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_compact_direct_cdb.py",
+      "git_blob": "8089f11bca9a3d34d886347c5b0fcdd26f012f53",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_compact_gshare_parallel_feedback.py",
+      "git_blob": "561fbf6f683c093a4389a9c7fcbd154a2a3f4cae",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_compact_indirect_btb.py",
+      "git_blob": "fc0cf74d588a520fd51f7d2c69f31e1d66b9a9dc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_compact_prediction_target.py",
+      "git_blob": "46aedad382ba1e70009841a119c858e755f98c99",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_compact_rob_completion.py",
+      "git_blob": "97deef5cab74cdc46180c1b17f195152497fef31",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_dcache_hit_response_coissue.py",
+      "git_blob": "8cd76d73c197869090c2bf8197f317c6b3781307",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_dcache_way_parallel_query.py",
+      "git_blob": "7e337152aaa82506e1de065c9490140958890b46",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_dcache_word_response.py",
+      "git_blob": "e939b49c841474733e5c35b7f26a77e34f4227ea",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_direct_issue.py",
+      "git_blob": "72a61cb8dc9910f03c1ea80d18d2a5b6836f819a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_direct_recovery_apply.py",
+      "git_blob": "e2cd57faadc7e50bf052f63ed5059a2658e2cc4b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_early_frontend_redirect.py",
+      "git_blob": "57a3aaabf1388aa58cf4aa5c39143a91a7752a6d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_elastic_dispatch.py",
+      "git_blob": "6f9ac7463681a1e2b934967244902910b04399ab",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_fast_store_address_predecode.py",
+      "git_blob": "68477ee662164c7d094eecc57dad5fa0c9fed6bf",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_fast_store_batch.py",
+      "git_blob": "20d52c7b8478f70fe0e8c800856cd6e4715c7103",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_fast_store_identity_preselect.py",
+      "git_blob": "65ff9ccc2f4e9a2d7112bffda459e7a895c001a4",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_fast_store_original_data_contract.py",
+      "git_blob": "2d7f4b70e09ee437091b833ed45256e0574cf5a2",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_fast_store_wb_data.py",
+      "git_blob": "8196b198be1efd7daf5f3939416cab8020127f96",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_frontend_bypass_prefix.py",
+      "git_blob": "c220a939553887fefb87904065f53480204045e9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_frontend_direct_word_bounds.py",
+      "git_blob": "83bc44e1b5a830318498672d42da72fdf60c0818",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_frontend_local_response_pc.py",
+      "git_blob": "a2a448e03957e3627ccce3ac024a5722db92af1c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_frontend_parallel_bundle_control.py",
+      "git_blob": "826f0d1ef7c69075e4127b9756674eef17ac61a4",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_frontend_ras_offset_flags.py",
+      "git_blob": "939709d50c738cabe637d79badc2b0c84cf20aec",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_frontend_ras_predecode.py",
+      "git_blob": "0b87fd02aa8c82f2b886c76f25edf0ae69aea2d1",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_frontend_response_bypass.py",
+      "git_blob": "fc2886f43ab965261bc65353cbdf1ecedaf77b50",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_frontend_response_word_offset_read.py",
+      "git_blob": "32342205499fb7f477b8b0c2dcf891248570f224",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_head_load_packet_preselect.py",
+      "git_blob": "1deedc43c9765dc92bf83ebe85fce0eb57748e64",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_head_only_load_completion.py",
+      "git_blob": "cf8e68d3135747dcb3139d19e01647a028a92e0b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_head_report_word_select.py",
+      "git_blob": "9f790a9e23e8506b63dba3cd827cb9890eaa6115",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_head_store_ack_bypass.py",
+      "git_blob": "8af5d7699af59aef86c36c75ab2c4c4bc9f97250",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_held_identity_row_query.py",
+      "git_blob": "16b9efab3ebdf2e6fd44cc0396bbc4b5c535e7fd",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_held_report_identity_query.py",
+      "git_blob": "347e72d07afdcff0ef37b55e9a651a2382fc7fe9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_hybrid_direction_predictor.py",
+      "git_blob": "685550fa6abc3e073103401a203846d7f07bdf83",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_instruction_line_buffer.py",
+      "git_blob": "6e97ade8e55434548b32f10aa91a0b01e1767650",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_instruction_sram_command_lanes.py",
+      "git_blob": "78501f0489e5c0dfce627fd3d4b8705d435e3071",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_light_retire_payload.py",
+      "git_blob": "f12f5eca1a565119417204674100506764386e44",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_load_address_lookthrough.py",
+      "git_blob": "d16529174a97a247db1dc6e3d013a2e13af9589e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_load_completion_bypass.py",
+      "git_blob": "42360b2a03c62c6b9c10671e99fa4077b0f09b76",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_load_report_identity_prequalification.py",
+      "git_blob": "8931791f80f529c17cf79ee50176fdeb1645c5d7",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_load_response_source_query.py",
+      "git_blob": "0301e1ab23c047704ebafb107ba7e3fd4321858c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_load_return_wake_only.py",
+      "git_blob": "5e31a90dc9b262e293dad15b2837771c997b3a36",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_localparam_dependency_order.py",
+      "git_blob": "f2ff2d341da386acf5fd156a8eb141f07131634d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_lsq_alloc_fire_distribution.py",
+      "git_blob": "276b21900cb81f21a795dafc2483f7735cfc0e58",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_lsq_allocation_slot_preselect.py",
+      "git_blob": "a28acbab75be02419e50b31b7c28cba0d9aaf44a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_lsq_empty_selection_bypass.py",
+      "git_blob": "cd97f1815ea3936aea569b90ca8115483fa83c96",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_lsq_forward_onehot.py",
+      "git_blob": "b5dce1547acf3780e550a3df8806be069b1cbfd1",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_lsq_pick_local_validity.py",
+      "git_blob": "1d6d1802b1e79550d59ad32a7454f47fe5debec6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_lsq_pick_onehot.py",
+      "git_blob": "6218549031964ce41c067b980b745842db4f6346",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_lsq_registered_address_bypass.py",
+      "git_blob": "fe6b4b48b9da307d2e87508fafdf615deaf099e0",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_lsq_second_report_reclaim.py",
+      "git_blob": "9dcb5dce3baa80056255ee84e7342843e5518796",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_lsq_two_prefix_reclaim.py",
+      "git_blob": "65149b79e1b1672ebfe235d1ba891037bea2f997",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_lsq_wake_identity_precompare.py",
+      "git_blob": "fc28a588f914e1be1fc8af99f7006bd3b487d8cf",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_mdu_local_payload_owners.py",
+      "git_blob": "ce3c8ec7e6b6807b7f946fc242c4bfd159742c00",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_mmio_retire_value.py",
+      "git_blob": "d1db0ae9a6f6daac54972cccdff1b0609fcea6bc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_multibank_branch_feedback.py",
+      "git_blob": "f6b42b541de323b48a871341f8001a288ff7b756",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_narrow_rob_packets.py",
+      "git_blob": "6d09b1755653a451d762a445c1c7ef8f0268a8c5",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_predictor_bank_local_instruction_read.py",
+      "git_blob": "cbe1f539e7c96172ce184e51fcfd5021512dc332",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_predictor_bank_local_prefix_history.py",
+      "git_blob": "974e5afaf0c84124a0fb2a14dfd1edb9d65ea0ec",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_predictor_bank_pc_carry_select.py",
+      "git_blob": "adea858695626bd1680e278e276a35b9669bfaf8",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_predictor_direct_bank_word_index.py",
+      "git_blob": "69b321b76564acbe7b3df5cfd8fde3e72628e846",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_predictor_direction_independent_target.py",
+      "git_blob": "270761d5273d6d2cc92fdbfcacd6cee48488eede",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_predictor_narrow_direction_read.py",
+      "git_blob": "007355f377626587e83b5ad4b3e7afe056f261bd",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_predictor_prefix_query_history.py",
+      "git_blob": "f00c83f358b9ceacb2aac32fa66f7f50864e0594",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_prefix_iterative_mdu.py",
+      "git_blob": "edfbd294ce161669b6426a6f708d5b91eae060fe",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_ras_parallel_control.py",
+      "git_blob": "e0ef262b2ddd4b164bd9b90e8d1f90f50956da79",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_ras_predecode_repeat_match.py",
+      "git_blob": "91e3d01982e7fb294c601976ebc3cc263941549f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_ras_repeat_compression.py",
+      "git_blob": "fe859f34dc6d543ea0452bf630390bd9900714bf",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_rat_suffix_branch_mapping.py",
+      "git_blob": "cc9c9a2a61b57c138f128c3249dc0d74c976865a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_ready_load_no_agu.py",
+      "git_blob": "eb53fd95da43ce00ae5b11e5d7735c73e325e65a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_ready_ram_store_complete.py",
+      "git_blob": "8e1286065023d1222d1cf55c0736b0792870d59b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_recovery_apply_older_issue.py",
+      "git_blob": "4abd7217fc68aee3ac6bb9f0403b28975bf3854b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_recovery_preview_older_issue.py",
+      "git_blob": "a10ee83889068edbfebfc7d9c2b973e8c2d9ded3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_recovery_rob_credit.py",
+      "git_blob": "9a4adc7c489da64eca093e1e71e8442c1761dca9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_region_owned_icache_tags.py",
+      "git_blob": "b457e033d4db30ef8ffc45f3cacd67f0190c094d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_region_query_native_compat.py",
+      "git_blob": "07bda9da252537c1029d55dbf847f9a17f494b50",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_report_recovery_age_width.py",
+      "git_blob": "9ec16fe9942ad9d456d1c865569573a5b484ed1f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_report_recovery_circular_compare.py",
+      "git_blob": "1716643394da69d7cc3cda3e4f7dc22c10ecc762",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_report_recovery_prequalification.py",
+      "git_blob": "b717ea7752f9f4dae4b6125999d04f92e3e18329",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_resolved_store_alloc_load_bypass.py",
+      "git_blob": "4b89be8a63643ff28dbf8d5dcafd4df672614864",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_retain_free_pool_restore.py",
+      "git_blob": "4482367cfc3bd42d030d0a77c1ca27c649567141",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_rob_occupancy_distribution.py",
+      "git_blob": "13003a9e782008e632a9bcfd90118848d1b20130",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_rob_recovery_row_live.py",
+      "git_blob": "9e26c1da7fabe43da3a147a37d69e07e380d0f83",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_rob_store_prefix_admission.py",
+      "git_blob": "e184d3649fc916d6ac16c0186b23c8d0c30df0bd",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_rob_unique_reclaim_count.py",
+      "git_blob": "f2e184e30529bc33a3f96e3b5110de6c7ca9899e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_rs_direct_live_membership.py",
+      "git_blob": "c0213f8be7f5826a966cf5f879b6fefbf2089600",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_rs_elastic_skip_capacity.py",
+      "git_blob": "2f957f6565455f6e9e510bf360cefbd68be56a6c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_rs_predecode_issue_cancel.py",
+      "git_blob": "41f71937898173470d4d0c870944df753766658f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_rs_row_recovery_qualification.py",
+      "git_blob": "04f6dcd0cd25936d6b6a9b0269cd53ecee7e9ee1",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_same_edge_redirect_fetch.py",
+      "git_blob": "a8ca9c54a1bc56634ca4c7358df966809df9d5a6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_saved_identity_word_mask.py",
+      "git_blob": "3c7cd58c32b6d196b1d35da39f0bc06092146aeb",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_saved_load_report_priority.py",
+      "git_blob": "6249f3e3253766fc2f2b0f25d9200134a245a574",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_saved_store_operands_parallel_admission.py",
+      "git_blob": "34f634d7d6481e4284d679a21ed8c780f8e1fa4f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_shared_barrel.py",
+      "git_blob": "268210e22431fa958f173db739d5887efea179ef",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_shared_feedback_and_dispatch_replace.py",
+      "git_blob": "86fd6460ee4a1c65b28bd13fe6d037f2a6b6af96",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_shared_iterative_mdu.py",
+      "git_blob": "4c67e29df674e36d8b4e1d86ff5f8df06c5fd9ae",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_sram_axi_read_payload.py",
+      "git_blob": "49d3e48ff05715fc88f1fe4bd342ff3fd9d702c3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_sram_instruction_filter.py",
+      "git_blob": "686d5208074d558d0867ad4cbca4b54f732bf687",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_store_ack_source_query.py",
+      "git_blob": "1bafa7356c33d63f51d2ca57b2725171f312dc68",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_store_class_compare.py",
+      "git_blob": "3907aeec02fb15cc7cf777024364e7852a68aa33",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_tier3_source_batch.py",
+      "git_blob": "27ad4265168e919be9824854d452ca0de39519b6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_er1_unconnected_return_payload.py",
+      "git_blob": "4221e1fa66223eaf3426912d8e56556f7612a3b3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_execution_local_cancel.py",
+      "git_blob": "4a566ba1443eb99ce8fbcbecd96c466e65e85d01",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_execution_local_cancel_guard_fix.py",
+      "git_blob": "ea40fe125b9e6e937629df954129b9d71b1c8f75",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_frequency_research_candidates.py",
+      "git_blob": "28819190460b499c2b34403a3a58ee9b903f5bbf",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_frequency_sv_identifier_repair.py",
+      "git_blob": "1c067bab3f4765277e0ca506e6f047ea91a7a797",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_frontend_bounded_combination.py",
+      "git_blob": "5bf7ac0e1de2340aa131ee203751839344494949",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_frontend_bounded_count.py",
+      "git_blob": "8ec3061a0801205185abc69971b36e1356ee4919",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_frontend_bounded_payload.py",
+      "git_blob": "a68220b121913e644b7532e2387d9c2914cd5645",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_frontend_chain_tradeoff.py",
+      "git_blob": "fdbb48e95241ac78cd1095ed9fdab7be5bb175ce",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_frontend_packed_banks.py",
+      "git_blob": "40a562da276b76d91bcffcf590c20cd8fb3686c4",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_frontend_payload_banks.py",
+      "git_blob": "e3e7e6b1051c4eee72be0594b395e54528a3c274",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_frontend_state_and_dispatch_queries.py",
+      "git_blob": "ae6475e5e8e2d9072592ce18771e997e1597ec9f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_control_payload_owners.py",
+      "git_blob": "67ab0ff13d4b860e5f57d7b6b854945cdc75f5e1",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_control_scan.py",
+      "git_blob": "6bad73ad3a75c1687eaf3e53d51ca13e3ecba937",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_empty_bypass.py",
+      "git_blob": "c15da3040cb703fa43c09fbcee7dda6c4628fba8",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_local_response_ready.py",
+      "git_blob": "269deead0e28b8766313da52c1c264fa9706ce1d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_metadata_distribution.py",
+      "git_blob": "45dfb2effca966f9ca2dffed0d9181a828a66575",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_mshr_payload_lifecycle.py",
+      "git_blob": "2c8c85f951a5bc5b37f491f9341ce05d341dac74",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_mshr_state_banks.py",
+      "git_blob": "6ade9602375980fe47af72923f784e32113389b6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_parallel_match.py",
+      "git_blob": "d44fb5e729c5e57b1cd3e794a1d7a4b616c405da",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_parallel_match_integration.py",
+      "git_blob": "4c44fadeb14c83e80d412010da772e40a98f9908",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_parallel_read.py",
+      "git_blob": "b94ca8c69eca4066777a838935d86be4636306da",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_policy_integration.py",
+      "git_blob": "f491721d4388f364e2e77eb2d9b383c1096ebedc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_promoted_metadata_domains.py",
+      "git_blob": "ffd96af1d86a3dae3ae04df6dcaf3e645a438c01",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_ready_integration.py",
+      "git_blob": "d664afddf1848cae4273e5ca82c89d3fea5f413a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_refill_policy.py",
+      "git_blob": "4ff610d3a650dae0b84a8058f73e1c75dc9cd236",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_response_owner.py",
+      "git_blob": "51bf9bc1a0a9c8b6a384af0a6f2bd00cfafa277d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_static_mshr.py",
+      "git_blob": "d6de61ae27cdef4c7c90d0535a207f7d4089e5c8",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_icache_tag_banks.py",
+      "git_blob": "ae972c828bf645a9731795a39402dbcfe6f15b58",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_issue_credit_queue.py",
+      "git_blob": "9cadc039d61bc95e3b0d2ab37e9258444cacfb80",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_late_lsq_completion_grants.py",
+      "git_blob": "64871d7aaba1f711dbb0bb488895ead0b7b0b068",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_legal_addi_fix.py",
+      "git_blob": "ec6a67adde1a00fdbc14eef9edc356646e65d307",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_load_local_wake.py",
+      "git_blob": "b67ea6d67fc3ea2a8e59b546197b4609d62e7f07",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_local_alu_result_fields.py",
+      "git_blob": "fd7e54da996e0c5ac19dd80cabcf2e4f7230bdfc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_local_completion_eligibility.py",
+      "git_blob": "5d427ce288a2c4d0ec45905bfbddafee6cda5a77",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_local_execution_wake.py",
+      "git_blob": "c2319bd365826283ed63ac075a94c0c32c9c378b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_local_field_reset.py",
+      "git_blob": "96fefdd3c2c6cf57c4c2bc401c26a7afa405cb72",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_local_issue_and_memory.py",
+      "git_blob": "73292a86eb43b211ca43c4b59023cd8cafb1f4cc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_local_prf_storage.py",
+      "git_blob": "3487ea0974ffb8a98314775cb108c478a7130d07",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_local_producer_tags.py",
+      "git_blob": "d206ee267376bce1a27b8d8ec3ee08ed32609c40",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_local_rat_recovery.py",
+      "git_blob": "19229de8915b18cf7116730a1441ba297b4976b1",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_local_rename_state.py",
+      "git_blob": "4c43375274de993362a4e7a9c00328acb799bfab",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_balanced_retirement_select.py",
+      "git_blob": "541e0f471c8ca1405ec93f521b5903069ecb13a5",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_bounded_advance.py",
+      "git_blob": "04b7df4e4d840b386414a5a0a287220969bd1a4a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_circular_hazards.py",
+      "git_blob": "2df793fbc60dc9095e9951b40eb867baaa1aee9b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_circular_prefix_packet.py",
+      "git_blob": "7aba948ca9c15c17feefc0b3cd3e0008004a0950",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_circular_priority.py",
+      "git_blob": "2709db8f506c46971b3e88f2398cbeee51b74430",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_completion_tree.py",
+      "git_blob": "e028ac05ae8062acc43f3c8ef72c1ebb79044076",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_direct_report_and_forward_hold.py",
+      "git_blob": "e718abc918b22dfc8cdcd0568f5ef2086fe99fb9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_forward_window_names.py",
+      "git_blob": "ddbace191f8d620bb67a31a5c4731c1edbb77ef9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_forward_windows.py",
+      "git_blob": "5f26ce1d3621a89fee9b190e2808770390fcfd8e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_head_query_distribution.py",
+      "git_blob": "aae0146a75703f6589083f8a0a0606589435e362",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_local_metadata.py",
+      "git_blob": "79cf4ade50a51e7c5d0a3f16e172980d7a11f3ce",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_mmio_classification.py",
+      "git_blob": "428466ca29c605627032538ad9fe8aaa4c64d3b6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_owned_fields.py",
+      "git_blob": "d8bee1f10910e0c707e2e3ab4a4daf039871e286",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_parallel_recovery_trim.py",
+      "git_blob": "fe4f42ec23069ed7c5fbb4ecba9cedf7b378e28d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_pick_slot_identity.py",
+      "git_blob": "ab1f463d1c68b69a2c8c02dd29afc43fa736a458",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_report_bound_widths.py",
+      "git_blob": "280523daa86df8dafde5ffa3350727036b259b96",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_report_bounds.py",
+      "git_blob": "324e78f68e82378a6764746912b5b9710d16ba7c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_report_cancel.py",
+      "git_blob": "4f75286f3ab600f44543e76cde061a6b9c2f6422",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_report_physical_destination.py",
+      "git_blob": "1a569a85386eade6831e0c3bbc3d1e97ed57286c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_report_rob_predecode.py",
+      "git_blob": "251d96105d6f6ecc3f8af81422bb37952b6eb9f8",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_request_data_distribution.py",
+      "git_blob": "5b405067a382cc99ecbc20c5df98ba71124b6afc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_response_match_domains.py",
+      "git_blob": "d3fe88f2a8d36b534e226dff902bc1c4e4d5c648",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_response_query_distribution.py",
+      "git_blob": "4bfa98e35188c744276cfd864d82597400903c3e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_response_query_predecode.py",
+      "git_blob": "10deada179abd87ab5b0034714529a3028f69ae8",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_selection_query_distribution.py",
+      "git_blob": "6348c197abedb806251ee67808fbf9d6b78d5eec",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_selection_word_owners.py",
+      "git_blob": "4b121161037507dcef8a7e1726f88a361eb94e0f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_lsq_wide_event_owners.py",
+      "git_blob": "8274b5dd23d11fbe3a69a04dfd762571d9d2fd44",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_mdu_launch_distribution.py",
+      "git_blob": "595cbd2ee7b83e5d8698571016fca26f372be51d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_memory_and_mdu_routing.py",
+      "git_blob": "f100aa2769e6509e39ee9e397fd3fe5ad9ef7bb0",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_mmio_narrow_request_domains.py",
+      "git_blob": "34cda00d7658ad120e3baadb23c9d1c1098f2c8f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_multiplier_consumer_distribution.py",
+      "git_blob": "c814e529e16f3513dbb0ae4677022249c2080943",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_multiplier_final_stage.py",
+      "git_blob": "57198f9128485982bd9bbf0f313bfd959d519871",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_negative_polarity_distribution.py",
+      "git_blob": "aa0fc919a955fbff8b2b5fc5b721e60176db9a44",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_onehot_priority_elision.py",
+      "git_blob": "846181110ad266918f8ae548c695914754d9b2b9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_owner_optimization_visibility.py",
+      "git_blob": "fc605ca972dd5ddc6b195c40ab051c043479abf3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_parallel_free_refill.py",
+      "git_blob": "c577b4c13818245d5998a5087890816a4d5b208c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_parallel_lsq_pick_packet.py",
+      "git_blob": "389504d56ddb2fac9c210735f67106415155371e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_parallel_radix4_divider.py",
+      "git_blob": "9c5c0b4c308ee1984b6adc7d169bf5785182a4a6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_parallel_rs_allocation.py",
+      "git_blob": "cce3c17d7a79c31d710bc9200939088c3fff85bc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_physical_register_wakeup.py",
+      "git_blob": "e408e1aed3319239fc90d81ee1ef07cb32b35c69",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_pipeline8_candidate.py",
+      "git_blob": "dbff96affdd4d9eec05788156379afbfdb72444a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_pool_query_drivers.py",
+      "git_blob": "fbff4822c6480b04ede5b862271a0def2b975fa4",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_prearbitration_store_addresses.py",
+      "git_blob": "23445b3d47fc6a3013f94287c4ec1ad09099e445",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_prediction_target_and_ras_owners.py",
+      "git_blob": "0c24f40161c98fc6dbb57ee53b64f9a753534752",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_predictor_outer_routing.py",
+      "git_blob": "61d2c582446f9ddc04ef97b1c1f72e0418f287d6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_predictor_row_owners.py",
+      "git_blob": "9dbf04556fdd9c9bf0436e4ee8516e54068a6957",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_prf_bounded_queries.py",
+      "git_blob": "27ddb29dbfdbdd1fc2423dc0e8eeacb605a4effc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_prf_parallel_store_address.py",
+      "git_blob": "7b1d08b686e84ec2caa11ccafea802e59d1f56f2",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_prf_precompare_and_store_imm12.py",
+      "git_blob": "a13d7ca2982529d39129e8b254ffd9009f9ca42c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_producer_validity_payload.py",
+      "git_blob": "57f2eecf651e09ffd3fe9a325e260b5d7976986c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_recovery_query_domains.py",
+      "git_blob": "a24ed545b12feb0172826cfe9b0e9e6adfab4c44",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_recovery_request_queue_locality.py",
+      "git_blob": "7a489e415f7b3fb151038cb4292fa93ffebeb40b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_registered_cache_hit_reply.py",
+      "git_blob": "7c09e83570200ce66fd947e948ad64779161ea19",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_registered_decode_queue.py",
+      "git_blob": "80fc7a752eb2ee4865eba0b4d38544a09655ee91",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_registered_free_pool.py",
+      "git_blob": "1c91c543217c8da4feb62ef360c125d4dd8dac5a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_response_field_queues.py",
+      "git_blob": "cdbc7ed5cfae8fec45d84b3f2ee0af9fca80959c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rob_bounded_allocation.py",
+      "git_blob": "fe791690d012adb6a19e7aa00b939a6cae17d7a9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rob_cache_integration.py",
+      "git_blob": "de7584e0db99a69844dcbb67caf84ec5f0d36c0b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rob_commit_packet_domains.py",
+      "git_blob": "fd7d1fa506a68bc5ed0412ed0ff3d253753ea166",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rob_mmio_predecode.py",
+      "git_blob": "a60cef7fdb1dfcdeed3ebd09e898d3676e390c6e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rob_owned_fields.py",
+      "git_blob": "20855d4d8f2b88521051eea09da30fe30dc783a0",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rob_parallel_completion.py",
+      "git_blob": "9a4c1997e44aff1beecf38302b84af280cfe8875",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rob_reclaim_predecode.py",
+      "git_blob": "4260e8f2c5d389fb4eacb58fda6e8cec2ff2387d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rob_reclaim_width_guard.py",
+      "git_blob": "e08eef13e731aa3f7b22874b57a1925c3e0df4b9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rob_recovery_distribution.py",
+      "git_blob": "eb238b92f526b318e8050df297da078961dcc99d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rob_row_decoders.py",
+      "git_blob": "4dc019363249a93975b1a7525ab05487560ff258",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rs_age_matrix_candidate.py",
+      "git_blob": "c58305954e9c6c0ab6662719c31d76748f9f1e6a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rs_age_width_probe.py",
+      "git_blob": "b2cb32e06635207f11b52900ad4e6680f9df1930",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rs_bounded_issue_payload.py",
+      "git_blob": "aa1dd0f5816b09d88c55ecc600ade8956bf96edc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rs_chronological_order.py",
+      "git_blob": "ba564d601b2d22e37c99c6f0495b48b202236dcd",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rs_decoded_low_rank.py",
+      "git_blob": "49bb1877332d53cacb8193100a393e839ba7e97b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rs_effective_operand_routing.py",
+      "git_blob": "12ccc9e60fb6c1434bfeb3e035ef506f77be80cf",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rs_fast_slow_wake.py",
+      "git_blob": "77b9156610fd1faa601ef12109b646e9b9ea827c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rs_operand_write_owners.py",
+      "git_blob": "b51ad69cbf74eba9b4fb79a5ae8cdae1efcac530",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rs_payload_banks.py",
+      "git_blob": "b0ecdf59f95151b02096a6c52b2455b4c8457953",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rs_wake_domains.py",
+      "git_blob": "c38814aaab4e96e69aef3222177a87d1b4c626ca",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_rtl_control_distribution.py",
+      "git_blob": "e2fd9d557532e609a4d4fcf1c41d5bd34f4a3f6e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_selective_stored_store_address.py",
+      "git_blob": "2d5bbbac5eb41a71753dfc00025a9c2c83746968",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_shared_store_rob_query_predecode.py",
+      "git_blob": "0d1339e70f0bc841e9edc43bf815089f25bd8d2f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_shared_store_simm12_batch.py",
+      "git_blob": "e7f8dd9e81940a6a7ab75f2c263c788b05d8dc15",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_sixteen_bit_control_budget.py",
+      "git_blob": "246e9c4f12c239b015f70cb55d1b9ac6fe427013",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_stable_mmio_and_registered_hit.py",
+      "git_blob": "41aec89ac0373f78b6bfdffd8b5f7caaf7ad1685",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_staged_frequency_candidate.py",
+      "git_blob": "d3f39ce058faa0b2a79a471c52271caf3bcf1502",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_static_datapath_integration.py",
+      "git_blob": "627bb0c19b7636e55ee59f5f11711de7aa6b7e5a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_store_address_inflight.py",
+      "git_blob": "699c0dfc7742dd4f522e8c31418e39c202d2c15a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_store_address_onehot.py",
+      "git_blob": "15a55543d97d1210a64adcb5fbf0dd7f699bd346",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_store_address_pipeline.py",
+      "git_blob": "3b32dee122ea637c9a0273b5f912eea05f211b82",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_store_address_prefix.py",
+      "git_blob": "a1356f854f29a7dfcf6db3fee48979224e5890e1",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_store_probe_match_reuse.py",
+      "git_blob": "56665e766bc20a9f0dcc6b7f27a01bc8962b1848",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_store_registered_probe.py",
+      "git_blob": "5c8d099998a0eb16c9f81bc1f817132a41585248",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_store_rs_link_domains.py",
+      "git_blob": "9f6433b090f9e27b7f3f5005630f543ae46b1b6b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_store_rs_links.py",
+      "git_blob": "63187085f45876b245f2b41efb3e1a9ec65d53bb",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_valid_alu_redirect_arbitration.py",
+      "git_blob": "5dfefc34abf5502fbb37458d0d7e2817a5acab4b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/prepare_word_control_owners.py",
+      "git_blob": "24b43baf307dd999d6e94b39a78fa03039eef6fd",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/probe_component_recovered.py",
+      "git_blob": "97dcac6dd9fbdd51cf4da5c6e6ef54677c1b36ca",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/probe_dcache_registered_index.py",
+      "git_blob": "706f6446d3df05b5ef3e8b75fb5e98c7b7ccfd9f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/probe_localized_component.py",
+      "git_blob": "6e19f304759b7138203f3620ef2a165b22b7d402",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/probe_rob_banked_read.py",
+      "git_blob": "4c1c839577138a8d2718db76c940b03c1aa6407d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/profile_er1_a36_three_cases.py",
+      "git_blob": "099d154872f358f7ff9b66196a1d972e596f727e",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/progress_monitor.py",
+      "git_blob": "c4812af8e245acde63ab043cd2416fcb5192b8f9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/publish_frequency_path_report.py",
+      "git_blob": "4211b575626c38f8be03284a8fc8939b91838a81",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_dd_measurement_history.py",
+      "git_blob": "63210b814747480d5da314f9446d46e5b47e2acf",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_ea_followup_source_review.py",
+      "git_blob": "d03d17eab2319495b7c225d143a8e590f86efe39",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_ea_narrow_probe_source_review.py",
+      "git_blob": "cfdfe8db2054b00b3a6d5daeb450c352b3b8eab0",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_ea_shared_only_source_review.py",
+      "git_blob": "d833c662ff155bb729dc0970422bce4db8d36cdd",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_ep_recovery_width_evidence.py",
+      "git_blob": "9f1fff95a8ca2ceed27465a87997abcf3d9a3ba0",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a100_background_progress.py",
+      "git_blob": "72be4ddb49f8ecf07560055a29633495a8a5687f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a101_background_progress.py",
+      "git_blob": "411fb5ecace1c68346ee2d80e66e0052078979ce",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a102_a104_source_progress.py",
+      "git_blob": "c7fb00739b4a65ae1360e977516e0b3248165927",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a105_result_a108_a109_progress.py",
+      "git_blob": "a1ea6b4092e74eba34ac4b7cc0f8547389f06974",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a105_source_progress.py",
+      "git_blob": "9690d8eb9643751bda2cc250fc7e0e43d0a60f32",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a106_background_progress.py",
+      "git_blob": "9c9b9edf182b3684bc908b8f1dff04b56f0328d8",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a107_background_progress.py",
+      "git_blob": "c0da59cce85676a331d13c30b98334d5230da809",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a109_combined_closing.py",
+      "git_blob": "f98ce55eec42aa21bee6402a4618d55c628b2f99",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a109_complete_result.py",
+      "git_blob": "dd1019744ef451ef30a3babd7e19088aff3dfda6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a109_partial_ppa.py",
+      "git_blob": "11524e3ba2a729ef7d3f67bc89751349f63b3c70",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a110_background_progress.py",
+      "git_blob": "77ba4133979863b0aae40c1961fcfb31e0a65623",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a111_background_progress.py",
+      "git_blob": "33ed1a3ab94b017dcb3becdc4fc0143eab2644d3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a16r2_background_progress.py",
+      "git_blob": "98b31fd1f6e3617f6a7431ca1beb96b44b697b9b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a21_result_a22_progress.py",
+      "git_blob": "327dab1a26862a02e8bce11aa12737a323cd4dca",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a23_a28_source_progress.py",
+      "git_blob": "843dd27d1e6e93a2524b3fabedce89630b403843",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a36_running_a37_progress.py",
+      "git_blob": "6b37621714b4f75949ee88faf37be04c0ba26efc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a36_terminal_a39_a41_progress.py",
+      "git_blob": "34ce7e800215cfbd922c066db141ba25891f94ec",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a41_terminal_a42_a44_progress.py",
+      "git_blob": "b7c5c09bbd1619a3b2b6a606f612c4d07ab18a9f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a45_a48_source_progress.py",
+      "git_blob": "c63f1c04a220a1535736964767f3526c6d88a21a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a49_a51_source_progress.py",
+      "git_blob": "b7587ef51522a8ee7a4a8ced1b6cc2be18a756fe",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a52_a55_source_progress.py",
+      "git_blob": "d7d3d6ce8cda248945225ff2e286b6d3268abf5b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a55r2_partial_ppa.py",
+      "git_blob": "248a38c92d88c89dcea19f92067959b17057e8c2",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a56_a57_background_progress.py",
+      "git_blob": "9d9a0181825d8533f8a312e2eeb6af5a859b3b7b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a58_a60_background_progress.py",
+      "git_blob": "74ce71d55ed5158de477e5fcca0ac749759057c2",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a64_a67_source_progress.py",
+      "git_blob": "c10c61b074712127d64806ded64945a8138cfc62",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a68_a69_source_progress.py",
+      "git_blob": "635a2a20030953c5f3cf0a4038ef1597887dbfce",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a69_complete_result.py",
+      "git_blob": "4207038c9058f97ea6b760ad0af7f309ad87d97a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a70_source_progress.py",
+      "git_blob": "4ae60482e20a55662f30b67b46cbab645ffc88ac",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a71_a72_source_progress.py",
+      "git_blob": "de15f5d599827be4f3e228e32f910404e75c3d5c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a73_a75_source_progress.py",
+      "git_blob": "3ccc322cb6316161323ab680bf38d85df7e2ca36",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a75_complete_result.py",
+      "git_blob": "2872cc4749b10960dd12f6b45f216386b5467aee",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a75_partial_ppa_a77_a78_source_progress.py",
+      "git_blob": "b4c9a67f707854edae688fc0552ecb129a12d422",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a76_source_progress.py",
+      "git_blob": "675314f3ebe6bd8e980a9c5aecaec7eec239f6d3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a79_a83_source_progress.py",
+      "git_blob": "15a28c56e8f9d133ad2e46fe50983815ff60e8dd",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a83_complete_result.py",
+      "git_blob": "fbcf28907e93a6e904546c79846c6ba2c6b773ea",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a84_background_progress.py",
+      "git_blob": "3d455efc0264bf99b16776d68d44e078b02a2704",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a85_a86_background_progress.py",
+      "git_blob": "d2840af813ec5506f8899129a8815f5995dc4e24",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a87_a90_source_progress.py",
+      "git_blob": "566266b483dd0138441d67404065b42963fcb639",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a8_and_a14_progress.py",
+      "git_blob": "c4378b9737112f51b973804890cdb34d267a35af",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a8_background_progress.py",
+      "git_blob": "d39d8f6fd58c65c5cebd8f54bd6875e64284e985",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a91_a92_source_progress.py",
+      "git_blob": "07a0dc9bf1fcdcb6ecc84e8d984897cfaee7b765",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a92_failed_a93_a94_progress.py",
+      "git_blob": "ba5c3b7e36fc6a0457679040764ddf4df8cb5eca",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a94_complete_result.py",
+      "git_blob": "befcf3e78e9507cc0282a38da994835397796638",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a94_ppa_a97_a98_progress.py",
+      "git_blob": "39f4649fae9657066f8616007f07c2b465615204",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a95_background_progress.py",
+      "git_blob": "a9bf9719c8e727810d4e4853323e3664749b5208",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a96_background_progress.py",
+      "git_blob": "81000de3879636613a2495893f399db1c9bca071",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a99_ppa_result.py",
+      "git_blob": "54011f47b40e8f893866ff30373232c8bcd35d65",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_a99_source_progress.py",
+      "git_blob": "1fbc5a8b4084e164b9c63e1b204fc791f715e786",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_er1_ready_store_source_opportunity.py",
+      "git_blob": "80a148e4e71df8dde0ff341dfae1d68455921b23",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_eu_background_research.py",
+      "git_blob": "68001debfaea894a4061203041c94fdfffe66bf5",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_background.py",
+      "git_blob": "5ed90d644c6d61b95739c11aea73b222f6df3f30",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_bi_progress.py",
+      "git_blob": "5b219367320a67cdc43234928a764e373641fe23",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_bu_progress.py",
+      "git_blob": "e91df6f6782c2a8794c597f78bd3e4a6e4eb24d5",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_cd1_measurement.py",
+      "git_blob": "4a6aa0ecd5c42f963185f7c26201f2daa7fac469",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_cd1_repair.py",
+      "git_blob": "4b1673c3f02b23b5f1ca84d7f500f8a095b56f79",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_cd_progress.py",
+      "git_blob": "132665c87fd26cbe68b28dc066ab7976dc5f52cc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_cr_progress.py",
+      "git_blob": "cd9a2c519ab208651010d5b4729ebe2e13f4cabd",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_cu1_progress.py",
+      "git_blob": "8aa483ee66e22e9ad833d6ce171fa18629cb108a",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_cv_progress.py",
+      "git_blob": "a7d2efc7070e621671140db8910b1293acb3e712",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_cy_progress.py",
+      "git_blob": "8f3cccf4a4b595f91a8d083264ca5aef256e7cfe",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_dd_measurement.py",
+      "git_blob": "b0545734ab6f49fc48bafbc098c2dcefccbfd834",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_dd_progress.py",
+      "git_blob": "033f82deba7600291b165ea02fca09c3cf45e7b2",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_df1_measurement.py",
+      "git_blob": "7394726b4b2439d1d9784c351dc90cf4af3fc4dc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_df1_progress.py",
+      "git_blob": "4751148f3f17ce34040b234d2bca46b028723d6c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_dk_progress.py",
+      "git_blob": "8a4a6a039d249025d5f69a94f3c3eb4ecad06876",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_dm1_progress.py",
+      "git_blob": "30481d7b99ee6812314961c89c62908f5d54d9eb",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_dt_pretest.py",
+      "git_blob": "d9c93d1951f46d35a18e85f34b2ef1fc2794243d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_dt_result.py",
+      "git_blob": "20f9d8a415e3d8c32a0b4b4e1fb1be525d1574b1",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_dy_source_progress.py",
+      "git_blob": "1470862c95a8fe86ab0a72c61aa082bc0b2408a9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_ea_pretest.py",
+      "git_blob": "768dfa09a7e93154d34d89e711666e25840ad1e8",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_ea_result.py",
+      "git_blob": "6c3785c45a837d522dda9b5dd5ede28330f84d7d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_ef_pretest.py",
+      "git_blob": "c0f3e22fe13b96e1b18c8abaa6147236cde232a4",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_ef_result.py",
+      "git_blob": "a331d4c355756152a86b3d3dff965c7eb08241ed",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_el1_pretest.py",
+      "git_blob": "49e8e47ba3845a1c56c0d03837a398f098c788b5",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_ep_pretest.py",
+      "git_blob": "ed9ea5fe954bdf7296413c7477a0ed9a91545d9c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_measurement_progress.py",
+      "git_blob": "75beec338941ae5cfba2a16ce9541a80ed813805",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_frequency_timing_result.py",
+      "git_blob": "1f70bde6cd71e778850fe3af5377cd681c9888d9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_pipeline8_completion.py",
+      "git_blob": "2204a322ad8d956f5ba9e64b7e4b3aff8be8a225",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_reused_frequency_program_pretest.py",
+      "git_blob": "f2cbbb25afd36e24050f7d6446b9959216079926",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_reused_frequency_program_progress.py",
+      "git_blob": "0228d8b89454d6c9ed59fcf7b3c7709bf2d94d84",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/record_reviewed_frequency_pretest.py",
+      "git_blob": "82c631fa5e74a1d5c9928b1973bc0a88d5dca800",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/refresh_frequency_research_candidates.py",
+      "git_blob": "86e4a658c5b1887843cf93b1e42248e9dcdaf652",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/repair_icache_query_ports.py",
+      "git_blob": "00cd32ddb9f0346f817394561702222b1da54ca5",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/repair_owned_field_generation.py",
+      "git_blob": "1114d5614127a268eab2a5a141b68d58e578109f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_er1_tier3_source_batch.py",
+      "git_blob": "2208a945a8fc58d3ba06228970d945db65c1e98c",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_dr_sources.py",
+      "git_blob": "8f8699cbd1d54877b1ad8bbdfceffa1b26c02ba9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_dx_sources.py",
+      "git_blob": "4bad76085d909e7087e53b7fe929f0a1f84cc335",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_ef_sources.py",
+      "git_blob": "3597fbbbec41266a43e378db09c1ee02c27b8e21",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_eg_sources.py",
+      "git_blob": "aed79331b336c9507d246bad8ac92d32d8bef029",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_eh_ei_sources.py",
+      "git_blob": "601b85fabaf01814eff13af6cb9a491743f6fad3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_ej_sources.py",
+      "git_blob": "b837fe8863b5d5d291aac035d070a77d180f631d",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_ek_sources.py",
+      "git_blob": "44decd12a216372e693e474d8e9e548125c755d5",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_el1_sources.py",
+      "git_blob": "3809cc345c0ba935ad93e2ac73ccd840a0ccd066",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_em_sources.py",
+      "git_blob": "07990767fa9b5eb6c735e22cfa93a028719148e6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_eo1_sources.py",
+      "git_blob": "541213d7860875157de20b5dab6d9e77ea1b24bf",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_ep_sources.py",
+      "git_blob": "43772e172c52ac7493788f5b8cd05976556430ba",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_eq_sources.py",
+      "git_blob": "02749b4704d0d287a336defd26b536a80f9a70e5",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_er1_sources.py",
+      "git_blob": "5e496bb2ca1c84c52e0884086143264fc98f9c99",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_es_sources.py",
+      "git_blob": "57a227492d95f4fc5260491b65edfdc2e615dd75",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/review_frequency_eu_sources.py",
+      "git_blob": "8aab5094bcdd2512181a7ea24c75c8eedf75bcdb",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/run_axi_response_fifo_candidate.ps1",
+      "git_blob": "0b7da9c93eda3a1eef85db4c773865d848c397b3",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/run_banked_layout_candidate.ps1",
+      "git_blob": "01c9424cd68cdd41de926563b426c14986bcabc9",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/run_dcache_static_update_candidate.ps1",
+      "git_blob": "4215a1a900903cf2c2d2b4d736a75660dd2bad91",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/run_parallel_select_candidate.ps1",
+      "git_blob": "3f6716ee96f82d729e00c0585db68114f3109500",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/run_rob_control_bank_candidate.ps1",
+      "git_blob": "925f8a4ea5fadb6669cc3546cb85c08a4f3c542f",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/run_static_datapath_candidate.ps1",
+      "git_blob": "7aa96bc1c3a20c6f5a621a18b4559a5ba337be0b",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/run_window_tradeoff_candidate.ps1",
+      "git_blob": "90bd8454a9a728934d2b56d14d7799a0b7598cf2",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/start_frequency_course_background.py",
+      "git_blob": "f53f65e7f64ae4b01c4629e80e36e5fb5c40c5dd",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/start_reused_frequency_programs_background.py",
+      "git_blob": "6f372cd4e010f34b7051565172c6702a00bedc83",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/summarize_frequency_perf_progress.py",
+      "git_blob": "841902a815013882a9ceac97589d9caac2b9f002",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/summarize_frequency_screen.py",
+      "git_blob": "48d80ddfa9818b322d2d57297e3a0617864133f2",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/trace_saved_high_fanout_cones.py",
+      "git_blob": "7aefe0849c89f59c9d145237058ca1fd59c30fa6",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/trace_saved_mshr_flag_inputs.py",
+      "git_blob": "d059bb585307083797b40fb92b05374853bb84bb",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/update_frequency_source_progress.py",
+      "git_blob": "f01d2350897429888b2dff2b9a6a2c7fa90ec201",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/validate_a109_course_readme.py",
+      "git_blob": "93e248fb5c32695fd99a25a8d6c5d87fa9099856",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/wait_er1_a109_combined_adoption.py",
+      "git_blob": "8f4fe28a12c2229da3b527f322b3551c0612ecdc",
+      "reason": "retired_tool"
+    },
+    {
+      "path": "tools/wait_frequency_directed_native.py",
+      "git_blob": "849e21845149e8c8fe1afc37c012adca1194e4d3",
+      "reason": "retired_tool"
+    }
+  ]
+}
