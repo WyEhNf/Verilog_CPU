@@ -1,0 +1,149 @@
+{
+  "name": "global_D1000_L056_RAMBUF4_F8",
+  "framework_commit": "302f0cf3cccdaa5de084a2120e0d950c663e4cf5",
+  "run_directory": "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015",
+  "states": {
+    "ppa": {
+      "status": "PASSED",
+      "phase": "ppa",
+      "manifest_sha256": "afbc4d04a71d24e7a5882dc5168f587ac3bc48ae0214f7d60200e54fdc319b80",
+      "area_um2": 32200.657837992745,
+      "fmax_mhz": 489.01623686723974,
+      "report_sha256": "eb61db6dcd8f04cbef3c695c65acc0a01163287719a86537dd1718cdfa67a494",
+      "returncode": 0,
+      "seconds": 89.03194050001912
+    },
+    "build": {
+      "status": "PASSED",
+      "phase": "build",
+      "manifest_sha256": "afbc4d04a71d24e7a5882dc5168f587ac3bc48ae0214f7d60200e54fdc319b80",
+      "command": [
+        "C:\\Users\\admin\\miniconda3\\python.exe",
+        "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\source\\scripts\\build.py",
+        "--filelist",
+        "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\source\\filelist.f",
+        "--out",
+        "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\build",
+        "--jobs",
+        "1",
+        "--appimage",
+        "",
+        "--verilator",
+        "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\native_verilator_driver.exe",
+        "--cxx",
+        "F:\\c26\\msys64\\mingw64\\bin\\g++.exe",
+        "--ar",
+        "F:\\c26\\msys64\\mingw64\\bin\\ar.exe",
+        "--make",
+        "F:\\c26\\msys64\\usr\\bin\\make.exe"
+      ],
+      "returncode": 0,
+      "log_sha256": "0e7f0925123611d2f77348acd56b9af0697a6011368b11b2f9aa4714e9354f7c",
+      "executable_sha256": "813c1cfb0aea51864d1c9fb90dc8cfa236e95ab08eda3daef41114c36e4da549",
+      "seconds": 505.2779992999276
+    },
+    "perf": {
+      "status": "PASSED",
+      "phase": "perf",
+      "manifest_sha256": "afbc4d04a71d24e7a5882dc5168f587ac3bc48ae0214f7d60200e54fdc319b80",
+      "command": [
+        "C:\\Users\\admin\\miniconda3\\python.exe",
+        "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\source\\scripts\\testcase.py",
+        "--testcases",
+        "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\source\\testcases",
+        "--sim",
+        "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\build\\sim.exe",
+        "--latency",
+        "10",
+        "--max-cycles",
+        "1000000",
+        "--kind",
+        "perf"
+      ],
+      "returncode": 0,
+      "log_sha256": "b0ceba5f6406b3b4fc4b193a3c9d9ded0721b766623924a9de5fea0eb92d8634",
+      "results": [
+        {
+          "name": "perf_median",
+          "instructions": 6961,
+          "cycles": 7572,
+          "ipc": 0.9193079767564712
+        },
+        {
+          "name": "perf_multiply",
+          "instructions": 21722,
+          "cycles": 17490,
+          "ipc": 1.2419668381932534
+        },
+        {
+          "name": "perf_qsort",
+          "instructions": 139900,
+          "cycles": 143485,
+          "ipc": 0.9750148099104436
+        },
+        {
+          "name": "perf_rsort",
+          "instructions": 195719,
+          "cycles": 153155,
+          "ipc": 1.2779145310306552
+        },
+        {
+          "name": "perf_towers",
+          "instructions": 5278,
+          "cycles": 4739,
+          "ipc": 1.1137370753323486
+        },
+        {
+          "name": "perf_vvadd",
+          "instructions": 4524,
+          "cycles": 3725,
+          "ipc": 1.214496644295302
+        }
+      ],
+      "geomean_ipc": 1.1152626918348099,
+      "seconds": 104.09284300007857
+    },
+    "smoke": {
+      "status": "PASSED",
+      "phase": "smoke",
+      "manifest_sha256": "afbc4d04a71d24e7a5882dc5168f587ac3bc48ae0214f7d60200e54fdc319b80",
+      "command": [
+        "C:\\Users\\admin\\miniconda3\\python.exe",
+        "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\source\\scripts\\testcase.py",
+        "--testcases",
+        "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\source\\testcases",
+        "--sim",
+        "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\build\\sim.exe",
+        "--latency",
+        "10",
+        "--max-cycles",
+        "1000000",
+        "--kind",
+        "correctness",
+        "--case",
+        "correctness_array_test1"
+      ],
+      "returncode": 0,
+      "log_sha256": "39bc25fa278bf15f27e8bd85770fdc6092e3c8ba27982b8f7ab4484848391fd1",
+      "seconds": 1.7868168000131845
+    }
+  },
+  "manifest_sha256": "afbc4d04a71d24e7a5882dc5168f587ac3bc48ae0214f7d60200e54fdc319b80",
+  "official_default_synthesis": false,
+  "official_submission_score": false,
+  "simulation": "Zero-delay mapped-netlist functional simulation; original official driver/testcases and RAM; no WORD_SIM",
+  "source_tool_library_hashes_verified": true,
+  "supplemental_inputs": {
+    "reason": "Disabled PGO helper is imported unconditionally by bounded builder; included before import and compilation, preserving original manifest and live generation",
+    "sha256": {
+      "source/tools/cpu2026_pgo.py": "c549e17a97814b7bccc5224fb4af31d00a22d61ea0b241cf6ed0741986b0f610"
+    }
+  },
+  "supplemental_inputs_sha256": "fe2786f6416eb1f3e326050381b6850e648463de14af6d634c31f221ab218714",
+  "status": "COMPLETED",
+  "area_um2": 32200.657837992745,
+  "fmax_mhz": 489.01623686723974,
+  "geomean_ipc": 1.1152626918348099,
+  "tier3_thresholds_passed": true,
+  "target500_passed": false
+}

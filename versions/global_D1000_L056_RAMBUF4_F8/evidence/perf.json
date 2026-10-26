@@ -1,0 +1,61 @@
+{
+  "status": "PASSED",
+  "phase": "perf",
+  "manifest_sha256": "afbc4d04a71d24e7a5882dc5168f587ac3bc48ae0214f7d60200e54fdc319b80",
+  "command": [
+    "C:\\Users\\admin\\miniconda3\\python.exe",
+    "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\source\\scripts\\testcase.py",
+    "--testcases",
+    "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\source\\testcases",
+    "--sim",
+    "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\build\\sim.exe",
+    "--latency",
+    "10",
+    "--max-cycles",
+    "1000000",
+    "--kind",
+    "perf"
+  ],
+  "returncode": 0,
+  "log_sha256": "b0ceba5f6406b3b4fc4b193a3c9d9ded0721b766623924a9de5fea0eb92d8634",
+  "results": [
+    {
+      "name": "perf_median",
+      "instructions": 6961,
+      "cycles": 7572,
+      "ipc": 0.9193079767564712
+    },
+    {
+      "name": "perf_multiply",
+      "instructions": 21722,
+      "cycles": 17490,
+      "ipc": 1.2419668381932534
+    },
+    {
+      "name": "perf_qsort",
+      "instructions": 139900,
+      "cycles": 143485,
+      "ipc": 0.9750148099104436
+    },
+    {
+      "name": "perf_rsort",
+      "instructions": 195719,
+      "cycles": 153155,
+      "ipc": 1.2779145310306552
+    },
+    {
+      "name": "perf_towers",
+      "instructions": 5278,
+      "cycles": 4739,
+      "ipc": 1.1137370753323486
+    },
+    {
+      "name": "perf_vvadd",
+      "instructions": 4524,
+      "cycles": 3725,
+      "ipc": 1.214496644295302
+    }
+  ],
+  "geomean_ipc": 1.1152626918348099,
+  "seconds": 104.09284300007857
+}

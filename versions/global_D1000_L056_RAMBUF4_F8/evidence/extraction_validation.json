@@ -1,0 +1,27 @@
+{
+  "validated_on": "2026-10-26",
+  "netlist_and_all_four_simulation_sources_byte_identical_to_measured_run": true,
+  "buffer_replay_byte_identical_to_original": true,
+  "buffered_design_sha256": "c1500a5477dd4e3ee6e3daf08180b2fbf8382e38f90be72637572b3401382e81",
+  "simulation_source_sha256": [
+    {
+      "name": "sram_fakeram.sv",
+      "sha256": "d075505f3bb78fdab075fd73b6ee6afc1c8edfaa32cef8feb9f9e0901ee1977a"
+    },
+    {
+      "name": "mapped.v",
+      "sha256": "ce1ae01b92aabfac41adcddb6f6ef937c9212babe481403c38f1d824814edf6c"
+    },
+    {
+      "name": "cells.v",
+      "sha256": "d6d4a26c4fff7ebef0b6fc0110de1e6de0c8dab16890870d87a4beba008f8353"
+    },
+    {
+      "name": "macros.v",
+      "sha256": "0b91fc94af3565cd220e8912d60ebd1d7caf7ea4edb734c51a82cc528a4fd19c"
+    }
+  ],
+  "frozen_rtl_filelist_entries": 38,
+  "hardware_tests_repeated": false,
+  "fresh_abc_mapping_performed": false
+}

@@ -1,0 +1,16 @@
+{
+  "name": "global_D1000_L056_RAMBUF4_F8",
+  "path": "versions/global_D1000_L056_RAMBUF4_F8",
+  "manifest_sha256": "be561c4dd67069c2167b1ccb73096b536449c366f711e7dd84adb2c7fcd1956f",
+  "metrics": {
+    "area_um2": 32200.657837992745,
+    "fmax_mhz": 489.01623686723974,
+    "geomean_ipc": 1.1152626918348099,
+    "tier3_thresholds_passed": true,
+    "target500_passed": false
+  },
+  "source_entry": "versions/global_D1000_L056_RAMBUF4_F8/source/verilog/filelist.f",
+  "netlist_extraction": "python versions/global_D1000_L056_RAMBUF4_F8/release.py materialize --out build/global_D1000_L056_RAMBUF4_F8",
+  "main_tier_profiles_preserved": true,
+  "official_default_synthesis": false
+}

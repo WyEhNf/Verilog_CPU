@@ -1,0 +1,10 @@
+{
+  "status": "PASSED",
+  "phase": "ppa",
+  "manifest_sha256": "afbc4d04a71d24e7a5882dc5168f587ac3bc48ae0214f7d60200e54fdc319b80",
+  "area_um2": 32200.657837992745,
+  "fmax_mhz": 489.01623686723974,
+  "report_sha256": "eb61db6dcd8f04cbef3c695c65acc0a01163287719a86537dd1718cdfa67a494",
+  "returncode": 0,
+  "seconds": 89.03194050001912
+}

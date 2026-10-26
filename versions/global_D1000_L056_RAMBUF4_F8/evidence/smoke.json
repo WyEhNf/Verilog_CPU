@@ -1,0 +1,24 @@
+{
+  "status": "PASSED",
+  "phase": "smoke",
+  "manifest_sha256": "afbc4d04a71d24e7a5882dc5168f587ac3bc48ae0214f7d60200e54fdc319b80",
+  "command": [
+    "C:\\Users\\admin\\miniconda3\\python.exe",
+    "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\source\\scripts\\testcase.py",
+    "--testcases",
+    "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\source\\testcases",
+    "--sim",
+    "F:\\CPU2026CourseRuns\\global_D1000_L056_RAMBUF4_F8_latest_302f0cf3_20261015\\build\\sim.exe",
+    "--latency",
+    "10",
+    "--max-cycles",
+    "1000000",
+    "--kind",
+    "correctness",
+    "--case",
+    "correctness_array_test1"
+  ],
+  "returncode": 0,
+  "log_sha256": "39bc25fa278bf15f27e8bd85770fdc6092e3c8ba27982b8f7ab4484848391fd1",
+  "seconds": 1.7868168000131845
+}

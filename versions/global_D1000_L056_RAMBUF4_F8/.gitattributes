@@ -1,0 +1,3 @@
+# Preserve the exact frozen file bytes used by the release hash manifest.
+* -text whitespace=cr-at-eol
+** -text whitespace=cr-at-eol
