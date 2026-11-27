@@ -378,10 +378,18 @@ module rv32_axi_lite_bridge #(
                 // is captured independently. All 128 bits are ready when the
                 // unchanged received==4 condition publishes the line.
                 // Reread on idle edges: FakeRAM Q does not retain idle data.
-                sram_fakeram #(.DEPTH(1),.WIDTH(96),.WRITE_GRANULARITY(32)) prefix (
-                    .clk(clock),.en(!reset),.we(write_prefix),
-                    .wmask(3'b001 << return_word),.addr(1'b0),
-                    .wdata({3{word_data}}),.rdata(read_data[payload_row][95:0]));
+                // Three one-word macros, as the 96-bit wrapper expands to. A
+                // word is enabled for reads, or for its own write; the other
+                // two idle during a write exactly as their masked lanes did.
+                wire [2:0] prefix_write;
+                rv32_sram_pin_tree #(.LEAVES(3)) prefix_write_pins (
+                    .signal_i(write_prefix),.views_o(prefix_write));
+                for(genvar prefix_word=0;prefix_word<3;prefix_word=prefix_word+1) begin:g_prefix_word
+                    sram_fakeram #(.DEPTH(1),.WIDTH(32),.WRITE_GRANULARITY(32)) prefix (
+                        .clk(clock),.en(!reset && (!write_prefix || return_word==prefix_word)),
+                        .we(prefix_write[prefix_word]),.wmask(1'b1),.addr(1'b0),
+                        .wdata(word_data),.rdata(read_data[payload_row][prefix_word*32 +: 32]));
+                end
                 rv32_frequency_word_bank #(.WIDTH(32)) final_word (
                     .clk_i(clock),.write_i(row_return && return_word==2'd3),
                     .data_i(word_data),.data_o(read_data[payload_row][127:96]));
