@@ -1,0 +1,937 @@
+{
+ "name": "course_D1000_F537",
+ "measured_on": "2026-11-26",
+ "git_commit": "dd690a804ecf5b65a2ef9beb81690ff3e4651ff1",
+ "framework_commit": "302f0cf3cccdaa5de084a2120e0d950c663e4cf5",
+ "testcases_commit": "29f980727f7d99a1842a58f34091c7579ba3fe85",
+ "tier3_thresholds": {
+  "maximum_area_um2": 36000,
+  "minimum_geomean_ipc": 1.0985,
+  "minimum_frequency_mhz": 300
+ },
+ "result": {
+  "area_um2": 32672.4666359867,
+  "geomean_ipc": 1.1174965937932515,
+  "estimated_fmax_mhz": 536.9690613529103,
+  "minimum_period_ns": 1.8623046875,
+  "tier3_passed": true,
+  "frequency_500mhz_passed": true
+ },
+ "result_at_framework_default_abc_target": {
+  "command": "make synth CLOCK_PERIOD_NS=2.0",
+  "area_um2": 32653.775,
+  "estimated_fmax_mhz": 475.62,
+  "minimum_period_ns": 2.1025,
+  "tier3_passed": true,
+  "frequency_500mhz_passed": false,
+  "source": "report.txt of that run; values as printed"
+ },
+ "depends_on": "config.mk sets CLOCK_PERIOD_NS ?= 1.0. A grader that ignores the repository config.mk obtains the framework-default row.",
+ "ppa": {
+  "status": "PASSED",
+  "command": "make synth  (config.mk: CLOCK_PERIOD_NS ?= 1.0; MODE=opt, ABC_DRIVING_CELL=INVx1_ASAP7_75t_R, ABC_LOAD_FF=5.0)",
+  "area": {
+   "logic_area_um2": 24728.554799986712,
+   "sequential_area_um2": 6984.6948,
+   "combinational_area_um2": 17743.85999998671,
+   "sram_area_um2": 7943.911835999989,
+   "area_um2": 32672.4666359867,
+   "sram_instances": [
+    {
+     "instance": "student_top/bus.g_read_payload_owner[0].g_sram_words.g_prefix_word[0].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[0].g_sram_words.g_prefix_word[1].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[0].g_sram_words.g_prefix_word[2].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[1].g_sram_words.g_prefix_word[0].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[1].g_sram_words.g_prefix_word[1].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[1].g_sram_words.g_prefix_word[2].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[2].g_sram_words.g_prefix_word[0].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[2].g_sram_words.g_prefix_word[1].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[2].g_sram_words.g_prefix_word[2].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[3].g_sram_words.g_prefix_word[0].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[3].g_sram_words.g_prefix_word[1].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[3].g_sram_words.g_prefix_word[2].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[4].g_sram_words.g_prefix_word[0].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[4].g_sram_words.g_prefix_word[1].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[4].g_sram_words.g_prefix_word[2].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[5].g_sram_words.g_prefix_word[0].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[5].g_sram_words.g_prefix_word[1].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[5].g_sram_words.g_prefix_word[2].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[6].g_sram_words.g_prefix_word[0].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[6].g_sram_words.g_prefix_word[1].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[6].g_sram_words.g_prefix_word[2].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[7].g_sram_words.g_prefix_word[0].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[7].g_sram_words.g_prefix_word[1].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/bus.g_read_payload_owner[7].g_sram_words.g_prefix_word[2].prefix.lane_0",
+     "module": "fakeram_asap7_1x32",
+     "depth": 1,
+     "width": 32,
+     "area_um2": 1.343693
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[0].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[10].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[11].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[12].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[13].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[14].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[15].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[1].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[2].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[3].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[4].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[5].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[6].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[7].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[8].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[0].g_local_commands.port_bank.g_byte[9].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[0].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[10].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[11].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[12].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[13].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[14].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[15].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[1].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[2].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[3].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[4].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[5].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[6].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[7].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[8].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_data_way[1].g_local_commands.port_bank.g_byte[9].storage.lane_0",
+     "module": "fakeram_asap7_512x8",
+     "depth": 512,
+     "width": 8,
+     "area_um2": 171.992678
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_tag_port_way[0].demand_tags.lane_0",
+     "module": "fakeram_asap7_512x19",
+     "depth": 512,
+     "width": 19,
+     "area_um2": 408.482611
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_tag_port_way[0].nextline_tags.lane_0",
+     "module": "fakeram_asap7_512x19",
+     "depth": 512,
+     "width": 19,
+     "area_um2": 408.482611
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_tag_port_way[1].demand_tags.lane_0",
+     "module": "fakeram_asap7_512x19",
+     "depth": 512,
+     "width": 19,
+     "area_um2": 408.482611
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_dcache.dcache.g_sram_tags.g_tag_port_way[1].nextline_tags.lane_0",
+     "module": "fakeram_asap7_512x19",
+     "depth": 512,
+     "width": 19,
+     "area_um2": 408.482611
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_data_array[0].data_array.lane_0",
+     "module": "fakeram_asap7_128x16",
+     "depth": 128,
+     "width": 16,
+     "area_um2": 85.996339
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_data_array[1].data_array.lane_0",
+     "module": "fakeram_asap7_128x16",
+     "depth": 128,
+     "width": 16,
+     "area_um2": 85.996339
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_data_array[2].data_array.lane_0",
+     "module": "fakeram_asap7_128x16",
+     "depth": 128,
+     "width": 16,
+     "area_um2": 85.996339
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_data_array[3].data_array.lane_0",
+     "module": "fakeram_asap7_128x16",
+     "depth": 128,
+     "width": 16,
+     "area_um2": 85.996339
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_data_array[4].data_array.lane_0",
+     "module": "fakeram_asap7_128x16",
+     "depth": 128,
+     "width": 16,
+     "area_um2": 85.996339
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_data_array[5].data_array.lane_0",
+     "module": "fakeram_asap7_128x16",
+     "depth": 128,
+     "width": 16,
+     "area_um2": 85.996339
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_data_array[6].data_array.lane_0",
+     "module": "fakeram_asap7_128x16",
+     "depth": 128,
+     "width": 16,
+     "area_um2": 85.996339
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_data_array[7].data_array.lane_0",
+     "module": "fakeram_asap7_128x16",
+     "depth": 128,
+     "width": 16,
+     "area_um2": 85.996339
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[0].g_data_lane[0].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[0].g_data_lane[1].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[0].g_data_lane[2].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[0].g_data_lane[3].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[0].g_data_lane[4].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[0].g_data_lane[5].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[0].g_data_lane[6].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[0].g_data_lane[7].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[1].g_data_lane[0].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[1].g_data_lane[1].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[1].g_data_lane[2].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[1].g_data_lane[3].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[1].g_data_lane[4].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[1].g_data_lane[5].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[1].g_data_lane[6].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[1].g_data_lane[7].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[2].g_data_lane[0].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[2].g_data_lane[1].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[2].g_data_lane[2].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[2].g_data_lane[3].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[2].g_data_lane[4].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[2].g_data_lane[5].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[2].g_data_lane[6].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[2].g_data_lane[7].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[3].g_data_lane[0].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[3].g_data_lane[1].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[3].g_data_lane[2].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[3].g_data_lane[3].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[3].g_data_lane[4].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[3].g_data_lane[5].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[3].g_data_lane[6].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    },
+    {
+     "instance": "student_top/core.g_cached_memory.g_nonblocking_icache.icache.g_instruction_line_filter.lines.g_sram_lines.g_bank[3].g_data_lane[7].data.lane_0",
+     "module": "fakeram_asap7_4x16",
+     "depth": 4,
+     "width": 16,
+     "area_um2": 2.687386
+    }
+   ]
+  },
+  "sram_macro_instances": 100,
+  "timing": {
+   "clock_port": "clock",
+   "clock_period_ns": 1.0,
+   "input_delay_ns": 0.2,
+   "output_delay_ns": 0.2,
+   "input_transition_ns": 0.05,
+   "clock_transition_ns": 0.05,
+   "clock_uncertainty_ns": 0.05,
+   "output_load_ff": 5.0,
+   "reset_value": 0,
+   "clock_model": "ideal",
+   "interconnect": "no_parasitics",
+   "frequency_resolution_ns": 0.001,
+   "minimum_period_ns": 1.8623046875,
+   "estimated_fmax_mhz": 536.9690613529103,
+   "worst_setup_slack_ns": -0.861672,
+   "timing_analyzed": true
+  },
+  "critical_path": {
+   "startpoint": "_468636_/QN",
+   "endpoint": "_479998_/D",
+   "slack_ns": -0.8617
+  },
+  "abc_constraints": {
+   "driving_cell": "INVx1_ASAP7_75t_R",
+   "output_load_ff": 5.0
+  },
+  "tools": {
+   "yosys": "Yosys 0.63 (git sha1 70a11c6bf, g++ 13.3.0-6ubuntu2~24.04.1 -fPIC -O3)",
+   "opensta": "3.1.0"
+  },
+  "report_txt_sha256": "498433393cfc2271aad102df241a9945d9f5ae3132c979091a17bd0216cc8a89",
+  "mapped_netlist_sha256": "5eaee13b03ad0db8cce59632c786d6964f413e41107935850fa2c7d51a068aae",
+  "wall_seconds": 1263
+ },
+ "perf": {
+  "status": "PASSED",
+  "latency": 10,
+  "max_cycles": 1000000,
+  "gate_level": {
+   "simulator": "unmodified scripts/build.py + scripts/sim.cpp on netlist/mapped.v.gz, simulation/cells.v, simulation/macros.v; Verilator 5.020, no wrapper",
+   "command": "scripts/testcase.py --kind perf --latency 10 --max-cycles 1000000",
+   "results": [
+    {
+     "name": "perf_median",
+     "dynamic_instructions": 6961,
+     "cycles": 7518,
+     "ipc": 0.9259111465815376
+    },
+    {
+     "name": "perf_multiply",
+     "dynamic_instructions": 21722,
+     "cycles": 17506,
+     "ipc": 1.240831714840626
+    },
+    {
+     "name": "perf_qsort",
+     "dynamic_instructions": 139900,
+     "cycles": 143280,
+     "ipc": 0.9764098269123395
+    },
+    {
+     "name": "perf_rsort",
+     "dynamic_instructions": 195719,
+     "cycles": 153139,
+     "ipc": 1.2780480478519516
+    },
+    {
+     "name": "perf_towers",
+     "dynamic_instructions": 5278,
+     "cycles": 4719,
+     "ipc": 1.118457300275482
+    },
+    {
+     "name": "perf_vvadd",
+     "dynamic_instructions": 4524,
+     "cycles": 3725,
+     "ipc": 1.214496644295302
+    }
+   ],
+   "geomean_ipc": 1.1174965937932515
+  },
+  "rtl": {
+   "simulator": "make build (tools/verilator_low_memory.py, WORD_SIM=1, PGO=0)",
+   "command": "make perf LATENCY=10",
+   "results": [
+    {
+     "name": "perf_median",
+     "dynamic_instructions": 6961,
+     "cycles": 7518,
+     "ipc": 0.9259111465815376
+    },
+    {
+     "name": "perf_multiply",
+     "dynamic_instructions": 21722,
+     "cycles": 17506,
+     "ipc": 1.240831714840626
+    },
+    {
+     "name": "perf_qsort",
+     "dynamic_instructions": 139900,
+     "cycles": 143280,
+     "ipc": 0.9764098269123395
+    },
+    {
+     "name": "perf_rsort",
+     "dynamic_instructions": 195719,
+     "cycles": 153139,
+     "ipc": 1.2780480478519516
+    },
+    {
+     "name": "perf_towers",
+     "dynamic_instructions": 5278,
+     "cycles": 4719,
+     "ipc": 1.118457300275482
+    },
+    {
+     "name": "perf_vvadd",
+     "dynamic_instructions": 4524,
+     "cycles": 3725,
+     "ipc": 1.214496644295302
+    }
+   ],
+   "geomean_ipc": 1.1174965937932515
+  },
+  "gate_and_rtl_cycles_identical": true
+ },
+ "correctness": {
+  "status": "PASSED",
+  "latency": 10,
+  "rtl": {
+   "command": "make test LATENCY=10 MAX_CYCLES=1000000000",
+   "passed": 19,
+   "failed": 0,
+   "cycles": {
+    "correctness_add_to_100": 447,
+    "correctness_array_test1": 433,
+    "correctness_array_test2": 466,
+    "correctness_basicopt1": 690965,
+    "correctness_bulgarian": 171316,
+    "correctness_expr": 414,
+    "correctness_gcd": 427,
+    "correctness_hanoi": 3348,
+    "correctness_lvalue2": 210,
+    "correctness_magic": 363712,
+    "correctness_manyarguments": 215,
+    "correctness_multiarray": 1327,
+    "correctness_naive": 214,
+    "correctness_pi": 38853527,
+    "correctness_qsort": 897323,
+    "correctness_queens": 240705,
+    "correctness_statement_test": 1137,
+    "correctness_superloop": 341756,
+    "correctness_tak": 808003
+   }
+  },
+  "gate_level": {
+   "passed": 18,
+   "failed": 0,
+   "cycles": {
+    "correctness_add_to_100": 447,
+    "correctness_array_test1": 433,
+    "correctness_array_test2": 466,
+    "correctness_basicopt1": 690965,
+    "correctness_bulgarian": 171316,
+    "correctness_expr": 414,
+    "correctness_gcd": 427,
+    "correctness_hanoi": 3348,
+    "correctness_lvalue2": 210,
+    "correctness_magic": 363712,
+    "correctness_manyarguments": 215,
+    "correctness_multiarray": 1327,
+    "correctness_naive": 214,
+    "correctness_qsort": 897323,
+    "correctness_queens": 240705,
+    "correctness_statement_test": 1137,
+    "correctness_superloop": 341756,
+    "correctness_tak": 808003
+   },
+   "not_run": [
+    "correctness_pi"
+   ],
+   "note": "Same answers on every case run. Cycle counts are also compared with RTL below."
+  },
+  "gate_vs_rtl_cycle_differences": {}
+ },
+ "not_verified": [
+  "gate-level correctness_pi (not finished at extraction; RTL passes)",
+  "Tier1/Tier2 area and frequency after this change (cycles verified identical; not re-synthesized)",
+  "formal equivalence",
+  "whether the grader reads config.mk",
+  "course AppImage binaries (tools built from the pinned sources)"
+ ],
+ "version_manifest_sha256": "55464836a9eb97dd99d0b16587b11d24d912c5f92946a508030c12eb944c9ab3"
+}
