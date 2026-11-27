@@ -130,18 +130,22 @@ rv32_frequency_event_select #(.WIDTH(RESPONSE_WIDTH),.EVENTS(2),.PRIORITY(0)) re
                 SRAM_ADDR_WIDTH'(read_index >> SRAM_BANK_WIDTH);
             localparam integer COMMAND_WIDTH=SRAM_ADDR_WIDTH+2;
             wire [8*COMMAND_WIDTH-1:0] commands;
-            rv32_frequency_control_tree #(.WIDTH(COMMAND_WIDTH),.LEAVES(8)) command_tree (
+            rv32_sram_pin_tree #(.WIDTH(COMMAND_WIDTH),.LEAVES(8)) command_tree (
                 .signal_i({!reset_i && (bank_fill || offered_read || bank_hold),bank_fill,address}),
                 .views_o(commands));
             // Same eight physical4x16 macros per bank as the former128-bit
             // wrapper expansion; each priced command leaf drives one macro.
+            // Each fill data bit reaches one macro pin per bank.
+            wire [127:0] bank_wdata;
+            rv32_sram_pin_tree #(.WIDTH(128)) data_pins (
+                .signal_i(primary_resp_line_data_i),.views_o(bank_wdata));
             for(genvar data_lane=0;data_lane<8;data_lane=data_lane+1) begin:g_data_lane
                 wire enable,write;
                 wire [SRAM_ADDR_WIDTH-1:0] lane_address;
                 assign {enable,write,lane_address}=commands[data_lane*COMMAND_WIDTH +: COMMAND_WIDTH];
                 sram_fakeram #(.DEPTH(SRAM_DEPTH),.WIDTH(16),.WRITE_GRANULARITY(16)) data (
                     .clk(clk_i),.en(enable),.we(write),.wmask(1'b1),.addr(lane_address),
-                    .wdata(primary_resp_line_data_i[data_lane*16 +: 16]),
+                    .wdata(bank_wdata[data_lane*16 +: 16]),
                     .rdata(bank_data[bank*128+data_lane*16 +: 16]));
             end
             // Bank data follows the same registered fast response owner.
