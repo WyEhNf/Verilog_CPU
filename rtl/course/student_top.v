@@ -52,7 +52,7 @@ module student_top #(
     parameter integer RS_ENTRIES = 8, LSQ_ENTRIES = 16,
     parameter integer LSQ_STORE_ADMISSION_BYPASS = 0,
     parameter integer EARLY_LOAD_ADDRESS = 3,
-    parameter integer LOAD_COMPLETION_BYPASS = 1,
+    parameter integer LOAD_COMPLETION_BYPASS = 2,
     parameter integer LSQ_SAVED_REPORT_PRIORITY = 1,
     parameter integer LSQ_HEAD_LOAD_IDENTITY_QUERY = 1,
     parameter integer LSQ_HELD_LOAD_IDENTITY_QUERY = 0,
