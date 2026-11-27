@@ -74,6 +74,16 @@ ABC ?=
 STA ?=
 ASAP7_LIB ?=
 
+# ABC mapping effort for `make synth`. The course flow passes this period to
+# ABC as its delay target and reports the frequency from OpenSTA's own search
+# of the minimum period, whose interface constraints do not depend on it.
+# ABC stops sizing gates as soon as its estimate meets the target, and its
+# estimate omits clock-to-Q, setup and clock uncertainty (about 0.1 ns), so
+# the framework default of 2.0 ns leaves this design near 476 MHz. A 1.0 ns
+# target makes ABC size the critical paths as far as it can: about 537 MHz
+# at the same area. `make synth CLOCK_PERIOD_NS=2.0` reproduces the default.
+CLOCK_PERIOD_NS ?= 1.0
+
 # Example native setup:
 # APPIMAGE =
 # VERILATOR = /opt/verilator/bin/verilator
