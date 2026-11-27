@@ -1,0 +1,92 @@
+{
+ "status": "PASSED",
+ "latency": 10,
+ "max_cycles": 1000000,
+ "gate_level": {
+  "simulator": "unmodified scripts/build.py + scripts/sim.cpp on netlist/mapped.v.gz, simulation/cells.v, simulation/macros.v; Verilator 5.020, no wrapper",
+  "command": "scripts/testcase.py --kind perf --latency 10 --max-cycles 1000000",
+  "results": [
+   {
+    "name": "perf_median",
+    "dynamic_instructions": 6961,
+    "cycles": 7518,
+    "ipc": 0.9259111465815376
+   },
+   {
+    "name": "perf_multiply",
+    "dynamic_instructions": 21722,
+    "cycles": 17506,
+    "ipc": 1.240831714840626
+   },
+   {
+    "name": "perf_qsort",
+    "dynamic_instructions": 139900,
+    "cycles": 143280,
+    "ipc": 0.9764098269123395
+   },
+   {
+    "name": "perf_rsort",
+    "dynamic_instructions": 195719,
+    "cycles": 153139,
+    "ipc": 1.2780480478519516
+   },
+   {
+    "name": "perf_towers",
+    "dynamic_instructions": 5278,
+    "cycles": 4719,
+    "ipc": 1.118457300275482
+   },
+   {
+    "name": "perf_vvadd",
+    "dynamic_instructions": 4524,
+    "cycles": 3725,
+    "ipc": 1.214496644295302
+   }
+  ],
+  "geomean_ipc": 1.1174965937932515
+ },
+ "rtl": {
+  "simulator": "make build (tools/verilator_low_memory.py, WORD_SIM=1, PGO=0)",
+  "command": "make perf LATENCY=10",
+  "results": [
+   {
+    "name": "perf_median",
+    "dynamic_instructions": 6961,
+    "cycles": 7518,
+    "ipc": 0.9259111465815376
+   },
+   {
+    "name": "perf_multiply",
+    "dynamic_instructions": 21722,
+    "cycles": 17506,
+    "ipc": 1.240831714840626
+   },
+   {
+    "name": "perf_qsort",
+    "dynamic_instructions": 139900,
+    "cycles": 143280,
+    "ipc": 0.9764098269123395
+   },
+   {
+    "name": "perf_rsort",
+    "dynamic_instructions": 195719,
+    "cycles": 153139,
+    "ipc": 1.2780480478519516
+   },
+   {
+    "name": "perf_towers",
+    "dynamic_instructions": 5278,
+    "cycles": 4719,
+    "ipc": 1.118457300275482
+   },
+   {
+    "name": "perf_vvadd",
+    "dynamic_instructions": 4524,
+    "cycles": 3725,
+    "ipc": 1.214496644295302
+   }
+  ],
+  "geomean_ipc": 1.1174965937932515
+ },
+ "gate_and_rtl_cycles_identical": true
+}

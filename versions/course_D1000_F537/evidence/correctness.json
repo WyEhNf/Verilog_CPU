@@ -1,0 +1,59 @@
+{
+ "status": "PASSED",
+ "latency": 10,
+ "rtl": {
+  "command": "make test LATENCY=10 MAX_CYCLES=1000000000",
+  "passed": 19,
+  "failed": 0,
+  "cycles": {
+   "correctness_add_to_100": 447,
+   "correctness_array_test1": 433,
+   "correctness_array_test2": 466,
+   "correctness_basicopt1": 690965,
+   "correctness_bulgarian": 171316,
+   "correctness_expr": 414,
+   "correctness_gcd": 427,
+   "correctness_hanoi": 3348,
+   "correctness_lvalue2": 210,
+   "correctness_magic": 363712,
+   "correctness_manyarguments": 215,
+   "correctness_multiarray": 1327,
+   "correctness_naive": 214,
+   "correctness_pi": 38853527,
+   "correctness_qsort": 897323,
+   "correctness_queens": 240705,
+   "correctness_statement_test": 1137,
+   "correctness_superloop": 341756,
+   "correctness_tak": 808003
+  }
+ },
+ "gate_level": {
+  "passed": 18,
+  "failed": 0,
+  "cycles": {
+   "correctness_add_to_100": 447,
+   "correctness_array_test1": 433,
+   "correctness_array_test2": 466,
+   "correctness_basicopt1": 690965,
+   "correctness_bulgarian": 171316,
+   "correctness_expr": 414,
+   "correctness_gcd": 427,
+   "correctness_hanoi": 3348,
+   "correctness_lvalue2": 210,
+   "correctness_magic": 363712,
+   "correctness_manyarguments": 215,
+   "correctness_multiarray": 1327,
+   "correctness_naive": 214,
+   "correctness_qsort": 897323,
+   "correctness_queens": 240705,
+   "correctness_statement_test": 1137,
+   "correctness_superloop": 341756,
+   "correctness_tak": 808003
+  },
+  "not_run": [
+   "correctness_pi"
+  ],
+  "note": "Same answers on every case run. Cycle counts are also compared with RTL below."
+ },
+ "gate_vs_rtl_cycle_differences": {}
+}

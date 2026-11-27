@@ -1,0 +1,242 @@
+{
+ "note": "make synth MODE=diagnose keeps hierarchy and maps differently: totals are larger than the opt-mode result and are only used to attribute area to modules.",
+ "total_area_um2": 42385.70637599998,
+ "tree": {
+  "instance": "student_top",
+  "module": "student_top",
+  "area_um2": 42385.706,
+  "sram_area_um2": 7943.912,
+  "children": [
+   {
+    "instance": "student_top/core",
+    "module": "cpu_core",
+    "area_um2": 40886.856,
+    "sram_area_um2": 7911.663,
+    "children": [
+     {
+      "instance": "student_top/core/g_ooo_backend.backend",
+      "module": "rv32_backend_joint",
+      "area_um2": 17247.353,
+      "sram_area_um2": 0.0,
+      "children": [
+       {
+        "instance": "student_top/core/g_ooo_backend.backend/lsq",
+        "module": "rv32_lsq",
+        "area_um2": 5118.659,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_ooo_backend.backend/rs",
+        "module": "rv32_reservation_station",
+        "area_um2": 2770.244,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_ooo_backend.backend/prf",
+        "module": "rv32_physical_register_file",
+        "area_um2": 2165.757,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_ooo_backend.backend/g_parallel_rat_recovery.rat_recovery",
+        "module": "rv32_rat_recovery",
+        "area_um2": 1565.003,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_ooo_backend.backend/rob",
+        "module": "rv32_rob",
+        "area_um2": 1543.162,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_ooo_backend.backend/g_elastic_dispatch.packet",
+        "module": "rv32_elastic_dispatch_packet",
+        "area_um2": 497.222,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_ooo_backend.backend/rename",
+        "module": "rv32_rename_unit",
+        "area_um2": 481.534,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_ooo_backend.backend/mdu",
+        "module": "rv32m_mdu_reservation_station",
+        "area_um2": 318.66,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_ooo_backend.backend/g_alu[0].alu",
+        "module": "rv32i_alu",
+        "area_um2": 254.144,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_ooo_backend.backend/g_alu[1].alu",
+        "module": "rv32i_alu",
+        "area_um2": 254.144,
+        "sram_area_um2": 0.0,
+        "children": []
+       }
+      ]
+     },
+     {
+      "instance": "student_top/core/g_cached_memory.g_nonblocking_dcache.dcache",
+      "module": "rv32_dcache_nonblocking",
+      "area_um2": 14332.416,
+      "sram_area_um2": 7137.696,
+      "children": [
+       {
+        "instance": "student_top/core/g_cached_memory.g_nonblocking_dcache.dcache/g_sram_tags.g_data_way[0].g_local_commands.port_bank",
+        "module": "rv32_dcache_command_line",
+        "area_um2": 2830.921,
+        "sram_area_um2": 2751.883,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_cached_memory.g_nonblocking_dcache.dcache/g_sram_tags.g_data_way[1].g_local_commands.port_bank",
+        "module": "rv32_dcache_command_line",
+        "area_um2": 2830.834,
+        "sram_area_um2": 2751.883,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_cached_memory.g_nonblocking_dcache.dcache/g_sram_tags.g_tag_port_way[0].demand_tags",
+        "module": "sram_fakeram_512x19_m19",
+        "area_um2": 408.628,
+        "sram_area_um2": 408.483,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_cached_memory.g_nonblocking_dcache.dcache/g_sram_tags.g_tag_port_way[0].nextline_tags",
+        "module": "sram_fakeram_512x19_m19",
+        "area_um2": 408.628,
+        "sram_area_um2": 408.483,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_cached_memory.g_nonblocking_dcache.dcache/g_sram_tags.g_tag_port_way[1].demand_tags",
+        "module": "sram_fakeram_512x19_m19",
+        "area_um2": 408.628,
+        "sram_area_um2": 408.483,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_cached_memory.g_nonblocking_dcache.dcache/g_sram_tags.g_tag_port_way[1].nextline_tags",
+        "module": "sram_fakeram_512x19_m19",
+        "area_um2": 408.628,
+        "sram_area_um2": 408.483,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_cached_memory.g_nonblocking_dcache.dcache/genblk24.g_banked_updates.metadata_input_tree",
+        "module": "rv32_frequency_control_tree",
+        "area_um2": 229.635,
+        "sram_area_um2": 0.0,
+        "children": []
+       }
+      ]
+     },
+     {
+      "instance": "student_top/core/g_cached_memory.g_nonblocking_icache.icache",
+      "module": "rv32_icache_nonblocking",
+      "area_um2": 4297.487,
+      "sram_area_um2": 773.967,
+      "children": [
+       {
+        "instance": "student_top/core/g_cached_memory.g_nonblocking_icache.icache/g_instruction_line_filter.lines",
+        "module": "rv32_instruction_line_filter",
+        "area_um2": 559.876,
+        "sram_area_um2": 85.996,
+        "children": []
+       }
+      ]
+     },
+     {
+      "instance": "student_top/core/g_banked_predictor.predictor",
+      "module": "rv32_banked_predictor",
+      "area_um2": 2130.313,
+      "sram_area_um2": 0.0,
+      "children": [
+       {
+        "instance": "student_top/core/g_banked_predictor.predictor/g_bank[0].predictor",
+        "module": "rv32_branch_predictor",
+        "area_um2": 490.879,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_banked_predictor.predictor/g_bank[1].predictor",
+        "module": "rv32_branch_predictor",
+        "area_um2": 490.879,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_banked_predictor.predictor/g_bank[2].predictor",
+        "module": "rv32_branch_predictor",
+        "area_um2": 490.879,
+        "sram_area_um2": 0.0,
+        "children": []
+       },
+       {
+        "instance": "student_top/core/g_banked_predictor.predictor/g_bank[3].predictor",
+        "module": "rv32_branch_predictor",
+        "area_um2": 490.879,
+        "sram_area_um2": 0.0,
+        "children": []
+       }
+      ]
+     },
+     {
+      "instance": "student_top/core/frontend",
+      "module": "rv32_fetch_frontend",
+      "area_um2": 1927.184,
+      "sram_area_um2": 0.0,
+      "children": []
+     },
+     {
+      "instance": "student_top/core/g_decode_pipeline.pipe",
+      "module": "rv32_decode_bundle_register",
+      "area_um2": 564.231,
+      "sram_area_um2": 0.0,
+      "children": []
+     }
+    ]
+   },
+   {
+    "instance": "student_top/bus",
+    "module": "rv32_axi_lite_bridge",
+    "area_um2": 1498.851,
+    "sram_area_um2": 32.249,
+    "children": [
+     {
+      "instance": "student_top/bus/g_response_fifos.data",
+      "module": "rv32_axi_response_fifo",
+      "area_um2": 200.781,
+      "sram_area_um2": 0.0,
+      "children": []
+     },
+     {
+      "instance": "student_top/bus/g_response_fifos.instruction",
+      "module": "rv32_axi_response_fifo",
+      "area_um2": 200.781,
+      "sram_area_um2": 0.0,
+      "children": []
+     }
+    ]
+   }
+  ]
+ }
+}

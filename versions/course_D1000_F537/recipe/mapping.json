@@ -1,0 +1,103 @@
+{
+ "name": "course_D1000_F537",
+ "flow": "course framework 302f0cf3 scripts/synth.py, unmodified, mode opt",
+ "command": "make synth",
+ "config_mk": {
+  "CLOCK_PERIOD_NS": 1.0
+ },
+ "abc": {
+  "target_ps": 1000,
+  "driving_cell": "INVx1_ASAP7_75t_R",
+  "load_ff": 5.0,
+  "script": "Yosys default constrained script: strash; &get -n; &fraig -x; &put; scorr; dc2; dretime; strash; &get -n; &dch -f; &nf {D}; &put; buffer; upsize {D}; dnsize {D}; stime -p"
+ },
+ "hierarchy": "synth -top student_top -noabc -flatten. The RTL has no keep attribute and one keep_hierarchy module, rv32_sram_pin_inverter (1212 instances, one INVx1 each).",
+ "post_processing": "none: no netlist edit, no custom mapping script, no buffer insertion outside ABC",
+ "sta": {
+  "clock_port": "clock",
+  "clock_period_ns": 1.0,
+  "input_delay_ns": 0.2,
+  "output_delay_ns": 0.2,
+  "input_transition_ns": 0.05,
+  "clock_transition_ns": 0.05,
+  "clock_uncertainty_ns": 0.05,
+  "output_load_ff": 5.0,
+  "reset_value": 0,
+  "clock_model": "ideal",
+  "interconnect": "no_parasitics",
+  "frequency_resolution_ns": 0.001,
+  "minimum_period_ns": 1.8623046875,
+  "estimated_fmax_mhz": 536.9690613529103,
+  "worst_setup_slack_ns": -0.861672,
+  "timing_analyzed": true
+ },
+ "same_netlist_recipe_at_framework_default_target": {
+  "command": "make synth CLOCK_PERIOD_NS=2.0",
+  "area_um2": 32653.775,
+  "estimated_fmax_mhz": 475.62,
+  "minimum_period_ns": 2.1025
+ },
+ "tool_sha256": {
+  "yosys": "00adb0d9fffebd0a303590ffd0a63dfa394f45cbcffe77daab5560b0268704e2",
+  "abc": "045f5e68d489cc34c17d0f4df95620d222bd9ee4f415e924a9e80b476da13acc",
+  "sta": "d3eb75a331ea8686e89f2d82d75b8c454d5b93ea6def43bc9004c84a25d43561",
+  "verilator": "70d2614c1dc45f96dd6cd50b5df998bb93e2ba9d2793af211a7ba4f06591828d"
+ },
+ "tool_build": "native Linux builds of the revisions pinned by the course Dockerfile: Yosys 70a11c6b (ABC 8e401543), OpenSTA f89887b5 with CUDD f54f5333, Verilator v5.020, ASAP7 f970bd3c",
+ "standard_libraries_sha256": {
+  "asap7sc7p5t_AO_RVT_TT_nldm_211120.lib": "b1ece108c0a2acd8d01c05cee6daee2834425037b1d9aad625d6f1dd640f1940",
+  "asap7sc7p5t_INVBUF_RVT_TT_nldm_220122.lib": "a4ceb32e418e1aac8667e28fbd8e9e46baf520180be4db075598a4d7c681a56e",
+  "asap7sc7p5t_OA_RVT_TT_nldm_211120.lib": "6529c6c72465cd133dfbfb03952327ab2774bb6aa4be866d78fd7bc6c58c9f6f",
+  "asap7sc7p5t_SEQ_RVT_TT_nldm_220123.lib": "57a0b403485b99ebd676942af4673ac086b86c7c75fbdc3e5c0038501dd22ba3",
+  "asap7sc7p5t_SIMPLE_RVT_TT_nldm_211120.lib": "fa92e6ab1481810602811b1eea54bc016a341f11fb5188d7512c026599adf038"
+ },
+ "ram_libraries_sha256": {
+  "fakeram_asap7_128x16.lib": "3aedfe87ba9280c83fa6189ed7be1b079592281dfaa035a859d5c64e978c2e55",
+  "fakeram_asap7_1x32.lib": "787a0d5e1399e09de0b3a0e342d8d1092ab22af0230a29b1471ffc867a2631a6",
+  "fakeram_asap7_4x16.lib": "e9cf2c06638b27c4e0e1672c5173fc5266f937e884b47c5a0def11eff058dc85",
+  "fakeram_asap7_512x19.lib": "09a382329a7b8ae52c5f6ed9eec4cc76910eda8eab814acab36ea4bd13d7156a",
+  "fakeram_asap7_512x8.lib": "76008a32e7c01d04fd0e8c2c1ec8bea9fd8579e47ac559731b2d98fa3b539a07"
+ },
+ "ram_configurations": [
+  {
+   "module": "sram_fakeram_1x32_m32",
+   "depth": 1,
+   "width": 32,
+   "write_granularity": 32,
+   "lanes": 1,
+   "macro": "fakeram_asap7_1x32"
+  },
+  {
+   "module": "sram_fakeram_4x16_m16",
+   "depth": 4,
+   "width": 16,
+   "write_granularity": 16,
+   "lanes": 1,
+   "macro": "fakeram_asap7_4x16"
+  },
+  {
+   "module": "sram_fakeram_128x16_m16",
+   "depth": 128,
+   "width": 16,
+   "write_granularity": 16,
+   "lanes": 1,
+   "macro": "fakeram_asap7_128x16"
+  },
+  {
+   "module": "sram_fakeram_512x8_m8",
+   "depth": 512,
+   "width": 8,
+   "write_granularity": 8,
+   "lanes": 1,
+   "macro": "fakeram_asap7_512x8"
+  },
+  {
+   "module": "sram_fakeram_512x19_m19",
+   "depth": 512,
+   "width": 19,
+   "write_granularity": 19,
+   "lanes": 1,
+   "macro": "fakeram_asap7_512x19"
+  }
+ ]
+}
