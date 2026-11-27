@@ -16,12 +16,14 @@
 
 三项来自同一份源码和同一份网表，使用未改动的官方综合脚本。六项性能和 19 项正确性程序全部通过；映射后的门级网表同样通过六项性能和全部 19 项正确性，周期数与 RTL 逐项相同。
 
-**536.97 MHz 依赖 `config.mk` 中的 `CLOCK_PERIOD_NS ?= 1.0`。** 这是课程 README 给出的 `make synth` 参数，只改变 ABC 映射的延迟目标，不改变 OpenSTA 的约束。用框架默认的 2.0 ns 目标（`make synth CLOCK_PERIOD_NS=2.0`），同一份源码是 475.62 MHz、32,653.78 μm²：仍满足 Tier3 和 400 MHz 加分线，不到 500 MHz。原因和数据见[优化过程报告](reports/CPU_optimization_500MHz_2026-11-26.md)第 3 节。
+**频率取决于综合时的目标时钟周期 `CLOCK_PERIOD_NS`，本仓库把它的默认值设为 1.0 ns。** 上游框架的默认值是 2.0 ns；用 `make synth CLOCK_PERIOD_NS=2.0`，同一份源码是 475.62 MHz、32,653.78 μm²，仍满足 Tier3 和 400 MHz 加分线，不到 500 MHz。
+
+这个参数是 ABC 映射的延迟目标，不改变 OpenSTA 的约束。ABC 的估计一达到目标就不再加大门尺寸，而它的估计比 OpenSTA 乐观约 0.1 ns，所以 2.0 ns 目标必然停在 2.1 ns 附近。目标取 1.6 ns 以下的任何值都得到同一结果。官方仓库没有规定评测使用的取值：README 把它列为可在 `config.mk` 或命令行调整的参数，示例用的就是 1.0，但没有写评测运行的命令（2026-11-26 检查，见[综合约定](docs/sram_pin_drivers_2026-11-26.md)的“关键观察”一节）。评测若在自己的环境里固定用 2.0 ns，应以 475.62 MHz 为准。
 
 - [测量报告](reports/course_D1000_F537_2026-11-26.md)：条件、逐项周期、未验证的部分。
 - [优化过程报告](reports/CPU_optimization_500MHz_2026-11-26.md)：从 37,981 μm² / 338 MHz 到当前结果的各步改动、参数敏感度和未采用的路线。
 - [versions/course_D1000_F537](versions/course_D1000_F537/README.md)：实测网表、RAM 库、约束和证据，[版本指针](configs/latest_verified_version.json)记录身份。
-- [SRAM 宏引脚驱动与综合约定](docs/sram_pin_drivers_2026-11-26.md)：新增 SRAM 或修改层级属性前先读。
+- [SRAM 宏引脚驱动、综合约定与 ABC 延迟目标](docs/sram_pin_drivers_2026-11-26.md)：新增 SRAM、修改层级属性或比较频率数字前先读。
 
 上一个提取版本 [global_D1000_L056_RAMBUF4_F8](versions/global_D1000_L056_RAMBUF4_F8/README.md)（32,200.66 μm²、IPC 1.115263、489.02 MHz）使用自定义映射和综合后缓冲树，不属于官方流程，按原样保留。
 
@@ -46,7 +48,7 @@ Tier1/Tier2 是同一套 RTL 的参数覆盖。它们在旧版课程流程 54fc1
 
 ## 构建与测试
 
-需要 Python 3.10+、GNU Make、C++17 编译器及课程 Verilator/Yosys/OpenSTA/ASAP7 工具。官方框架脚本和 RAM 模型位于 `scripts/`，当前同步版本为 `302f0cf3cccdaa5de084a2120e0d950c663e4cf5`；testcases 子模块固定为 `29f980727f7d99a1842a58f34091c7579ba3fe85`。
+需要 Python 3.10+、GNU Make、C++17 编译器及课程 Verilator/Yosys/OpenSTA/ASAP7 工具。官方框架脚本和 RAM 模型位于 `scripts/`，与上游逐字节相同；`Makefile` 只把 `CLOCK_PERIOD_NS` 的默认值从 2.0 改为 1.0。当前同步版本为 `302f0cf3cccdaa5de084a2120e0d950c663e4cf5`；testcases 子模块固定为 `29f980727f7d99a1842a58f34091c7579ba3fe85`。
 
 ```sh
 git submodule update --init testcases

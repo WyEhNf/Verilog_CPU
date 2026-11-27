@@ -16,11 +16,11 @@
   "target500_passed": true
  },
  "official_default_synthesis": true,
- "official_default_synthesis_note": "Unmodified course scripts via make synth. The ABC delay target is 1.0 ns from config.mk; the framework default of 2.0 ns gives 475.62 MHz.",
+ "official_default_synthesis_note": "Unmodified course scripts via make synth with CLOCK_PERIOD_NS=1.0 (set by source/config.mk at measurement; the repository Makefile default since). The upstream default of 2.0 ns gives 475.62 MHz.",
  "official_submission_score": false,
  "source": "Parameterized RTL at git_commit; every file byte-compared with the measured run",
  "files_sha256": {
-  "README.md": "89f8bfb2c02de10810b520927b13fd396db36aaa5073ba10a3d89407c9cafdf7",
+  "README.md": "39adac349c50d90018274285afe1a2ae3905a35f3d324dc53652ee530c993a95",
   "evidence/constraints.sdc": "b4a3b096a3baeec4324ec3b38febf5b657ddbc50d95f73986341bc33a2e9ee2b",
   "evidence/correctness.json": "dc75e2a27f05d1b474a593d0b9fff8ea919b43a2c20ab5fe56ea76d8679f7686",
   "evidence/hierarchy_area_diagnose.json": "e78a9b952aaf95327a43ef16994ffcd6e7c569352dbdf655aa7088f79c216309",

@@ -17,16 +17,7 @@
   "tier3_passed": true,
   "frequency_500mhz_passed": true
  },
- "result_at_framework_default_abc_target": {
-  "command": "make synth CLOCK_PERIOD_NS=2.0",
-  "area_um2": 32653.775,
-  "estimated_fmax_mhz": 475.62,
-  "minimum_period_ns": 2.1025,
-  "tier3_passed": true,
-  "frequency_500mhz_passed": false,
-  "source": "report.txt of that run; values as printed"
- },
- "depends_on": "config.mk sets CLOCK_PERIOD_NS ?= 1.0. A grader that ignores the repository config.mk obtains the framework-default row.",
+ "depends_on": "CLOCK_PERIOD_NS = 1.0 ns, the ABC delay target; default of this repository (Makefile and config.mk). A grader that fixes the upstream default of 2.0 ns in its own environment obtains the other row.",
  "ppa": {
   "status": "PASSED",
   "command": "make synth  (config.mk: CLOCK_PERIOD_NS ?= 1.0; MODE=opt, ABC_DRIVING_CELL=INVx1_ASAP7_75t_R, ABC_LOAD_FF=5.0)",
@@ -928,8 +919,38 @@
  "not_verified": [
   "Tier1/Tier2 area and frequency after this change (cycles verified identical; not re-synthesized)",
   "formal equivalence",
-  "whether the grader reads config.mk",
+  "which CLOCK_PERIOD_NS the grader uses (not stated upstream)",
   "course AppImage binaries (tools built from the pinned sources)"
  ],
- "version_manifest_sha256": "497d37e0fc2a754038679bc750ca05d04f52088d15d843840faeba36057d185c"
+ "version_manifest_sha256": "6b8109b2f13edcf3f5b893ec25898eb7670f267be10df45bd9278920c845a866",
+ "result_at_upstream_default_abc_target": {
+  "command": "make synth CLOCK_PERIOD_NS=2.0",
+  "area_um2": 32653.775,
+  "estimated_fmax_mhz": 475.62,
+  "minimum_period_ns": 2.1025,
+  "tier3_passed": true,
+  "frequency_500mhz_passed": false,
+  "source": "report.txt of that run; values as printed"
+ },
+ "upstream_rule_check": {
+  "checked_on": "2026-11-26",
+  "repository": "ACMClassCourse-2025/RISC-V-CPU-2026",
+  "main": "302f0cf3cccdaa5de084a2120e0d950c663e4cf5",
+  "branches": [
+   "main",
+   "chisel-example"
+  ],
+  "commits_on_main": 2,
+  "issues": 0,
+  "pull_requests": 1,
+  "releases": 0,
+  "finding": "No rule fixes the clock period used for grading. README lists CLOCK_PERIOD_NS (default 2.0) among variables settable in config.mk or on the command line and shows make synth CLOCK_PERIOD_NS=1.0; the grading and OJ sections do not mention a synthesis command."
+ },
+ "makefile_default_rerun": {
+  "command": "make synth CONFIG=/nonexistent.mk",
+  "estimated_fmax_mhz": 536.97,
+  "area_um2": 32672.467,
+  "mapped_netlist_sha256": "5eaee13b03ad0db8cce59632c786d6964f413e41107935850fa2c7d51a068aae",
+  "byte_identical_to_measured_netlist": true
+ }
 }

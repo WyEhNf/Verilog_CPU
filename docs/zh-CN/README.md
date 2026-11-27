@@ -65,7 +65,7 @@
 | 计划 RS 私有载荷准备与提前 MDU 类别 | [中文](rs_preload_mdu_class_review_2026-10-10.md) | [原版](../rs_preload_mdu_class_review_2026-10-10.md) |
 | 片上 SRAM 存储库 (`sram_fakeram`) | [中文](sram.md) | [原版](../sram.md) |
 | 框架片上 SRAM 规范 | [中文](sram_fakeram_contract.md) | [原版](../sram_fakeram_contract.md) |
-| SRAM 宏引脚驱动与官方流程综合 | [中文](sram_pin_drivers_2026-11-26.md) | [原版](../sram_pin_drivers_2026-11-26.md) |
+| SRAM 宏引脚驱动、综合约定与 ABC 延迟目标 | [中文](sram_pin_drivers_2026-11-26.md) | [原版](../sram_pin_drivers_2026-11-26.md) |
 | 静态哨兵类别与保存候选状态查询 | [中文](static_source_saved_state_review_2026-10-09.md) | [原版](../static_source_saved_state_review_2026-10-09.md) |
 | 保存 STORE 路由与 MSHR 数据所有者候选 | [中文](store_route_mshr_owner_review_2026-10-09.md) | [原版](../store_route_mshr_owner_review_2026-10-09.md) |
 | Yosys+ASAP7 面积综合"卡死"诊断与修复记录 | [中文](synth_hang_diagnosis.md) | [原版](../synth_hang_diagnosis.md) |

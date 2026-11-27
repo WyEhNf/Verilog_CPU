@@ -11,7 +11,7 @@
     "area_um2": 32672.4666359867,
     "geomean_ipc": 1.1174965937932515,
     "fmax_mhz": 536.9690613529103,
-    "fmax_mhz_at_framework_default_abc_target": 475.62,
-    "synthesis": "make synth with config.mk CLOCK_PERIOD_NS=1.0"
+    "synthesis": "make synth; CLOCK_PERIOD_NS defaults to 1.0 in this repository (upstream default 2.0)",
+    "fmax_mhz_at_upstream_default_abc_target": 475.62
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "course_D1000_F537",
   "path": "versions/course_D1000_F537",
-  "manifest_sha256": "497d37e0fc2a754038679bc750ca05d04f52088d15d843840faeba36057d185c",
+  "manifest_sha256": "6b8109b2f13edcf3f5b893ec25898eb7670f267be10df45bd9278920c845a866",
   "metrics": {
     "area_um2": 32672.4666359867,
     "fmax_mhz": 536.9690613529103,
@@ -9,20 +9,20 @@
     "tier3_thresholds_passed": true,
     "target500_passed": true
   },
-  "metrics_at_framework_default_abc_target": {
-    "area_um2": 32653.775,
-    "fmax_mhz": 475.62,
-    "target500_passed": false
-  },
   "source_entry": "verilog/filelist.f",
   "source_commit": "dd690a804ecf5b65a2ef9beb81690ff3e4651ff1",
   "netlist_extraction": "python versions/course_D1000_F537/release.py materialize --out build/course_D1000_F537",
   "main_tier_profiles_preserved": true,
   "official_default_synthesis": true,
-  "official_default_synthesis_note": "make synth with the unmodified course scripts; config.mk sets the ABC delay target to 1.0 ns",
+  "official_default_synthesis_note": "make synth with the unmodified course scripts; CLOCK_PERIOD_NS (ABC delay target) is 1.0 ns, the default of this repository. The upstream repository sets no rule for the value used in grading (checked 2026-11-26).",
   "previous": {
     "name": "global_D1000_L056_RAMBUF4_F8",
     "path": "versions/global_D1000_L056_RAMBUF4_F8",
     "manifest_sha256": "be561c4dd67069c2167b1ccb73096b536449c366f711e7dd84adb2c7fcd1956f"
+  },
+  "metrics_at_upstream_default_abc_target": {
+    "area_um2": 32653.775,
+    "fmax_mhz": 475.62,
+    "target500_passed": false
   }
 }

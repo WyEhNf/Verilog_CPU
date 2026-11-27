@@ -13,7 +13,7 @@
 | 项目最终要求 | [原版](final_project_requirements.md) | [中文版](zh-CN/final_project_requirements.md) |
 | 面积与性能优化方案 | [原版](area_optimization_strategy_2026-09-08.md) | [中文版](zh-CN/area_optimization_strategy_2026-09-08.md) |
 | 本机测试环境 | [原版](windows_test_environment.md) | [中文版](zh-CN/windows_test_environment.md) |
-| SRAM 宏引脚驱动与官方流程综合 | [原版](sram_pin_drivers_2026-11-26.md) | [中文版](zh-CN/sram_pin_drivers_2026-11-26.md) |
+| SRAM 宏引脚驱动、综合约定与 ABC 延迟目标 | [原版](sram_pin_drivers_2026-11-26.md) | [中文版](zh-CN/sram_pin_drivers_2026-11-26.md) |
 | 参考论文与资源 | [原版](references.md) | [中文版](zh-CN/references.md) |
 
 两套文档记录同一时期的设计与实验；翻译不代表重新执行测试或更新历史验收结论。后续修改时请同步维护对应版本。
