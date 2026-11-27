@@ -545,27 +545,38 @@ module rv32_dcache_nonblocking #(
         localparam integer TAG_PORTS=2*CACHE_WAYS;
         wire [TAG_PORTS-1:0] tag_port_write,tag_port_enable,tag_port_address_select;
         wire [TAG_PORTS*CACHE_TAG_WIDTH-1:0] tag_port_data;
-        rv32_frequency_control_tree #(.LEAVES(TAG_PORTS)) tag_port_write_tree (
+        rv32_sram_pin_tree #(.LEAVES(TAG_PORTS)) tag_port_write_tree (
             .signal_i(tag_array_write),.views_o(tag_port_write));
         rv32_frequency_control_tree #(.LEAVES(TAG_PORTS)) tag_port_enable_tree (
             .signal_i(!reset_i && (tag_array_write || input_fire)),.views_o(tag_port_enable));
         rv32_frequency_control_tree #(.LEAVES(TAG_PORTS)) tag_port_address_tree (
             .signal_i(tag_array_write),.views_o(tag_port_address_select));
-        rv32_frequency_control_tree #(.WIDTH(CACHE_TAG_WIDTH),.LEAVES(TAG_PORTS)) tag_port_data_tree (
+        rv32_sram_pin_tree #(.WIDTH(CACHE_TAG_WIDTH),.LEAVES(TAG_PORTS)) tag_port_data_tree (
             .signal_i(tag_write_value),.views_o(tag_port_data));
+        // Both ways of one port class read the same set. Select the address
+        // once per class, then give every tag macro address pin its own leaf.
+        wire [CACHE_INDEX_WIDTH-1:0] demand_tag_address=
+            tag_port_address_select[0]?tag_write_set:cache_index(dcache_req_addr_i);
+        wire [CACHE_INDEX_WIDTH-1:0] nextline_tag_address=
+            tag_port_address_select[1]?tag_write_set:cache_index(input_prefetch_line);
+        wire [CACHE_WAYS*CACHE_INDEX_WIDTH-1:0] demand_tag_address_pins,nextline_tag_address_pins;
+        rv32_sram_pin_tree #(.WIDTH(CACHE_INDEX_WIDTH),.LEAVES(CACHE_WAYS)) demand_tag_address_tree (
+            .signal_i(demand_tag_address),.views_o(demand_tag_address_pins));
+        rv32_sram_pin_tree #(.WIDTH(CACHE_INDEX_WIDTH),.LEAVES(CACHE_WAYS)) nextline_tag_address_tree (
+            .signal_i(nextline_tag_address),.views_o(nextline_tag_address_pins));
         for(genvar tag_port_way=0;tag_port_way<CACHE_WAYS;tag_port_way=tag_port_way+1) begin:g_tag_port_way
             sram_fakeram #(.DEPTH(CACHE_SETS),.WIDTH(CACHE_TAG_WIDTH),
                           .WRITE_GRANULARITY(CACHE_TAG_WIDTH)) demand_tags (
                 .clk(clk_i),.en(tag_port_enable[2*tag_port_way]),
                 .we(tag_port_write[2*tag_port_way]),.wmask(tag_write_mask[tag_port_way]),
-                .addr(tag_port_address_select[2*tag_port_way]?tag_write_set:cache_index(dcache_req_addr_i)),
+                .addr(demand_tag_address_pins[tag_port_way*CACHE_INDEX_WIDTH +: CACHE_INDEX_WIDTH]),
                 .wdata(tag_port_data[2*tag_port_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]),
                 .rdata(demand_rdata[tag_port_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]));
             sram_fakeram #(.DEPTH(CACHE_SETS),.WIDTH(CACHE_TAG_WIDTH),
                           .WRITE_GRANULARITY(CACHE_TAG_WIDTH)) nextline_tags (
                 .clk(clk_i),.en(tag_port_enable[2*tag_port_way+1]),
                 .we(tag_port_write[2*tag_port_way+1]),.wmask(tag_write_mask[tag_port_way]),
-                .addr(tag_port_address_select[2*tag_port_way+1]?tag_write_set:cache_index(input_prefetch_line)),
+                .addr(nextline_tag_address_pins[tag_port_way*CACHE_INDEX_WIDTH +: CACHE_INDEX_WIDTH]),
                 .wdata(tag_port_data[(2*tag_port_way+1)*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]),
                 .rdata(prefetch_rdata[tag_port_way*CACHE_TAG_WIDTH +: CACHE_TAG_WIDTH]));
         end

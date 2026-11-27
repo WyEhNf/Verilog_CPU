@@ -35,10 +35,13 @@ module rv32_dcache_command_line #(
     wire [IW-1:0] address=({IW{refill_way}} & refill_set) |
         ({IW{local_way}} & local_set) | ({IW{store_way}} & hit_set) |
         ({IW{!writing}} & read_set);
-    localparam integer PIN_WIDTH=IW+3;
+    // Write and address reach sixteen macros: private pin leaves, one root
+    // per eight. Chip enable is formed per byte below, so the enable and
+    // mask qualification see ordinary gate loads.
+    localparam integer PIN_WIDTH=IW+1;
     wire [16*PIN_WIDTH-1:0] pin_views;
-    rv32_frequency_control_tree #(.WIDTH(PIN_WIDTH),.LEAVES(16)) pin_tree (
-        .signal_i({enabled,writing,full_write,address}),.views_o(pin_views));
+    rv32_sram_pin_tree #(.WIDTH(PIN_WIDTH),.LEAVES(16),.ROOTED(1)) pin_tree (
+        .signal_i({writing,address}),.views_o(pin_views));
     // Each final grant leaf selects only sixteen write-data bits. The raw
     // local/refill command never drives the wide payload selection again.
     wire [15:0] data_select_views;
@@ -46,10 +49,13 @@ module rv32_dcache_command_line #(
         .signal_i({refill_way,local_way}),.views_o(data_select_views));
     genvar byte_id;
     generate for(byte_id=0;byte_id<16;byte_id=byte_id+1) begin:g_byte
-        wire port_enable,port_write,port_full_write;
+        wire port_write;
         wire [IW-1:0] port_address;
-        assign {port_enable,port_write,port_full_write,port_address}=
-            pin_views[byte_id*PIN_WIDTH +: PIN_WIDTH];
+        assign {port_write,port_address}=pin_views[byte_id*PIN_WIDTH +: PIN_WIDTH];
+        // The FakeRAM wrapper gates a masked byte's chip enable while writing:
+        // CE = en & (~we | wmask). Form that same value here and pass wmask=1.
+        // A zero mask still must not turn the byte into a read.
+        wire byte_enable=enabled && (!writing || full_write || store_mask_i[byte_id]);
         wire refill_select=data_select_views[(byte_id/2)*2+1];
         wire local_select=data_select_views[(byte_id/2)*2];
         // Qualify before a preserved boundary. The raw store-response
@@ -63,11 +69,8 @@ module rv32_dcache_command_line #(
             response_store_data_i[byte_id*8 +: 8]:response_data_i[byte_id*8 +: 8];
         wire [7:0] write_data=refill_select?refill_data:
             local_select?local_data_i[byte_id*8 +: 8]:store_data_i[byte_id*8 +: 8];
-        // Keep global writing on every byte. The original FakeRAM wrapper
-        // gates masked-byte CE; a zero mask must not turn that byte into a read.
         sram_fakeram #(.DEPTH(SETS),.WIDTH(8),.WRITE_GRANULARITY(8)) storage (
-            .clk(clk_i),.en(port_enable),.we(port_write),
-            .wmask(port_full_write || store_mask_i[byte_id]),
+            .clk(clk_i),.en(byte_enable),.we(port_write),.wmask(1'b1),
             .addr(port_address),.wdata(write_data),.rdata(data_o[byte_id*8 +: 8]));
     end endgenerate
 endmodule
