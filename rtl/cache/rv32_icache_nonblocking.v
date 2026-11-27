@@ -585,12 +585,27 @@ module rv32_icache_nonblocking #(
     wire refill_array_write = !reset_i && refill_array_candidate && mem_resp_ready_o;
     wire hit_array_read = request_fire && request_hit &&
                           (lookup_req_epoch == current_epoch_i);
-    sram_fakeram #(.DEPTH(CACHE_LINES), .WIDTH(128), .WRITE_GRANULARITY(128)) data_array (
-        .clk(clk_i), .en(!reset_i && (refill_array_write || hit_array_read)),
-        .we(refill_array_write), .wmask(1'b1),
-        .addr(refill_array_write ? refill_entry : request_entry),
-        .wdata(mem_resp_data_i), .rdata(data_rdata)
-    );
+    // FakeRAM read delay grows with the width of one macro, while its area
+    // is per bit. Eight 16-bit lanes hold the same line for the same area and
+    // return it roughly 0.14 ns earlier than one 128-bit macro. Every lane
+    // receives the identical command through private pin drivers.
+    localparam integer DATA_LANES=8;
+    localparam integer DATA_PIN_WIDTH=CACHE_ENTRY_WIDTH+2;
+    wire [DATA_LANES*DATA_PIN_WIDTH-1:0] data_array_pins;
+    rv32_sram_pin_tree #(.WIDTH(DATA_PIN_WIDTH),.LEAVES(DATA_LANES)) data_array_pin_tree (
+        .signal_i({!reset_i && (refill_array_write || hit_array_read),refill_array_write,
+                   refill_array_write ? refill_entry : request_entry}),
+        .views_o(data_array_pins));
+    generate for(genvar data_lane=0;data_lane<DATA_LANES;data_lane=data_lane+1) begin:g_data_array
+        wire lane_enable,lane_write;
+        wire [CACHE_ENTRY_WIDTH-1:0] lane_address;
+        assign {lane_enable,lane_write,lane_address}=
+            data_array_pins[data_lane*DATA_PIN_WIDTH +: DATA_PIN_WIDTH];
+        sram_fakeram #(.DEPTH(CACHE_LINES), .WIDTH(16), .WRITE_GRANULARITY(16)) data_array (
+            .clk(clk_i), .en(lane_enable), .we(lane_write), .wmask(1'b1), .addr(lane_address),
+            .wdata(mem_resp_data_i[data_lane*16 +: 16]), .rdata(data_rdata[data_lane*16 +: 16])
+        );
+    end endgenerate
 
     assign lookup_req_ready = !reset_i && response_slot_free &&
                             !(refill_array_candidate && request_hit) &&
