@@ -89,7 +89,7 @@ module student_top #(
     parameter integer LSQ_RESPONSE_WORD_PRESELECT = 0,
     parameter integer LSQ_RECLAIM_WIDTH = 2,
     parameter integer LSQ_SECOND_REPORT_RECLAIM = 1,
-    parameter integer LSQ_EMPTY_SELECTION_BYPASS = 0,
+    parameter integer LSQ_EMPTY_SELECTION_BYPASS = 2,
     parameter integer LSQ_COMMITTED_STORE_BYPASS = 0,
     parameter integer LSQ_PICK_LOCAL_VALIDITY = 1,
     parameter integer LSQ_FORWARD_ONEHOT = 1,
