@@ -7,7 +7,7 @@
   "customized_files": {
     "config.mk": {
       "upstream_sha256": "1933616248ea492db2bf10b8f5e98a707e6f4b505ff6298a5c3564808329ea75",
-      "purpose": "Select tools/verilator_low_memory.py and JOBS=1; export AppImage selection, TRACE_DEPTH=1, COMPACT_IDS=0, CPP_GROUP_BYTES=2097152, OPT_FAST=-O3, SPLIT_SCHEDULE=1, WORD_SIM=1 and UNROLL_STMTS=4096. Structural simulation, diagnostic names and compiler options remain configurable. PGO links use at most two LTO workers."
+      "purpose": "Select tools/verilator_low_memory.py and JOBS=1; export AppImage selection, TRACE_DEPTH=1, COMPACT_IDS=0, CPP_GROUP_BYTES=2097152, OPT_FAST=-O3, SPLIT_SCHEDULE=1, WORD_SIM=1 and UNROLL_STMTS=4096. Structural simulation, diagnostic names and compiler options remain configurable. PGO links use at most two LTO workers. Since 2026-11-26 it also sets CLOCK_PERIOD_NS ?= 1.0, the ABC delay target used by make synth."
     },
     "docs/axi4-lite.md": {
       "upstream_sha256": "051b7458ac42b3bfd257ed3a4fea23409980c6f4a29ed74120a1dd6ec190b9c2",
@@ -37,5 +37,21 @@
     "scripts/timing.tcl": "a002bb0fc0c6853cb33394be0b62818f6dddfba62b474d4e23f8193b1e27efb1",
     "scripts/toolchain.py": "13a0667fe197b99ac28ea5495d6de477abbaab5a375639a152990acd2f229b0b"
   },
-  "previous_framework_revision": "54fc150ffc290f52aa024209ffb9a29d43856f6d"
+  "previous_framework_revision": "54fc150ffc290f52aa024209ffb9a29d43856f6d",
+  "vendored_sha256_lf": {
+    "Makefile": "d1af2b27fcc16b8b48761d5d670c4ef71da41e7c611387d382c5cb686f9c20e9",
+    "scripts/build.py": "53a696ea526986a67e5affeab447e81378d61eeedce3fb37b92a45fb16318a8b",
+    "scripts/fakeram.py": "bcad1312d66d279e22c932fc548cb5aaf3ab0f795e6fcf15115e393ac87dcc21",
+    "scripts/oj_io.py": "6c2930aeabec7abfe7c9d2ba649877ae4d192bb394cbf4f4e7a34c1093878cd6",
+    "scripts/ram/sram_fakeram.sv": "c0a2389d5c3211fbd2fbca22a2e2e86edc38eafa9260407d72a55841274098cc",
+    "scripts/run.py": "7c5db9d823531482586b47f28a06a1768ecacdb87c44852d219c8e79279d83c8",
+    "scripts/sim.cpp": "8dc91fce4c30e48b2caa73d62fc2fa89f71b3d938bf53bb622efa5d0572836ec",
+    "scripts/synth.py": "34c3a8e9a7cab599c0f26e600d51e4e64b32c12bfbe2cd598b529058c4507c08",
+    "scripts/synth_report.py": "e1f3967cb64786a73f112ccf17a29091cbcb094a55612285a19d09946a249924",
+    "scripts/testcase.py": "1bb479d37cac7d1f26aa1a016538429212ac49ed8ce7e73e5b56396f3d8c84f3",
+    "scripts/timing.py": "576be0b8273c7ee3616a414b759fc158634b9138500f61f2ea8db0fd133e5f3f",
+    "scripts/timing.tcl": "dc8314b75f29ef1ae483ece9d2dbbac076a4d0dd50bee6d9273f4a78c601b484",
+    "scripts/toolchain.py": "03a25cfc4b396214445e45b2b11c71a87cc7eb117ac8176c792b6d5c6f0a35fc"
+  },
+  "vendored_sha256_note": "vendored_sha256 holds the hashes of the upstream files with CRLF line endings (the earlier Windows checkout). vendored_sha256_lf holds the same files with LF endings, as checked out on Linux and as served by the upstream repository; verified byte for byte against framework_revision on 2026-11-26."
 }

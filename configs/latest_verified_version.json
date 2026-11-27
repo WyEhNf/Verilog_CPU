@@ -1,16 +1,28 @@
 {
-  "name": "global_D1000_L056_RAMBUF4_F8",
-  "path": "versions/global_D1000_L056_RAMBUF4_F8",
-  "manifest_sha256": "be561c4dd67069c2167b1ccb73096b536449c366f711e7dd84adb2c7fcd1956f",
+  "name": "course_D1000_F537",
+  "path": "versions/course_D1000_F537",
+  "manifest_sha256": "55464836a9eb97dd99d0b16587b11d24d912c5f92946a508030c12eb944c9ab3",
   "metrics": {
-    "area_um2": 32200.657837992745,
-    "fmax_mhz": 489.01623686723974,
-    "geomean_ipc": 1.1152626918348099,
+    "area_um2": 32672.4666359867,
+    "fmax_mhz": 536.9690613529103,
+    "geomean_ipc": 1.1174965937932515,
     "tier3_thresholds_passed": true,
+    "target500_passed": true
+  },
+  "metrics_at_framework_default_abc_target": {
+    "area_um2": 32653.775,
+    "fmax_mhz": 475.62,
     "target500_passed": false
   },
-  "source_entry": "versions/global_D1000_L056_RAMBUF4_F8/source/verilog/filelist.f",
-  "netlist_extraction": "python versions/global_D1000_L056_RAMBUF4_F8/release.py materialize --out build/global_D1000_L056_RAMBUF4_F8",
+  "source_entry": "verilog/filelist.f",
+  "source_commit": "dd690a804ecf5b65a2ef9beb81690ff3e4651ff1",
+  "netlist_extraction": "python versions/course_D1000_F537/release.py materialize --out build/course_D1000_F537",
   "main_tier_profiles_preserved": true,
-  "official_default_synthesis": false
+  "official_default_synthesis": true,
+  "official_default_synthesis_note": "make synth with the unmodified course scripts; config.mk sets the ABC delay target to 1.0 ns",
+  "previous": {
+    "name": "global_D1000_L056_RAMBUF4_F8",
+    "path": "versions/global_D1000_L056_RAMBUF4_F8",
+    "manifest_sha256": "be561c4dd67069c2167b1ccb73096b536449c366f711e7dd84adb2c7fcd1956f"
+  }
 }
