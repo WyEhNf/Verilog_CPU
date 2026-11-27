@@ -28,7 +28,7 @@
   }
  },
  "gate_level": {
-  "passed": 18,
+  "passed": 19,
   "failed": 0,
   "cycles": {
    "correctness_add_to_100": 447,
@@ -48,11 +48,10 @@
    "correctness_queens": 240705,
    "correctness_statement_test": 1137,
    "correctness_superloop": 341756,
-   "correctness_tak": 808003
+   "correctness_tak": 808003,
+   "correctness_pi": 38853527
   },
-  "not_run": [
-   "correctness_pi"
-  ],
+  "not_run": [],
   "note": "Same answers on every case run. Cycle counts are also compared with RTL below."
  },
  "gate_vs_rtl_cycle_differences": {}

@@ -897,7 +897,7 @@
    }
   },
   "gate_level": {
-   "passed": 18,
+   "passed": 19,
    "failed": 0,
    "cycles": {
     "correctness_add_to_100": 447,
@@ -917,21 +917,19 @@
     "correctness_queens": 240705,
     "correctness_statement_test": 1137,
     "correctness_superloop": 341756,
-    "correctness_tak": 808003
+    "correctness_tak": 808003,
+    "correctness_pi": 38853527
    },
-   "not_run": [
-    "correctness_pi"
-   ],
+   "not_run": [],
    "note": "Same answers on every case run. Cycle counts are also compared with RTL below."
   },
   "gate_vs_rtl_cycle_differences": {}
  },
  "not_verified": [
-  "gate-level correctness_pi (not finished at extraction; RTL passes)",
   "Tier1/Tier2 area and frequency after this change (cycles verified identical; not re-synthesized)",
   "formal equivalence",
   "whether the grader reads config.mk",
   "course AppImage binaries (tools built from the pinned sources)"
  ],
- "version_manifest_sha256": "55464836a9eb97dd99d0b16587b11d24d912c5f92946a508030c12eb944c9ab3"
+ "version_manifest_sha256": "497d37e0fc2a754038679bc750ca05d04f52088d15d843840faeba36057d185c"
 }

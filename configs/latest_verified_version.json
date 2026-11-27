@@ -1,7 +1,7 @@
 {
   "name": "course_D1000_F537",
   "path": "versions/course_D1000_F537",
-  "manifest_sha256": "55464836a9eb97dd99d0b16587b11d24d912c5f92946a508030c12eb944c9ab3",
+  "manifest_sha256": "497d37e0fc2a754038679bc750ca05d04f52088d15d843840faeba36057d185c",
   "metrics": {
     "area_um2": 32672.4666359867,
     "fmax_mhz": 536.9690613529103,

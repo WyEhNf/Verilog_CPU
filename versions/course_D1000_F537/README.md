@@ -40,7 +40,7 @@ python versions/course_D1000_F537/framework/scripts/testcase.py --kind perf --la
 
 - **面积与频率**：一次 `make synth`，结果见 `evidence/report.txt` 和 `evidence/ppa.json`。STA 为理想时钟、无寄生参数，输入输出延迟 0.2 ns，时钟不确定度 0.05 ns，输出负载 5 fF。
 - **IPC**：六项原始 `testcases/perf_*`，延迟 10，分子取各自 `metrics.json` 的动态指令数。门级网表仿真与 RTL 仿真的六项周期数逐项相同：7518 / 17506 / 143280 / 153139 / 4719 / 3725。
-- **正确性**：RTL 仿真 19 项全部通过。门级网表仿真通过了除 `correctness_pi` 外的 18 项，周期数与 RTL 逐项相同；`correctness_pi` 约 3,900 万周期，门级仿真未在提取前跑完，见 `evidence/correctness.json` 的 `not_run`。
+- **正确性**：RTL 仿真和门级网表仿真各 19 项全部通过，周期数逐项相同，含 `correctness_pi`（38,853,527 周期）。
 - 门级仿真是零延迟功能仿真，使用原版 `build.py` 和 `sim.cpp`、Verilator 5.020，没有使用主工程的模拟加速包装。
 
 工具是按课程 Dockerfile 固定的版本在 Linux 上从源码构建的：Yosys `70a11c6b`（ABC `8e401543`）、OpenSTA `f89887b5`、Verilator 5.020、ASAP7 `f970bd3c`。五个标准单元库的 SHA256 与上一个提取版本记录的一致。没有使用课程 AppImage，二进制哈希记录在 `recipe/mapping.json`。
