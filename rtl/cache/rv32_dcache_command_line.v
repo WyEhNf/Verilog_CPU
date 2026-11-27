@@ -4,7 +4,6 @@
 // One command owner per way, replacing four identical 32-bit address
 // decoders. The storage remains sixteen DEPTH x 8 single-port macros.
 // No registers, new edge, read port, or command acceptance are introduced.
-(* keep_hierarchy = 1 *)
 module rv32_dcache_command_line #(
     parameter integer SETS=512, WAYS=2, WAY=0,
     parameter integer IW=$clog2(SETS), EW=$clog2(SETS*WAYS)

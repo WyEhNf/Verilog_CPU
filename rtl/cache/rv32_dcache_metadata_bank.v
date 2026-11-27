@@ -6,7 +6,6 @@
 // flow cannot share one write-control gate across every metadata flip-flop.
 // Cache data/tags remain in the CPU's real sram_fakeram instances. The cache
 // selects these state owners only with STATIC_UPDATES=2 (default remains 0).
-(* keep_hierarchy = 1 *)
 module rv32_dcache_metadata_bank #(
     parameter integer CACHE_LINES = 1024,
     parameter integer CACHE_WAYS = 2,

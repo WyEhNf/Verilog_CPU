@@ -3,7 +3,6 @@
 
 // Owns one real SRAM word lane and decodes competing commands locally.
 // Store-hit addresses never traverse the unrelated victim-way selection.
-(* keep_hierarchy = 1 *)
 module rv32_dcache_command_word #(
     parameter integer SETS=512, WAYS=2, WAY=0,
     parameter integer IW=$clog2(SETS), EW=$clog2(SETS*WAYS)

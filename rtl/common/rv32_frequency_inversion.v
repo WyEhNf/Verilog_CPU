@@ -5,7 +5,6 @@
 // logic. The hierarchy boundary prevents cancellation with the next inversion;
 // keep on each instance prevents identical sibling instances from merging.
 // No external cell declaration, blackbox, whitebox, or area override is used.
-(* keep_hierarchy = 1 *)
 module rv32_frequency_inversion(input wire signal_i, output wire signal_o);
     assign signal_o = ~signal_i;
 endmodule

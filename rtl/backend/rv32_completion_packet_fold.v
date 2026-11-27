@@ -2,7 +2,6 @@
 
 // Fold exact candidate choice into the original direct source grant. Keep the
 // same full payload, zero when unselected, without another edge or queue port.
-(* keep_hierarchy = 1 *)
 module rv32_completion_packet_fold #(
     parameter integer WIDTH=80,
     parameter integer WORDS=(WIDTH+15)/16

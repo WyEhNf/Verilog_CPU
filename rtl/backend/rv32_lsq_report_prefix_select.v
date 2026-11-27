@@ -3,7 +3,6 @@
 // Select the oldest physical/wrap class independently of occupied range.
 // The caller supplies the exact age<count prefix; the selected oldest row is
 // covered iff any eligible row is covered. No valid/head/tail invariant is used.
-(* keep_hierarchy = 1 *)
 module rv32_lsq_report_prefix_select #(
     parameter integer ENTRIES=16,
     parameter integer DOMAINS=(ENTRIES+3)/4

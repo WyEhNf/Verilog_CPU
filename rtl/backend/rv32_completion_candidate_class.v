@@ -2,7 +2,6 @@
 
 // Compare complete tags before late candidate choice. No producer ownership,
 // valid-state or shortened-generation assumption licenses these equalities.
-(* keep_hierarchy = 1 *)
 module rv32_completion_candidate_class #(
     parameter integer TAG_WIDTH=16,
     parameter integer LANES=2

@@ -22,17 +22,14 @@ module rv32_frequency_negative_subtree #(
     genvar bit_id,child;
     generate if(LEAVES==1) begin:g_leaf
         for(bit_id=0;bit_id<WIDTH;bit_id=bit_id+1) begin:g_driver
-            (* keep=1,keep_hierarchy=1 *)
             rv32_frequency_inversion restore_positive (
                 .signal_i(negative_i[bit_id]),.signal_o(views_o[bit_id]));
         end
     end else begin:g_internal
         wire [WIDTH-1:0] positive,distributed_negative;
         for(bit_id=0;bit_id<WIDTH;bit_id=bit_id+1) begin:g_driver
-            (* keep=1,keep_hierarchy=1 *)
             rv32_frequency_inversion invert_root (
                 .signal_i(negative_i[bit_id]),.signal_o(positive[bit_id]));
-            (* keep=1,keep_hierarchy=1 *)
             rv32_frequency_inversion invert_output (
                 .signal_i(positive[bit_id]),.signal_o(distributed_negative[bit_id]));
         end

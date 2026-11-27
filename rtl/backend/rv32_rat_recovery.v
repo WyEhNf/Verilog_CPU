@@ -48,7 +48,7 @@ module rv32_rat_recovery #(
     end else if(IMPL==1) begin : g_parallel_oldest
         wire [COUNT_WIDTH-1:0] branch_age = (branch_slot_i >= head_i) ?
             branch_slot_i - head_i : ROB_ENTRIES + branch_slot_i - head_i;
-        (* keep = 1 *) wire [ROB_ENTRIES-1:0] killed_writer;
+        wire [ROB_ENTRIES-1:0] killed_writer;
         wire [ROB_ENTRIES-1:0] above_branch;
         for (row = 0; row < ROB_ENTRIES; row = row + 1) begin : g_age
             wire [COUNT_WIDTH-1:0] row_age = (row >= head_i) ?

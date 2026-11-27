@@ -4,7 +4,6 @@
 // Read a packed row array using two already-decoded index banks. A selected
 // input bit drives bounded row groups; no encoded-index decode follows the
 // late report selection. The caller retains the full normal generation check.
-(* keep_hierarchy = 1 *)
 module rv32_frequency_array_read_bank_masks #(
     parameter integer WIDTH=9,ENTRIES=64,
     parameter integer INDEX_WIDTH=(ENTRIES<=1)?1:$clog2(ENTRIES),

@@ -3,7 +3,6 @@
 
 // Actual in-flight store/RFO write-data state, retaining original byte masks
 // and zero > write > merge priority. This is not the cache's data array.
-(* keep_hierarchy = 1 *)
 module rv32_dcache_mshr_data_bank #(
     parameter integer MSHR_ID = 0,
     parameter integer STORE_MISS_WRITE_AROUND = 0,

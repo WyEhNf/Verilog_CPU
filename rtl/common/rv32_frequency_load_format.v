@@ -5,7 +5,6 @@
 // formatted output, since formatting an all-zero word produces all zeros.
 // Late sign bits drive one bounded tree input instead of 16/24 output gates.
 // No state, new owner, size restriction or changed completion edge.
-(* keep_hierarchy = 1 *)
 module rv32_frequency_load_format (
     input wire [31:0] raw_i,
     input wire [1:0] size_i,

@@ -3,7 +3,6 @@
 // Prepare one complete row's relative WORD response before the late match
 // priority. The caller retains the original full identity/wait predicate and
 // default row0. All four masks and size codes0..3 keep their original meaning.
-(* keep_hierarchy = 1 *)
 module rv32_lsq_response_word_format (
     input wire [31:0] word_i,forward_i,
     input wire [3:0] mask_i,

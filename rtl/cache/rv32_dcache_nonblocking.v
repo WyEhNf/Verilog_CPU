@@ -1341,10 +1341,10 @@ module rv32_dcache_nonblocking #(
         // These are distinct address-qualified Boolean functions, not aliases
         // or external buffer cells. Retaining the decoder boundaries bounds
         // each group's metadata write fanout without adding a pipeline cycle.
-        (* keep = 1 *) wire [GROUP_COUNT-1:0] miss_group, prefetch_group;
-        (* keep = 1 *) wire [GROUP_COUNT-1:0] store_group, local_group, refill_group;
-        (* keep = 1 *) wire [GROUP_ROWS-1:0] miss_row, prefetch_row, store_row;
-        (* keep = 1 *) wire [GROUP_ROWS-1:0] local_row, refill_row;
+        wire [GROUP_COUNT-1:0] miss_group, prefetch_group;
+        wire [GROUP_COUNT-1:0] store_group, local_group, refill_group;
+        wire [GROUP_ROWS-1:0] miss_row, prefetch_row, store_row;
+        wire [GROUP_ROWS-1:0] local_row, refill_row;
         wire [CACHE_ENTRY_WIDTH-1:0] local_entry = query_local_mshr_victim_entry;
         wire [CACHE_ENTRY_WIDTH-1:0] refill_entry = query_response_mshr_victim_entry;
         for (update_group = 0; update_group < GROUP_COUNT; update_group = update_group + 1) begin : g_group
@@ -1409,13 +1409,13 @@ module rv32_dcache_nonblocking #(
         end
         for (update_mshr = 0; update_mshr < MSHR_ENTRIES; update_mshr = update_mshr + 1) begin : g_mshr_data
             assign mshr_wdata[update_mshr] = static_mshr_wdata[update_mshr];
-            (* keep = 1 *) wire write_zero = static_prefetch_allocate && second_free_index == update_mshr;
-            (* keep = 1 *) wire write_word =
+            wire write_zero = static_prefetch_allocate && second_free_index == update_mshr;
+            wire write_word =
                 ((static_request_action == 4'd8 || (STORE_MISS_WRITE_AROUND != 0 && static_request_action == 4'd9)) && free_index == update_mshr) ||
                 ((static_request_action == 4'd6) && matching_index == update_mshr);
-            (* keep = 1 *) wire merge_word = (static_request_action == 4'd7) && matching_index == update_mshr;
+            wire merge_word = (static_request_action == 4'd7) && matching_index == update_mshr;
             for (update_byte = 0; update_byte < 16; update_byte = update_byte + 1) begin : g_byte
-                (* keep = 1 *) wire write_byte = write_word || (merge_word && core_req_mask[update_byte]);
+                wire write_byte = write_word || (merge_word && core_req_mask[update_byte]);
                 always @(posedge clk_i) begin
                     if (reset_i) static_mshr_wdata[update_mshr][update_byte*8 +: 8] <= 8'd0;
                     else if (write_zero) static_mshr_wdata[update_mshr][update_byte*8 +: 8] <= 8'd0;

@@ -3,7 +3,6 @@
 // Exact (row-head) modulo ENTRIES < count, including every count encoding.
 // Decode the two saved scalars independently; no head+count carry precedes
 // a row comparison, and no queue-valid/occupancy invariant is assumed.
-(* keep_hierarchy = 1 *)
 module rv32_lsq_report_range_mask #(
     parameter integer ENTRIES=16,
     parameter integer SLOT_WIDTH=(ENTRIES<=1)?1:$clog2(ENTRIES),

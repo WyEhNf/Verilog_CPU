@@ -3,7 +3,6 @@
 // Compare every original full generation before the late decoded slot query.
 // The caller supplies a single identity's two one-hot query banks. There is
 // no saved liveness certificate and no generation/range shortening.
-(* keep_hierarchy = 1 *)
 module rv32_frequency_live_match_bank_masks #(
     parameter integer ENTRIES=32,GENERATION_WIDTH=8,
     parameter integer INDEX_WIDTH=(ENTRIES<=1)?1:$clog2(ENTRIES),

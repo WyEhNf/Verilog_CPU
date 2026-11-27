@@ -4,7 +4,6 @@
 // complete oldest saved packet and the independently matched full held tag.
 // Qualify these packets only after their wide reads, retaining original zeros
 // when no covered saved row exists and the original invalid-slot head default.
-(* keep_hierarchy = 1 *)
 module rv32_lsq_report_packet_qualify #(
     parameter integer WIDTH=80,
     parameter integer SLOT_WIDTH=4,

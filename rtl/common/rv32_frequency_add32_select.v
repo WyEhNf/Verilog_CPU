@@ -4,7 +4,6 @@
 // Eight independent four-bit adders produce block G/P and both sum choices.
 // Three prefix levels resolve carries. Each late carry selects four bits.
 // Exact modulo-2^32 addition with no registers or additional clock edge.
-(* keep_hierarchy = 1 *)
 module rv32_frequency_add32_select (
     input wire [31:0] lhs_i,rhs_i,
     output wire [31:0] sum_o

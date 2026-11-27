@@ -3,7 +3,6 @@
 // Exact circular age < full count for power-of-two queues. Upper count bits
 // cover the entire ring; otherwise one low sum/carry describes both intervals.
 // No valid/window invariant or generation-width reduction is used.
-(* keep_hierarchy = 1 *)
 module rv32_lsq_report_range_carry #(
     parameter integer ENTRIES=16,
     parameter integer SLOT_WIDTH=$clog2(ENTRIES),

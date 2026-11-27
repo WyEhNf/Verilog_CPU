@@ -5,7 +5,6 @@
 // Instead of sixteen repeated (load_offset+b)==(store_offset+j) comparisons,
 // decode seven possible nonempty windows once and share across the four bytes.
 // This adds no state, speculation, or new alignment assumption.
-(* keep_hierarchy = 1 *)
 module rv32_lsq_forward_window #(
     parameter integer STORE_OFFSET_PREDECODE=0
 ) (

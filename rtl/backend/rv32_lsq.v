@@ -1434,7 +1434,6 @@ module rv32_lsq #(
         (SAVED_CANDIDATE_STATE_QUERY!=0 && SAVED_REQUEST_QUERY==0))
         $fatal(1,"Saved candidate state requires saved request query");
     assign dcache_req_addr_o=selected_addr;
-    (* keep_hierarchy = 1 *)
     rv32_lsq_request_owner #(.FRESH_NO_FORWARD(SAVED_REQUEST_QUERY),.TAG_WIDTH(TAG_WIDTH),.ROB_TAG_WIDTH(ROB_TAG_WIDTH)) request_owner (
         .flush_i(flush_i),.recovery_i(recovery_valid_i),.found_i(candidate_found || allocation_request_offer),
         .wait_i(allocation_request_offer ? 1'b0 : candidate_wait),.load_i(selected_load),.ready_i(dcache_req_ready_i),
@@ -1818,7 +1817,6 @@ module rv32_lsq #(
                 wire row_cancel;
                 // This local combinational owner prevents the exact guard
                 // from being reconstructed after the report payload mux.
-                (* keep_hierarchy = 1 *)
                 rv32_execution_recovery_cancel #(.TAG_WIDTH(ROB_TAG_WIDTH),
                     .ROB_ENTRIES(ROB_ENTRIES),.ENABLED(LOCAL_REPORT_CANCEL),
                     .KILL_BRANCH(0),.WIDTH(REPORT_RECOVERY_WIDTH)) cancel_guard (

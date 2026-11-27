@@ -3,7 +3,6 @@
 // Four original prefix-priority grants are onehot0 by construction. Prepare
 // complete region equalities before late target selection; no grant selects
 // the original all-zero target, so its region equality must also be retained.
-(* keep_hierarchy = 1 *)
 module rv32_icache_control_region_query #(
     parameter integer REGION_BITS=12,WAYS=2,DOMAINS=16
 ) (

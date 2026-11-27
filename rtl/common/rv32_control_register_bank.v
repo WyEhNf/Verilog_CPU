@@ -23,16 +23,16 @@ module rv32_control_register_bank #(
     generate
         if (ENABLED != 0) begin : g_register_banks
             for (leaf = 0; leaf < LEAVES; leaf = leaf + 1) begin : g_bank
-                (* keep = 1 *) reg [WIDTH-1:0] value_q;
+                reg [WIDTH-1:0] value_q;
                 // Keep the real sequential cells, rather than just aliases:
                 // preserving wire names alone would not prevent FF merging.
-                (* keep = 1 *) always @(posedge clk_i)
+                always @(posedge clk_i)
                     if (reset_i) value_q <= RESET_VALUE;
                 else if (update_en_i) value_q <= value_i;
                 assign replicas_o[leaf*WIDTH +: WIDTH] = value_q;
             end
         end else begin : g_shared_register
-            (* keep = 1 *) reg [WIDTH-1:0] value_q;
+            reg [WIDTH-1:0] value_q;
             always @(posedge clk_i)
                 if (reset_i) value_q <= RESET_VALUE;
                 else if (update_en_i) value_q <= value_i;

@@ -42,7 +42,6 @@ module rv32_frequency_polarity_node #(
     genvar bit_id,child;
     generate
         for(bit_id=0;bit_id<WIDTH;bit_id=bit_id+1) begin:g_driver
-            (* keep=1,keep_hierarchy=1 *)
             rv32_frequency_inversion invert (
                 .signal_i(signal_i[bit_id]),.signal_o(inverted[bit_id]));
         end

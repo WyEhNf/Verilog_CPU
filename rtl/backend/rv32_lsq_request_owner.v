@@ -5,7 +5,6 @@
 // forwarding predicates never directly qualify a wide packet or barrel shift.
 // Each externally visible payload still equals zero when no request is sent.
 // Forwarding temporaries also retain their original admission/load gating.
-(* keep_hierarchy = 1 *)
 module rv32_lsq_request_owner #(
     parameter integer TAG_WIDTH=17,ROB_TAG_WIDTH=17, FRESH_NO_FORWARD=0
 ) (

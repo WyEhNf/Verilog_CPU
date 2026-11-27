@@ -5,7 +5,6 @@
 // bits use three carry-select blocks. The upper word changes only by -1, 0,
 // or +1; its increment/decrement prefixes are independent of the low carry.
 // No state, and all arithmetic wraps modulo 2^32.
-(* keep_hierarchy = 1 *)
 module rv32_frequency_add_simm12 #(
     parameter CLASS_COMPARE=0
 ) (
