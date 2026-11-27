@@ -79,9 +79,11 @@ ASAP7_LIB ?=
 # of the minimum period, whose interface constraints do not depend on it.
 # ABC stops sizing gates as soon as its estimate meets the target, and its
 # estimate omits clock-to-Q, setup and clock uncertainty (about 0.1 ns), so
-# the framework default of 2.0 ns leaves this design near 476 MHz. A 1.0 ns
+# the upstream default of 2.0 ns leaves this design near 476 MHz. A 1.0 ns
 # target makes ABC size the critical paths as far as it can: about 537 MHz
-# at the same area. `make synth CLOCK_PERIOD_NS=2.0` reproduces the default.
+# at the same area. The Makefile default is 1.0 as well, so the result does
+# not depend on this file. `make synth CLOCK_PERIOD_NS=2.0` gives the
+# upstream-default result.
 CLOCK_PERIOD_NS ?= 1.0
 
 # Example native setup:
@@ -108,7 +110,7 @@ SIM ?=
 # FILELIST = verilog/filelist.f
 # BUILD = build
 # MODE = opt
-# CLOCK_PERIOD_NS = 2.0
+# CLOCK_PERIOD_NS = 1.0   (upstream framework default: 2.0)
 # SYNTH_OUT = build/synth
 # MAX_CYCLES = 100000000
 # LATENCY = 10
